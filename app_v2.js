@@ -2505,3 +2505,1848 @@ App.render();
   // Re-render current page so patched wallet cards are applied immediately.
   try { App.render() } catch (_) {}
 })();
+
+/* ============================================================
+   V2.2.5 Practical UX polish + data fixes
+   Scope: category/merchant editors, CC benefit tabs, wallet cards,
+   Aurora gold THB pricing, transaction list UI, add-tx category picker,
+   and rule-based AI-style financial insights. No storage schema rewrite.
+   ============================================================ */
+;(function v225PracticalUxFixes(){
+  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const fmt = n => moneyFmt(Number(n) || 0)
+  const numFmt = (n, digits = 2) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: digits })
+  const pct = n => Math.max(0, Math.min(100, Number(n) || 0))
+  const investTypes = new Set(['gold','crypto','fcd'])
+  const AURORA_GOLD_URL = 'https://www.aurora.co.th/price/gold_pricelist'
+  const EMOJIS = ['🍜','☕','🛒','🛍️','🚗','⛽','🏠','💡','📱','🎬','💊','🏥','🎁','💰','💼','📈','🍱','🥗','✈️','🚆','🐶','🎮','🧾','🏪','💳','🏦','🥇','₿','📦','✨','🔁','🛡️']
+  const COLORS = ['#2563EB','#16A34A','#DC2626','#F59E0B','#7C3AED','#0891B2','#BE185D','#475569','#0F766E','#EA580C','#4F46E5','#111827']
+
+  function typeColor(type) {
+    if (type === 'income') return 'var(--income)'
+    if (type === 'transfer') return 'var(--primary)'
+    return 'var(--expense)'
+  }
+
+  function signedAmount(tx) {
+    if (S.settings?.hideMoney) return '฿••••'
+    if (tx.type === 'income') return '+' + fmt(tx.amount)
+    if (tx.type === 'expense' || tx.type === 'cc_payment') return '-' + fmt(tx.amount)
+    return fmt(tx.amount)
+  }
+
+  function txVisual(tx) {
+    const cat = App._findCat?.(tx.categoryId)
+    const wallet = S.wallets.find(w => w.id === tx.walletId)
+    const toWallet = S.wallets.find(w => w.id === tx.toWalletId)
+    const isTransfer = tx.type === 'transfer'
+    const title = isTransfer ? `${wallet?.name || 'ไม่ระบุ'} → ${toWallet?.name || 'ไม่ระบุ'}` : (tx.merchant || tx.note || cat?.label || 'รายการ')
+    const icon = cat?.icon || (tx.type === 'income' ? '💰' : isTransfer ? '🔁' : tx.type === 'cc_payment' ? '💳' : '💸')
+    const meta = []
+    if (cat?.label) meta.push(cat.label)
+    if (wallet?.name && !isTransfer) meta.push(wallet.name)
+    if (isTransfer) meta.push('โอนเงิน')
+    if (tx.isRecurring) meta.push('🔁 ประจำ')
+    if (tx.isInstallment) meta.push(`ผ่อน ${tx.installmentNo || 1}/${tx.installmentMonths || '?'}`)
+    return { cat, wallet, toWallet, title, icon, meta }
+  }
+
+  function fullMonthLabel(ym) {
+    if (!ym) return ''
+    const [y, m] = ym.split('-').map(Number)
+    const names = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
+    return `${names[m - 1]} ${y}`
+  }
+
+  function groupDateLabel(dateStr) {
+    if (!dateStr) return ''
+    const base = Calc.shortDate(dateStr)
+    if (dateStr === TODAY) return `วันนี้ ${base}`
+    const y = new Date(); y.setDate(y.getDate() - 1)
+    if (dateStr === y.toISOString().slice(0, 10)) return `เมื่อวาน ${base}`
+    return base
+  }
+
+  function filterTransactionsForList() {
+    const q = (S.txSearch || '').toLowerCase()
+    return S.transactions.filter(t => {
+      if (!String(t.date || '').startsWith(S.txMonth)) return false
+      if (S.txType !== 'all' && t.type !== S.txType) return false
+      if (!q) return true
+      const cat = App._findCat?.(t.categoryId)
+      const wallet = S.wallets.find(w => w.id === t.walletId)
+      const toWallet = S.wallets.find(w => w.id === t.toWalletId)
+      return [t.merchant, t.note, cat?.label, wallet?.name, toWallet?.name].some(v => String(v || '').toLowerCase().includes(q))
+    }).sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
+  }
+
+  function renderEditorEmoji(prefix, current, targetId) {
+    return `<button type="button" class="emoji-current" onclick="App.toggleEmojiPanel('${prefix}')"><span id="${prefix}-emoji-preview">${esc(current)}</span><small>แตะเพื่อเปลี่ยน</small></button>
+      <input type="hidden" id="${targetId}" value="${esc(current)}">
+      <div class="emoji-grid" id="${prefix}-emoji-panel" style="display:none">${EMOJIS.map(e => `<button type="button" onclick="App.pickEmoji('${prefix}','${e}')">${e}</button>`).join('')}<button type="button" onclick="App.customEmoji('${prefix}')">＋</button></div>`
+  }
+
+  function renderEditorColor(prefix, current, targetId) {
+    const normalized = current || '#2563EB'
+    return `<div class="color-picker-row compact-colors">${COLORS.map(c => `<button type="button" class="color-swatch${c.toLowerCase() === String(normalized).toLowerCase() ? ' active' : ''}" data-color="${c}" style="background:${c}" onclick="App.pickColor('${prefix}','${c}')" aria-label="เลือกสี ${c}"></button>`).join('')}<label class="color-swatch color-swatch-custom" style="--picked:${esc(normalized)}" aria-label="เลือกสีเอง"><input type="color" id="${prefix}-color-native" value="${esc(normalized)}" oninput="App.pickColor('${prefix}', this.value)"><span>＋</span></label></div>
+      <input type="hidden" id="${targetId}" value="${esc(normalized)}"><div class="form-hint">เลือกจากสี preset หรือแตะวงกลมท้ายสุดเพื่อกำหนดสีเอง</div>`
+  }
+
+  App.toggleEmojiPanel = function(prefix) {
+    const panel = document.getElementById(prefix + '-emoji-panel')
+    if (!panel) return
+    panel.style.display = panel.style.display === 'grid' ? 'none' : 'grid'
+  }
+  App.pickEmoji = function(prefix, emoji) {
+    const target = document.getElementById(prefix === 'cat' ? 'cat-icon' : `${prefix}-emoji`)
+    const preview = document.getElementById(prefix + '-emoji-preview')
+    if (target) target.value = emoji
+    if (preview) preview.textContent = emoji
+    const panel = document.getElementById(prefix + '-emoji-panel')
+    if (panel) panel.style.display = 'none'
+  }
+  App.customEmoji = function(prefix) {
+    const v = prompt('ใส่อีโมจิที่ต้องการ')
+    if (v && v.trim()) App.pickEmoji(prefix, v.trim().slice(0, 4))
+  }
+  App.pickColor = function(prefix, color) {
+    const hiddenId = prefix === 'cat' ? 'cat-color' : prefix === 'mer' ? 'mer-color' : prefix === 'wf' ? 'wf-color' : `${prefix}-color`
+    const hidden = document.getElementById(hiddenId)
+    if (hidden) hidden.value = color
+    const native = document.getElementById(prefix + '-color-native')
+    if (native) native.value = color
+    document.querySelectorAll('.color-swatch[data-color]').forEach(btn => btn.classList.toggle('active', String(btn.dataset.color).toLowerCase() === String(color).toLowerCase()))
+    document.querySelectorAll('.color-swatch-custom').forEach(el => el.style.setProperty('--picked', color))
+  }
+  App.setCategoryColor = color => App.pickColor('cat', color)
+
+  App.openCategoryForm = function(id) {
+    const type = S.catManageType || 'expense'
+    const c = id ? (S.categories[type] || []).find(x => x.id === id) : null
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCategoryScreen('${type}')">←</button><h2>${c ? 'แก้ไข' : 'เพิ่ม'}หมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.saveCategory('${esc(id || '')}')" style="width:auto;padding:8px 14px">บันทึก</button></div>
+      <div class="sub-scroll">
+        <div class="form-group"><label class="form-label">ชื่อหมวดหมู่</label><input class="form-input" id="cat-name" value="${esc(c?.label || '')}" placeholder="เช่น อาหาร, เดินทาง"></div>
+        <div class="form-group"><label class="form-label">อีโมจิ</label>${renderEditorEmoji('cat', c?.icon || '📦', 'cat-icon')}</div>
+        <div class="form-group"><label class="form-label">สี</label>${renderEditorColor('cat', c?.color || '#2563EB', 'cat-color')}</div>
+      </div>`)
+  }
+
+  App.openMerchantForm = function(id) {
+    App._ensureV2State?.()
+    const m = id ? S.merchants.find(x => x.id === id) : null
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openMerchantScreen()">←</button><h2>${m ? 'แก้ไข' : 'เพิ่ม'}ร้านค้า</h2><button class="btn btn-primary btn-sm" onclick="App.saveMerchant('${esc(id || '')}')" style="width:auto;padding:8px 14px">บันทึก</button></div>
+      <div class="sub-scroll">
+        <div class="form-group"><label class="form-label">ชื่อร้านค้า</label><input class="form-input" id="mer-name" value="${esc(m?.name || '')}" placeholder="เช่น Grab, Netflix"></div>
+        <div class="form-group"><label class="form-label">อีโมจิ</label>${renderEditorEmoji('mer', m?.emoji || '🏪', 'mer-emoji')}</div>
+        <div class="form-group"><label class="form-label">สี</label>${renderEditorColor('mer', m?.color || '#2563EB', 'mer-color')}</div>
+      </div>`)
+  }
+
+  App.openCCBenefitScreen = function(cardId, tab = S.ccBenefitTab || 'points') {
+    S.ccBenefitTab = tab === 'cashback' ? 'cashback' : 'points'
+    const b = App._benefit?.(cardId) || S.ccBenefits?.[cardId] || { points:{}, cashback:{} }
+    const p = b.points || {}, c = b.cashback || {}
+    const f = (id, label, value, hint = '') => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="0.01" id="${id}" value="${value || ''}" placeholder="0">${hint ? `<div class="form-hint">${hint}</div>` : ''}</div>`
+    const pointsForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิดคะแนนสะสม</b><button class="toggle${(p.enabled || b.enabled) ? ' on' : ''}" id="ccb-points-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${f('ccb-bahtPerPoint','X บาท = 1 คะแนน',p.bahtPerPoint)}${f('ccb-pointEvery','ทุก X บาทได้ 1 คะแนน',p.pointPerBahtEvery)}${f('ccb-multi','คะแนนเพิ่ม X เท่า',p.multiplier || 1)}${f('ccb-maxTxnPoint','สูงสุด/รายการ',p.maxPerTxn)}${f('ccb-maxCyclePoint','สูงสุด/รอบบัญชี',p.maxPerCycle)}</div></div>`
+    const cashForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิด Cashback</b><button class="toggle${(c.enabled || b.enabled) ? ' on' : ''}" id="ccb-cash-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${f('ccb-cbPercent','รับเงินคืน X%',c.percent)}${f('ccb-cbMin','ขั้นต่ำ (฿)',c.minSpend)}${f('ccb-cbTier','เริ่มขั้นบันไดที่ (฿)',c.tierThreshold)}${f('ccb-cbEvery','คิดทุก ๆ X บาท',c.everyBaht || 1)}${f('ccb-cbMaxTxn','สูงสุด/รายการ (฿)',c.maxPerTxn)}${f('ccb-cbMaxCycle','สูงสุด/รอบบัญชี (฿)',c.maxPerCycle)}</div></div>`
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefit('${esc(cardId)}')" style="width:auto">บันทึก</button></div>
+      <div class="sub-scroll">
+        <div class="benefit-tabs"><button class="benefit-tab ${S.ccBenefitTab === 'points' ? 'active' : ''}" onclick="App.openCCBenefitScreen('${esc(cardId)}','points')">คะแนนสะสม</button><button class="benefit-tab ${S.ccBenefitTab === 'cashback' ? 'active' : ''}" onclick="App.openCCBenefitScreen('${esc(cardId)}','cashback')">Cashback</button></div>
+        ${S.ccBenefitTab === 'points' ? pointsForm : cashForm}
+      </div>`)
+  }
+
+  App.saveCCBenefit = function(cardId) {
+    const prev = App._benefit?.(cardId) || S.ccBenefits?.[cardId] || { points:{}, cashback:{} }
+    const pp = prev.points || {}, pc = prev.cashback || {}
+    const val = (id, fallback = 0) => document.getElementById(id) ? (parseFloat(document.getElementById(id).value) || 0) : (Number(fallback) || 0)
+    const on = (id, fallback = false) => document.getElementById(id) ? document.getElementById(id).classList.contains('on') : !!fallback
+    S.ccBenefits ||= {}
+    S.ccBenefits[cardId] = {
+      enabled: false,
+      points: {
+        enabled: on('ccb-points-enabled', pp.enabled || prev.enabled),
+        bahtPerPoint: val('ccb-bahtPerPoint', pp.bahtPerPoint),
+        pointPerBahtEvery: val('ccb-pointEvery', pp.pointPerBahtEvery),
+        multiplier: val('ccb-multi', pp.multiplier || 1) || 1,
+        maxPerTxn: val('ccb-maxTxnPoint', pp.maxPerTxn),
+        maxPerCycle: val('ccb-maxCyclePoint', pp.maxPerCycle),
+      },
+      cashback: {
+        enabled: on('ccb-cash-enabled', pc.enabled || prev.enabled),
+        percent: val('ccb-cbPercent', pc.percent),
+        minSpend: val('ccb-cbMin', pc.minSpend),
+        tierThreshold: val('ccb-cbTier', pc.tierThreshold),
+        everyBaht: val('ccb-cbEvery', pc.everyBaht || 1) || 1,
+        maxPerTxn: val('ccb-cbMaxTxn', pc.maxPerTxn),
+        maxPerCycle: val('ccb-cbMaxCycle', pc.maxPerCycle),
+      }
+    }
+    persist(); App.openCCDetail(cardId); toast('บันทึกสิทธิประโยชน์แล้ว', 'success')
+  }
+
+  App._parseAuroraGold = function(html) {
+    const clean = String(html || '')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;|&#160;/g, ' ')
+      .replace(/\s+/g, ' ')
+    const anchor = clean.search(/รับซื้อรูปพรรณออโรร่า|รับซื้อคืน|ทองคำแท่ง/i)
+    const tail = anchor >= 0 ? clean.slice(anchor) : clean
+    const nums = tail.match(/\d{1,3}(?:,\d{3})+(?:\.\d+)?/g) || []
+    const toNumber = s => Number(String(s || '').replace(/,/g, '')) || 0
+    const barBuy = toNumber(nums[0])
+    const barSell = toNumber(nums[1])
+    const jewelryBuy = toNumber(nums[2]) || toNumber(nums.find(n => toNumber(n) > 10000 && toNumber(n) < 200000))
+    return jewelryBuy ? { jewelryBuy, barBuy, barSell, source: 'Aurora', url: AURORA_GOLD_URL, fetchedAt: new Date().toISOString() } : null
+  }
+
+  App.refreshMarketPrices = async function() {
+    const next = { ...(S.marketPrices || {}) }
+    let ok = false
+    try { const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache:'no-store' }); if (r.ok) { next.crypto = await r.json(); ok = true } } catch {}
+    try { const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' }); if (r.ok) { next.fx = await r.json(); ok = true } } catch {}
+    try {
+      const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(AURORA_GOLD_URL)
+      const r = await fetch(proxy, { cache:'no-store' })
+      if (r.ok) {
+        const data = App._parseAuroraGold(await r.text())
+        if (data?.jewelryBuy) { next.auroraGold = data; ok = true }
+      }
+    } catch {}
+    next.updatedAt = new Date().toISOString()
+    S.marketPrices = next
+    persist(); App.renderWallets?.(); App.render?.()
+    toast(ok ? 'อัปเดตราคาอ้างอิงแล้ว' : 'อัปเดตไม่ได้ ใช้ราคาสำรองในกระเป๋าแทน', ok ? 'success' : 'warn')
+  }
+
+  App._investmentUnitPriceTHB = function(w) {
+    const p = S.marketPrices || {}
+    if (w.type === 'gold') return Number(p.auroraGold?.jewelryBuy || w.manualPrice || 0)
+    if (w.type === 'crypto') {
+      const map = { BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether' }
+      const id = map[(w.symbol || '').toUpperCase()]
+      return Number((id && p.crypto?.[id]?.thb) || w.manualPrice || 0)
+    }
+    if (w.type === 'fcd') {
+      const cur = (w.currency || w.symbol || 'USD').toUpperCase()
+      const thb = p.fx?.rates?.THB
+      return Number((cur === 'USD' ? thb : (thb && p.fx?.rates?.[cur] ? thb / p.fx.rates[cur] : 0)) || w.manualPrice || 0)
+    }
+    return 0
+  }
+  App._investmentValueTHB = w => investTypes.has(w?.type) ? ((Number(w.units || 0) * App._investmentUnitPriceTHB(w)) || Number(w.balance || 0)) : Number(w?.balance || 0)
+  App._marketText = function(w) {
+    const p = S.marketPrices || {}
+    if (w.type === 'gold') return p.auroraGold?.jewelryBuy ? `Aurora รับซื้อรูปพรรณ ${fmt(p.auroraGold.jewelryBuy)}/บาททอง` : 'ใช้ราคาสำรอง/บาททอง'
+    if (w.type === 'crypto') { const coin = (w.symbol || w.name || '').toUpperCase(); const map = {BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether'}; const id = map[coin]; const thb = id && p.crypto?.[id]?.thb; return thb ? `${coin} ${fmt(thb)}` : 'CoinGecko' }
+    if (w.type === 'fcd') { const cur = (w.currency || w.symbol || 'USD').toUpperCase(); const rate = cur === 'USD' ? p.fx?.rates?.THB : (p.fx?.rates?.THB && p.fx?.rates?.[cur] ? p.fx.rates.THB / p.fx.rates[cur] : null); return rate ? `${cur}/THB ${rate.toFixed(2)}` : 'FX อ้างอิง' }
+    return ''
+  }
+
+  App._walletCard = function(w) {
+    const isCC = w.type === 'credit'
+    const inv = investTypes.has(w.type)
+    const owed = Math.abs(Number(w.balance || 0))
+    const value = isCC ? owed : (inv ? App._investmentValueTHB(w) : Number(w.balance || 0))
+    const usedPct = isCC && w.limit ? pct((owed / w.limit) * 100) : 0
+    const due = isCC && w.dueDay ? Calc.getDueDate(w.dueDay) : null
+    const avail = isCC && w.limit ? Math.max(0, Number(w.limit || 0) - owed) : 0
+    const color = w.color || (isCC ? '#DC2626' : '#2563EB')
+    const detailAction = isCC ? `App.openCCDetail('${esc(w.id)}')` : `App.openWalletDetail('${esc(w.id)}')`
+    const unitLabel = w.type === 'gold' ? 'บาททอง' : (w.symbol || w.currency || '')
+    const priceText = inv ? App._marketText(w) : ''
+    return `<div class="wallet-card wallet-card-colored${isCC ? ' wallet-card-credit' : ''}${inv ? ' wallet-card-invest' : ''}" style="--wallet-color:${esc(color)};--wallet-color-2:${esc(color)}BB" onclick="${detailAction}">
+      <div class="wc-header"><div><div class="wc-name">${esc(w.icon)} ${esc(w.name)}</div><div class="wc-type">${esc(App._walletTypeLabel(w.type))}${priceText ? ` · ${esc(priceText)}` : ''}</div></div></div>
+      <div class="wc-balance">${isCC && !S.settings.hideMoney ? '-' : ''}${fmt(value)}</div>
+      ${inv ? `<div class="wc-prog-info wc-invest-info"><span>จำนวน ${numFmt(w.units, 4)} ${esc(unitLabel)}</span><span>${fmt(App._investmentUnitPriceTHB(w))}/หน่วย</span></div>` : ''}
+      ${isCC && due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${esc(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}
+      ${isCC && w.limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${usedPct}%;background:${usedPct > 80 ? 'rgba(252,165,165,.9)' : 'rgba(255,255,255,.88)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${usedPct.toFixed(0)}% · คงเหลือ ${fmt(avail)}</span></div></div>` : ''}
+      <div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();${detailAction}">ดูรายการ</button>${isCC ? `<button class="wallet-chip-btn" onclick="event.stopPropagation();App.openCCPay('${esc(w.id)}')">ชำระ</button>` : ''}<button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${esc(w.id)}')">แก้ไข</button></div>
+    </div>`
+  }
+
+  App.renderWallets = function() {
+    App._ensureV2State?.()
+    const g = Calc.getWalletGroups ? Calc.getWalletGroups(S.wallets) : { assets:S.wallets.filter(w=>w.type!=='credit'), liabilities:S.wallets.filter(w=>w.type==='credit'), investments:[], assetTotal:0, liabilityTotal:0 }
+    const summary = document.getElementById('wallets-summary')
+    if (summary) summary.innerHTML = `<div class="wallet-summary-grid" style="width:100%"><div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${fmt(g.assetTotal || g.assets || 0)}</strong></div><div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${fmt(g.liabilityTotal || g.debt || 0)}</strong></div></div>`
+    const section = (title, icon, list, empty, grid) => `<div class="wallet-section-title">${icon} ${esc(title)}</div>${list.length ? `<div class="${grid ? 'wallet-grid-2' : 'wallet-list-stack'}">${list.map(w => App._walletCard(w)).join('')}</div>` : `<div class="card card-pad" style="font-size:13px;color:var(--muted);margin-bottom:12px">${esc(empty)}</div>`}`
+    const updated = S.marketPrices?.auroraGold?.fetchedAt ? new Date(S.marketPrices.auroraGold.fetchedAt).toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' }) : ''
+    const goldNote = `<div class="wallet-market-note">ทองคำใช้ราคา <b>รับซื้อรูปพรรณออโรร่า/บาททอง</b>${updated ? ` · อัปเดต ${esc(updated)}` : ''}</div>`
+    document.getElementById('wallets-content').innerHTML = `<div class="wallet-toolbar"><button class="btn btn-secondary btn-sm" onclick="App.refreshMarketPrices()">↻ Refresh ราคา</button><button class="btn btn-primary btn-sm" onclick="App.openWalletForm(null)">+ เพิ่มกระเป๋า</button></div>${goldNote}${section('สินทรัพย์','🏦',g.assets || [],'ยังไม่มีสินทรัพย์',true)}${section('บัตรเครดิต','💳',g.liabilities || [],'ยังไม่มีบัตรเครดิต',false)}${section('การลงทุน','📈',g.investments || [],'เพิ่มทอง / Crypto / FCD เพื่อดูมูลค่าอ้างอิง',true)}`
+  }
+
+  const prevOpenWalletForm = App.openWalletForm.bind(App)
+  App.openWalletForm = function(id) {
+    prevOpenWalletForm(id)
+    const w = id ? S.wallets.find(x => x.id === id) : null
+    const row = document.getElementById('wf-color-row')
+    if (row && !row.querySelector('.color-swatch-custom')) {
+      row.classList.add('compact-colors')
+      row.querySelectorAll('.color-dot').forEach(dot => dot.classList.add('color-swatch'))
+      row.insertAdjacentHTML('beforeend', `<label class="color-swatch color-swatch-custom" style="--picked:${esc(document.getElementById('wf-color')?.value || '#2563EB')}" aria-label="เลือกสีเอง"><input type="color" id="wf-color-native" value="${esc(document.getElementById('wf-color')?.value || '#2563EB')}" oninput="App.pickColor('wf', this.value)"><span>＋</span></label>`)
+    }
+    const type = document.getElementById('wf-type')?.value
+    const symbolInput = document.getElementById('wf-symbol')
+    if (symbolInput && type === 'gold') {
+      symbolInput.value = w?.symbol || 'บาททอง'
+      symbolInput.placeholder = 'บาททอง'
+      const label = symbolInput.closest('.form-group')?.querySelector('.form-label')
+      if (label) label.textContent = 'หน่วยทองคำ'
+    }
+    const units = document.getElementById('wf-units')
+    if (units) {
+      const label = units.closest('.form-group')?.querySelector('.form-label')
+      if (label && type === 'gold') label.textContent = 'จำนวนทองคำ (บาททอง)'
+    }
+    const manual = document.getElementById('wf-manual-price')
+    if (manual) {
+      const label = manual.closest('.form-group')?.querySelector('.form-label')
+      if (label && type === 'gold') label.textContent = 'ราคาสำรองรับซื้อรูปพรรณออโรร่า/บาททอง'
+      manual.value = manual.value ? Number(manual.value).toLocaleString('en-US').replace(/,/g,'') : manual.value
+    }
+  }
+  const prevSelectWalletType = App._selectWalletType?.bind(App)
+  App._selectWalletType = function(type) {
+    prevSelectWalletType?.(type)
+    if (type === 'gold') {
+      const symbol = document.getElementById('wf-symbol')
+      if (symbol && !symbol.value) symbol.value = 'บาททอง'
+    }
+  }
+  const prevSaveWallet = App.saveWallet.bind(App)
+  App.saveWallet = function() {
+    const type = document.getElementById('wf-type')?.value
+    const symbol = document.getElementById('wf-symbol')
+    if (type === 'gold' && symbol) symbol.value = 'บาททอง'
+    prevSaveWallet()
+  }
+
+  App._txRow = function(tx) {
+    const v = txVisual(tx)
+    const bg = v.cat?.color ? `${v.cat.color}16` : tx.type === 'transfer' ? 'rgba(37,99,235,.10)' : 'var(--elevated)'
+    return `<div class="tx-row tx-row-modern tx-row--${esc(tx.type)}" data-txid="${esc(tx.id)}">
+      <div class="tx-icon" style="background:${bg}">${esc(v.icon)}</div>
+      <div class="tx-info"><div class="tx-title">${esc(v.title)}</div><div class="tx-sub">${v.meta.map(x => `<span class="tx-meta-pill">${esc(x)}</span>`).join('')}</div></div>
+      <div class="tx-right"><div class="tx-amount" style="color:${typeColor(tx.type)}">${signedAmount(tx)}</div></div>
+    </div>`
+  }
+
+  App.renderTransactions = function() {
+    const months = Calc.getMonths(6)
+    const header = document.querySelector('#page-transactions .page-header')
+    if (header) {
+      header.innerHTML = `<div class="tx-page-top"><div><h1>รายการทั้งหมด</h1><p>${esc(fullMonthLabel(S.txMonth))}</p></div><div class="mt-sync-pill"><span class="mt-sync-dot"></span><span>Synced</span></div></div>
+        <div class="tx-summary-cards"><div class="tx-summary-card income"><span>รายรับ</span><strong id="tx-income-total">${fmt(0)}</strong></div><div class="tx-summary-card expense"><span>รายจ่าย</span><strong id="tx-expense-total">${fmt(0)}</strong></div></div>
+        <div class="tx-search-wrap"><input class="form-input" id="tx-search" placeholder="🔍  ค้นหาร้านค้า หมวด หรือจำนวนเงิน" value="${esc(S.txSearch || '')}"></div>
+        <div class="chips tx-filter-row" id="tx-type-chips">${[['all','ทั้งหมด'],['expense','รายจ่าย'],['income','รายรับ'],['transfer','โอนเงิน']].map(([v,l]) => `<button class="chip${S.txType === v ? ' active' : ''}" onclick="App.setTxType('${v}')">${l}</button>`).join('')}</div>
+        <div class="chips tx-month-row" id="tx-month-chips">${months.map(m => `<button class="chip mini${m === S.txMonth ? ' active' : ''}" onclick="App.setTxMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`).join('')}</div>`
+    }
+    const search = document.getElementById('tx-search')
+    if (search) search.oninput = e => { S.txSearch = e.target.value; App.renderTransactionsList() }
+    App.renderTransactionsList()
+  }
+
+  App.renderTransactionsList = function() {
+    const filtered = filterTransactionsForList()
+    const income = filtered.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
+    const expense = filtered.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
+    const incEl = document.getElementById('tx-income-total'), expEl = document.getElementById('tx-expense-total')
+    if (incEl) incEl.textContent = '+' + fmt(income)
+    if (expEl) expEl.textContent = '-' + fmt(expense)
+    const byDate = {}
+    filtered.forEach(t => { (byDate[t.date] ||= []).push(t) })
+    let html = ''
+    const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a))
+    if (!dates.length) html = App._emptyState('📋', 'ไม่มีรายการ', S.txSearch ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีรายการในช่วงนี้')
+    dates.forEach(date => {
+      const rows = byDate[date]
+      const dayInc = rows.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
+      const dayExp = rows.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
+      html += `<div class="tx-date-header"><span>${esc(groupDateLabel(date))}</span><div>${dayInc ? `<b class="c-income">+${fmt(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense">-${fmt(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
+    })
+    const el = document.getElementById('tx-list-content')
+    if (el) el.innerHTML = html
+    App._bindTxRows?.('tx-list-content')
+  }
+
+  const prevSetTxMonth = App.setTxMonth?.bind(App)
+  App.setTxMonth = function(m) { S.txMonth = m; S.txSearch = S.txSearch || ''; App.renderTransactions() }
+  App.setTxType = function(t) { S.txType = t; App.renderTransactions() }
+
+  function getFrequentCategories(type) {
+    const cats = S.categories[type] || []
+    const usage = {}
+    S.transactions.filter(t => t.type === type && t.categoryId).forEach(t => usage[t.categoryId] = (usage[t.categoryId] || 0) + 1)
+    return [...cats].sort((a,b) => (usage[b.id] || 0) - (usage[a.id] || 0))
+  }
+  App.showAllTxCategories = function() { S.txShowAllCats = true; App._renderAddTxDetail() }
+  App.hideAllTxCategories = function() { S.txShowAllCats = false; App._renderAddTxDetail() }
+  const prevSetTxType = App._setTxType?.bind(App)
+  App._setTxType = function(type) { S.txShowAllCats = false; prevSetTxType ? prevSetTxType(type) : (S.tx.type = type, S.tx.categoryId = '', App._renderAddTxAmount()) }
+  App._selectCat = function(id) { S.tx.categoryId = id; document.querySelectorAll('#cat-grid .cat-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.catid === id)) }
+
+  App._renderAddTxDetail = function() {
+    const type = S.tx.type
+    const typeKey = type === 'income' ? 'income' : 'expense'
+    const allCats = getFrequentCategories(typeKey)
+    const needsCat = type !== 'transfer'
+    const shownCats = S.txShowAllCats ? allCats : allCats.slice(0, 5)
+    const hasMore = needsCat && allCats.length > 5 && !S.txShowAllCats
+    const amount = parseFloat(S.tx.amount || 0)
+    const display = Number.isFinite(amount) ? amount.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0'
+    const color = typeColor(type)
+    const walletOptions = S.wallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
+    const toWalletOptions = S.wallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
+    const isExpense = type === 'expense'
+    const box = document.getElementById('add-tx-content')
+    if (!box) return
+    box.innerHTML = `<div class="sheet-header"><h2>${S.txMode === 'edit' ? 'แก้ไขรายละเอียด' : 'รายละเอียดรายการ'}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
+      <div class="add-detail-shell">
+        <div class="add-detail-scroll">
+          <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
+          ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div class="cat-grid cat-grid-compact" id="cat-grid">${shownCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}${hasMore ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.showAllTxCategories()"><span class="cat-icon">⋯</span><span>เพิ่มเติม</span></button>` : ''}${S.txShowAllCats && allCats.length > 5 ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.hideAllTxCategories()"><span class="cat-icon">⌃</span><span>ย่อ</span></button>` : ''}</div></div>` : ''}
+          <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);${type === 'transfer' ? 'App._renderAddTxDetail()' : ''}">${walletOptions}</select></div>
+          ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value)"></div>`}
+          <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value)"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
+          ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
+        </div>
+        <div class="add-detail-actions"><button class="btn btn-secondary" onclick="App._backToAmount()">← แก้จำนวน</button><button class="btn btn-primary" style="background:${color};box-shadow:0 4px 16px ${color}44" onclick="App.saveTx()">${S.txMode === 'edit' ? 'บันทึก' : `บันทึก ${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}`}</button></div>
+      </div>`
+  }
+
+  App.getFinancialAdvisorInsights = function(month = S.rptMonth || THIS_MONTH) {
+    const stats = Calc.getMonthlyStats(S.transactions, month)
+    const prevMonth = Calc.getMonths(2)[1]
+    const prev = Calc.getMonthlyStats(S.transactions, prevMonth)
+    const budget = Calc.getBudgetProgress(S.transactions, S.budgets || [], S.categories, month)
+    const top = Object.entries(stats.byCategory || {}).sort((a,b) => b[1] - a[1])[0]
+    const cat = top && App._findCat?.(top[0])
+    const insights = []
+    const savingsRate = stats.income ? (stats.net / stats.income) * 100 : 0
+    insights.push({ icon:'🧠', title:'AI Financial Coach', body: savingsRate >= 20 ? `เดือนนี้อัตราออมประมาณ ${savingsRate.toFixed(0)}% อยู่ในระดับดี ควรแยกเงินส่วนเกินไปออม/ลงทุนทันทีหลังรับรายได้` : savingsRate >= 0 ? `เดือนนี้ยังมีกระแสเงินสดบวก แต่อัตราออมอยู่ที่ ${savingsRate.toFixed(0)}% แนะนำตั้งเป้าออมอัตโนมัติก่อนใช้จ่าย` : `เดือนนี้รายจ่ายสูงกว่ารายรับ แนะนำลดรายจ่ายไม่จำเป็น 1-2 หมวดทันทีและตั้งเพดานรายสัปดาห์` })
+    if (prev.expense) {
+      const diff = ((stats.expense - prev.expense) / prev.expense) * 100
+      insights.push({ icon: diff > 0 ? '📈' : '📉', title:'เทียบเดือนก่อน', body:`รายจ่าย${diff >= 0 ? 'เพิ่มขึ้น' : 'ลดลง'} ${Math.abs(diff).toFixed(0)}% จากเดือนก่อน ${diff > 15 ? 'ควรตรวจรายการที่ผิดปกติหรือรายจ่ายก้อนใหญ่' : 'ถือว่าอยู่ในช่วงควบคุมได้'}` })
+    }
+    if (cat && top) insights.push({ icon:'🔍', title:'หมวดที่ควรจับตา', body:`หมวด ${cat.label} ใช้สูงสุดที่ ${fmt(top[1])} (${stats.expense ? (top[1]/stats.expense*100).toFixed(0) : 0}% ของรายจ่าย) แนะนำตั้งงบย่อยหรือ review รายการซ้ำ` })
+    const over = budget.find(b => b.over)
+    if (over) insights.push({ icon:'⚠️', title:'งบประมาณเกิน', body:`${over.label} เกินงบ ${fmt(over.spent - over.monthlyLimit)} แล้ว ควรหยุดใช้หมวดนี้ชั่วคราวจนจบรอบเดือน` })
+    return insights.slice(0, 4)
+  }
+
+  const prevRenderReports = App.renderReports.bind(App)
+  App.renderReports = function() {
+    prevRenderReports()
+    const box = document.getElementById('reports-content')
+    if (!box || box.querySelector('.ai-advisor-card')) return
+    const insights = App.getFinancialAdvisorInsights(S.rptMonth)
+    box.insertAdjacentHTML('afterbegin', `<div class="sec-title">Financial Insights</div><div class="card card-pad ai-advisor-card"><div class="ai-card-head"><div><strong>AI Financial Coach</strong><span>วิเคราะห์จากพฤติกรรมรายรับ-รายจ่ายในเครื่อง</span></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()">วิเคราะห์ใหม่</button></div>${insights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${i.icon}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')}</div>`)
+  }
+
+  try { if (S.page === 'transactions') App.renderTransactions(); else App.render?.() } catch (_) {}
+})();
+
+/* ============================================================
+   V2.2.6 Investment, Aurora gold sync, and circular color controls
+   Scope: presentation/market-price robustness only. Keeps storage/sync logic intact.
+   ============================================================ */
+;(function v226InvestmentGoldAndColorFixes(){
+  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
+  const numFmt = (n, digits = 4) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: digits })
+  const investTypes = new Set(['gold','crypto','fcd'])
+  const AURORA_GOLD_URL = 'https://www.aurora.co.th/price/gold_pricelist'
+
+  function isInvestType(type) { return investTypes.has(type) }
+  function toNumber(s) { return Number(String(s || '').replace(/,/g, '')) || 0 }
+  function assetUnitLabel(wOrType) {
+    const type = typeof wOrType === 'string' ? wOrType : wOrType?.type
+    if (type === 'gold') return 'บาททอง'
+    if (type === 'fcd') return (typeof wOrType === 'string' ? 'สกุลเงิน' : (wOrType?.currency || wOrType?.symbol || 'USD'))
+    return typeof wOrType === 'string' ? 'หน่วย' : (wOrType?.symbol || 'หน่วย')
+  }
+  function marketUrlFor(type, w) {
+    if (type === 'gold') return AURORA_GOLD_URL
+    if (type === 'crypto') return 'https://www.coingecko.com/'
+    if (type === 'fcd') return 'https://www.frankfurter.app/'
+    return '#'
+  }
+  function marketSourceLabel(type) {
+    if (type === 'gold') return 'Aurora รับซื้อรูปพรรณ'
+    if (type === 'crypto') return 'CoinGecko'
+    if (type === 'fcd') return 'Frankfurter FX'
+    return 'ราคาจริง'
+  }
+
+  // Aurora HTML has a current intraday table row:
+  // time / round / bar buy / bar sell / Aurora jewelry buy / change.
+  App._parseAuroraGold = function(html) {
+    const raw = String(html || '')
+    const clean = raw
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;|&#160;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    let tail = clean
+    const tableIdx = clean.search(/ช่วงเวลา\s+ทองแท่ง|รับซื้อรูปพรรณออโรร่า/i)
+    if (tableIdx >= 0) tail = clean.slice(tableIdx)
+
+    const priceRe = '(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?)'
+    const intradayRow = tail.match(new RegExp('\\d{1,2}:\\d{2}(?::\\d{2})?\\s*น\\.?\\s+\\d+\\s+' + priceRe + '\\s+' + priceRe + '\\s+' + priceRe))
+    if (intradayRow) {
+      const barBuy = toNumber(intradayRow[1])
+      const barSell = toNumber(intradayRow[2])
+      const jewelryBuy = toNumber(intradayRow[3])
+      if (jewelryBuy) return { jewelryBuy, barBuy, barSell, source:'Aurora', url:AURORA_GOLD_URL, fetchedAt:new Date().toISOString() }
+    }
+
+    // Fallback: after the jewelry-buy header, use the first valid sequence of 3 gold prices.
+    const jewelryIdx = clean.search(/รับซื้อรูปพรรณออโรร่า/i)
+    const afterJewelry = jewelryIdx >= 0 ? clean.slice(jewelryIdx) : clean
+    const nums = afterJewelry.match(/\d{1,3}(?:,\d{3})+(?:\.\d+)?/g) || []
+    for (let i = 0; i <= nums.length - 3; i++) {
+      const a = toNumber(nums[i]), b = toNumber(nums[i + 1]), c = toNumber(nums[i + 2])
+      // Jewelry buy is normally lower than bar buy/sell. This avoids accidentally using bar-buy as jewelry-buy.
+      if (a > 10000 && b > 10000 && c > 10000 && c <= Math.max(a, b)) {
+        return { jewelryBuy:c, barBuy:a, barSell:b, source:'Aurora', url:AURORA_GOLD_URL, fetchedAt:new Date().toISOString() }
+      }
+    }
+    return null
+  }
+
+  App.refreshMarketPrices = async function() {
+    const next = { ...(S.marketPrices || {}) }
+    let ok = false
+    let goldOk = false
+    try {
+      const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache:'no-store' })
+      if (r.ok) { next.crypto = await r.json(); ok = true }
+    } catch (_) {}
+    try {
+      const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' })
+      if (r.ok) { next.fx = await r.json(); ok = true }
+    } catch (_) {}
+
+    const auroraEndpoints = [
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(AURORA_GOLD_URL),
+      'https://corsproxy.io/?' + encodeURIComponent(AURORA_GOLD_URL),
+      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(AURORA_GOLD_URL)
+    ]
+    for (const url of auroraEndpoints) {
+      try {
+        const r = await fetch(url, { cache:'no-store' })
+        if (!r.ok) continue
+        const data = App._parseAuroraGold(await r.text())
+        if (data?.jewelryBuy) { next.auroraGold = data; ok = true; goldOk = true; break }
+      } catch (_) {}
+    }
+
+    next.updatedAt = new Date().toISOString()
+    S.marketPrices = next
+    persist()
+    App.renderWallets?.()
+    App.render?.()
+    if (goldOk) toast('อัปเดตราคาทอง Aurora แล้ว', 'success')
+    else toast(ok ? 'อัปเดตราคาอ้างอิงแล้ว แต่ราคาทองยังไม่ได้ ใช้ราคาสำรองแทน' : 'อัปเดตราคาไม่ได้ ใช้ราคาสำรองในกระเป๋าแทน', ok ? 'warn' : 'error')
+  }
+
+  App._investmentUnitPriceTHB = function(w) {
+    const p = S.marketPrices || {}
+    if (w?.type === 'gold') return Number(p.auroraGold?.jewelryBuy || w.manualPrice || 0)
+    if (w?.type === 'crypto') {
+      const map = { BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether' }
+      const id = map[(w.symbol || '').toUpperCase()]
+      return Number((id && p.crypto?.[id]?.thb) || w.manualPrice || 0)
+    }
+    if (w?.type === 'fcd') {
+      const cur = (w.currency || w.symbol || 'USD').toUpperCase()
+      const thb = p.fx?.rates?.THB
+      return Number((cur === 'USD' ? thb : (thb && p.fx?.rates?.[cur] ? thb / p.fx.rates[cur] : 0)) || w.manualPrice || 0)
+    }
+    return 0
+  }
+  App._investmentValueTHB = w => isInvestType(w?.type) ? ((Number(w.units || 0) * App._investmentUnitPriceTHB(w)) || Number(w.balance || 0)) : Number(w?.balance || 0)
+  App._marketText = function(w) {
+    const p = S.marketPrices || {}
+    if (w?.type === 'gold') return p.auroraGold?.jewelryBuy ? `Aurora รับซื้อรูปพรรณ ${fmt(p.auroraGold.jewelryBuy)}/บาททอง` : 'ยังไม่ sync ราคา Aurora'
+    if (w?.type === 'crypto') { const coin = (w.symbol || w.name || '').toUpperCase(); const map = {BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether'}; const id = map[coin]; const thb = id && p.crypto?.[id]?.thb; return thb ? `${coin} ${fmt(thb)}` : 'CoinGecko' }
+    if (w?.type === 'fcd') { const cur = (w.currency || w.symbol || 'USD').toUpperCase(); const rate = cur === 'USD' ? p.fx?.rates?.THB : (p.fx?.rates?.THB && p.fx?.rates?.[cur] ? p.fx.rates.THB / p.fx.rates[cur] : null); return rate ? `${cur}/THB ${rate.toFixed(2)}` : 'FX อ้างอิง' }
+    return ''
+  }
+
+  function syncInvestmentWalletForm(type = document.getElementById('wf-type')?.value) {
+    const isInv = isInvestType(type)
+    const balanceGroup = document.getElementById('wf-balance')?.closest('.form-group')
+    if (balanceGroup) {
+      balanceGroup.classList.toggle('invest-balance-hidden', isInv)
+      balanceGroup.style.display = isInv ? 'none' : ''
+    }
+
+    const investBox = document.getElementById('wf-invest-fields')
+    if (!investBox) return
+    investBox.style.display = isInv ? '' : 'none'
+    if (!isInv) return
+
+    const w = S.editingWalletId ? S.wallets.find(x => x.id === S.editingWalletId) : null
+    if (!investBox.querySelector('#wf-units')) {
+      investBox.insertAdjacentHTML('beforeend', `<div class="form-group"><label class="form-label">จำนวน Asset ที่มี</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${esc(w?.units || '')}" placeholder="เช่น 1.5, 0.05, 1000"></div><div class="form-group"><label class="form-label">ราคาสำรองต่อหน่วย (บาท)</label><input class="form-input" type="number" step="0.01" id="wf-manual-price" value="${esc(w?.manualPrice || '')}" placeholder="ใช้เมื่อดึงราคาจริงไม่ได้"></div>`)
+    }
+
+    const units = document.getElementById('wf-units')
+    if (units) {
+      units.placeholder = type === 'gold' ? 'เช่น 1, 2.5 บาททอง' : 'เช่น 0.05, 2.5, 1000'
+      const label = units.closest('.form-group')?.querySelector('.form-label')
+      if (label) label.textContent = type === 'gold' ? 'จำนวนทองคำที่มี (บาททอง)' : 'จำนวน Asset ที่มี'
+    }
+    const manual = document.getElementById('wf-manual-price')
+    if (manual) {
+      const label = manual.closest('.form-group')?.querySelector('.form-label')
+      if (label) label.textContent = type === 'gold' ? 'ราคาสำรองรับซื้อรูปพรรณ/บาททอง' : 'ราคาสำรองต่อหน่วย (บาท)'
+    }
+    const symbol = document.getElementById('wf-symbol')
+    if (symbol && type === 'gold') {
+      symbol.value = 'บาททอง'
+      symbol.placeholder = 'บาททอง'
+      symbol.readOnly = true
+      const label = symbol.closest('.form-group')?.querySelector('.form-label')
+      if (label) label.textContent = 'หน่วยทองคำ'
+    } else if (symbol) {
+      symbol.readOnly = false
+      const label = symbol.closest('.form-group')?.querySelector('.form-label')
+      if (label) label.textContent = type === 'fcd' ? 'สกุลเงิน' : 'Symbol / สกุลเงิน'
+    }
+
+    let priceBox = document.getElementById('wf-market-price-link')
+    if (!priceBox) {
+      investBox.insertAdjacentHTML('beforeend', '<div id="wf-market-price-link" class="market-price-box"></div>')
+      priceBox = document.getElementById('wf-market-price-link')
+    }
+    const tempWallet = { ...(w || {}), type, symbol: symbol?.value || w?.symbol, currency: symbol?.value || w?.currency }
+    const unitPrice = App._investmentUnitPriceTHB(tempWallet)
+    priceBox.innerHTML = `<div><strong>ราคาจริง</strong><span>${esc(marketSourceLabel(type))}${unitPrice ? ` · ${fmt(unitPrice)}/${esc(assetUnitLabel(type))}` : ' · ยังไม่ sync'}</span></div><a href="${esc(marketUrlFor(type, w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a>`
+  }
+
+  const previousOpenWalletForm = App.openWalletForm.bind(App)
+  App.openWalletForm = function(id) {
+    previousOpenWalletForm(id)
+    setTimeout(() => syncInvestmentWalletForm(), 0)
+  }
+  const previousSelectWalletType = App._selectWalletType?.bind(App)
+  App._selectWalletType = function(type) {
+    previousSelectWalletType?.(type)
+    syncInvestmentWalletForm(type)
+  }
+  const previousSaveWallet = App.saveWallet.bind(App)
+  App.saveWallet = function() {
+    const type = document.getElementById('wf-type')?.value
+    const symbol = document.getElementById('wf-symbol')
+    if (type === 'gold' && symbol) symbol.value = 'บาททอง'
+    previousSaveWallet()
+  }
+
+  const previousWalletCard = App._walletCard?.bind(App)
+  App._walletCard = function(w) {
+    if (!isInvestType(w?.type)) return previousWalletCard ? previousWalletCard(w) : ''
+    const color = w.color || '#2563EB'
+    const unitLabel = assetUnitLabel(w)
+    const priceText = App._marketText(w)
+    const unitPrice = App._investmentUnitPriceTHB(w)
+    const detailAction = `App.openWalletDetail('${esc(w.id)}')`
+    return `<div class="wallet-card wallet-card-colored wallet-card-invest wallet-card-invest-asset-only" style="--wallet-color:${esc(color)};--wallet-color-2:${esc(color)}BB" onclick="${detailAction}">
+      <div class="wc-header"><div><div class="wc-name">${esc(w.icon)} ${esc(w.name)}</div><div class="wc-type">${esc(App._walletTypeLabel(w.type))}</div></div></div>
+      <div class="wc-balance wc-balance-asset">${numFmt(w.units, 4)} <span>${esc(unitLabel)}</span></div>
+      <div class="wc-prog-info wc-invest-info"><span>${esc(priceText || 'ยังไม่ sync ราคาจริง')}</span>${unitPrice ? `<span>${fmt(unitPrice)}/หน่วย</span>` : '<span>ใช้ราคาสำรองถ้ามี</span>'}</div>
+      <a class="market-price-link" href="${esc(marketUrlFor(w.type, w))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">ดูราคาจริง ↗</a>
+      <div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();${detailAction}">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${esc(w.id)}')">แก้ไข</button></div>
+    </div>`
+  }
+
+  const previousOpenWalletDetail = App.openWalletDetail?.bind(App)
+  App.openWalletDetail = function(id) {
+    const w = S.wallets.find(x => x.id === id)
+    if (!w || !isInvestType(w.type)) return previousOpenWalletDetail?.(id)
+    S.walletDetailId = id
+    S.walletTxRange ||= 'all'
+    const tx = App._filterWalletTx ? App._filterWalletTx(id) : S.transactions.filter(t => t.walletId === id || t.toWalletId === id).sort((a,b) => (b.date || '').localeCompare(a.date || ''))
+    const chips = [['all','ทั้งหมด'],['month','เดือนนี้'],['3m','3 เดือน'],['year','ปีนี้'],['custom','กำหนดเอง']].map(([k,l]) => `<button class="chip${S.walletTxRange === k ? ' active' : ''}" onclick="App.setWalletTxRange('${k}','${esc(id)}')">${l}</button>`).join('')
+    const custom = S.walletTxRange === 'custom' ? `<div class="wallet-filter-custom"><input class="form-input" type="date" id="wallet-filter-start" value="${esc(S.walletTxStart || '')}"><input class="form-input" type="date" id="wallet-filter-end" value="${esc(S.walletTxEnd || '')}"><button class="btn btn-primary btn-sm" onclick="App.setWalletTxCustom('${esc(id)}')" style="width:auto">ดู</button></div>` : ''
+    const unitPrice = App._investmentUnitPriceTHB(w)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(w.icon)} ${esc(w.name)}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(w.id)}')" style="width:auto">แก้ไข</button></div>
+      <div class="sub-scroll wallet-detail-screen" data-wallet-id="${esc(id)}">
+        <div class="wallet-detail-hero wallet-detail-invest-only">
+          <div class="nw-label">จำนวน Asset ที่มี</div>
+          <div class="big">${numFmt(w.units, 4)} <span>${esc(assetUnitLabel(w))}</span></div>
+          <div class="nw-detail"><span class="nw-item">ราคาจริง <strong>${unitPrice ? fmt(unitPrice) + '/หน่วย' : 'ยังไม่ sync'}</strong></span><a class="market-price-link" href="${esc(marketUrlFor(w.type, w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a></div>
+        </div>
+        <div class="chips" style="padding:0 0 12px">${chips}</div>
+        ${custom}
+        ${App._sectionHeader('รายการในกระเป๋านี้')}
+        <div class="card"><div style="padding:0 16px">${tx.length ? tx.map(t => App._txRow(t)).join('') : App._emptyState('📋','ไม่พบรายการ','ลองเปลี่ยนช่วงเวลา')}</div></div>
+      </div>`)
+    setTimeout(() => App._bindTxRows('sub-screen'), 0)
+  }
+
+  try { App.render?.() } catch (_) {}
+})()
+
+/* ============================================================
+   V2.2.7 Reliable Aurora gold sync bridge
+   Why: Aurora blocks normal browser cross-origin fetch from GitHub Pages.
+   This layer supports a user-owned proxy endpoint (recommended) via JSONP,
+   then falls back to public proxies only as best-effort.
+   ============================================================ */
+;(function v227ReliableAuroraGoldSync(){
+  const AURORA_GOLD_URL = 'https://www.aurora.co.th/price/gold_pricelist'
+  const toastSafe = (msg, type='info') => { try { toast(msg, type) } catch { console.log(msg) } }
+  const toNumber = (s) => Number(String(s || '').replace(/,/g, '').replace(/[^d.-]/g, '')) || 0
+  const normaliseGoldData = (payload) => {
+    if (!payload) return null
+    if (typeof payload === 'string') return App._parseAuroraGold?.(payload) || null
+    const jewelryBuy = toNumber(payload.jewelryBuy ?? payload.auroraJewelryBuy ?? payload.buyJewelry ?? payload.price)
+    const barBuy = toNumber(payload.barBuy ?? payload.goldBarBuy ?? payload.buy)
+    const barSell = toNumber(payload.barSell ?? payload.goldBarSell ?? payload.sell)
+    if (!jewelryBuy) return null
+    return {
+      jewelryBuy,
+      barBuy,
+      barSell,
+      source: payload.source || 'Aurora',
+      url: payload.url || AURORA_GOLD_URL,
+      fetchedAt: payload.fetchedAt || new Date().toISOString(),
+      fetchedVia: payload.fetchedVia || payload.via || 'custom-proxy'
+    }
+  }
+
+  App._fetchJsonp = function(url, timeoutMs = 15000) {
+    return new Promise((resolve, reject) => {
+      const cb = '__mtGoldCb_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+      const script = document.createElement('script')
+      let done = false
+      const sep = url.includes('?') ? '&' : '?'
+      const cleanup = () => {
+        try { delete window[cb] } catch { window[cb] = undefined }
+        script.remove()
+      }
+      const timer = setTimeout(() => {
+        if (done) return
+        done = true
+        cleanup()
+        reject(new Error('gold proxy timeout'))
+      }, timeoutMs)
+      window[cb] = (data) => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        cleanup()
+        resolve(data)
+      }
+      script.onerror = () => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        cleanup()
+        reject(new Error('gold proxy script error'))
+      }
+      script.src = url + sep + 'callback=' + encodeURIComponent(cb) + '&_=' + Date.now()
+      document.head.appendChild(script)
+    })
+  }
+
+  App._getGoldProxyUrl = function(){
+    return String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '').trim()
+  }
+
+  App._fetchAuroraGoldViaProxy = async function(){
+    const customProxy = App._getGoldProxyUrl()
+    if (customProxy) {
+      const payload = await App._fetchJsonp(customProxy)
+      const data = normaliseGoldData(payload)
+      if (data?.jewelryBuy) return data
+      throw new Error('custom gold proxy returned no Aurora jewelry-buy price')
+    }
+
+    const publicProxyUrls = [
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(AURORA_GOLD_URL),
+      'https://corsproxy.io/?' + encodeURIComponent(AURORA_GOLD_URL),
+      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(AURORA_GOLD_URL)
+    ]
+    for (const url of publicProxyUrls) {
+      try {
+        const r = await fetch(url, { cache:'no-store' })
+        if (!r.ok) continue
+        const data = normaliseGoldData(await r.text())
+        if (data?.jewelryBuy) return { ...data, fetchedVia:'public-proxy' }
+      } catch (_) {}
+    }
+    return null
+  }
+
+  App.refreshMarketPrices = async function(){
+    const next = { ...(S.marketPrices || {}) }
+    let anyOk = false
+    let goldOk = false
+
+    try {
+      const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache:'no-store' })
+      if (r.ok) { next.crypto = await r.json(); anyOk = true }
+    } catch (_) {}
+    try {
+      const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' })
+      if (r.ok) { next.fx = await r.json(); anyOk = true }
+    } catch (_) {}
+
+    try {
+      const gold = await App._fetchAuroraGoldViaProxy()
+      if (gold?.jewelryBuy) {
+        next.auroraGold = gold
+        anyOk = true
+        goldOk = true
+      }
+    } catch (err) {
+      console.warn('Aurora gold sync failed:', err)
+    }
+
+    next.updatedAt = new Date().toISOString()
+    S.marketPrices = next
+    persist()
+    App.renderWallets?.()
+    App.render?.()
+
+    if (goldOk) {
+      toastSafe('Sync ราคาทอง Aurora สำเร็จ', 'success')
+    } else if (!App._getGoldProxyUrl()) {
+      toastSafe('ยังไม่ได้ตั้งค่า Gold Proxy จึง sync Aurora ไม่เสถียร', 'warn')
+    } else {
+      toastSafe(anyOk ? 'ราคาอื่นอัปเดตแล้ว แต่ Aurora ยังไม่ตอบกลับ' : 'Sync ราคาไม่ได้ ลองเช็ก Gold Proxy', anyOk ? 'warn' : 'error')
+    }
+  }
+
+  App.setGoldProxyUrl = function(url){
+    const value = String(url || '').trim()
+    if (value) localStorage.setItem('MT_GOLD_PROXY_URL', value)
+    else localStorage.removeItem('MT_GOLD_PROXY_URL')
+    window.MT_GOLD_PROXY_URL = value
+    toastSafe(value ? 'บันทึก Gold Proxy URL แล้ว' : 'ลบ Gold Proxy URL แล้ว', value ? 'success' : 'info')
+  }
+})();
+
+/* ============================================================
+   V2.2.8 Thai Gold / Gold Traders source switch
+   Why: Aurora URL cannot be fetched reliably from Apps Script.
+   Uses Gold Traders Association-compatible data via a JSON API/proxy.
+   Keeps legacy auroraGold key populated for backward compatibility.
+   ============================================================ */
+;(function v228ThaiGoldSourceSwitch(){
+  const GTA_URL = 'https://classic.goldtraders.or.th/'
+  const THAI_GOLD_API_URL = 'https://api.chnwt.dev/thai-gold-api/latest'
+  const toastSafe = (msg, type='info') => { try { toast(msg, type) } catch { console.log(msg) } }
+  const toNumber = (s) => Number(String(s || '').replace(/,/g, '').replace(/[^\d.\-]/g, '')) || 0
+  const fmtMoney = (n) => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
+  const dateNow = () => new Date().toISOString()
+
+  function normaliseThaiGoldPayload(payload) {
+    if (!payload) return null
+    if (typeof payload === 'string') {
+      try { payload = JSON.parse(payload) } catch { return null }
+    }
+
+    const root = payload.response || payload.data || payload
+    const price = root.price || root.prices || {}
+    const gold = price.gold || root.gold || {}
+    const goldBar = price.gold_bar || price.goldBar || root.gold_bar || root.goldBar || {}
+
+    // Thai Gold API shape:
+    // response.price.gold.buy = ornament/jewelry buy reference
+    // response.price.gold_bar.buy/sell = gold bar buy/sell
+    const jewelryBuy = toNumber(
+      payload.jewelryBuy ?? payload.goldBuy ?? payload.ornamentBuy ?? payload.price ??
+      root.jewelryBuy ?? root.goldBuy ?? root.ornamentBuy ??
+      gold.buy ?? gold.bid ?? gold.taxBase
+    )
+    const jewelrySell = toNumber(payload.jewelrySell ?? root.jewelrySell ?? gold.sell ?? gold.ask)
+    const barBuy = toNumber(payload.barBuy ?? root.barBuy ?? goldBar.buy ?? goldBar.bid)
+    const barSell = toNumber(payload.barSell ?? root.barSell ?? goldBar.sell ?? goldBar.ask)
+
+    if (!jewelryBuy && !barBuy && !barSell) return null
+
+    return {
+      jewelryBuy: jewelryBuy || barBuy || 0,
+      jewelrySell: jewelrySell || 0,
+      barBuy: barBuy || 0,
+      barSell: barSell || 0,
+      source: payload.source || root.source || 'Gold Traders Association',
+      url: payload.url || root.url || GTA_URL,
+      fetchedAt: payload.fetchedAt || root.fetchedAt || dateNow(),
+      latestDate: payload.latestDate || root.latestDate || root.update_date || payload.update_date || '',
+      latestTime: payload.latestTime || root.latestTime || root.update_time || payload.update_time || '',
+      fetchedVia: payload.fetchedVia || payload.via || 'direct-json'
+    }
+  }
+
+  App._normaliseThaiGoldPayload = normaliseThaiGoldPayload
+
+  App._fetchThaiGoldViaSource = async function(){
+    const customProxy = String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '').trim()
+    if (customProxy) {
+      const payload = await App._fetchJsonp(customProxy)
+      const data = normaliseThaiGoldPayload(payload)
+      if (data?.jewelryBuy) return { ...data, fetchedVia:'custom-proxy' }
+      throw new Error('custom gold proxy returned no Thai gold price')
+    }
+
+    // Best case: the JSON API allows browser CORS.
+    try {
+      const r = await fetch(THAI_GOLD_API_URL, { cache:'no-store' })
+      if (r.ok) {
+        const data = normaliseThaiGoldPayload(await r.json())
+        if (data?.jewelryBuy) return { ...data, fetchedVia:'direct-api' }
+      }
+    } catch (_) {}
+
+    // Browser-only fallback for GitHub Pages. Not guaranteed, but harmless.
+    const proxyUrls = [
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(THAI_GOLD_API_URL),
+      'https://corsproxy.io/?' + encodeURIComponent(THAI_GOLD_API_URL),
+      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(THAI_GOLD_API_URL)
+    ]
+    for (const url of proxyUrls) {
+      try {
+        const r = await fetch(url, { cache:'no-store' })
+        if (!r.ok) continue
+        const data = normaliseThaiGoldPayload(await r.text())
+        if (data?.jewelryBuy) return { ...data, fetchedVia:'public-proxy' }
+      } catch (_) {}
+    }
+    return null
+  }
+
+  // Backward compatibility: older code still calls this method name.
+  App._fetchAuroraGoldViaProxy = App._fetchThaiGoldViaSource
+
+  App.refreshMarketPrices = async function(){
+    const next = { ...(S.marketPrices || {}) }
+    let anyOk = false
+    let goldOk = false
+
+    try {
+      const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache:'no-store' })
+      if (r.ok) { next.crypto = await r.json(); anyOk = true }
+    } catch (_) {}
+
+    try {
+      const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' })
+      if (r.ok) { next.fx = await r.json(); anyOk = true }
+    } catch (_) {}
+
+    try {
+      const gold = await App._fetchThaiGoldViaSource()
+      if (gold?.jewelryBuy) {
+        next.thaiGold = gold
+        // Keep legacy key so all previous investment renderers still work.
+        next.auroraGold = gold
+        anyOk = true
+        goldOk = true
+      }
+    } catch (err) {
+      console.warn('Thai gold sync failed:', err)
+    }
+
+    next.updatedAt = dateNow()
+    S.marketPrices = next
+    persist()
+    App.renderWallets?.()
+    App.render?.()
+
+    if (goldOk) toastSafe('Sync ราคาทองสมาคมค้าทองคำสำเร็จ', 'success')
+    else if (anyOk) toastSafe('ราคาอื่นอัปเดตแล้ว แต่ราคาทองยังไม่สำเร็จ', 'warn')
+    else toastSafe('Sync ราคาไม่ได้ ลองตั้งค่า Gold Proxy หรือเช็กอินเทอร์เน็ต', 'error')
+  }
+
+  App._investmentUnitPriceTHB = function(w) {
+    if (!w) return 0
+    const p = S.marketPrices || {}
+    if (w.type === 'gold') return Number(p.thaiGold?.jewelryBuy || p.auroraGold?.jewelryBuy || w.manualPrice || 0)
+    if (w.type === 'crypto') {
+      const key = (w.symbol || '').toUpperCase()
+      const map = { BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether' }
+      return Number(p.crypto?.[map[key]]?.thb || w.manualPrice || 0)
+    }
+    if (w.type === 'fcd') {
+      const cc = (w.currency || w.symbol || 'USD').toUpperCase()
+      if (cc === 'THB') return 1
+      return Number(p.fx?.rates?.[cc] ? (1 / p.fx.rates[cc]) * p.fx.rates.THB : w.manualPrice || 0)
+    }
+    return Number(w.manualPrice || 0)
+  }
+
+  App._marketText = function(w) {
+    const p = S.marketPrices || {}
+    if (w?.type === 'gold') {
+      const g = p.thaiGold || p.auroraGold
+      return g?.jewelryBuy ? `สมาคมค้าทองคำ ทองรูปพรรณรับซื้อ ${fmtMoney(g.jewelryBuy)}/บาททอง` : 'ยังไม่ sync ราคาทองสมาคมค้าทองคำ'
+    }
+    if (w?.type === 'crypto') return 'CoinGecko'
+    if (w?.type === 'fcd') return 'Frankfurter FX'
+    return ''
+  }
+
+  function isInvestType(type) { return ['gold','crypto','fcd'].includes(type) }
+  function assetUnitLabel(w) {
+    if (w?.type === 'gold') return 'บาททอง'
+    if (w?.type === 'fcd') return w.currency || w.symbol || 'USD'
+    return w?.symbol || 'หน่วย'
+  }
+  function marketUrlFor(w) {
+    if (w?.type === 'gold') return GTA_URL
+    if (w?.type === 'crypto') return 'https://www.coingecko.com/'
+    if (w?.type === 'fcd') return 'https://www.frankfurter.app/'
+    return '#'
+  }
+
+  const previousWalletCard = App._walletCard?.bind(App)
+  App._walletCard = function(w) {
+    if (!isInvestType(w?.type)) return previousWalletCard ? previousWalletCard(w) : ''
+    const color = w.color || '#2563EB'
+    const unitPrice = App._investmentUnitPriceTHB(w)
+    const priceText = App._marketText(w)
+    const detailAction = `App.openWalletDetail('${esc(w.id)}')`
+    return `<div class="wallet-card wallet-card-colored wallet-card-invest wallet-card-invest-asset-only" style="--wallet-color:${esc(color)};--wallet-color-2:${esc(color)}BB" onclick="${detailAction}">
+      <div class="wc-header"><div><div class="wc-name">${esc(w.icon)} ${esc(w.name)}</div><div class="wc-type">${esc(App._walletTypeLabel(w.type))}</div></div></div>
+      <div class="wc-balance wc-balance-asset">${numFmt(w.units, 4)} <span>${esc(assetUnitLabel(w))}</span></div>
+      <div class="wc-prog-info wc-invest-info"><span>${esc(priceText || 'ยังไม่ sync ราคาจริง')}</span>${unitPrice ? `<span>${fmtMoney(unitPrice)}/หน่วย</span>` : '<span>ใช้ราคาสำรองถ้ามี</span>'}</div>
+      <a class="market-price-link" href="${esc(marketUrlFor(w))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">ดูราคาจริง ↗</a>
+      <div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();${detailAction}">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${esc(w.id)}')">แก้ไข</button></div>
+    </div>`
+  }
+
+  const previousOpenWalletDetail = App.openWalletDetail?.bind(App)
+  App.openWalletDetail = function(id) {
+    const w = S.wallets.find(x => x.id === id)
+    if (!w || !isInvestType(w.type)) return previousOpenWalletDetail?.(id)
+    S.walletDetailId = id
+    S.walletTxRange ||= 'all'
+    const tx = App._filterWalletTx ? App._filterWalletTx(id) : S.transactions.filter(t => t.walletId === id || t.toWalletId === id).sort((a,b) => (b.date || '').localeCompare(a.date || ''))
+    const chips = [['all','ทั้งหมด'],['month','เดือนนี้'],['3m','3 เดือน'],['year','ปีนี้'],['custom','กำหนดเอง']].map(([k,l]) => `<button class="chip${S.walletTxRange === k ? ' active' : ''}" onclick="App.setWalletTxRange('${k}','${esc(id)}')">${l}</button>`).join('')
+    const custom = S.walletTxRange === 'custom' ? `<div class="wallet-filter-custom"><input class="form-input" type="date" id="wallet-filter-start" value="${esc(S.walletTxStart || '')}"><input class="form-input" type="date" id="wallet-filter-end" value="${esc(S.walletTxEnd || '')}"><button class="btn btn-primary btn-sm" onclick="App.setWalletTxCustom('${esc(id)}')" style="width:auto">ดู</button></div>` : ''
+    const unitPrice = App._investmentUnitPriceTHB(w)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(w.icon)} ${esc(w.name)}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(w.id)}')" style="width:auto">แก้ไข</button></div>
+      <div class="sub-scroll wallet-detail-screen" data-wallet-id="${esc(id)}">
+        <div class="wallet-detail-hero wallet-detail-invest-only">
+          <div class="nw-label">จำนวน Asset ที่มี</div>
+          <div class="big">${numFmt(w.units, 4)} <span>${esc(assetUnitLabel(w))}</span></div>
+          <div class="nw-detail"><span class="nw-item">ราคาจริง <strong>${unitPrice ? fmtMoney(unitPrice) + '/หน่วย' : 'ยังไม่ sync'}</strong></span><a class="market-price-link" href="${esc(marketUrlFor(w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a></div>
+          ${w.type === 'gold' ? `<div class="wallet-market-note compact">อ้างอิง: สมาคมค้าทองคำ / ทองรูปพรรณรับซื้อ</div>` : ''}
+        </div>
+        <div class="chips" style="padding:0 0 12px">${chips}</div>
+        ${custom}
+        ${App._sectionHeader('รายการในกระเป๋านี้')}
+        <div class="card"><div style="padding:0 16px">${tx.length ? tx.map(t => App._txRow(t)).join('') : App._emptyState('📋','ไม่พบรายการ','ลองเปลี่ยนช่วงเวลา')}</div></div>
+      </div>`)
+    setTimeout(() => App._bindTxRows('sub-screen'), 0)
+  }
+
+  App.setGoldProxyUrl = function(url){
+    const value = String(url || '').trim()
+    if (value) localStorage.setItem('MT_GOLD_PROXY_URL', value)
+    else localStorage.removeItem('MT_GOLD_PROXY_URL')
+    window.MT_GOLD_PROXY_URL = value
+    toastSafe(value ? 'บันทึก Gold Proxy URL แล้ว' : 'ลบ Gold Proxy URL แล้ว', value ? 'success' : 'info')
+  }
+
+  try { App.render?.() } catch (_) {}
+})();
+
+/* ============================================================
+   V2.2.9 Wallet rollback + Gold Traders API hardening
+   ============================================================ */
+;(function v229WalletRollbackGoldApi(){
+  const MONEY = n => (typeof fmtMoney === 'function' ? fmtMoney(n) : Calc.fmt(Number(n)||0));
+  const NUM = (n, digits = 4) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: digits });
+  const ESC = v => (typeof esc === 'function' ? esc(v) : String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])));
+  const INVEST_TYPES = new Set(['gold','crypto','fcd']);
+  const GOLD_API_URL = 'https://api.chnwt.dev/thai-gold-api/latest';
+  const GOLDTRADERS_URL = 'https://www.goldtraders.or.th/';
+  const isInvest = w => INVEST_TYPES.has(w?.type);
+  const walletTypeLabel = type => ({ bank:'ธนาคาร', cash:'เงินสด', ewallet:'E-Wallet', saving:'ออมทรัพย์', credit:'บัตรเครดิต', gold:'ทองคำ', crypto:'Crypto', fcd:'เงินฝากต่างประเทศ' })[type] || type || 'กระเป๋า';
+  const unitLabel = w => w?.type === 'gold' ? 'บาททอง' : w?.type === 'fcd' ? (w.currency || w.symbol || 'USD') : (w?.symbol || 'หน่วย');
+  const marketUrl = w => w?.type === 'gold' ? GOLDTRADERS_URL : w?.type === 'crypto' ? 'https://www.coingecko.com/' : w?.type === 'fcd' ? 'https://www.frankfurter.app/' : '#';
+  const goldData = () => S.marketPrices?.thaiGold || S.marketPrices?.auroraGold || null;
+  App._walletTypeLabel = App._walletTypeLabel || walletTypeLabel;
+
+  App._investmentUnitPriceTHB = function(w){
+    if (!w) return 0;
+    const p = S.marketPrices || {};
+    if (w.type === 'gold') return Number(p.thaiGold?.jewelryBuy || p.auroraGold?.jewelryBuy || w.manualPrice || 0);
+    if (w.type === 'crypto') { const map = { BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether' }; return Number(p.crypto?.[map[String(w.symbol||'').toUpperCase()]]?.thb || w.manualPrice || 0); }
+    if (w.type === 'fcd') { const cur = String(w.currency || w.symbol || 'USD').toUpperCase(); const thb = p.fx?.rates?.THB; return Number(cur === 'THB' ? 1 : (thb && p.fx?.rates?.[cur] ? thb / p.fx.rates[cur] : w.manualPrice || 0)); }
+    return Number(w.manualPrice || 0);
+  };
+  App._investmentValueTHB = w => isInvest(w) ? Number(w.units || 0) * App._investmentUnitPriceTHB(w) : Number(w?.balance || 0);
+  App._marketText = function(w){
+    if (w?.type === 'gold') { const g = goldData(); return g?.jewelryBuy ? `สมาคมค้าทองคำ · ทองรูปพรรณรับซื้อ ${MONEY(g.jewelryBuy)}/บาททอง` : 'ยังไม่ Sync ราคาทองสมาคมค้าทองคำ'; }
+    if (w?.type === 'crypto') return 'CoinGecko';
+    if (w?.type === 'fcd') return 'Frankfurter FX';
+    return '';
+  };
+  function netWorthGroups(){
+    const wallets = S.wallets || [];
+    const assets = wallets.filter(w => ['bank','cash','ewallet','saving'].includes(w.type));
+    const liabilities = wallets.filter(w => w.type === 'credit');
+    const investments = wallets.filter(w => isInvest(w));
+    const sumAssets = assets.reduce((s,w)=>s+Math.max(0, Number(w.balance||0)),0);
+    const sumInvest = investments.reduce((s,w)=>s+Math.max(0, App._investmentValueTHB(w) || Number(w.balance||0)),0);
+    const debt = liabilities.reduce((s,w)=>s+Math.abs(Number(w.balance||0)),0);
+    return { assets, liabilities, investments, assetTotal: sumAssets + sumInvest, liabilityTotal: debt, netTotal: sumAssets + sumInvest - debt };
+  }
+  Calc.getWalletGroups = () => netWorthGroups();
+
+  App._walletCard = function(w){
+    const isCC = w.type === 'credit'; const invest = isInvest(w); const color = w.color || (isCC ? '#DC2626' : invest ? '#D97706' : '#2563EB');
+    const detailAction = isCC ? `App.openCCDetail('${ESC(w.id)}')` : `App.openWalletDetail('${ESC(w.id)}')`;
+    const name = `${w.icon || ''} ${w.name || ''}`.trim();
+    if (invest) {
+      const price = App._investmentUnitPriceTHB(w); const marketText = App._marketText(w);
+      return `<div class="wallet-card wallet-card-colored wallet-card-invest wallet-card-invest-asset-only" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="${detailAction}"><div class="wc-header"><div><div class="wc-name">${ESC(name)}</div><div class="wc-type">${ESC(walletTypeLabel(w.type))}</div></div></div><div class="wc-balance wc-balance-asset">${NUM(w.units,4)} <span>${ESC(unitLabel(w))}</span></div><div class="wc-prog-info wc-invest-info"><span>${ESC(marketText)}</span><span>${price ? MONEY(price) + '/หน่วย' : 'กรอกราคาสำรองได้'}</span></div><a class="market-price-link" href="${ESC(marketUrl(w))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">ดูราคาจริง ↗</a><div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();${detailAction}">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')">แก้ไข</button></div></div>`;
+    }
+    if (isCC) {
+      const owed = Math.abs(Number(w.balance || 0)); const limit = Number(w.limit || 0); const due = w.dueDay ? Calc.getDueDate(w.dueDay) : null; const pct = limit ? Math.min(100, Math.max(0, owed / limit * 100)) : 0; const avail = limit ? Math.max(0, limit - owed) : 0;
+      return `<div class="wallet-card wallet-card-colored wallet-card-credit" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="${detailAction}"><div class="wc-header"><div><div class="wc-name">${ESC(name)}</div><div class="wc-type">บัตรเครดิต${limit ? ` · วงเงิน ${MONEY(limit)}` : ''}</div></div></div><div class="wc-balance">-${MONEY(owed)}</div>${due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${ESC(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : ''}<div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openCCDetail('${ESC(w.id)}')">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openCCPay('${ESC(w.id)}')">ชำระ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')">แก้ไข</button></div></div>`;
+    }
+    return `<div class="wallet-card wallet-card-colored" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="${detailAction}"><div class="wc-header"><div><div class="wc-name">${ESC(name)}</div><div class="wc-type">${ESC(walletTypeLabel(w.type))}</div></div></div><div class="wc-balance">${MONEY(Number(w.balance || 0))}</div><div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();${detailAction}">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')">แก้ไข</button></div></div>`;
+  };
+
+  App.renderWallets = function(){
+    const g = netWorthGroups(); const summary = document.getElementById('wallets-summary'); const content = document.getElementById('wallets-content');
+    if (summary) summary.innerHTML = `<div class="wallet-summary-grid wallet-summary-grid-fixed"><div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${MONEY(g.assetTotal)}</strong></div><div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${MONEY(g.liabilityTotal)}</strong></div></div>`;
+    if (!content) return; content.style.display = 'block'; content.style.visibility = 'visible';
+    const gold = goldData(); const updated = gold?.fetchedAt ? new Date(gold.fetchedAt).toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' }) : '';
+    const goldNote = `<div class="wallet-market-note"><b>ราคาทอง:</b> อ้างอิงสมาคมค้าทองคำ · ทองรูปพรรณรับซื้อ${gold?.jewelryBuy ? ` ${MONEY(gold.jewelryBuy)}/บาททอง` : ' ยังไม่ Sync'}${updated ? ` · อัปเดต ${ESC(updated)}` : ''}</div>`;
+    const empty = txt => `<div class="card card-pad wallet-empty-card">${ESC(txt)}</div>`;
+    const section = (title, icon, list, emptyText, grid) => `<section class="wallet-section-block"><div class="wallet-section-title">${icon} ${ESC(title)}</div>${list.length ? `<div class="${grid ? 'wallet-grid-2' : 'wallet-list-stack'}">${list.map(App._walletCard).join('')}</div>` : empty(emptyText)}</section>`;
+    content.innerHTML = `<div class="wallet-toolbar"><button class="btn btn-secondary btn-sm" onclick="App.refreshMarketPrices()">↻ Refresh ราคา</button><button class="btn btn-primary btn-sm" onclick="App.openWalletForm(null)">+ เพิ่มกระเป๋า</button></div>${goldNote}${section('สินทรัพย์','🏦',g.assets,'ยังไม่มีสินทรัพย์',true)}${section('บัตรเครดิต','💳',g.liabilities,'ยังไม่มีบัตรเครดิต',false)}${section('การลงทุน','📈',g.investments,'เพิ่มทอง / Crypto / FCD เพื่อดูราคาอ้างอิง',true)}`;
+  };
+
+  const previousOpenWalletDetail = App.openWalletDetail?.bind(App);
+  App.openWalletDetail = function(id){
+    const w = S.wallets.find(x => x.id === id); if (!w || !isInvest(w)) return previousOpenWalletDetail?.(id);
+    const tx = (S.transactions || []).filter(t => t.walletId === id || t.toWalletId === id).sort((a,b)=>(b.date||'').localeCompare(a.date||'')); const price = App._investmentUnitPriceTHB(w);
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${ESC(w.icon)} ${ESC(w.name)}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${ESC(w.id)}')" style="width:auto">แก้ไข</button></div><div class="sub-scroll wallet-detail-screen"><div class="wallet-detail-hero wallet-detail-invest-only"><div class="nw-label">จำนวน Asset ที่มี</div><div class="big">${NUM(w.units,4)} <span>${ESC(unitLabel(w))}</span></div><div class="nw-detail"><span class="nw-item">ราคาจริง <strong>${price ? MONEY(price) + '/หน่วย' : 'ยังไม่ Sync'}</strong></span><a class="market-price-link" href="${ESC(marketUrl(w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a></div>${w.type === 'gold' ? `<div class="wallet-market-note compact">อ้างอิง: สมาคมค้าทองคำ / ทองรูปพรรณรับซื้อ</div>` : ''}</div>${App._sectionHeader ? App._sectionHeader('รายการในกระเป๋านี้') : '<div class="section-title">รายการในกระเป๋านี้</div>'}<div class="card"><div style="padding:0 16px">${tx.length ? tx.map(t => App._txRow(t)).join('') : (App._emptyState ? App._emptyState('📋','ไม่พบรายการ','') : '<div class="empty-state">ไม่พบรายการ</div>')}</div></div></div>`);
+    setTimeout(() => App._bindTxRows?.('sub-screen'), 0);
+  };
+
+  function normaliseGoldPayload(raw){
+    let json = raw; if (typeof raw === 'string') { const trimmed = raw.trim(); try { json = JSON.parse(trimmed); } catch { const m = trimmed.match(/^[^(]+\((.*)\);?$/s); if (m) json = JSON.parse(m[1]); else return null; } }
+    const root = json?.response || json?.data || json || {}; const price = root.price || root.prices || {}; const gold = price.gold || root.gold || {}; const goldBar = price.gold_bar || price.goldBar || root.gold_bar || root.goldBar || {}; const n = v => Number(String(v ?? '').replace(/,/g,'').replace(/[^\d.\-]/g,'')) || 0;
+    const jewelryBuy = n(root.jewelryBuy || root.jewelry_buy || gold.buy || gold.bid || root.gold_buy); const jewelrySell = n(root.jewelrySell || root.jewelry_sell || gold.sell || gold.ask || root.gold_sell); const barBuy = n(root.barBuy || root.bar_buy || goldBar.buy || goldBar.bid); const barSell = n(root.barSell || root.bar_sell || goldBar.sell || goldBar.ask); if (!jewelryBuy && !barBuy) return null;
+    return { ok:true, source: root.source || json.source || 'Thai Gold API / Gold Traders Association', url: root.url || json.url || GOLD_API_URL, fetchedAt: root.fetchedAt || json.fetchedAt || new Date().toISOString(), latestDate: root.update_date || root.latestDate || json.latestDate || '', latestTime: root.update_time || root.latestTime || json.latestTime || '', jewelryBuy: jewelryBuy || barBuy, jewelrySell, barBuy, barSell };
+  }
+  App._normaliseThaiGoldPayload = normaliseGoldPayload;
+  App._fetchThaiGoldViaSource = async function(){
+    const customProxy = String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '').trim();
+    if (customProxy) { const payload = await App._fetchJsonp(customProxy); const data = normaliseGoldPayload(payload); if (data?.jewelryBuy) return { ...data, fetchedVia:'apps-script-proxy' }; }
+    try { const r = await fetch(GOLD_API_URL, { cache:'no-store' }); if (r.ok) { const data = normaliseGoldPayload(await r.json()); if (data?.jewelryBuy) return { ...data, fetchedVia:'direct-api' }; } } catch (_) {}
+    for (const url of ['https://api.allorigins.win/raw?url=' + encodeURIComponent(GOLD_API_URL), 'https://corsproxy.io/?' + encodeURIComponent(GOLD_API_URL)]) { try { const r = await fetch(url, { cache:'no-store' }); if (r.ok) { const data = normaliseGoldPayload(await r.text()); if (data?.jewelryBuy) return { ...data, fetchedVia:'public-proxy' }; } } catch (_) {} }
+    return null;
+  };
+  App._fetchAuroraGoldViaProxy = App._fetchThaiGoldViaSource;
+  App.refreshMarketPrices = async function(){
+    const next = { ...(S.marketPrices || {}) }; let anyOk = false, goldOk = false;
+    try { const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache:'no-store' }); if (r.ok) { next.crypto = await r.json(); anyOk = true; } } catch (_) {}
+    try { const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' }); if (r.ok) { next.fx = await r.json(); anyOk = true; } } catch (_) {}
+    try { const gold = await App._fetchThaiGoldViaSource(); if (gold?.jewelryBuy) { next.thaiGold = gold; next.auroraGold = gold; anyOk = true; goldOk = true; } } catch (err) { console.warn('Gold sync failed:', err); }
+    next.updatedAt = new Date().toISOString(); S.marketPrices = next; persist(); App.renderWallets?.(); App.render?.();
+    if (goldOk) toast('Sync ราคาทองสมาคมค้าทองคำสำเร็จ', 'success'); else if (anyOk) toast('ราคาอื่นอัปเดตแล้ว แต่ราคาทองยังไม่สำเร็จ', 'warn'); else toast('Sync ราคาไม่ได้ กรุณาเช็ก Gold Proxy/อินเทอร์เน็ต', 'error');
+  };
+  try { if (S.page === 'wallets') App.renderWallets(); } catch (err) { console.warn('wallet rollback render failed', err); }
+})();
+
+/* ============================================================
+   V2.2-safety-ux: Targeted bug fixes & UX improvements
+   All changes are additive patches — nothing removed, no data
+   model changes.
+   ============================================================ */
+;(function v22SafetyUX() {
+
+  // ── P0: CC Payment — check source wallet has enough balance ──
+  // Original saveCCPay deducts from source without any balance check,
+  // silently sending it deeply negative.
+  const _origSaveCCPay = App.saveCCPay.bind(App)
+  App.saveCCPay = function() {
+    const walletId = document.getElementById('cc-pay-wallet')?.value
+    const amount   = parseFloat(document.getElementById('cc-pay-amount')?.value) || 0
+    if (walletId && amount > 0) {
+      const src = S.wallets.find(w => w.id === walletId)
+      if (src && src.balance < amount) {
+        toast(`ยอดใน "${src.name}" ไม่เพียงพอ (มี ${Calc.fmt(src.balance)})`, 'error')
+        return
+      }
+    }
+    _origSaveCCPay()
+  }
+
+  // ── P1: Search debounce — 250ms to prevent re-render on every keystroke ──
+  // The V2.2 renderTransactions sets oninput without debounce.
+  // We re-attach with debounce each time the transactions page renders.
+  let _txSearchTimer = null
+  const _origRenderTx = App.renderTransactions.bind(App)
+  App.renderTransactions = function() {
+    _origRenderTx()
+    const el = document.getElementById('tx-search')
+    if (!el) return
+    el.oninput = function(e) {
+      clearTimeout(_txSearchTimer)
+      const val = e.target.value
+      _txSearchTimer = setTimeout(() => {
+        S.txSearch = val
+        App.renderTransactionsList?.()
+      }, 250)
+    }
+  }
+
+  // ── P1: FAB visible on Transactions tab ──
+  // V2.2.2 final guard hides FAB on all non-dashboard pages.
+  // We wrap showPage (outer-most) so our change runs after syncChrome.
+  const _origShowPage = App.showPage.bind(App)
+  App.showPage = function(page) {
+    _origShowPage(page)
+    _syncFab(page)
+  }
+
+  const _origRender = App.render.bind(App)
+  App.render = function() {
+    const result = _origRender()
+    _syncFab(S.page)
+    return result
+  }
+
+  function _syncFab(page) {
+    const fab = document.getElementById('fab')
+    if (!fab) return
+    const visible = page === 'dashboard' || page === 'transactions'
+    // Toggle body class so the CSS rule body:not(.is-transactions) #fab
+    // in V2.2.1 layer also allows the FAB through on the transactions page
+    document.body.classList.toggle('is-transactions', page === 'transactions')
+    fab.classList.toggle('hidden', !visible)
+    fab.setAttribute('aria-hidden', String(!visible))
+    fab.tabIndex = visible ? 0 : -1
+  }
+
+  // ── P1: Merchant autocomplete (datalist) in add-tx form ──
+  // After each _renderAddTxDetail call, inject a <datalist> pointing at
+  // the user's saved merchants so the browser shows suggestions.
+  const _origDetailRender = App._renderAddTxDetail.bind(App)
+  App._renderAddTxDetail = function() {
+    _origDetailRender()
+    _injectMerchantDatalist()
+  }
+
+  function _injectMerchantDatalist() {
+    const input = document.getElementById('tx-merchant')
+    if (!input || !S.merchants?.length) return
+    const listId = 'tx-merchant-suggestions'
+    let dl = document.getElementById(listId)
+    if (!dl) {
+      dl = document.createElement('datalist')
+      dl.id = listId
+      document.body.appendChild(dl)
+    }
+    dl.innerHTML = S.merchants
+      .map(m => `<option value="${String(m.name).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">`)
+      .join('')
+    input.setAttribute('list', listId)
+  }
+
+  // ── P2: getDueDate — local timezone instead of UTC ──
+  // Original uses toISOString() which is UTC; in UTC+7 an 11 PM local
+  // calculation shifts the due date to the next day.
+  Calc.getDueDate = function(dueDay) {
+    const now = new Date()
+    let m = now.getMonth(), y = now.getFullYear()
+    if (now.getDate() > dueDay) {
+      m++
+      if (m > 11) { m = 0; y++ }
+    }
+    const msLeft = new Date(y, m, dueDay) - now
+    const daysLeft = Math.max(0, Math.ceil(msLeft / 86400000))
+    const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+    return { daysLeft, dueStr: `${dueDay} ${months[m]}` }
+  }
+
+  // Apply FAB state immediately on script load
+  try { _syncFab(S.page) } catch (_) {}
+
+})();
+
+/* ============================================================
+   V2.3 Features
+   1. Recurring auto-post alert on Dashboard
+   2. Replace confirm() dialogs with inline confirmation
+   3. Export CSV
+   4. Daily budget ฿/day chip on budget bars
+   5. Dashboard month switcher
+   6. Wire up Thai gold proxy URL setting in More page
+   ============================================================ */
+;(function v23Features() {
+
+  // ── Shared helpers ──────────────────────────────────────────
+  const ESC = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const FMT = n => moneyFmt(Number(n) || 0)
+
+  function mlabel(ym) {
+    if (!ym) return ''
+    const [y, m] = ym.split('-').map(Number)
+    const names = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+    return `${names[m-1]} ${y}`
+  }
+
+  function secHdr(title, actionLabel, action) {
+    return App._sectionHeader
+      ? App._sectionHeader(title, actionLabel, action)
+      : `<div class="section-header"><h3>${ESC(title)}</h3>${actionLabel ? `<button type="button" onclick="${action}">${ESC(actionLabel)}</button>` : ''}</div>`
+  }
+
+  // ── 1. Inline confirm dialog — replaces all 6 browser confirm() calls ──
+  App.showConfirm = function({ title = 'ยืนยัน', body = '', confirmLabel = 'ยืนยัน', danger = false, onConfirm, onCancel } = {}) {
+    document.getElementById('v23-confirm-overlay')?.remove()
+    const el = document.createElement('div')
+    el.id = 'v23-confirm-overlay'
+    el.className = 'v23-confirm-overlay'
+    el.innerHTML = `
+      <div class="v23-confirm-sheet" role="alertdialog" aria-modal="true">
+        <div class="v23-confirm-title">${ESC(title)}</div>
+        ${body ? `<div class="v23-confirm-body">${ESC(body)}</div>` : ''}
+        <div class="v23-confirm-actions">
+          <button class="btn btn-secondary v23-cancel-btn">ยกเลิก</button>
+          <button class="btn ${danger ? 'v23-btn-danger' : 'btn-primary'} v23-ok-btn">${ESC(confirmLabel)}</button>
+        </div>
+      </div>`
+    document.body.appendChild(el)
+    el.querySelector('.v23-cancel-btn').onclick = () => { el.remove(); onCancel?.() }
+    el.querySelector('.v23-ok-btn').onclick    = () => { el.remove(); onConfirm?.() }
+    el.addEventListener('click', e => { if (e.target === el) { el.remove(); onCancel?.() } })
+  }
+
+  App.importData = function(input) {
+    const file = input?.files?.[0]
+    if (!file) return
+    Storage.importJSON(file, data => {
+      App.showConfirm({
+        title: 'นำเข้าข้อมูล',
+        body: 'จะแทนที่ข้อมูลปัจจุบันทั้งหมด ยืนยัน?',
+        confirmLabel: 'นำเข้า', danger: true,
+        onConfirm() {
+          S.transactions = data.transactions || []
+          S.wallets      = data.wallets      || []
+          S.categories   = data.categories   || S.categories
+          S.budgets      = data.budgets      || []
+          S.recurring    = data.recurring    || []
+          S.merchants    = data.merchants    || []
+          persist(); App.render()
+          toast('นำเข้าข้อมูลสำเร็จ', 'success')
+        },
+        onCancel() { if (input) input.value = '' }
+      })
+    }, err => { toast('นำเข้าล้มเหลว: ' + err, 'error'); if (input) input.value = '' })
+  }
+
+  App.resetData = function() {
+    App.showConfirm({
+      title: 'รีเซ็ตข้อมูลทั้งหมด',
+      body: 'ไม่สามารถกู้คืนได้ ยืนยันการรีเซ็ต?',
+      confirmLabel: 'รีเซ็ต', danger: true,
+      onConfirm() {
+        Storage.reset()
+        const fresh = Storage.init()
+        Object.assign(S, fresh)
+        persist(); App.render()
+        toast('รีเซ็ตข้อมูลแล้ว', 'info')
+      }
+    })
+  }
+
+  App.deleteWallet = function(id) {
+    App.showConfirm({
+      title: 'ลบกระเป๋าเงิน',
+      body: 'รายการที่เกี่ยวข้องจะยังคงอยู่',
+      confirmLabel: 'ลบ', danger: true,
+      onConfirm() {
+        S.wallets = S.wallets.filter(w => w.id !== id)
+        persist(); App.closeOverlay('overlay-wallet-form'); App.render()
+        toast('ลบกระเป๋าแล้ว', 'success')
+      }
+    })
+  }
+
+  App.deleteRecurring = function(id) {
+    App.showConfirm({
+      title: 'ลบรายการประจำ',
+      confirmLabel: 'ลบ', danger: true,
+      onConfirm() {
+        S.recurring = S.recurring.filter(r => r.id !== id)
+        persist(); App.openRecurringScreen(); toast('ลบแล้ว', 'success')
+      }
+    })
+  }
+
+  App.deleteCategory = function(id) {
+    App.showConfirm({
+      title: 'ลบหมวดหมู่',
+      confirmLabel: 'ลบ', danger: true,
+      onConfirm() {
+        const type = S.catManageType || 'expense'
+        S.categories[type] = S.categories[type].filter(c => c.id !== id)
+        persist(); App.openCategoryScreen(type); toast('ลบหมวดหมู่แล้ว', 'success')
+      }
+    })
+  }
+
+  App.deleteMerchant = function(id) {
+    App.showConfirm({
+      title: 'ลบร้านค้า',
+      confirmLabel: 'ลบ', danger: true,
+      onConfirm() {
+        S.merchants = S.merchants.filter(m => m.id !== id)
+        persist(); App.openMerchantScreen(); toast('ลบร้านค้าแล้ว', 'success')
+      }
+    })
+  }
+
+  // ── 2. Export CSV ────────────────────────────────────────────
+  App.exportCSV = function() {
+    const typeLabel = { expense: 'รายจ่าย', income: 'รายรับ', transfer: 'โอนเงิน', cc_payment: 'ชำระบัตร' }
+    const headers = ['วันที่','ประเภท','หมวดหมู่','ร้านค้า/แหล่งที่มา','จำนวนเงิน','กระเป๋าเงิน','หมายเหตุ']
+    const rows = [...S.transactions]
+      .sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
+      .map(t => {
+        const cat = App._findCat?.(t.categoryId)
+        const wallet = S.wallets.find(w => w.id === t.walletId)
+        const toWallet = S.wallets.find(w => w.id === t.toWalletId)
+        const sign = (t.type === 'expense' || t.type === 'cc_payment') ? -1 : 1
+        const walletName = t.type === 'transfer'
+          ? `${wallet?.name || ''} → ${toWallet?.name || ''}`
+          : (wallet?.name || '')
+        return [
+          t.date || '',
+          typeLabel[t.type] || t.type,
+          cat?.label || '',
+          t.merchant || '',
+          (sign * Number(t.amount || 0)).toFixed(2),
+          walletName,
+          t.note || ''
+        ].map(v => `"${String(v).replace(/"/g, '""')}"`)
+      })
+    const csv = '﻿' + [headers.map(h => `"${h}"`).join(','), ...rows.map(r => r.join(','))].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `money-tracker-${getTODAY()}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast('ส่งออก CSV สำเร็จ', 'success')
+  }
+
+  // ── 3. Recurring due-alert helpers ──────────────────────────
+  function getOverdueRecurring() {
+    const today = getTODAY()
+    return (S.recurring || []).filter(r => {
+      if (r.paused) return false
+      if (!r.lastPostedAt) return true
+      const daysSince = Math.floor((new Date(today) - new Date(r.lastPostedAt)) / 86400000)
+      return daysSince >= (r.everyDays || 30)
+    })
+  }
+
+  App.postRecurringNow = function(id) {
+    const r = S.recurring.find(x => x.id === id)
+    if (!r) return
+    const expCatIds = new Set((S.categories.expense || []).map(c => c.id))
+    const txType = r.categoryId && !expCatIds.has(r.categoryId) ? 'income' : 'expense'
+    const wallet = S.wallets.find(w => w.type !== 'credit') || S.wallets[0]
+    if (wallet) {
+      S.transactions.push({
+        id: Calc.genId(),
+        type: txType,
+        amount: Number(r.amount) || 0,
+        walletId: wallet.id,
+        categoryId: r.categoryId || '',
+        merchant: r.name,
+        note: '🔁 รายการประจำ',
+        date: getTODAY(),
+        isRecurring: true
+      })
+      const delta = Number(r.amount) || 0
+      wallet.balance = (Number(wallet.balance) || 0) + (txType === 'expense' ? -delta : delta)
+    }
+    r.lastPostedAt = getTODAY()
+    persist()
+    App.renderDashboard()
+    toast(`บันทึก "${r.name}" แล้ว`, 'success')
+  }
+
+  App.skipRecurringNow = function(id) {
+    const r = S.recurring.find(x => x.id === id)
+    if (!r) return
+    r.lastPostedAt = getTODAY()
+    persist()
+    App.renderDashboard()
+    toast(`ข้าม "${r.name}" แล้ว`, 'info')
+  }
+
+  // ── 4. Dashboard: month switcher + recurring alerts + daily budget ──
+  S.dashMonth = S.dashMonth || getTHISMONTH()
+
+  App.setDashMonth = function(m) {
+    S.dashMonth = m
+    App.renderDashboard()
+  }
+
+  App.renderDashboard = function() {
+    App._ensureV2State?.()
+    const dm = S.dashMonth || getTHISMONTH()
+    const thisMonth = getTHISMONTH()
+    const isCurrentMonth = dm === thisMonth
+
+    const stats = Calc.getMonthlyStats(S.transactions, dm)
+    const nw = Calc.getNetWorth(S.wallets)
+    const expBudgets = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, dm)
+    const incBudgets = Calc.getIncomeBudgetProgress
+      ? Calc.getIncomeBudgetProgress(S.transactions, S.incomeBudgets || [], S.categories, dm)
+      : []
+    const recent = [...S.transactions]
+      .filter(t => (t.date || '').startsWith(dm))
+      .sort((a,b) => (b.date || '').localeCompare(a.date || ''))
+      .slice(0, 5)
+    const assets = S.wallets.filter(w => w.type !== 'credit')
+    const cc = S.wallets.find(w => w.type === 'credit' && Math.abs(Number(w.balance) || 0) > 0)
+    const ccUsed = Math.abs(Number(cc?.balance) || 0)
+    const ccLimit = Number(cc?.limit) || 0
+    const ccPct = ccLimit ? Math.min(100, Math.max(0, (ccUsed / ccLimit) * 100)) : 0
+    const ccDue = cc?.dueDay ? Calc.getDueDate(cc.dueDay) : null
+    const transferTotal = S.transactions
+      .filter(t => (t.date || '').startsWith(dm) && t.type === 'transfer')
+      .reduce((s,t) => s + Number(t.amount || 0), 0)
+
+    // Daily budget calculation
+    const nowDate = new Date()
+    const [dmY, dmM] = dm.split('-').map(Number)
+    const totalDays = new Date(dmY, dmM, 0).getDate()
+    const remainDays = isCurrentMonth ? Math.max(1, totalDays - nowDate.getDate() + 1) : 1
+
+    function dailyChip(b) {
+      if (!b.monthlyLimit) return ''
+      const remaining = b.monthlyLimit - b.spent
+      const daily = remaining > 0 ? Math.round(remaining / remainDays) : 0
+      return `<span class="daily-budget-chip${remaining < 0 ? ' over' : ''}">฿${daily.toLocaleString('en-US')}/วัน</span>`
+    }
+
+    // Month nav (last 4 months, newest first)
+    const months = Calc.getMonths ? Calc.getMonths(4) : [thisMonth]
+
+    let html = `
+      <div class="mt-topbar">
+        <div>
+          <div class="mt-title">Money Tracker</div>
+          <div class="mt-subtitle">${ESC(Calc.monthLabel(dm))}</div>
+        </div>
+        <div class="mt-sync-pill"><span class="mt-sync-dot"></span><span>Local</span></div>
+      </div>
+      <div class="dash-month-nav">${months.map(m =>
+        `<button class="chip${m === dm ? ' active' : ''}" onclick="App.setDashMonth('${ESC(m)}')">${ESC(mlabel(m))}</button>`
+      ).join('')}</div>`
+
+    // Recurring due alerts (current month only)
+    if (isCurrentMonth) {
+      const due = getOverdueRecurring()
+      if (due.length) {
+        html += `<div class="sec-title" style="margin-top:4px;margin-bottom:6px">🔁 รายการประจำที่ถึงกำหนด</div>`
+        due.forEach(r => {
+          html += `<div class="mt-recurring-alert">
+            <div class="mt-recurring-alert-info">
+              <span class="mt-recurring-alert-icon">${ESC(r.icon || '🔁')}</span>
+              <div>
+                <div class="mt-recurring-alert-name">${ESC(r.name)}</div>
+                <div class="mt-recurring-alert-amount">${FMT(r.amount)}</div>
+              </div>
+            </div>
+            <div class="mt-recurring-alert-btns">
+              <button class="btn btn-primary btn-sm" onclick="App.postRecurringNow('${ESC(r.id)}')">บันทึก</button>
+              <button class="btn btn-secondary btn-sm" onclick="App.skipRecurringNow('${ESC(r.id)}')">ข้าม</button>
+            </div>
+          </div>`
+        })
+      }
+    }
+
+    html += `
+      <div class="mt-net-card">
+        <div class="mt-net-head">
+          <div>
+            <div class="mt-net-label">เงินสุทธิที่ใช้ได้จริง</div>
+            <div class="mt-net-value">${nw.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(nw.net))}</div>
+          </div>
+          <button class="mt-hide-btn" onclick="App.toggleHideMoney()">${S.settings.hideMoney ? '👁 แสดง' : '🙈 ซ่อน'}</button>
+        </div>
+        <div class="mt-net-split">
+          <div class="mt-net-metric"><small>รายรับเดือนนี้</small><strong style="color:#4ADE80">+${FMT(stats.income)}</strong></div>
+          <div class="mt-divider"></div>
+          <div class="mt-net-metric"><small>รายจ่ายเดือนนี้</small><strong style="color:#F87171">-${FMT(stats.expense)}</strong></div>
+        </div>
+      </div>`
+
+    if (cc) {
+      const dueText = ccDue
+        ? `ครบกำหนด ${ESC(ccDue.dueStr)} · อีก ${ccDue.daysLeft} วัน`
+        : `รอบบัญชีตัดวันที่ ${ESC(cc.cycleDay || 25)}`
+      html += `
+        <div class="mt-alert-card" onclick="App.openCCDetail('${ESC(cc.id)}')">
+          <div>
+            <div class="mt-alert-title">💳 ${ESC(cc.name)}</div>
+            <div class="mt-alert-sub">${dueText}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:16px;font-weight:900;color:var(--expense);letter-spacing:-.04em">${FMT(ccUsed)}</div>
+            ${ccLimit ? `<div style="font-size:10px;color:var(--muted);margin-top:1px">จาก ${FMT(ccLimit)}</div>` : ''}
+          </div>
+        </div>`
+      if (ccLimit) {
+        html += `<div class="mt-progress-wrap">
+          <div class="mt-progress-label"><span>วงเงินที่ใช้</span><b style="color:${ccPct > 70 ? 'var(--expense)' : 'var(--text)'}">${ccPct.toFixed(0)}%</b></div>
+          <div class="mt-progress-track"><div class="mt-progress-fill" style="width:${ccPct}%;background:${ccPct > 70 ? 'var(--expense)' : 'var(--primary)'}"></div></div>
+        </div>`
+      }
+    }
+
+    if (assets.length) {
+      html += `<div class="mt-wallet-mini-grid">${assets.slice(0,3).map(w => `
+        <div class="mt-wallet-mini" onclick="App.openWalletDetail('${ESC(w.id)}')">
+          <div class="icon">${ESC(w.icon || '◈')}</div>
+          <div class="value">${FMT(App._investmentValueTHB ? App._investmentValueTHB(w) : (w.balance || 0))}</div>
+          <div class="name">${ESC(w.name)}</div>
+        </div>`).join('')}</div>`
+    }
+
+    html += `<div class="mt-stat-row">
+      <div class="mt-stat-card income"><small>รายรับ</small><strong>+${FMT(stats.income)}</strong></div>
+      <div class="mt-stat-card expense"><small>รายจ่าย</small><strong>-${FMT(stats.expense)}</strong></div>
+      <div class="mt-stat-card transfer"><small>โอนเงิน</small><strong>${FMT(transferTotal)}</strong></div>
+      <div class="mt-stat-card saving"><small>คงเหลือเดือนนี้</small><strong>${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(stats.net))}</strong></div>
+    </div>`
+
+    const budgetRows = [...expBudgets.slice(0,2), ...incBudgets.slice(0,1)]
+    if (budgetRows.length) {
+      html += secHdr('งบประมาณเดือนนี้', 'ดูรายงาน', "App.showPage('reports')")
+      html += `<div class="card card-pad">`
+      budgetRows.forEach(b => {
+        const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'
+        html += `<div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px;gap:8px">
+            <span style="font-weight:800">${ESC(b.icon)} ${ESC(b.label)}</span>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+              ${dailyChip(b)}
+              <span style="color:${b.over ? 'var(--expense)' : 'var(--muted)'}">${FMT(b.spent)} / ${FMT(b.monthlyLimit)}</span>
+            </div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,Math.max(0,b.pct))}%;background:${barColor}"></div></div>
+        </div>`
+      })
+      html += `</div>`
+    }
+
+    html += secHdr('รายการล่าสุด', 'ดูทั้งหมด', "App.showPage('transactions')")
+    html += `<div class="card" style="margin-bottom:22px"><div style="padding:0 16px">${
+      recent.length
+        ? recent.map(t => App._txRow(t)).join('')
+        : (App._emptyState ? App._emptyState('📋','ยังไม่มีรายการ','แตะ + เพื่อเพิ่มรายการแรก') : '<div class="empty-state">ยังไม่มีรายการ</div>')
+    }</div></div>`
+
+    const target = document.getElementById('dashboard-content')
+    if (target) target.innerHTML = html
+    App._bindTxRows?.('dashboard-content')
+  }
+
+  // ── 5. More page: CSV export row + Thai gold proxy setting ──
+  const _prevRenderMore = App.renderMore.bind(App)
+  App.renderMore = function() {
+    _prevRenderMore()
+    const content = document.getElementById('more-content')
+    if (!content) return
+
+    // Insert CSV export row before the resetData row
+    if (!content.querySelector('[data-v23-csv]')) {
+      const resetRow = content.querySelector('[onclick*="resetData"]')?.closest('.settings-row')
+      if (resetRow) {
+        resetRow.insertAdjacentHTML('beforebegin', `
+          <div class="settings-row" onclick="App.exportCSV()" data-v23-csv="1">
+            <div class="s-icon">📊</div>
+            <div class="s-label">ส่งออก CSV</div>
+            <div class="s-arrow">›</div>
+          </div>`)
+      }
+    }
+
+    // Insert Gold proxy setting section before the footer
+    if (!content.querySelector('[data-v23-gold-proxy]')) {
+      const currentProxy = String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '')
+      const footer = content.querySelector('[style*="text-align:center"]')
+      if (footer) {
+        footer.insertAdjacentHTML('beforebegin', `
+          <div class="sec-title">Thai Gold API (Proxy)</div>
+          <div class="card card-pad" data-v23-gold-proxy="1" style="margin-bottom:16px">
+            <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
+              ใส่ URL Google Apps Script Proxy เพื่อ sync ราคาทองสมาคมค้าทองคำ
+            </div>
+            <input class="form-input" id="gold-proxy-input"
+              placeholder="https://script.google.com/macros/s/.../exec"
+              value="${ESC(currentProxy)}"
+              style="margin-bottom:10px">
+            <button class="btn btn-primary" onclick="App.saveGoldProxyUrl()">บันทึก Proxy URL</button>
+            ${currentProxy ? `<div style="font-size:11px;color:var(--income);margin-top:8px">✓ ตั้งค่าแล้ว: ${ESC(currentProxy.length > 60 ? currentProxy.slice(0,60) + '…' : currentProxy)}</div>` : ''}
+          </div>`)
+      }
+    }
+  }
+
+  App.saveGoldProxyUrl = function() {
+    const url = (document.getElementById('gold-proxy-input')?.value || '').trim()
+    localStorage.setItem('MT_GOLD_PROXY_URL', url)
+    window.MT_GOLD_PROXY_URL = url
+    toast(url ? 'บันทึก Gold Proxy URL แล้ว' : 'ล้าง Gold Proxy URL แล้ว', 'success')
+    App.renderMore()
+  }
+
+  // Apply to current page immediately
+  try { if (S.page === 'dashboard') App.renderDashboard() } catch (_) {}
+  try { if (S.page === 'more') App.renderMore() } catch (_) {}
+
+})();
+
+/* ============================================================
+   V2.4 Wallet + Reports polish
+   Wallet: edit button top-right, remove ดูรายการ/market-link/
+   market-note, show real THB value for invest wallets.
+   Reports: single AI insights section + analyzing toast.
+   ============================================================ */
+;(function v24WalletReportsPolish() {
+  const ESC = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const MONEY = n => moneyFmt(Number(n) || 0)
+  const NUM = (n, d = 4) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: d })
+  const isInvest = w => w && new Set(['gold','crypto','fcd']).has(w.type)
+
+  function unitLabel(w) {
+    if (w.type === 'gold') return 'บาทท.'
+    if (w.type === 'crypto') return w.symbol || 'coins'
+    return w.symbol || 'หน่วย'
+  }
+
+  // ── Override _walletCard ──────────────────────────────────────
+  App._walletCard = function(w) {
+    const isCC = w.type === 'credit'
+    const invest = isInvest(w)
+    const color = w.color || (isCC ? '#DC2626' : invest ? '#D97706' : '#2563EB')
+    const name = `${w.icon || ''} ${w.name || ''}`.trim()
+    const typeLabel = App._walletTypeLabel ? App._walletTypeLabel(w.type) : w.type
+    const editBtn = `<button class="wc-edit-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')" aria-label="แก้ไข">✏️</button>`
+
+    if (invest) {
+      const price = App._investmentUnitPriceTHB ? App._investmentUnitPriceTHB(w) : 0
+      const thbValue = App._investmentValueTHB ? App._investmentValueTHB(w) : (price * Number(w.units || 0))
+      const units = Number(w.units || 0)
+      return `<div class="wallet-card wallet-card-colored wallet-card-invest" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB">
+        <div class="wc-header">
+          <div><div class="wc-name">${ESC(name)}</div><div class="wc-type">${ESC(typeLabel)}</div></div>
+          ${editBtn}
+        </div>
+        <div class="wc-balance">${MONEY(thbValue)}</div>
+        <div class="wc-prog-info wc-invest-units" style="margin-top:6px">
+          <span>${NUM(units, 4)} ${ESC(unitLabel(w))}</span>
+          <span>${price ? MONEY(price) + '/หน่วย' : 'ยังไม่ Sync'}</span>
+        </div>
+      </div>`
+    }
+
+    if (isCC) {
+      const owed = Math.abs(Number(w.balance || 0))
+      const limit = Number(w.limit || 0)
+      const due = w.dueDay ? Calc.getDueDate(w.dueDay) : null
+      const pct = limit ? Math.min(100, Math.max(0, owed / limit * 100)) : 0
+      const avail = limit ? Math.max(0, limit - owed) : 0
+      return `<div class="wallet-card wallet-card-colored wallet-card-credit" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="App.openCCDetail('${ESC(w.id)}')">
+        <div class="wc-header">
+          <div><div class="wc-name">${ESC(name)}</div><div class="wc-type">บัตรเครดิต${limit ? ` · วงเงิน ${MONEY(limit)}` : ''}</div></div>
+          ${editBtn}
+        </div>
+        <div class="wc-balance">-${MONEY(owed)}</div>
+        ${due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${ESC(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}
+        ${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : ''}
+        <div class="wc-action-row">
+          <button class="wallet-chip-btn" onclick="event.stopPropagation();App.openCCPay('${ESC(w.id)}')">ชำระ</button>
+        </div>
+      </div>`
+    }
+
+    // Regular asset wallet — card click opens transaction history
+    return `<div class="wallet-card wallet-card-colored" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="App.openWalletDetail('${ESC(w.id)}')">
+      <div class="wc-header">
+        <div><div class="wc-name">${ESC(name)}</div><div class="wc-type">${ESC(typeLabel)}</div></div>
+        ${editBtn}
+      </div>
+      <div class="wc-balance">${MONEY(Number(w.balance || 0))}</div>
+    </div>`
+  }
+
+  // ── Strip wallet-market-note after render ────────────────────
+  const _prevRenderWallets = App.renderWallets.bind(App)
+  App.renderWallets = function() {
+    _prevRenderWallets()
+    document.querySelectorAll('#wallets-content .wallet-market-note').forEach(el => el.remove())
+  }
+
+  // ── Reports: single AI insights + "analyzing" toast ──────────
+  const _prevRenderReports = App.renderReports.bind(App)
+  App.renderReports = function() {
+    toast('🧠 AI กำลังวิเคราะห์...', 'info')
+    _prevRenderReports()
+    const box = document.getElementById('reports-content')
+    if (!box) return
+
+    // Remove all insight sections injected by earlier wrappers
+    box.querySelectorAll('.sec-title').forEach(el => {
+      if (/Financial Insights/i.test(el.textContent)) {
+        el.nextElementSibling?.remove()
+        el.remove()
+      }
+    })
+    box.querySelectorAll('.ai-advisor-card').forEach(el => el.remove())
+
+    // Insert one fresh AI insights card at top
+    if (!App.getFinancialAdvisorInsights) return
+    const insights = App.getFinancialAdvisorInsights(S.rptMonth)
+    if (!insights?.length) return
+    box.insertAdjacentHTML('afterbegin', `
+      <div class="sec-title">Financial Insights</div>
+      <div class="card card-pad ai-advisor-card" style="margin-bottom:12px">
+        <div class="ai-card-head">
+          <div><strong>AI Financial Coach</strong><span>วิเคราะห์จากพฤติกรรมรายรับ-รายจ่ายในเครื่อง</span></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.renderReports()">วิเคราะห์ใหม่</button>
+        </div>
+        ${insights.map(i => `<div class="insight-row ai-insight">
+          <div class="insight-icon">${i.icon}</div>
+          <div><div class="insight-title">${ESC(i.title)}</div><div class="insight-body">${ESC(i.body)}</div></div>
+        </div>`).join('')}
+      </div>`)
+  }
+
+  // Apply immediately
+  try { if (S.page === 'wallets') App.renderWallets() } catch (_) {}
+  try { if (S.page === 'reports') App.renderReports() } catch (_) {}
+
+})();

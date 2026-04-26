@@ -1,4 +1,4 @@
-const CACHE_NAME = 'money-tracker-v2'
+const CACHE_NAME = 'money-tracker-v2-3-features'
 const ASSETS = [
   './index.html',
   './style_v2.css',
@@ -7,6 +7,7 @@ const ASSETS = [
   './calculations.js',
   './sample-data_v2.js',
   './manifest.json',
+  // gold-proxy-appscript.js is a server-side Google Apps Script — not served locally
 ]
 
 self.addEventListener('install', e => {

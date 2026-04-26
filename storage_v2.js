@@ -17,7 +17,18 @@ const Storage = {
   },
 
   save(key, data) {
-    localStorage.setItem(key, JSON.stringify(data))
+    try {
+      localStorage.setItem(key, JSON.stringify(data))
+    } catch (e) {
+      if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+        // Defer toast call — Storage may be loaded before App
+        setTimeout(() => {
+          if (typeof toast === 'function') toast('พื้นที่จัดเก็บเต็ม กรุณาส่งออกข้อมูลก่อนเพิ่มรายการใหม่', 'error')
+        }, 0)
+      } else {
+        throw e
+      }
+    }
   },
 
   // Load all app data, seeding defaults on first run

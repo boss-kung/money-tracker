@@ -38,8 +38,8 @@
 <body>
 <div id="app">
 
-  <!-- Toast -->
-  <div id="toast-container"></div>
+  <!-- Toast (aria-live so screen readers announce new messages) -->
+  <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
 
   <!-- Prototype-style status bar (desktop phone preview only by CSS) -->
   <div id="app-status-bar" aria-hidden="true">
@@ -122,54 +122,54 @@
     </button>
   </nav>
 
-  <!-- ── FAB (bottom-right, dashboard only) ─ -->
+  <!-- ── FAB ─────────────────────────────── -->
   <button id="fab" onclick="App.openAddTx()" aria-label="เพิ่มรายการ">
     <svg viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></svg>
   </button>
 
   <!-- ── Overlay: Add / Edit Transaction ───── -->
-  <div class="overlay" id="overlay-add-tx">
-    <div class="overlay-backdrop" onclick="App.closeAddTx()"></div>
+  <div class="overlay" id="overlay-add-tx" role="dialog" aria-modal="true" aria-label="เพิ่ม/แก้ไขรายการ">
+    <div class="overlay-backdrop" onclick="App.closeAddTx()" aria-hidden="true"></div>
     <div class="sheet" id="sheet-add-tx" style="max-height:98dvh">
-      <div class="sheet-handle"></div>
+      <div class="sheet-handle" aria-hidden="true"></div>
       <div id="add-tx-content"></div>
     </div>
   </div>
 
   <!-- ── Overlay: Transaction Detail ────────── -->
-  <div class="overlay" id="overlay-tx-detail">
-    <div class="overlay-backdrop" onclick="App.closeOverlay('overlay-tx-detail')"></div>
+  <div class="overlay" id="overlay-tx-detail" role="dialog" aria-modal="true" aria-label="รายละเอียดรายการ">
+    <div class="overlay-backdrop" onclick="App.closeOverlay('overlay-tx-detail')" aria-hidden="true"></div>
     <div class="sheet">
-      <div class="sheet-handle"></div>
+      <div class="sheet-handle" aria-hidden="true"></div>
       <div class="sheet-header">
         <h2>รายละเอียด</h2>
-        <button class="btn-icon" onclick="App.closeOverlay('overlay-tx-detail')">✕</button>
+        <button class="btn-icon" onclick="App.closeOverlay('overlay-tx-detail')" aria-label="ปิด">✕</button>
       </div>
       <div class="sheet-body" id="tx-detail-content"></div>
     </div>
   </div>
 
   <!-- ── Overlay: Wallet Form ───────────────── -->
-  <div class="overlay" id="overlay-wallet-form">
-    <div class="overlay-backdrop" onclick="App.closeOverlay('overlay-wallet-form')"></div>
+  <div class="overlay" id="overlay-wallet-form" role="dialog" aria-modal="true" aria-labelledby="wallet-form-title">
+    <div class="overlay-backdrop" onclick="App.closeOverlay('overlay-wallet-form')" aria-hidden="true"></div>
     <div class="sheet">
-      <div class="sheet-handle"></div>
+      <div class="sheet-handle" aria-hidden="true"></div>
       <div class="sheet-header">
         <h2 id="wallet-form-title">เพิ่มกระเป๋าเงิน</h2>
-        <button class="btn-icon" onclick="App.closeOverlay('overlay-wallet-form')">✕</button>
+        <button class="btn-icon" onclick="App.closeOverlay('overlay-wallet-form')" aria-label="ปิด">✕</button>
       </div>
       <div class="sheet-body" id="wallet-form-content"></div>
     </div>
   </div>
 
   <!-- ── Overlay: CC Payment ────────────────── -->
-  <div class="overlay" id="overlay-cc-pay">
-    <div class="overlay-backdrop" onclick="App.closeOverlay('overlay-cc-pay')"></div>
+  <div class="overlay" id="overlay-cc-pay" role="dialog" aria-modal="true" aria-label="ชำระบัตรเครดิต">
+    <div class="overlay-backdrop" onclick="App.closeOverlay('overlay-cc-pay')" aria-hidden="true"></div>
     <div class="sheet">
-      <div class="sheet-handle"></div>
+      <div class="sheet-handle" aria-hidden="true"></div>
       <div class="sheet-header">
         <h2>ชำระบัตรเครดิต</h2>
-        <button class="btn-icon" onclick="App.closeOverlay('overlay-cc-pay')">✕</button>
+        <button class="btn-icon" onclick="App.closeOverlay('overlay-cc-pay')" aria-label="ปิด">✕</button>
       </div>
       <div class="sheet-body" id="cc-pay-content"></div>
     </div>
@@ -183,6 +183,11 @@
 <script src="sample-data_v2.js"></script>
 <script src="storage_v2.js"></script>
 <script src="calculations.js"></script>
+<script>
+  // Optional but recommended for reliable Thai gold-price sync.
+  // Paste your Google Apps Script Web App URL here after deploying the Gold Traders proxy.
+  window.MT_GOLD_PROXY_URL = "";
+</script>
 <script src="app_v2.js"></script>
 </body>
 </html>

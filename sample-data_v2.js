@@ -1,9 +1,23 @@
-const TODAY = new Date().toISOString().slice(0, 10)
-const THIS_MONTH = TODAY.slice(0, 7)
+// Use functions so date stays correct if app is open past midnight
+function _localDateStr(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+function _localMonthStr(d) { return _localDateStr(d).slice(0, 7) }
+
+// These are still constants for backward-compat (seeding default data only).
+// App logic should call getTODAY() / getTHISMONTH() for runtime dates.
+const TODAY      = _localDateStr(new Date())
+const THIS_MONTH = _localMonthStr(new Date())
 const LAST_MONTH = (() => {
   const d = new Date(); d.setMonth(d.getMonth() - 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  return _localMonthStr(d)
 })()
+
+function getTODAY()     { return _localDateStr(new Date()) }
+function getTHISMONTH() { return _localMonthStr(new Date()) }
 
 const DEFAULT_CATEGORIES = {
   expense: [
