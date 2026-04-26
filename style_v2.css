@@ -3528,3 +3528,76 @@ body {
   transform: none !important;
   border-radius: 0 !important;
 }
+
+/* ── V3.0 additions ────────────────────────────────────────── */
+
+/* Wallet spend summary (inflow / outflow / net strip) */
+.wallet-spend-summary {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.wss-item {
+  flex: 1;
+  background: var(--elevated);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wss-item span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.wss-item strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Amount range filter row in transactions page */
+#tx-amount-filter input[type="number"]::-webkit-inner-spin-button,
+#tx-amount-filter input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ── v32 Merchant custom dropdown ────────────────────────── */
+.mt-merchant-wrap { position: relative; }
+#mt-merchant-dropdown {
+  position: absolute;
+  top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--surface);
+  border: 1.5px solid var(--primary);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  z-index: 9999;
+  max-height: 220px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+#mt-merchant-dropdown.hidden { display: none; }
+.mt-merchant-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  -webkit-tap-highlight-color: transparent;
+}
+.mt-merchant-item:last-child { border-bottom: none; }
+.mt-merchant-item:active,
+.mt-merchant-item.hovered { background: var(--elevated); }
+.mt-merchant-item .mmi-emoji {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+}
+.mt-merchant-item .mmi-name { flex: 1; }
+.mt-merchant-item .mmi-tag {
+  font-size: 11px;
+  color: var(--muted);
+}

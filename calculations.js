@@ -22,7 +22,7 @@ const Calc = {
     if (!dateStr) return ''
     const today = TODAY
     const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
-    const yStr = yesterday.toISOString().slice(0, 10)
+    const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`
     if (dateStr === today)  return 'วันนี้'
     if (dateStr === yStr)   return 'เมื่อวาน'
     const [y, m, d] = dateStr.split('-').map(Number)
@@ -54,9 +54,8 @@ const Calc = {
     let due = new Date(now.getFullYear(), now.getMonth(), dueDay)
     if (due < now) due = new Date(now.getFullYear(), now.getMonth() + 1, dueDay)
     const daysLeft = Math.ceil((due - now) / 86400000)
-    const [y, m, d] = due.toISOString().slice(0, 10).split('-').map(Number)
     const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
-    return { daysLeft, dueStr: `${d} ${months[m - 1]}` }
+    return { daysLeft, dueStr: `${due.getDate()} ${months[due.getMonth()]}` }
   },
 
   genId() {
