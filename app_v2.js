@@ -323,15 +323,15 @@ const App = {
 
     let html = `
       <!-- Summary cards -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+      <div class="report-summary-grid">
         ${[
           ['รายรับ', stats.income, 'var(--income)'],
           ['รายจ่าย', stats.expense, 'var(--expense)'],
           ['สุทธิ', stats.net, stats.net >= 0 ? 'var(--income)' : 'var(--expense)'],
         ].map(([l,v,c]) => `
-          <div class="card card-pad" style="padding:12px">
-            <div style="font-size:11px;color:var(--muted)">${l}</div>
-            <div style="font-size:14px;font-weight:800;color:${c};margin-top:4px">${Calc.fmt(Math.abs(v))}</div>
+          <div class="card report-summary-card">
+            <div class="report-summary-label">${l}</div>
+            <div class="report-summary-value" style="color:${c}">${Calc.fmt(Math.abs(v))}</div>
           </div>`).join('')}
       </div>
 
@@ -2070,11 +2070,11 @@ App.render();
 })();
 
 /* ============================================================
-   V2.2 Prototype Design Style Overrides
-   Re-applies prototype-inspired presentation on top of v2-2 while
+   V2.2 UI Style Overrides
+   Re-applies mobile-first presentation on top of v2-2 while
    preserving existing app state, storage, calculations and handlers.
    ============================================================ */
-;(function prototypeStyleForV22(){
+;(function uiStyleForV22(){
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
   const fmt = n => moneyFmt(Number(n) || 0)
   const clampPct = n => Math.max(0, Math.min(100, Number(n) || 0))
@@ -3811,6 +3811,44 @@ App.render();
       : `<div class="section-header"><h3>${ESC(title)}</h3>${actionLabel ? `<button type="button" onclick="${action}">${ESC(actionLabel)}</button>` : ''}</div>`
   }
 
+  function createStarterWallet() {
+    return {
+      id: Calc.genId ? Calc.genId() : `w_${Date.now()}`,
+      name: 'กระเป๋าหลัก',
+      type: 'cash',
+      icon: '💵',
+      color: '#059669',
+      balance: 0,
+    }
+  }
+
+  function ensureMinimumWallet() {
+    if (!Array.isArray(S.wallets)) S.wallets = []
+    if (S.wallets.length === 0) S.wallets.push(createStarterWallet())
+    return S.wallets
+  }
+
+  function cleanResetState() {
+    return {
+      transactions: [],
+      wallets: [createStarterWallet()],
+      categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
+      budgets: [],
+      settings: { ...JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), hideMoney: false },
+      recurring: [],
+      merchants: [],
+      ccBenefits: {},
+      incomeBudgets: [],
+      marketPrices: {},
+    }
+  }
+
+  const _prevEnsureV2State = App._ensureV2State?.bind(App)
+  App._ensureV2State = function() {
+    _prevEnsureV2State?.()
+    ensureMinimumWallet()
+  }
+
   // ── 1. Inline confirm dialog — replaces all 6 browser confirm() calls ──
   App.showConfirm = function({ title = 'ยืนยัน', body = '', confirmLabel = 'ยืนยัน', danger = false, onConfirm, onCancel } = {}) {
     document.getElementById('v23-confirm-overlay')?.remove()
@@ -3841,12 +3879,16 @@ App.render();
         body: 'จะแทนที่ข้อมูลปัจจุบันทั้งหมด ยืนยัน?',
         confirmLabel: 'นำเข้า', danger: true,
         onConfirm() {
-          S.transactions = data.transactions || []
-          S.wallets      = data.wallets      || []
-          S.categories   = data.categories   || S.categories
-          S.budgets      = data.budgets      || []
-          S.recurring    = data.recurring    || []
-          S.merchants    = data.merchants    || []
+          S.transactions  = data.transactions || []
+          S.wallets       = data.wallets      || []
+          S.categories    = data.categories   || S.categories
+          S.budgets       = data.budgets      || []
+          S.recurring     = data.recurring    || []
+          S.merchants     = data.merchants    || []
+          S.ccBenefits    = data.ccBenefits   || {}
+          S.incomeBudgets = data.incomeBudgets || []
+          S.marketPrices  = data.marketPrices || {}
+          ensureMinimumWallet()
           persist(); App.render()
           toast('นำเข้าข้อมูลสำเร็จ', 'success')
         },
@@ -3862,21 +3904,29 @@ App.render();
       confirmLabel: 'รีเซ็ต', danger: true,
       onConfirm() {
         Storage.reset()
-        const fresh = Storage.init()
-        Object.assign(S, fresh)
-        persist(); App.render()
+        Object.assign(S, cleanResetState())
+        persist(); applyTheme(); App.render()
         toast('รีเซ็ตข้อมูลแล้ว', 'info')
       }
     })
   }
 
   App.deleteWallet = function(id) {
+    if ((S.wallets || []).length <= 1) {
+      toast('ต้องมีกระเป๋าอย่างน้อย 1 อัน', 'warn')
+      return
+    }
     App.showConfirm({
       title: 'ลบกระเป๋าเงิน',
       body: 'รายการที่เกี่ยวข้องจะยังคงอยู่',
       confirmLabel: 'ลบ', danger: true,
       onConfirm() {
+        if ((S.wallets || []).length <= 1) {
+          toast('ต้องมีกระเป๋าอย่างน้อย 1 อัน', 'warn')
+          return
+        }
         S.wallets = S.wallets.filter(w => w.id !== id)
+        ensureMinimumWallet()
         persist(); App.closeOverlay('overlay-wallet-form'); App.render()
         toast('ลบกระเป๋าแล้ว', 'success')
       }
@@ -4279,17 +4329,15 @@ App.render();
       const due = w.dueDay ? Calc.getDueDate(w.dueDay) : null
       const pct = limit ? Math.min(100, Math.max(0, owed / limit * 100)) : 0
       const avail = limit ? Math.max(0, limit - owed) : 0
+      const payBtn = `<button class="wallet-chip-btn wc-card-pay-btn" onclick="event.stopPropagation();App.openCCPay('${ESC(w.id)}')">ชำระ</button>`
       return `<div class="wallet-card wallet-card-colored wallet-card-credit" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="App.openCCDetail('${ESC(w.id)}')">
         <div class="wc-header">
           <div><div class="wc-name">${ESC(name)}</div><div class="wc-type">บัตรเครดิต${limit ? ` · วงเงิน ${MONEY(limit)}` : ''}</div></div>
-          ${editBtn}
+          <div class="wc-card-actions">${payBtn}${editBtn}</div>
         </div>
         <div class="wc-balance">-${MONEY(owed)}</div>
         ${due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${ESC(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}
         ${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : ''}
-        <div class="wc-action-row">
-          <button class="wallet-chip-btn" onclick="event.stopPropagation();App.openCCPay('${ESC(w.id)}')">ชำระ</button>
-        </div>
       </div>`
     }
 
@@ -4349,4 +4397,254 @@ App.render();
   try { if (S.page === 'wallets') App.renderWallets() } catch (_) {}
   try { if (S.page === 'reports') App.renderReports() } catch (_) {}
 
+})();
+
+/* ============================================================
+   V2.4.1 Credit card pay button placement guard
+   Ensures legacy wallet-card renderers cannot leave “ชำระ” in
+   the bottom action row. The visible target is header actions:
+   [ชำระ] [แก้ไข].
+   ============================================================ */
+;(function v241CreditPayPlacementGuard() {
+  function isPayButton(btn) {
+    return btn && (btn.textContent || '').trim() === 'ชำระ'
+  }
+  function isEditButton(btn) {
+    return btn && (btn.textContent || '').trim() === 'แก้ไข'
+  }
+  function ensureCreditPayPlacement() {
+    document.querySelectorAll('#wallets-content .wallet-card-credit').forEach(card => {
+      const header = card.querySelector('.wc-header')
+      if (!header) return
+      let actions = header.querySelector('.wc-card-actions')
+      if (!actions) {
+        actions = document.createElement('div')
+        actions.className = 'wc-card-actions'
+        header.appendChild(actions)
+      }
+
+      const bottomRow = card.querySelector('.wc-action-row')
+      const bottomButtons = bottomRow ? Array.from(bottomRow.querySelectorAll('button')) : []
+      const bottomPay = bottomButtons.find(isPayButton)
+      const bottomEdit = bottomButtons.find(isEditButton)
+      const headerPay = Array.from(actions.querySelectorAll('button')).find(isPayButton)
+      const headerEdit = actions.querySelector('.wc-edit-btn') || Array.from(actions.querySelectorAll('button')).find(isEditButton)
+
+      if (bottomPay && !headerPay) {
+        bottomPay.classList.add('wc-card-pay-btn')
+        actions.insertBefore(bottomPay, actions.firstChild)
+      } else if (bottomPay) {
+        bottomPay.remove()
+      }
+
+      if (bottomEdit && !headerEdit) {
+        bottomEdit.classList.add('wc-edit-btn')
+        actions.appendChild(bottomEdit)
+      } else if (bottomEdit) {
+        bottomEdit.remove()
+      }
+
+      if (bottomRow && !bottomRow.querySelector('button')) bottomRow.remove()
+    })
+  }
+
+  const _renderWallets = App.renderWallets?.bind(App)
+  if (_renderWallets) {
+    App.renderWallets = function() {
+      _renderWallets()
+      ensureCreditPayPlacement()
+    }
+  }
+
+  try { if (S.page === 'wallets') ensureCreditPayPlacement() } catch (_) {}
+})();
+
+/* ============================================================
+   V2.4.2 FCD FX sync polish
+   - Fetch FX quotes based on actual FCD wallet currencies.
+   - Keep the existing gold/crypto sync behavior.
+   - Revalue investment wallets that have units after fresh prices arrive.
+   ============================================================ */
+;(function v242FcdFxSyncPolish() {
+  const COMMON_FCD_QUOTES = ['THB', 'EUR', 'JPY', 'GBP', 'CNY', 'SGD', 'HKD', 'AUD', 'NZD', 'CAD', 'CHF'];
+  const cleanCurrency = value => String(value || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+  const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : `฿${(Number(n) || 0).toLocaleString('en-US')}`);
+  const notify = (msg, type) => (typeof toast === 'function' ? toast(msg, type) : console.log(msg));
+
+  function getFcdCurrencies() {
+    const set = new Set(['USD', ...COMMON_FCD_QUOTES]);
+    (S.wallets || [])
+      .filter(w => w?.type === 'fcd')
+      .forEach(w => {
+        const cur = cleanCurrency(w.currency || w.symbol || 'USD');
+        if (cur) set.add(cur);
+      });
+    return [...set].filter(Boolean);
+  }
+
+  function normaliseBulkFxPayload(data, requested) {
+    const rates = data?.rates || {};
+    const thbPerUsd = Number(rates.THB || 0);
+    if (!thbPerUsd) return null;
+
+    const fcdRatesTHB = { THB: 1, USD: thbPerUsd };
+    requested.forEach(cur => {
+      if (cur === 'THB') fcdRatesTHB.THB = 1;
+      else if (cur === 'USD') fcdRatesTHB.USD = thbPerUsd;
+      else if (Number(rates[cur]) > 0) fcdRatesTHB[cur] = thbPerUsd / Number(rates[cur]);
+    });
+
+    return {
+      ...data,
+      base: data?.base || 'USD',
+      rates: { ...rates, THB: thbPerUsd },
+      requestedQuotes: requested,
+      fcdRatesTHB,
+      fetchedAt: new Date().toISOString(),
+      source: 'Frankfurter'
+    };
+  }
+
+  async function fetchBulkFx(currencies) {
+    const quotes = [...new Set(['THB', ...currencies.filter(cur => cur !== 'USD' && cur !== 'THB')])];
+    const query = quotes.join(',');
+    const urls = [
+      `https://api.frankfurter.dev/v2/rates?base=USD&quotes=${query}`,
+      `https://api.frankfurter.dev/v1/latest?base=USD&symbols=${query}`
+    ];
+
+    for (const url of urls) {
+      try {
+        const r = await fetch(url, { cache: 'no-store' });
+        if (!r.ok) continue;
+        const normalised = normaliseBulkFxPayload(await r.json(), currencies);
+        if (normalised) return normalised;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  async function fetchPairFx(currencies) {
+    const fcdRatesTHB = { THB: 1 };
+    const requested = [...new Set(currencies.filter(cur => cur && cur !== 'THB'))];
+
+    for (const cur of requested) {
+      try {
+        const r = await fetch(`https://api.frankfurter.dev/v2/rate/${encodeURIComponent(cur)}/THB`, { cache: 'no-store' });
+        if (!r.ok) continue;
+        const data = await r.json();
+        const rate = Number(data?.rate || data?.rates?.THB || 0);
+        if (rate > 0) fcdRatesTHB[cur] = rate;
+      } catch (_) {}
+    }
+
+    if (!fcdRatesTHB.USD) return null;
+    return {
+      base: 'USD',
+      rates: { THB: fcdRatesTHB.USD },
+      requestedQuotes: currencies,
+      fcdRatesTHB,
+      fetchedAt: new Date().toISOString(),
+      source: 'Frankfurter'
+    };
+  }
+
+  async function fetchFcdFx() {
+    const currencies = getFcdCurrencies();
+    return (await fetchBulkFx(currencies)) || (await fetchPairFx(currencies));
+  }
+
+  function fcdRateTHB(cur) {
+    const cc = cleanCurrency(cur || 'USD');
+    const p = S.marketPrices || {};
+    if (cc === 'THB') return 1;
+    if (Number(p.fcdRatesTHB?.[cc]) > 0) return Number(p.fcdRatesTHB[cc]);
+    if (Number(p.fx?.fcdRatesTHB?.[cc]) > 0) return Number(p.fx.fcdRatesTHB[cc]);
+
+    const rates = p.fx?.rates || {};
+    const thbPerUsd = Number(rates.THB || 0);
+    if (cc === 'USD') return thbPerUsd || 0;
+    if (thbPerUsd && Number(rates[cc]) > 0) return thbPerUsd / Number(rates[cc]);
+    return 0;
+  }
+
+  function revalueInvestmentWallets() {
+    (S.wallets || []).forEach(w => {
+      if (!['gold', 'crypto', 'fcd'].includes(w?.type)) return;
+      const units = Number(w.units || 0);
+      if (!units || !App._investmentUnitPriceTHB) return;
+      const unitPrice = Number(App._investmentUnitPriceTHB(w) || 0);
+      if (unitPrice > 0) w.balance = units * unitPrice;
+    });
+  }
+
+  const previousUnitPrice = App._investmentUnitPriceTHB?.bind(App);
+  App._investmentUnitPriceTHB = function(w) {
+    if (w?.type === 'fcd') {
+      const cur = cleanCurrency(w.currency || w.symbol || 'USD');
+      return fcdRateTHB(cur) || Number(w.manualPrice || 0);
+    }
+    return previousUnitPrice ? previousUnitPrice(w) : Number(w?.manualPrice || 0);
+  };
+
+  const previousMarketText = App._marketText?.bind(App);
+  App._marketText = function(w) {
+    if (w?.type === 'fcd') {
+      const cur = cleanCurrency(w.currency || w.symbol || 'USD');
+      const rate = fcdRateTHB(cur);
+      return rate ? `Frankfurter FX · ${cur}/THB ${rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : `ยังไม่ Sync อัตราแลกเปลี่ยน ${cur}/THB`;
+    }
+    return previousMarketText ? previousMarketText(w) : '';
+  };
+
+  App.refreshMarketPrices = async function() {
+    const next = { ...(S.marketPrices || {}) };
+    let cryptoOk = false;
+    let fxOk = false;
+    let goldOk = false;
+
+    try {
+      const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache: 'no-store' });
+      if (r.ok) { next.crypto = await r.json(); cryptoOk = true; }
+    } catch (_) {}
+
+    try {
+      const fx = await fetchFcdFx();
+      if (fx?.fcdRatesTHB?.USD) {
+        next.fx = fx;
+        next.fcdRatesTHB = fx.fcdRatesTHB;
+        fxOk = true;
+      }
+    } catch (_) {}
+
+    try {
+      if (typeof App._fetchThaiGoldViaSource === 'function') {
+        const gold = await App._fetchThaiGoldViaSource();
+        if (gold?.jewelryBuy) {
+          next.thaiGold = gold;
+          next.auroraGold = gold;
+          goldOk = true;
+        }
+      }
+    } catch (err) {
+      console.warn('Gold sync failed:', err);
+    }
+
+    next.updatedAt = new Date().toISOString();
+    S.marketPrices = next;
+    revalueInvestmentWallets();
+    persist();
+    App.renderWallets?.();
+    App.render?.();
+
+    const okParts = [];
+    if (fxOk) okParts.push('FCD FX');
+    if (cryptoOk) okParts.push('Crypto');
+    if (goldOk) okParts.push('ทอง');
+
+    if (okParts.length) notify(`Sync ราคาอ้างอิงสำเร็จ: ${okParts.join(', ')}`, goldOk || fxOk ? 'success' : 'info');
+    else notify('Sync ราคาไม่ได้ กรุณาเช็กอินเทอร์เน็ตหรือ Gold Proxy', 'error');
+  };
+
+  try { if (S.page === 'wallets') App.renderWallets?.(); } catch (_) {}
 })();

@@ -875,7 +875,6 @@ body { background: var(--bg); letter-spacing: -.01em; }
 .reward-tile strong { color: var(--primary); font-size: 20px; }
 .benefits-toggle-row { min-height: 44px; }
 .installment-row { display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid var(--border); }
-.installment-row:last-child { border-bottom:0; }
 
 .empty {
   padding: 44px 20px;
@@ -896,9 +895,9 @@ body { background: var(--bg); letter-spacing: -.01em; }
 }
 
 /* ============================================================
-   V2.2 Prototype Design Style Layer
+   V2.2 UI Style Layer
    Base: money-tracker-v2-2-ui-refresh.zip
-   Intent: translate the uploaded Claude prototype visual system into
+   Intent: translate the current mobile visual system into
    the existing vanilla app without removing feature logic.
    ============================================================ */
 /* System font only: Apple/SF stack; no external font import. */
@@ -965,24 +964,7 @@ body {
   letter-spacing: -.012em;
 }
 
-@media (min-width: 560px) {
-  body::before {
-    content: 'MONEY TRACKER · PROTOTYPE STYLE';
-    position: fixed;
-    z-index: 0;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: rgba(255,255,255,.30);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .12em;
-    pointer-events: none;
-    white-space: nowrap;
-  }
-}
-
-#app {
+@media#app {
   background: var(--bg);
   color: var(--text);
   isolation: isolate;
@@ -1003,52 +985,6 @@ body {
     box-shadow: 0 40px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08);
   }
 }
-
-/* Native-phone cue from prototype. Hidden on real small screens to avoid a double mobile status bar. */
-#app-status-bar { display: none; }
-@media (min-width: 560px) {
-  #app-status-bar {
-    height: 44px;
-    flex: 0 0 44px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 24px;
-    background: var(--bg);
-    color: var(--text);
-    user-select: none;
-    z-index: 9;
-  }
-}
-#app-status-time { font-size: 13px; font-weight: 800; line-height: 1; }
-.app-status-icons { display: flex; align-items: center; gap: 6px; color: var(--text); }
-.signal-bars { display: flex; gap: 2px; align-items: flex-end; height: 11px; }
-.signal-bars i { display: block; width: 3px; border-radius: 2px; background: currentColor; }
-.signal-bars i:nth-child(1) { height: 3px; }
-.signal-bars i:nth-child(2) { height: 5px; }
-.signal-bars i:nth-child(3) { height: 7px; }
-.signal-bars i:nth-child(4) { height: 9px; opacity: .35; }
-.status-battery {
-  width: 25px;
-  height: 12px;
-  border: 1px solid color-mix(in srgb, var(--text) 35%, transparent);
-  border-radius: 4px;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  padding: 1.5px;
-}
-.status-battery::after {
-  content: '';
-  position: absolute;
-  right: -3px;
-  top: 3px;
-  width: 2px;
-  height: 6px;
-  border-radius: 0 2px 2px 0;
-  background: color-mix(in srgb, var(--text) 40%, transparent);
-}
-.status-battery i { display: block; width: 16px; height: 7px; border-radius: 2px; background: currentColor; }
 
 /* Keep all floating layers inside the app frame on desktop. */
 #bottom-nav,
@@ -1072,7 +1008,7 @@ body {
   letter-spacing: -.055em;
 }
 
-/* Bottom navigation: prototype-style centered FAB, active dot, no heavy icon pill. */
+/* Bottom navigation: modern centered FAB, active dot, no heavy icon pill. */
 #bottom-nav {
   left: 0;
   right: 0;
@@ -1109,7 +1045,6 @@ body {
   background: var(--primary);
   margin-top: 1px;
 }
-.nav-fab-space { flex: 1; pointer-events: none; }
 #fab {
   left: 50%;
   right: auto;
@@ -1301,7 +1236,7 @@ html.dark .mt-alert-sub { color: #F59E0B; }
 .section-header h3 { font-size: 15px; font-weight: 900; letter-spacing: -.03em; }
 .section-header button { color: var(--primary); font-weight: 800; }
 
-/* Transaction list rows from prototype */
+/* Transaction list rows */
 .tx-row {
   min-height: 62px;
   padding: 10px 0;
@@ -1316,7 +1251,7 @@ html.dark .mt-alert-sub { color: #F59E0B; }
 .tx-amount { font-size: 15px; font-weight: 800; }
 .tx-date { font-size: 10px; color: var(--muted); margin-top:1px; }
 
-/* Add transaction prototype flow */
+/* Add transaction flow */
 .sheet {
   border-radius: 28px 28px 0 0;
   max-width: 390px;
@@ -1471,7 +1406,7 @@ html.dark .mt-alert-sub { color: #F59E0B; }
 /* ============================================================
    V2.2.1 Critical mobile shell + dashboard-only FAB fix
    - Keep nav pinned to the bottom of the app viewport
-   - Remove prototype center-FAB gap; bottom nav is exactly 5 icons
+   - Remove legacy center-FAB gap; bottom nav is exactly 5 icons
    - Show floating add button only on Dashboard, aligned to the right
    ============================================================ */
 :root {
@@ -1585,10 +1520,6 @@ body {
   height: 100%;
   min-width: 0;
   padding: 7px 0 6px;
-}
-
-.nav-fab-space {
-  display: none !important;
 }
 
 #fab {
@@ -3381,3 +3312,219 @@ label.color-swatch {
 }
 .wc-edit-btn:active { background: rgba(255,255,255,.32); }
 .wc-invest-units { opacity: .82; font-size: 12px; }
+
+
+/* ── V2.3 targeted fixes: credit pay placement, report equal cards, compact More ── */
+.wc-card-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+}
+.wc-card-pay-btn {
+  color: #fff !important;
+  background: rgba(255,255,255,.18) !important;
+  border: 1px solid rgba(255,255,255,.25) !important;
+  min-height: 28px !important;
+  padding: 5px 9px !important;
+  font-size: 12px !important;
+}
+.report-summary-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  margin-bottom: 16px !important;
+  align-items: stretch !important;
+}
+.report-summary-card {
+  min-height: 66px !important;
+  padding: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+}
+.report-summary-label {
+  font-size: 11px !important;
+  line-height: 1.25 !important;
+  color: var(--muted) !important;
+  white-space: nowrap !important;
+}
+.report-summary-value {
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+  margin-top: 4px !important;
+  word-break: break-word !important;
+  font-variant-numeric: tabular-nums !important;
+}
+#more-content .sec-title {
+  margin: 10px 0 5px !important;
+}
+#more-content .card.card-pad {
+  padding: 8px 12px !important;
+}
+#more-content .settings-row {
+  padding: 9px 0 !important;
+  gap: 10px !important;
+  min-height: 0 !important;
+}
+#more-content .s-icon {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 10px !important;
+  font-size: 16px !important;
+}
+#more-content .s-label {
+  font-size: 14px !important;
+  line-height: 1.25 !important;
+}
+#more-content .s-value {
+  font-size: 11.5px !important;
+}
+#more-content .s-arrow {
+  font-size: 18px !important;
+}
+#more-content .color-row {
+  gap: 8px !important;
+}
+#more-content .color-dot {
+  width: 28px !important;
+  height: 28px !important;
+}
+#more-content [data-v23-gold-proxy] {
+  margin-bottom: 10px !important;
+}
+#more-content [data-v23-gold-proxy] .form-input {
+  min-height: 42px !important;
+  margin-bottom: 8px !important;
+}
+#more-content [data-v23-gold-proxy] .btn {
+  min-height: 42px !important;
+}
+
+/* ── V2.4.2 remove preview chrome + Thai mark clipping fix ── */
+body::before {
+  content: none !important;
+  display: none !important;
+}
+#app-status-bar,
+.app-status-icons,
+.signal-bars,
+.status-battery {
+  display: none !important;
+}
+button,
+input,
+select,
+textarea,
+.btn,
+.btn-sm,
+.chip,
+.wallet-chip-btn,
+.wc-pay-btn,
+.wc-card-pay-btn,
+.type-tab,
+.flag-pill,
+.cat-btn,
+.budget-tab,
+.quick-amount-row button,
+.installment-month-grid button {
+  line-height: 1.42 !important;
+}
+.form-input,
+.search-input {
+  line-height: 1.45 !important;
+}
+#bottom-nav .nav-btn span,
+.tx-title,
+.tx-sub,
+.list-item-name,
+.list-item-sub,
+.s-label,
+.s-value,
+.report-summary-label,
+.report-summary-value,
+.wc-name,
+.wc-type {
+  line-height: 1.38 !important;
+}
+.wallet-chip-btn,
+.wc-card-pay-btn,
+.wc-pay-btn,
+.chip,
+.btn-sm {
+  overflow: visible !important;
+}
+
+/* ============================================================
+   V2.3.1 Production fullscreen shell
+   Remove desktop phone mockup frame/rounded viewport and make
+   the bottom navigation span the full app width.
+   ============================================================ */
+html,
+body {
+  width: 100% !important;
+  height: var(--app-height) !important;
+  min-height: var(--app-height) !important;
+  overflow: hidden !important;
+  background: var(--bg) !important;
+}
+
+body {
+  position: fixed !important;
+  inset: 0 !important;
+  display: block !important;
+  align-items: initial !important;
+  justify-content: initial !important;
+  margin: 0 !important;
+}
+
+#app {
+  position: fixed !important;
+  inset: 0 !important;
+  left: 0 !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  max-width: none !important;
+  height: var(--app-height) !important;
+  min-height: var(--app-height) !important;
+  margin: 0 !important;
+  transform: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+}
+
+@media (min-width: 431px), (min-width: 560px) {
+  body {
+    background: var(--bg) !important;
+    position: fixed !important;
+    display: block !important;
+  }
+
+  #app {
+    width: 100vw !important;
+    max-width: none !important;
+    height: var(--app-height) !important;
+    min-height: var(--app-height) !important;
+    inset: 0 !important;
+    left: 0 !important;
+    top: 0 !important;
+    transform: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+}
+
+#bottom-nav {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  transform: none !important;
+  border-radius: 0 !important;
+}
