@@ -48,14 +48,15 @@ function moneyFmt(n) { return S.settings?.hideMoney ? '฿••••' : Calc.f
 
 // ── Apply theme ───────────────────────────────────────────────
 function applyTheme() {
-  document.documentElement.classList.toggle('dark', S.settings.darkMode)
-  document.documentElement.style.setProperty('--primary', S.settings.accentColor)
-  document.getElementById('meta-theme').setAttribute('content', S.settings.darkMode ? '#0F172A' : '#1E293B')
+  document.documentElement.classList.toggle('dark', Boolean(S.settings?.darkMode))
+  document.documentElement.style.setProperty('--primary', S.settings?.accentColor || '#2563EB')
+  document.getElementById('meta-theme')?.setAttribute('content', S.settings?.darkMode ? '#0F172A' : '#1E293B')
 }
 
 // ── Toast ─────────────────────────────────────────────────────
 function toast(msg, type = 'info') {
   const c = document.getElementById('toast-container')
+  if (!c) { console[type === 'error' ? 'error' : 'log'](msg); return }
   const el = document.createElement('div')
   el.className = `toast ${type}`
   el.textContent = msg
@@ -66,18 +67,19 @@ function toast(msg, type = 'info') {
 
 // ── Overlay helpers ───────────────────────────────────────────
 const App = {
-  openOverlay(id)  { document.getElementById(id).classList.add('open') },
+  openOverlay(id)  { document.getElementById(id)?.classList.add('open') },
   closeOverlay(id) {
-    document.getElementById(id).classList.remove('open')
+    document.getElementById(id)?.classList.remove('open')
     if (id === 'overlay-tx-detail') S.deleteConfirm = false
   },
   openSubScreen(html) {
     const ss = document.getElementById('sub-screen')
+    if (!ss) return
     ss.innerHTML = html
     ss.classList.add('open')
   },
   closeSubScreen() {
-    document.getElementById('sub-screen').classList.remove('open')
+    document.getElementById('sub-screen')?.classList.remove('open')
     App.render()
   },
   toggleHideMoney() { S.settings.hideMoney = !S.settings.hideMoney; persist(); App.render() },
@@ -86,7 +88,7 @@ const App = {
   showPage(page) {
     S.page = page
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
-    document.getElementById('page-' + page).classList.add('active')
+    document.getElementById('page-' + page)?.classList.add('active')
     document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === page)
     })
@@ -108,80 +110,9 @@ const App = {
   // ─────────────────────────────────────────────────────────
   // DASHBOARD
   // ─────────────────────────────────────────────────────────
-  renderDashboard() {
-    const stats   = Calc.getMonthlyStats(S.transactions, THIS_MONTH)
-    const nw      = Calc.getNetWorth(S.wallets)
-    const budget  = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, THIS_MONTH)
-    const recent  = [...S.transactions].sort((a,b) => b.date.localeCompare(a.date)).slice(0, 5)
-    const savW    = stats.income > 0 ? Math.min(stats.savingsRate, 100) : 0
+  // renderDashboard is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-    // gradient color from primary
-    const grad = `linear-gradient(135deg, ${S.settings.accentColor}, ${S.settings.accentColor}CC)`
-
-    let html = `
-      <!-- Header -->
-      <div class="grad-header" style="background:${grad};color:#fff;border-radius:0 0 24px 24px;margin-bottom:16px">
-        <div style="font-size:13px;opacity:.75;margin-bottom:12px">${Calc.monthLabel(THIS_MONTH)}</div>
-        <div class="grad-stats">
-          <div class="grad-stat">
-            <div class="grad-s-label">รายรับ</div>
-            <div class="grad-s-value">${Calc.fmt(stats.income)}</div>
-          </div>
-          <div class="grad-stat">
-            <div class="grad-s-label">รายจ่าย</div>
-            <div class="grad-s-value">${Calc.fmt(stats.expense)}</div>
-          </div>
-          <div class="grad-stat">
-            <div class="grad-s-label">คงเหลือ</div>
-            <div class="grad-s-value">${Calc.fmt(stats.net)}</div>
-          </div>
-        </div>
-        <div class="savings-bar"><div class="savings-fill" style="width:${savW}%"></div></div>
-        <div class="savings-text">อัตราการออม ${stats.savingsRate.toFixed(1)}%</div>
-      </div>
-
-      <!-- Net worth -->
-      <div class="card card-pad nw-card" style="margin-bottom:12px">
-        <div class="nw-label">ความมั่งคั่งสุทธิ</div>
-        <div class="nw-value ${nw.net >= 0 ? 'c-income' : 'c-expense'}">${nw.net >= 0 ? '' : '-'}${Calc.fmt(Math.abs(nw.net))}</div>
-        <div class="nw-detail">
-          <span class="nw-item">สินทรัพย์ <strong class="c-income">${Calc.fmt(nw.assets)}</strong></span>
-          <span class="nw-item">หนี้สิน <strong class="c-expense">${Calc.fmt(nw.debt)}</strong></span>
-        </div>
-      </div>`
-
-    // Budget overview
-    if (budget.length) {
-      html += `<div class="card card-pad" style="margin-bottom:12px">
-        <div style="font-size:14px;font-weight:700;margin-bottom:12px">งบประมาณเดือนนี้</div>`
-      budget.slice(0, 3).forEach(b => {
-        const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'
-        html += `<div style="margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px">
-            <span>${b.icon} ${b.label}</span>
-            <span style="color:${b.over ? 'var(--expense)' : 'var(--muted)'}">${Calc.fmt(b.spent)} / ${Calc.fmt(b.monthlyLimit)}</span>
-          </div>
-          <div class="progress-bar"><div class="progress-fill" style="width:${b.pct}%;background:${barColor}"></div></div>
-        </div>`
-      })
-      html += `</div>`
-    }
-
-    // Recent transactions
-    html += `<div class="card" style="margin-bottom:20px">
-      <div style="padding:16px 20px 0;font-size:14px;font-weight:700">รายการล่าสุด</div>`
-    if (!recent.length) {
-      html += App._emptyState('📋', 'ยังไม่มีรายการ', 'แตะ + เพื่อเพิ่มรายการแรก')
-    } else {
-      html += `<div style="padding:0 20px">`
-      recent.forEach(tx => { html += App._txRow(tx) })
-      html += `</div>`
-    }
-    html += `</div>`
-
-    document.getElementById('dashboard-content').innerHTML = html
-    App._bindTxRows('dashboard-content')
-  },
 
   // ─────────────────────────────────────────────────────────
   // TRANSACTIONS PAGE
@@ -252,55 +183,9 @@ const App = {
   // ─────────────────────────────────────────────────────────
   // WALLETS PAGE
   // ─────────────────────────────────────────────────────────
-  renderWallets() {
-    const nw = Calc.getNetWorth(S.wallets)
+  // renderWallets is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-    document.getElementById('wallets-summary').innerHTML = `
-      <div style="flex:1;background:rgba(5,150,105,.12);border-radius:14px;padding:12px">
-        <div style="font-size:12px;color:var(--muted)">สินทรัพย์รวม</div>
-        <div style="font-size:18px;font-weight:800;color:var(--income)">${Calc.fmt(nw.assets)}</div>
-      </div>
-      <div style="flex:1;background:rgba(220,38,38,.12);border-radius:14px;padding:12px">
-        <div style="font-size:12px;color:var(--muted)">หนี้สินรวม</div>
-        <div style="font-size:18px;font-weight:800;color:var(--expense)">${Calc.fmt(nw.debt)}</div>
-      </div>`
-
-    let html = ''
-    S.wallets.forEach(w => {
-      const isCC   = w.type === 'credit'
-      const owed   = Math.abs(w.balance)
-      const usedPct= isCC && w.limit ? Math.min((owed / w.limit) * 100, 100) : 0
-      const due    = isCC && w.dueDay ? Calc.getDueDate(w.dueDay) : null
-      const avail  = isCC && w.limit ? w.limit - owed : 0
-      const barClr = usedPct > 80 ? 'rgba(252,165,165,.9)' : 'rgba(255,255,255,.8)'
-
-      html += `<div class="wallet-card" style="background:linear-gradient(135deg,${w.color},${w.color}BB)"
-        onclick="${isCC ? `App.openCCDetail('${w.id}')` : `App.openWalletForm('${w.id}')`}">
-        <div class="wc-header">
-          <div>
-            <div class="wc-name">${w.icon} ${w.name}</div>
-            <div class="wc-type">${App._walletTypeLabel(w.type)}</div>
-          </div>
-          ${isCC ? `<button class="wc-pay-btn" onclick="event.stopPropagation();App.openCCPay('${w.id}')">ชำระ</button>` : ''}
-        </div>
-        <div class="wc-balance">${isCC ? '-' : ''}${Calc.fmt(isCC ? owed : w.balance)}</div>
-        ${isCC && w.limit ? `
-          <div class="wc-limit">
-            <div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${usedPct}%;background:${barClr}"></div></div>
-            <div class="wc-prog-info">
-              <span>ใช้ไป ${usedPct.toFixed(0)}% · คงเหลือ ${Calc.fmt(avail)}</span>
-              ${due ? `<span>ครบ ${due.dueStr} (${due.daysLeft}ว.)</span>` : ''}
-            </div>
-          </div>` : ''}
-      </div>`
-    })
-
-    html += `<button class="btn btn-secondary" onclick="App.openWalletForm(null)" style="margin-top:4px">
-      + เพิ่มกระเป๋าเงิน
-    </button>`
-
-    document.getElementById('wallets-content').innerHTML = html
-  },
 
   // ─────────────────────────────────────────────────────────
   // REPORTS PAGE
@@ -422,72 +307,9 @@ const App = {
   // ─────────────────────────────────────────────────────────
   // MORE / SETTINGS PAGE
   // ─────────────────────────────────────────────────────────
-  renderMore() {
-    const ACCENT_COLORS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
-    const budgetCount = S.budgets.filter(b => b.monthlyLimit > 0).length
+  // renderMore is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-    document.getElementById('more-content').innerHTML = `
-      <div style="padding:0 16px">
-        <div style="font-size:20px;font-weight:800;padding:20px 0 4px">เพิ่มเติม</div>
-
-        <div class="sec-title">การแสดงผล</div>
-        <div class="card card-pad">
-          <!-- Dark mode -->
-          <div class="settings-row" onclick="App.toggleDark()" style="cursor:pointer">
-            <div class="s-icon">🌙</div>
-            <div class="s-label">โหมดมืด</div>
-            <button class="toggle${S.settings.darkMode ? ' on' : ''}" id="dark-toggle" onclick="event.stopPropagation();App.toggleDark()"></button>
-          </div>
-          <!-- Accent color -->
-          <div style="padding:14px 0;border-bottom:1px solid var(--border)">
-            <div style="font-size:15px;font-weight:600;margin-bottom:12px">🎨 สีธีม</div>
-            <div class="color-row">
-              ${ACCENT_COLORS.map(c => `
-                <div class="color-dot${S.settings.accentColor===c?' selected':''}"
-                  style="background:${c}"
-                  onclick="App.setAccent('${c}')"></div>`).join('')}
-            </div>
-          </div>
-        </div>
-
-        <div class="sec-title">การเงิน</div>
-        <div class="card card-pad">
-          <div class="settings-row" onclick="App.openBudgetScreen()">
-            <div class="s-icon">💰</div>
-            <div class="s-label">งบประมาณ</div>
-            <div class="s-value">${budgetCount ? budgetCount + ' หมวด' : 'ยังไม่ตั้ง'}</div>
-            <div class="s-arrow">›</div>
-          </div>
-        </div>
-
-        <div class="sec-title">ข้อมูล</div>
-        <div class="card card-pad">
-          <div class="settings-row" onclick="App.exportData()">
-            <div class="s-icon">📤</div>
-            <div class="s-label">ส่งออกข้อมูล (JSON)</div>
-            <div class="s-arrow">›</div>
-          </div>
-          <div class="settings-row" onclick="document.getElementById('import-file').click()">
-            <div class="s-icon">📥</div>
-            <div class="s-label">นำเข้าข้อมูล (JSON)</div>
-            <div class="s-arrow">›</div>
-          </div>
-          <input type="file" id="import-file" accept=".json" style="display:none" onchange="App.importData(this)">
-          <div class="settings-row" onclick="App.resetData()">
-            <div class="s-icon">🔄</div>
-            <div class="s-label" style="color:var(--expense)">รีเซ็ตข้อมูลทั้งหมด</div>
-            <div class="s-arrow" style="color:var(--expense)">›</div>
-          </div>
-        </div>
-
-        <div style="text-align:center;padding:32px 0 8px">
-          <div style="font-size:40px">💰</div>
-          <div style="font-size:16px;font-weight:700;margin-top:8px">Money Tracker</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px">v1.0 · Offline-first PWA</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px">ข้อมูลเก็บในเครื่องของคุณเท่านั้น</div>
-        </div>
-      </div>`
-  },
 
   toggleDark() {
     S.settings.darkMode = !S.settings.darkMode
@@ -504,21 +326,9 @@ const App = {
     toast('ส่งออกข้อมูลสำเร็จ', 'success')
   },
 
-  importData(input) {
-    const file = input.files[0]
-    if (!file) return
-    Storage.importJSON(file, data => {
-      if (confirm('นำเข้าข้อมูลจะแทนที่ข้อมูลปัจจุบัน ยืนยัน?')) {
-        S.transactions = data.transactions || []
-        S.wallets      = data.wallets      || []
-        S.categories   = data.categories   || S.categories
-        S.budgets      = data.budgets      || []
-        persist(); App.render()
-        toast('นำเข้าข้อมูลสำเร็จ', 'success')
-      }
-      input.value = ''
-    }, err => { toast('นำเข้าล้มเหลว: ' + err, 'error'); input.value = '' })
-  },
+  // importData is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
+
 
   resetData() {
     if (!confirm('รีเซ็ตข้อมูลทั้งหมด? ไม่สามารถกู้คืนได้')) return
@@ -532,94 +342,24 @@ const App = {
   // ─────────────────────────────────────────────────────────
   // BUDGET SUB-SCREEN
   // ─────────────────────────────────────────────────────────
-  openBudgetScreen() {
-    const rows = S.categories.expense.map(cat => {
-      const b = S.budgets.find(b => b.categoryId === cat.id)
-      const spent = S.transactions
-        .filter(t => t.date.startsWith(THIS_MONTH) && t.type === 'expense' && t.categoryId === cat.id)
-        .reduce((s,t) => s + t.amount, 0)
-      return { cat, limit: b?.monthlyLimit || 0, spent }
-    })
+  // openBudgetScreen is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-    const html = `
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
-        <h2>ตั้งงบประมาณ</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.saveBudgets()" style="width:auto;padding:8px 16px">บันทึก</button>
-      </div>
-      <div class="sub-scroll">
-        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">ตั้งงบประมาณรายเดือนแต่ละหมวด (0 = ไม่กำหนด)</p>
-        ${rows.map(r => `
-          <div style="margin-bottom:16px">
-            <label class="form-label">${r.cat.icon} ${r.cat.label} · ใช้ไปแล้ว ${Calc.fmt(r.spent)}</label>
-            <input class="form-input" type="number" id="budget-${r.cat.id}" value="${r.limit || ''}" placeholder="0 = ไม่กำหนด">
-          </div>`).join('')}
-      </div>`
-    App.openSubScreen(html)
-  },
 
-  saveBudgets() {
-    S.categories.expense.forEach(cat => {
-      const el  = document.getElementById('budget-' + cat.id)
-      const val = parseFloat(el?.value) || 0
-      const idx = S.budgets.findIndex(b => b.categoryId === cat.id)
-      if (val > 0) {
-        if (idx >= 0) S.budgets[idx].monthlyLimit = val
-        else S.budgets.push({ categoryId: cat.id, monthlyLimit: val })
-      } else {
-        if (idx >= 0) S.budgets.splice(idx, 1)
-      }
-    })
-    persist(); App.closeSubScreen()
-    toast('บันทึกงบประมาณแล้ว', 'success')
-  },
+  // saveBudgets is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
+
 
   // ─────────────────────────────────────────────────────────
   // ADD TRANSACTION OVERLAY
   // ─────────────────────────────────────────────────────────
-  openAddTx() {
-    S.tx = {
-      step: 'amount', type: 'expense', amount: '0',
-      walletId: S.wallets.find(w => w.type !== 'credit')?.id || S.wallets[0]?.id || '',
-      toWalletId: '', categoryId: '', merchant: '', note: '', date: TODAY,
-    }
-    App._renderAddTxAmount()
-    App.openOverlay('overlay-add-tx')
-  },
+  // openAddTx is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-  _renderAddTxAmount() {
-    const amtColor = S.tx.type === 'income' ? 'var(--income)' : S.tx.type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
-    const display  = parseFloat(S.tx.amount || 0).toLocaleString('en-US', {
-      minimumFractionDigits: S.tx.amount.includes('.') ? (S.tx.amount.split('.')[1]?.length || 0) : 0
-    })
 
-    document.getElementById('add-tx-content').innerHTML = `
-      <div class="sheet-header" style="border-bottom:none;padding-bottom:0">
-        <h2>เพิ่มรายการ</h2>
-        <button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button>
-      </div>
+  // _renderAddTxAmount is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-      <!-- Type tabs -->
-      <div class="type-tabs">
-        ${[['expense','จ่าย'],['income','รับ'],['transfer','โอน']].map(([v,l]) =>
-          `<button class="type-tab${S.tx.type===v?' active':''}" onclick="App._setTxType('${v}')">${l}</button>`
-        ).join('')}
-      </div>
-
-      <!-- Amount display -->
-      <div class="amount-display" style="color:${amtColor}">฿${display}</div>
-
-      <!-- Numpad -->
-      <div class="numpad">
-        ${['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(k =>
-          `<button class="numpad-key${k==='⌫'?' del':''}" onclick="App._numpad('${k}')">${k}</button>`
-        ).join('')}
-      </div>
-
-      <div style="padding:0 20px 20px">
-        <button class="btn btn-primary" onclick="App._goToDetail()">ถัดไป →</button>
-      </div>`
-  },
 
   _setTxType(type) { S.tx.type = type; S.tx.categoryId = ''; App._renderAddTxAmount() },
 
@@ -728,34 +468,9 @@ const App = {
   _txField(field, val) { S.tx[field] = val },
   _backToAmount()      { S.tx.step = 'amount'; App._renderAddTxAmount() },
 
-  saveTx() {
-    const amt = parseFloat(S.tx.amount)
-    if (!amt || amt <= 0)             { toast('กรุณาระบุจำนวนเงิน', 'error'); return }
-    if (!S.tx.walletId)               { toast('กรุณาเลือกกระเป๋าเงิน', 'error'); return }
-    if (S.tx.type === 'transfer' && !S.tx.toWalletId) { toast('กรุณาเลือกปลายทาง', 'error'); return }
-    if (S.tx.type !== 'income' && S.tx.type !== 'transfer' && !S.tx.categoryId) {
-      toast('กรุณาเลือกหมวดหมู่', 'error'); return
-    }
+  // saveTx is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-    const tx = {
-      id:         Calc.genId(),
-      type:       S.tx.type,
-      amount:     amt,
-      walletId:   S.tx.walletId,
-      toWalletId: S.tx.toWalletId || undefined,
-      categoryId: S.tx.categoryId || undefined,
-      merchant:   S.tx.merchant,
-      note:       S.tx.note,
-      date:       S.tx.date || TODAY,
-    }
-
-    S.transactions.unshift(tx)
-    App._applyBalance(tx, 1)
-    persist()
-    App.closeOverlay('overlay-add-tx')
-    App.render()
-    toast('บันทึกรายการแล้ว', 'success')
-  },
 
   // ─────────────────────────────────────────────────────────
   // TRANSACTION DETAIL
@@ -767,36 +482,9 @@ const App = {
     App.openOverlay('overlay-tx-detail')
   },
 
-  _renderTxDetail() {
-    const tx = S.transactions.find(t => t.id === S.selectedTxId)
-    if (!tx) return
-    const cat    = App._findCat(tx.categoryId)
-    const wallet = S.wallets.find(w => w.id === tx.walletId)
-    const toWal  = S.wallets.find(w => w.id === tx.toWalletId)
-    const amtColor = tx.type === 'income' ? 'var(--income)' : tx.type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
+  // _renderTxDetail is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-    document.getElementById('tx-detail-content').innerHTML = `
-      <div style="text-align:center;margin-bottom:20px">
-        <div style="font-size:48px;font-weight:800;color:${amtColor}">
-          ${tx.type==='income'?'+':tx.type==='expense'?'-':''}${Calc.fmt(tx.amount)}
-        </div>
-        <div style="font-size:14px;color:var(--muted);margin-top:6px">${Calc.labelDate(tx.date)}</div>
-      </div>
-      <div>
-        ${cat    ? `<div class="detail-row"><span class="detail-label">หมวดหมู่</span><span class="detail-value">${cat.icon} ${cat.label}</span></div>` : ''}
-        ${wallet ? `<div class="detail-row"><span class="detail-label">กระเป๋าเงิน</span><span class="detail-value">${wallet.icon} ${wallet.name}</span></div>` : ''}
-        ${toWal  ? `<div class="detail-row"><span class="detail-label">ไปยัง</span><span class="detail-value">${toWal.icon} ${toWal.name}</span></div>` : ''}
-        ${tx.merchant ? `<div class="detail-row"><span class="detail-label">ร้านค้า</span><span class="detail-value">${tx.merchant}</span></div>` : ''}
-        ${tx.note     ? `<div class="detail-row"><span class="detail-label">หมายเหตุ</span><span class="detail-value">${tx.note}</span></div>` : ''}
-        <div class="detail-row"><span class="detail-label">ประเภท</span><span class="detail-value">${App._txTypeLabel(tx.type)}</span></div>
-      </div>
-      <div style="margin-top:24px">
-        ${S.deleteConfirm
-          ? `<button class="btn btn-danger" onclick="App.confirmDeleteTx()">ยืนยันการลบ</button>
-             <button class="btn btn-secondary mt-8" onclick="App._cancelDelete()">ยกเลิก</button>`
-          : `<button class="btn btn-outline" onclick="App.deleteTx()">🗑 ลบรายการ</button>`}
-      </div>`
-  },
 
   deleteTx() { S.deleteConfirm = true; App._renderTxDetail() },
   _cancelDelete() { S.deleteConfirm = false; App._renderTxDetail() },
@@ -816,68 +504,13 @@ const App = {
   // ─────────────────────────────────────────────────────────
   // WALLET FORM
   // ─────────────────────────────────────────────────────────
-  openWalletForm(walletId) {
-    S.editingWalletId = walletId
-    const w = walletId ? S.wallets.find(x => x.id === walletId) : null
-    const COLORS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
-    const TYPES  = [['bank','🏦','ธนาคาร'],['cash','💵','เงินสด'],['ewallet','📱','E-Wallet'],['credit','💳','บัตรเครดิต'],['saving','🏧','ออมทรัพย์']]
+  // openWalletForm is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-    document.getElementById('wallet-form-title').textContent = w ? 'แก้ไขกระเป๋า' : 'เพิ่มกระเป๋าเงิน'
-    document.getElementById('wallet-form-content').innerHTML = `
-      <div class="form-group">
-        <label class="form-label">ชื่อกระเป๋า</label>
-        <input class="form-input" id="wf-name" placeholder="เช่น ธ.กสิกร, เงินสด" value="${w?.name||''}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">ประเภท</label>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px" id="wf-type-grid">
-          ${TYPES.map(([v,icon,lbl]) => `
-            <button class="cat-btn${(w?.type||'bank')===v?' active':''}" onclick="App._selectWalletType('${v}')"
-              data-type="${v}">${icon}<br><small>${lbl}</small></button>`).join('')}
-        </div>
-        <input type="hidden" id="wf-type" value="${w?.type||'bank'}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">สี</label>
-        <div class="color-row" id="wf-color-row">
-          ${COLORS.map(c => `
-            <div class="color-dot${(w?.color||'#2563EB')===c?' selected':''}" style="background:${c}"
-              onclick="App._selectWalletColor('${c}')" data-color="${c}"></div>`).join('')}
-        </div>
-        <input type="hidden" id="wf-color" value="${w?.color||'#2563EB'}">
-      </div>
-      <div class="form-group">
-        <label class="form-label" id="wf-balance-label">${w?.type==='credit'?'ยอดค้างชำระ (฿)':'ยอดเงินเริ่มต้น (฿)'}</label>
-        <input class="form-input" type="number" id="wf-balance" placeholder="0" value="${w ? Math.abs(w.balance) : ''}">
-      </div>
-      <div id="wf-cc-fields" style="${(w?.type||'bank')==='credit'?'':'display:none'}">
-        <div class="form-group">
-          <label class="form-label">วงเงิน (฿)</label>
-          <input class="form-input" type="number" id="wf-limit" placeholder="50000" value="${w?.limit||''}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">วันครบกำหนดชำระ (วันที่)</label>
-          <input class="form-input" type="number" id="wf-dueday" min="1" max="31" placeholder="5" value="${w?.dueDay||''}">
-        </div>
-      </div>
-      <div class="flex-row">
-        ${w ? `<button class="btn btn-outline flex-1" onclick="App.deleteWallet('${w.id}')">ลบ</button>` : ''}
-        <button class="btn btn-primary${w?'':' flex-1'}" onclick="App.saveWallet()" style="${w?'flex:2':''}">
-          ${w ? 'บันทึก' : 'เพิ่มกระเป๋า'}
-        </button>
-      </div>`
 
-    App.openOverlay('overlay-wallet-form')
-  },
+  // _selectWalletType is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-  _selectWalletType(type) {
-    document.getElementById('wf-type').value = type
-    document.querySelectorAll('#wf-type-grid .cat-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.type === type)
-    })
-    document.getElementById('wf-cc-fields').style.display = type === 'credit' ? '' : 'none'
-    document.getElementById('wf-balance-label').textContent = type === 'credit' ? 'ยอดค้างชำระ (฿)' : 'ยอดเงินเริ่มต้น (฿)'
-  },
 
   _selectWalletColor(color) {
     document.getElementById('wf-color').value = color
@@ -886,35 +519,9 @@ const App = {
     })
   },
 
-  saveWallet() {
-    const name    = document.getElementById('wf-name').value.trim()
-    const type    = document.getElementById('wf-type').value
-    const color   = document.getElementById('wf-color').value
-    const balance = parseFloat(document.getElementById('wf-balance').value) || 0
-    const limit   = parseFloat(document.getElementById('wf-limit')?.value)  || 50000
-    const dueDay  = parseInt(document.getElementById('wf-dueday')?.value)   || 5
-    const ICONS   = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', saving:'🏧' }
+  // saveWallet is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-    if (!name) { toast('กรุณากรอกชื่อกระเป๋า', 'error'); return }
-
-    const data = {
-      name, type, color,
-      icon:    ICONS[type] || '💳',
-      balance: type === 'credit' ? -balance : balance,
-      ...(type === 'credit' && { limit, dueDay }),
-    }
-
-    if (S.editingWalletId) {
-      const idx = S.wallets.findIndex(w => w.id === S.editingWalletId)
-      if (idx >= 0) S.wallets[idx] = { ...S.wallets[idx], ...data }
-    } else {
-      S.wallets.push({ id: Calc.genId(), ...data })
-    }
-    persist()
-    App.closeOverlay('overlay-wallet-form')
-    App.render()
-    toast(S.editingWalletId ? 'แก้ไขกระเป๋าแล้ว' : 'เพิ่มกระเป๋าแล้ว', 'success')
-  },
 
   deleteWallet(id) {
     if (!confirm('ลบกระเป๋านี้? รายการที่เกี่ยวข้องจะยังคงอยู่')) return
@@ -989,62 +596,9 @@ const App = {
   // ─────────────────────────────────────────────────────────
   // CC DETAIL (tapping a CC card)
   // ─────────────────────────────────────────────────────────
-  openCCDetail(cardId) {
-    const card   = S.wallets.find(w => w.id === cardId)
-    const owed   = Math.abs(card.balance)
-    const usedPct= card.limit ? Math.min((owed / card.limit) * 100, 100) : 0
-    const avail  = card.limit ? card.limit - owed : 0
-    const due    = card.dueDay ? Calc.getDueDate(card.dueDay) : null
-    const txns   = S.transactions.filter(t => t.walletId === cardId)
-      .sort((a,b) => b.date.localeCompare(a.date)).slice(0, 20)
+  // openCCDetail is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
-    const html = `
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
-        <h2>${card.icon} ${card.name}</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${cardId}')" style="width:auto;padding:8px 14px">ชำระ</button>
-      </div>
-      <div class="sub-scroll">
-        <!-- Card visual -->
-        <div style="background:linear-gradient(135deg,${card.color},${card.color}BB);border-radius:20px;padding:24px;color:#fff;margin-bottom:16px">
-          <div style="font-size:12px;opacity:.75;margin-bottom:20px">${card.icon} ${card.name}</div>
-          <div style="font-size:13px;opacity:.7;margin-bottom:6px">ยอดค้างชำระ</div>
-          <div style="font-size:38px;font-weight:800;letter-spacing:-1px;margin-bottom:20px">${Calc.fmt(owed)}</div>
-          ${card.limit ? `
-          <div style="background:rgba(255,255,255,.2);border-radius:4px;height:7px;overflow:hidden;margin-bottom:8px">
-            <div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.85)'};border-radius:4px"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;opacity:.75">
-            <span>ใช้ ${usedPct.toFixed(0)}% · คงเหลือ ${Calc.fmt(avail)}</span>
-            ${due ? `<span>ครบ ${due.dueStr} (${due.daysLeft}ว.)</span>` : ''}
-          </div>` : ''}
-        </div>
-
-        <!-- Stats -->
-        <div style="display:flex;gap:10px;margin-bottom:16px">
-          <div class="card card-pad flex-1" style="padding:14px">
-            <div style="font-size:12px;color:var(--muted)">วงเงิน</div>
-            <div style="font-size:16px;font-weight:800">${Calc.fmt(card.limit||0)}</div>
-          </div>
-          <div class="card card-pad flex-1" style="padding:14px">
-            <div style="font-size:12px;color:var(--muted)">ครบกำหนด</div>
-            <div style="font-size:16px;font-weight:800;color:${due?.daysLeft<=3?'var(--expense)':'var(--text)'}">
-              ${due ? `${due.daysLeft} วัน` : '-'}
-            </div>
-          </div>
-        </div>
-
-        <!-- Recent transactions -->
-        <div style="font-size:14px;font-weight:700;margin-bottom:8px">รายการล่าสุด</div>
-        <div class="card"><div style="padding:0 16px">
-          ${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState('📋', 'ยังไม่มีรายการ', '')}
-        </div></div>
-      </div>`
-
-    App.openSubScreen(html)
-    // Bind tx rows after render
-    setTimeout(() => App._bindTxRows('sub-screen'), 0)
-  },
 
   // ─────────────────────────────────────────────────────────
   // HELPERS
@@ -1103,10 +657,9 @@ const App = {
     </div>`
   },
 
-  _walletTypeLabel(type) {
-    const m = { bank:'ธนาคาร', cash:'เงินสด', ewallet:'E-Wallet', credit:'บัตรเครดิต', saving:'ออมทรัพย์' }
-    return m[type] || type
-  },
+  // _walletTypeLabel is intentionally defined by the V2+ override block below.
+  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
+
 
   _txTypeLabel(type) {
     const m = { expense:'รายจ่าย', income:'รายรับ', transfer:'โอน', cc_payment:'ชำระบัตร' }
@@ -1406,6 +959,8 @@ function init() {
 
   // Bottom nav
   document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
+    if (btn.dataset.bound === '1') return
+    btn.dataset.bound = '1'
     btn.addEventListener('click', () => App.showPage(btn.dataset.tab))
   })
 

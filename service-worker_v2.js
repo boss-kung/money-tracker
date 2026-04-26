@@ -1,4 +1,4 @@
-const CACHE_NAME = 'money-tracker-v4-3-more-option-a'
+const CACHE_NAME = 'money-tracker-v4-3-css-cleanup-1'
 const ASSETS = [
   './index.html',
   './style_v2.css',
