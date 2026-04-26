@@ -1,4 +1,4 @@
-const CACHE_NAME = 'money-tracker-v4-1-ux-corrections'
+const CACHE_NAME = 'money-tracker-v4-3-more-option-a'
 const ASSETS = [
   './index.html',
   './style_v2.css',
