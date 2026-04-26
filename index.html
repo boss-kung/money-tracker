@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1E293B" id="meta-theme">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Money Tracker">
+  <meta name="description" content="ติดตามการเงินส่วนตัว">
+  <title>Money Tracker 💰</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style_v2.css">
+  <style>
+    /* Active tab dot indicator */
+    .nav-btn.active::after {
+      content: '';
+      display: block;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--primary);
+      margin-top: 1px;
+    }
+
+    /* 5-tab nav: equal sizing */
+    .nav-btn span {
+      font-size: 9px;
+      letter-spacing: 0;
+    }
+
+    /* Transactions header: breathing room */
+    #page-transactions .page-header {
+      padding-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Toast -->
+  <div id="toast-container"></div>
+
+  <!-- Prototype-style status bar (desktop phone preview only by CSS) -->
+  <div id="app-status-bar" aria-hidden="true">
+    <span id="app-status-time">9:41</span>
+    <div class="app-status-icons">
+      <span class="signal-bars"><i></i><i></i><i></i><i></i></span>
+      <svg class="status-wifi" width="15" height="11" viewBox="0 0 15 11" fill="none" aria-hidden="true">
+        <path d="M7.5 2.2C9.8 2.2 11.9 3.1 13.4 4.6L14.8 3.2C12.9 1.2 10.3 0 7.5 0S2.1 1.2.2 3.2L1.6 4.6C3.1 3.1 5.2 2.2 7.5 2.2Z" fill="currentColor"/>
+        <path d="M7.5 5.5C9 5.5 10.3 6.1 11.3 7L12.7 5.6C11.3 4.3 9.5 3.5 7.5 3.5S3.7 4.3 2.3 5.6L3.7 7C4.7 6.1 6 5.5 7.5 5.5Z" fill="currentColor"/>
+        <circle cx="7.5" cy="9.5" r="1.5" fill="currentColor"/>
+      </svg>
+      <span class="status-battery"><i></i></span>
+    </div>
+  </div>
+
+  <!-- ── Pages ─────────────────────────────── -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-scroll" id="dashboard-content"></div>
+  </div>
+
+  <div class="page" id="page-transactions">
+    <div class="page-header">
+      <h1>รายการ</h1>
+      <div style="margin-top:10px">
+        <div class="chips" id="tx-month-chips" style="padding:0 0 4px"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <div class="chips" id="tx-type-chips" style="padding:0;flex:1"></div>
+        </div>
+        <div style="padding:10px 0 0">
+          <input class="form-input" id="tx-search" placeholder="🔍  ค้นหา..." style="padding:10px 14px;font-size:14px">
+        </div>
+        <div id="tx-summary" style="display:flex;gap:16px;padding:10px 0 2px;font-size:13px"></div>
+      </div>
+    </div>
+    <div class="page-scroll" id="tx-list-content" style="padding-top:8px"></div>
+  </div>
+
+  <div class="page" id="page-wallets">
+    <div class="page-header">
+      <h1>กระเป๋าเงิน</h1>
+      <div id="wallets-summary" style="display:flex;gap:10px;margin-top:12px"></div>
+    </div>
+    <div class="page-scroll" id="wallets-content" style="padding-top:8px"></div>
+  </div>
+
+  <div class="page" id="page-reports">
+    <div class="page-header">
+      <h1>รายงาน</h1>
+      <div class="chips" id="report-month-chips" style="padding:10px 0 0;"></div>
+      <div class="chips" id="report-view-chips" style="padding:8px 0 0;"></div>
+    </div>
+    <div class="page-scroll" id="reports-content" style="padding-top:16px"></div>
+  </div>
+
+  <div class="page" id="page-more">
+    <div class="page-scroll" id="more-content" style="padding-top:0"></div>
+  </div>
+
+  <!-- ── Bottom Nav (5 tabs) ──────────────── -->
+  <nav id="bottom-nav">
+    <button class="nav-btn active" data-tab="dashboard">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span>หน้าหลัก</span>
+    </button>
+    <button class="nav-btn" data-tab="transactions">
+      <svg viewBox="0 0 24 24"><path d="M7 16V4m0 0L3 8m4-4 4 4M17 8v12m0 0 4-4m-4 4-4-4"/></svg>
+      <span>รายการ</span>
+    </button>
+    <button class="nav-btn" data-tab="wallets">
+      <svg viewBox="0 0 24 24"><path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/><path d="M17 12h4v4h-4a2 2 0 0 1 0-4Z"/></svg>
+      <span>กระเป๋า</span>
+    </button>
+    <button class="nav-btn" data-tab="reports">
+      <svg viewBox="0 0 24 24"><path d="M3 3v18h18M7 16l4-4 4 4 4-8"/></svg>
+      <span>รายงาน</span>
+    </button>
+    <button class="nav-btn" data-tab="more">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <span>เพิ่มเติม</span>
+    </button>
+  </nav>
+
+  <!-- ── FAB (bottom-right, dashboard only) ─ -->
+  <button id="fab" onclick="App.openAddTx()" aria-label="เพิ่มรายการ">
+    <svg viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></svg>
+  </button>
+
+  <!-- ── Overlay: Add / Edit Transaction ───── -->
+  <div class="overlay" id="overlay-add-tx">
+    <div class="overlay-backdrop" onclick="App.closeAddTx()"></div>
+    <div class="sheet" id="sheet-add-tx" style="max-height:98dvh">
+      <div class="sheet-handle"></div>
+      <div id="add-tx-content"></div>
+    </div>
+  </div>
+
+  <!-- ── Overlay: Transaction Detail ────────── -->
+  <div class="overlay" id="overlay-tx-detail">
+    <div class="overlay-backdrop" onclick="App.closeOverlay('overlay-tx-detail')"></div>
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h2>รายละเอียด</h2>
+        <button class="btn-icon" onclick="App.closeOverlay('overlay-tx-detail')">✕</button>
+      </div>
+      <div class="sheet-body" id="tx-detail-content"></div>
+    </div>
+  </div>
+
+  <!-- ── Overlay: Wallet Form ───────────────── -->
+  <div class="overlay" id="overlay-wallet-form">
+    <div class="overlay-backdrop" onclick="App.closeOverlay('overlay-wallet-form')"></div>
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h2 id="wallet-form-title">เพิ่มกระเป๋าเงิน</h2>
+        <button class="btn-icon" onclick="App.closeOverlay('overlay-wallet-form')">✕</button>
+      </div>
+      <div class="sheet-body" id="wallet-form-content"></div>
+    </div>
+  </div>
+
+  <!-- ── Overlay: CC Payment ────────────────── -->
+  <div class="overlay" id="overlay-cc-pay">
+    <div class="overlay-backdrop" onclick="App.closeOverlay('overlay-cc-pay')"></div>
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h2>ชำระบัตรเครดิต</h2>
+        <button class="btn-icon" onclick="App.closeOverlay('overlay-cc-pay')">✕</button>
+      </div>
+      <div class="sheet-body" id="cc-pay-content"></div>
+    </div>
+  </div>
+
+  <!-- ── Sub-screen (full overlay for sub-pages) -->
+  <div id="sub-screen"></div>
+
+</div><!-- #app -->
+
+<script src="sample-data_v2.js"></script>
+<script src="storage_v2.js"></script>
+<script src="calculations.js"></script>
+<script src="app_v2.js"></script>
+</body>
+</html>

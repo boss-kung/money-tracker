@@ -1,0 +1,96 @@
+const TODAY = new Date().toISOString().slice(0, 10)
+const THIS_MONTH = TODAY.slice(0, 7)
+const LAST_MONTH = (() => {
+  const d = new Date(); d.setMonth(d.getMonth() - 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+})()
+
+const DEFAULT_CATEGORIES = {
+  expense: [
+    { id: 'food',          label: 'อาหาร',     icon: '🍔', color: '#EF4444' },
+    { id: 'transport',     label: 'เดินทาง',    icon: '🚗', color: '#F59E0B' },
+    { id: 'shopping',      label: 'ช้อปปิ้ง',   icon: '🛍', color: '#8B5CF6' },
+    { id: 'health',        label: 'สุขภาพ',     icon: '💊', color: '#10B981' },
+    { id: 'entertainment', label: 'บันเทิง',    icon: '🎬', color: '#3B82F6' },
+    { id: 'utility',       label: 'ค่าบริการ',  icon: '💡', color: '#6366F1' },
+    { id: 'education',     label: 'การศึกษา',   icon: '📚', color: '#EC4899' },
+    { id: 'other_expense', label: 'อื่นๆ',      icon: '📦', color: '#6B7280' },
+  ],
+  income: [
+    { id: 'salary',       label: 'เงินเดือน',  icon: '💼', color: '#10B981' },
+    { id: 'freelance',    label: 'ฟรีแลนซ์',   icon: '💻', color: '#3B82F6' },
+    { id: 'investment',   label: 'ลงทุน',      icon: '📈', color: '#F59E0B' },
+    { id: 'other_income', label: 'อื่นๆ',      icon: '💰', color: '#6B7280' },
+  ],
+}
+
+const DEFAULT_WALLETS = [
+  { id: 'w1', name: 'ธ.ไทยพาณิชย์', type: 'bank',    icon: '🏦', color: '#6D28D9', balance: 28500 },
+  { id: 'w2', name: 'เงินสด',        type: 'cash',    icon: '💵', color: '#059669', balance: 3200  },
+  { id: 'w3', name: 'TrueMoney',      type: 'ewallet', icon: '📱', color: '#F59E0B', balance: 1800  },
+  { id: 'w4', name: 'KTC Cashback',   type: 'credit',  icon: '💳', color: '#DC2626', balance: -12900, limit: 50000, dueDay: 5, cycleDay: 25 },
+  { id: 'w5', name: 'ทองคำ',         type: 'gold',    icon: '🥇', color: '#D97706', balance: 15000, symbol: 'XAU' },
+  { id: 'w6', name: 'Bitcoin',       type: 'crypto',  icon: '₿', color: '#F59E0B', balance: 12000, symbol: 'BTC' },
+  { id: 'w7', name: 'FCD USD',       type: 'fcd',     icon: '💱', color: '#0891B2', balance: 10000, symbol: 'USD', currency: 'USD' },
+]
+
+const DEFAULT_TRANSACTIONS = [
+  { id: 't1', type: 'expense',    amount: 85,    walletId: 'w2', categoryId: 'food',          merchant: 'ข้าวแกง',  note: '',              date: TODAY },
+  { id: 't2', type: 'expense',    amount: 45,    walletId: 'w2', categoryId: 'transport',      merchant: 'Grab',     note: '',              date: TODAY },
+  { id: 't3', type: 'income',     amount: 35000, walletId: 'w1', categoryId: 'salary',         merchant: '',         note: 'เงินเดือนเม.ย.',date: THIS_MONTH + '-25' },
+  { id: 't4', type: 'expense',    amount: 599,   walletId: 'w4', categoryId: 'entertainment',  merchant: 'Netflix',  note: '',              date: THIS_MONTH + '-01' },
+  { id: 't5', type: 'expense',    amount: 1200,  walletId: 'w4', categoryId: 'shopping',       merchant: 'Shopee',   note: '',              date: THIS_MONTH + '-10' },
+  { id: 't6', type: 'expense',    amount: 350,   walletId: 'w1', categoryId: 'utility',        merchant: 'ค่าไฟ',   note: '',              date: THIS_MONTH + '-05' },
+  { id: 't7', type: 'transfer',   amount: 3000,  walletId: 'w1', toWalletId: 'w2',             merchant: '',         note: 'เติมเงินสด',   date: THIS_MONTH + '-15' },
+  { id: 't8', type: 'expense',    amount: 250,   walletId: 'w2', categoryId: 'food',           merchant: 'สุกี้',   note: '',              date: THIS_MONTH + '-20' },
+  { id: 't9', type: 'expense',    amount: 120,   walletId: 'w3', categoryId: 'food',           merchant: 'Grab Food',note: '',              date: LAST_MONTH + '-28' },
+  { id: 't10',type: 'income',     amount: 35000, walletId: 'w1', categoryId: 'salary',         merchant: '',         note: 'เงินเดือนมี.ค.',date: LAST_MONTH + '-25' },
+]
+
+const DEFAULT_BUDGETS = [
+  { categoryId: 'food',          monthlyLimit: 4000  },
+  { categoryId: 'transport',     monthlyLimit: 2000  },
+  { categoryId: 'entertainment', monthlyLimit: 1500  },
+  { categoryId: 'shopping',      monthlyLimit: 3000  },
+]
+
+const DEFAULT_SETTINGS = {
+  darkMode: false,
+  accentColor: '#2563EB',
+}
+
+const DEFAULT_RECURRING = []
+
+const DEFAULT_MERCHANTS = [
+  { id: 'ms1', name: 'Grab',         emoji: '🚗', color: '#10B981' },
+  { id: 'ms2', name: 'Shopee',        emoji: '🛍', color: '#F97316' },
+  { id: 'ms3', name: 'Netflix',       emoji: '🎬', color: '#DC2626' },
+  { id: 'ms4', name: 'LINE Man',      emoji: '🍔', color: '#06B6D4' },
+  { id: 'ms5', name: 'True Move H',   emoji: '📱', color: '#6366F1' },
+]
+
+
+const DEFAULT_CC_BENEFITS = {
+  w4: {
+    enabled: true,
+    points: {
+      bahtPerPoint: 25,
+      pointPerBahtEvery: 0,
+      multiplier: 1,
+      maxPerTxn: 0,
+      maxPerCycle: 0,
+    },
+    cashback: {
+      percent: 1,
+      minSpend: 0,
+      tierThreshold: 0,
+      everyBaht: 1,
+      maxPerTxn: 0,
+      maxPerCycle: 500,
+    },
+  },
+}
+
+const DEFAULT_INCOME_BUDGETS = [
+  { categoryId: 'salary', monthlyLimit: 35000 },
+]
