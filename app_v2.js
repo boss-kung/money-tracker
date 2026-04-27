@@ -83,7 +83,8 @@ let S = {
   budgets: [],
   settings: { darkMode: false, accentColor: '#2563EB' },
   recurring: [], merchants: [], ccBenefits: {}, incomeBudgets: [], marketPrices: {}, txMode: 'add', editingTxId: null,
-  cryptoAssets: [], cryptoHoldings: [], cryptoTransactions: [], migrations: { cryptoCentralizedV1: false },
+  cryptoAssets: [], cryptoHoldings: [], cryptoTransactions: [], cryptoSyncMeta: {}, migrations: { cryptoCentralizedV1: false },
+  creditLimitGroups: [], rewardAccounts: [], rewardLedger: [], netWorthSnapshots: [], investmentSnapshots: [],
 
   // Add-transaction flow
   tx: {
@@ -126,12 +127,18 @@ function applyTheme() {
 }
 
 // ── Toast ─────────────────────────────────────────────────────
+let lastToastMeta = { msg: '', type: '', at: 0 }
 function toast(msg, type = 'info') {
   const c = document.getElementById('toast-container')
   if (!c) { console[type === 'error' ? 'error' : 'log'](msg); return }
+  const text = String(msg || '')
+  const now = Date.now()
+  const duplicateVisible = [...c.querySelectorAll('.toast')].some(el => el.textContent === text && el.classList.contains(type))
+  if (duplicateVisible || (lastToastMeta.msg === text && lastToastMeta.type === type && (now - Number(lastToastMeta.at || 0)) < 1200)) return
+  lastToastMeta = { msg: text, type, at: now }
   const el = document.createElement('div')
   el.className = `toast ${type}`
-  el.textContent = msg
+  el.textContent = text
   el.onclick = () => el.remove()
   c.appendChild(el)
   setTimeout(() => el.remove(), 3000)
@@ -566,7 +573,13 @@ function init() {
   S.cryptoAssets = data.cryptoAssets || []
   S.cryptoHoldings = data.cryptoHoldings || []
   S.cryptoTransactions = data.cryptoTransactions || []
+  S.cryptoSyncMeta = data.cryptoSyncMeta || {}
   S.migrations = { cryptoCentralizedV1: false, ...(data.migrations || {}) }
+  S.creditLimitGroups  = data.creditLimitGroups  || []
+  S.rewardAccounts     = data.rewardAccounts     || []
+  S.rewardLedger       = data.rewardLedger       || []
+  S.netWorthSnapshots  = data.netWorthSnapshots  || []
+  S.investmentSnapshots = data.investmentSnapshots || []
 
   applyTheme()
 
@@ -592,22 +605,12 @@ init()
 ;(function(){
 const COLORS10=['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#16A34A','#EA580C','#475569'];
 const EMOJIS30=['🍔','🚗','🛍️','💊','🎬','💡','📚','📦','💼','💻','📈','💰','🏠','☕','🍱','✈️','🧾','🎮','🐶','🎁','💄','🏋️','🚌','🛒','📱','💳','🏦','🥇','₿','💱'];
-const oldDash=App.renderDashboard;
 /* consolidated: removed legacy renderDashboard from line 983 */
-const oldDetail=App._renderAddTxDetail;
 /* consolidated: removed legacy _toggleTxFlag from line 985 */
 /* consolidated: removed legacy _renderAddTxDetail from line 986 */
-const oldOpen=App.openAddTx;/* consolidated: removed legacy openAddTx from line 989 */
-const oldEdit=App.openEditTx;/* consolidated: removed legacy openEditTx from line 990 */
-const oldDup=App.openDuplicateTx;/* consolidated: removed legacy openDuplicateTx from line 991 */
-const oldSave=App.saveTx;/* consolidated: removed legacy saveTx from line 992 */
-const oldRow=App._txRow;/* consolidated: removed legacy _txRow from line 993 */
 Calc.getCardRewards=function(txns,b){const pe=!!(b?.points?.enabled||b?.enabled),ce=!!(b?.cashback?.enabled||b?.enabled),p=b?.points||{},c=b?.cashback||{};let points=0,cashback=0;(txns||[]).forEach(t=>{if(pe&&t.rewardIncludePoints!==false){let pt=0;if(p.bahtPerPoint)pt+=Math.floor(t.amount/p.bahtPerPoint);pt*=p.multiplier||1;if(p.maxPerTxn)pt=Math.min(pt,p.maxPerTxn);points+=pt}if(ce&&t.rewardIncludeCashback!==false&&(!c.minSpend||t.amount>=c.minSpend)){let base=c.everyBaht?Math.floor(t.amount/c.everyBaht)*c.everyBaht:t.amount,cb=base*((c.percent||0)/100);if(c.tierThreshold&&t.amount<c.tierThreshold)cb=0;if(c.maxPerTxn)cb=Math.min(cb,c.maxPerTxn);cashback+=cb}});if(p.maxPerCycle)points=Math.min(points,p.maxPerCycle);if(c.maxPerCycle)cashback=Math.min(cashback,c.maxPerCycle);return{points:Math.floor(points),cashback:Math.round(cashback*100)/100}};
 App._benefit=id=>S.ccBenefits?.[id]||{points:{},cashback:{}};App._rewardForTx=tx=>{const card=S.wallets.find(w=>w.id===tx.walletId&&w.type==='credit');return card&&tx.type==='expense'?Calc.getCardRewards([tx],App._benefit(card.id)):{points:0,cashback:0}};
-const oldTxDetail=App._renderTxDetail;/* consolidated: removed legacy _renderTxDetail from line 996 */
 /* consolidated: removed legacy openCCBenefitScreen from line 997 */
-App.saveCCBenefit=function(id){const v=i=>parseFloat(document.getElementById(i)?.value)||0;S.ccBenefits[id]={enabled:false,points:{enabled:document.getElementById('ccb-points-enabled').classList.contains('on'),bahtPerPoint:v('ccb-bahtPerPoint'),pointPerBahtEvery:v('ccb-pointEvery'),multiplier:v('ccb-multi')||1,maxPerTxn:v('ccb-maxTxnPoint'),maxPerCycle:v('ccb-maxCyclePoint')},cashback:{enabled:document.getElementById('ccb-cash-enabled').classList.contains('on'),percent:v('ccb-cbPercent'),minSpend:v('ccb-cbMin'),tierThreshold:v('ccb-cbTier'),everyBaht:v('ccb-cbEvery')||1,maxPerTxn:v('ccb-cbMaxTxn'),maxPerCycle:v('ccb-cbMaxCycle')}};persist();App.openCCDetail(id);toast('บันทึกสิทธิประโยชน์แล้ว','success')};
-const oldCC=App.openCCDetail;/* consolidated: removed legacy openCCDetail from line 999 */
 /* consolidated: removed legacy _investmentUnitPriceTHB from line 1000 *//* consolidated: removed legacy _investmentValueTHB from line 1000 */
 
 // Early investment helpers are required before later market-price patches load.
@@ -634,14 +637,8 @@ App._investmentValueTHB = App._investmentValueTHB || function earlyInvestmentVal
     : Number(w?.balance || 0)
 }
 
-const oldWalletCard=App._walletCard;/* consolidated: removed legacy _walletCard from line 1001 */
 /* consolidated: removed legacy openWalletDetail from line 1002 */
-const oldWalletForm=App.openWalletForm;/* consolidated: removed legacy openWalletForm from line 1003 */
-const oldSaveWallet=App.saveWallet;/* consolidated: removed legacy saveWallet from line 1004 */
-const oldReports=App.renderReports;/* consolidated: removed legacy renderReports from line 1005 */
 /* consolidated: removed legacy toggleEmojiPanel from line 1006 */App.pickEmoji=(p,e)=>{document.getElementById(p+'-emoji').value=e;document.getElementById(p+'-emoji-preview').textContent=e;App.toggleEmojiPanel(p)};/* consolidated: removed legacy customEmoji from line 1006 *//* consolidated: removed legacy pickColor from line 1006 */
-const oldCatForm=App.openCategoryForm;/* consolidated: removed legacy openCategoryForm from line 1007 */
-const oldMerForm=App.openMerchantForm;/* consolidated: removed legacy openMerchantForm from line 1008 */
 App.render();
 })();
 
@@ -731,10 +728,8 @@ App.render();
 
   /* consolidated: removed legacy openCCDetail from line 1178 */
 
-  const previousOpenWalletForm = App.openWalletForm
   /* consolidated: removed legacy openWalletForm from line 1208 */
 
-  const previousSaveWallet = App.saveWallet
   /* consolidated: removed legacy saveWallet from line 1219 */
 
   App.render()
@@ -967,10 +962,8 @@ App.render();
     document.body.classList.toggle('is-dashboard', isDashboard)
   }
 
-  const prevShowPage = App.showPage?.bind(App) || function(){}
   /* consolidated: removed legacy showPage from line 1852 */
 
-  const prevRender = App.render?.bind(App) || function(){}
   /* consolidated: removed legacy render from line 1858 */
 
   if (document.readyState === 'loading') {
@@ -1026,10 +1019,8 @@ App.render();
     }
   }
 
-  const prevShowPage = App.showPage?.bind(App) || function(){}
   /* consolidated: removed legacy showPage from line 1906 */
 
-  const prevRender = App.render?.bind(App) || function(){}
   /* consolidated: removed legacy render from line 1913 */
 
   setAppHeight()
@@ -1120,7 +1111,6 @@ App.render();
   /* consolidated: removed legacy openCategoryForm from line 2027 */
 
   // Make sure overlay sheets can sit above a currently open sub-screen.
-  const prevOpenOverlay = App.openOverlay?.bind(App) || function(){}
   /* consolidated: removed legacy openOverlay from line 2042 */
 
   // Re-render current page so patched wallet cards are applied immediately.
@@ -1212,6 +1202,7 @@ App.render();
     return `<div class="color-picker-row compact-colors">${COLORS.map(c => `<button type="button" class="color-swatch${c.toLowerCase() === String(normalized).toLowerCase() ? ' active' : ''}" data-color="${c}" style="background:${c}" onclick="App.pickColor('${prefix}','${c}')" aria-label="เลือกสี ${c}"></button>`).join('')}<label class="color-swatch color-swatch-custom" style="--picked:${esc(normalized)}" aria-label="เลือกสีเอง"><input type="color" id="${prefix}-color-native" value="${esc(normalized)}" oninput="App.pickColor('${prefix}', this.value)"><span>＋</span></label></div>
       <input type="hidden" id="${targetId}" value="${esc(normalized)}"><div class="form-hint">เลือกจากสี preset หรือแตะวงกลมท้ายสุดเพื่อกำหนดสีเอง</div>`
   }
+  App.renderEditorColor = renderEditorColor
 
   App.toggleEmojiPanel = function(prefix) {
     const panel = document.getElementById(prefix + '-emoji-panel')
@@ -1274,7 +1265,6 @@ App.render();
 
   const prevOpenWalletForm = App.openWalletForm?.bind(App) || function(){}
   /* consolidated: removed legacy openWalletForm from line 2325 */
-  const prevSelectWalletType = App._selectWalletType?.bind(App)
   /* consolidated: removed legacy _selectWalletType from line 2355 */
   const prevSaveWallet = App.saveWallet?.bind(App) || function(){}
   /* consolidated: removed legacy saveWallet from line 2363 */
@@ -1293,7 +1283,6 @@ App.render();
 
   /* consolidated: removed legacy renderTransactionsList from line 2395 */
 
-  const prevSetTxMonth = App.setTxMonth?.bind(App)
   /* consolidated: removed legacy setTxMonth from line 2419 */
   /* consolidated: removed legacy setTxType from line 2420 */
 
@@ -1378,7 +1367,6 @@ App.render();
     return insights.slice(0, 4)
   }
 
-  const prevRenderReports = App.renderReports?.bind(App) || function(){}
   /* consolidated: removed legacy renderReports from line 2484 */
 
   try { if (S.page === 'transactions') App.renderTransactions(); else App.render?.() } catch (_) {}
@@ -1513,17 +1501,12 @@ App.render();
     priceBox.innerHTML = `<div><strong>ราคาจริง</strong><span>${esc(marketSourceLabel(type))}${unitPrice ? ` · ${fmt(unitPrice)}/${esc(assetUnitLabel(type))}` : ' · ยังไม่ sync'}</span></div><a href="${esc(marketUrlFor(type, w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a>`
   }
 
-  const previousOpenWalletForm = App.openWalletForm?.bind(App) || function(){}
   /* consolidated: removed legacy openWalletForm from line 2679 */
-  const previousSelectWalletType = App._selectWalletType?.bind(App)
   /* consolidated: removed legacy _selectWalletType from line 2684 */
-  const previousSaveWallet = App.saveWallet?.bind(App) || function(){}
   /* consolidated: removed legacy saveWallet from line 2689 */
 
-  const previousWalletCard = App._walletCard?.bind(App)
   /* consolidated: removed legacy _walletCard from line 2697 */
 
-  const previousOpenWalletDetail = App.openWalletDetail?.bind(App)
   /* consolidated: removed legacy openWalletDetail from line 2714 */
 
   try { App.render?.() } catch (_) {}
@@ -1682,10 +1665,8 @@ App.render();
     return '#'
   }
 
-  const previousWalletCard = App._walletCard?.bind(App)
   /* consolidated: removed legacy _walletCard from line 3056 */
 
-  const previousOpenWalletDetail = App.openWalletDetail?.bind(App)
   /* consolidated: removed legacy openWalletDetail from line 3072 */
 
   App.setGoldProxyUrl = function(url){
@@ -1740,7 +1721,6 @@ App.render();
 
   /* consolidated: removed legacy renderWallets from line 3167 */
 
-  const previousOpenWalletDetail = App.openWalletDetail?.bind(App);
   /* consolidated: removed legacy openWalletDetail from line 3179 */
 
   function normaliseGoldPayload(raw){
@@ -1906,7 +1886,6 @@ App.render();
     }
   }
 
-  const _prevEnsureV2State = App._ensureV2State?.bind(App)
   /* consolidated: removed legacy _ensureV2State from line 3390 */
 
   // ── 1. Inline confirm dialog — replaces all 6 browser confirm() calls ──
@@ -2031,6 +2010,40 @@ App.render();
     App.renderDashboard()
   }
 
+Calc.getUsableMoney = function(wallets) {
+    const usableTypes = new Set(['cash', 'bank', 'ewallet', 'saving', 'fcd'])
+    let liquid = 0
+    let creditDebt = 0
+
+    ;(wallets || []).forEach(w => {
+      if (!w || w.hiddenFromWalletList) return
+
+      const type = String(w.type || '').toLowerCase()
+
+      if (usableTypes.has(type)) {
+        const value = type === 'fcd'
+          ? (App._investmentValueTHB ? App._investmentValueTHB(w) : Number(w.balance || 0))
+          : Number(w.balance || 0)
+
+        if (value > 0) liquid += value
+        return
+      }
+
+      if (type === 'credit') {
+        const balance = Number(w.balance || 0)
+        if (balance < 0) creditDebt += Math.abs(balance)
+      }
+    })
+
+    const round2 = n => Math.round((Number(n) || 0) * 100) / 100
+
+    return {
+      liquid: round2(liquid),
+      creditDebt: round2(creditDebt),
+      net: round2(liquid - creditDebt),
+    }
+  }
+
   App.renderDashboard = function() {
     App._ensureV2State?.()
     const dm = S.dashMonth || getTHISMONTH()
@@ -2038,7 +2051,9 @@ App.render();
     const isCurrentMonth = dm === thisMonth
 
     const stats = Calc.getMonthlyStats(S.transactions, dm)
-    const nw = Calc.getNetWorth(S.wallets)
+    const usable = Calc.getUsableMoney
+      ? Calc.getUsableMoney(S.wallets)
+      : Calc.getNetWorth(S.wallets)
     const expBudgets = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, dm)
     const incBudgets = Calc.getIncomeBudgetProgress
       ? Calc.getIncomeBudgetProgress(S.transactions, S.incomeBudgets || [], S.categories, dm)
@@ -2049,14 +2064,15 @@ App.render();
       .slice(0, 5)
     const assets = S.wallets.filter(w => w.type !== 'credit')
     const ccCards = S.wallets
-      .filter(w => w.type === 'credit' && Math.abs(Number(w.balance) || 0) > 0 && w.dueDay)
+      .filter(w => w.type === 'credit' && Math.abs(Number(w.balance) || 0) > 0)
       .map(w => {
         const used = Math.abs(Number(w.balance) || 0)
         const limit = Number(w.limit) || 0
         const pct = limit ? Math.min(100, Math.max(0, (used / limit) * 100)) : 0
-        const due = Calc.getDueDate(w.dueDay)
+        const due = App.getCreditCardDueInfo ? App.getCreditCardDueInfo(w) : (w.dueDay ? Calc.getDueDate(w.dueDay) : null)
         return { ...w, used, limit, pct, due }
       })
+      .filter(c => c.due)
       .sort((a, b) => a.due.daysLeft - b.due.daysLeft)
     const minDaysLeft = ccCards.length ? ccCards[0].due.daysLeft : null
     const nearDueCards = ccCards.filter(c => c.due.daysLeft === minDaysLeft)
@@ -2119,8 +2135,8 @@ App.render();
       <div class="mt-net-card">
         <div class="mt-net-head">
           <div>
-            <div class="mt-net-label">เงินสุทธิที่ใช้ได้จริง</div>
-            <div class="mt-net-value">${nw.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(nw.net))}</div>
+            <div class="mt-net-label">เงินที่ใช้ได้จริง</div>
+            <div class="mt-net-value">${usable.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(usable.net))}</div>
           </div>
         </div>
         <div class="mt-net-split">
@@ -2194,7 +2210,6 @@ App.render();
   }
 
   // ── 5. More page: CSV export row + Thai gold proxy setting ──
-  const _prevRenderMore = App.renderMore?.bind(App) || function(){}
   /* consolidated: removed legacy renderMore from line 3771 */
 
   App.saveGoldProxyUrl = function() {
@@ -2284,11 +2299,9 @@ App.render();
   }
 
   // ── Strip wallet-market-note after render ────────────────────
-  const _prevRenderWallets = App.renderWallets?.bind(App) || function(){}
   /* consolidated: removed legacy renderWallets from line 3899 */
 
   // ── Reports: single AI insights + "analyzing" toast ──────────
-  const _prevRenderReports = App.renderReports?.bind(App) || function(){}
   /* consolidated: removed legacy renderReports from line 3906 */
 
   // Apply immediately
@@ -2473,10 +2486,8 @@ App.render();
     });
   }
 
-  const previousUnitPrice = App._investmentUnitPriceTHB?.bind(App);
   /* consolidated: removed legacy _investmentUnitPriceTHB from line 4125 */
 
-  const previousMarketText = App._marketText?.bind(App);
   /* consolidated: removed legacy _marketText from line 4134 */
 
   /* consolidated: removed legacy refreshMarketPrices from line 4143 */
@@ -2514,11 +2525,9 @@ App.render();
   }
 
   // ── 2. Merchant datalist autocomplete ────────────────────────
-  const _prevRenderAddTxDetail = App._renderAddTxDetail?.bind(App)
   /* consolidated: removed legacy _renderAddTxDetail from line 4226 */
 
   // ── 6. Wallet monthly spend summary ──────────────────────────
-  const _prevOpenWalletDetail = App.openWalletDetail?.bind(App)
   /* consolidated: removed legacy openWalletDetail from line 4241 */
 
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
@@ -2680,7 +2689,6 @@ App.render();
   function getDropdown() { return document.getElementById('mt-merchant-dropdown') }
 
   // ── Override _renderAddTxDetail to clean up datalist/dropdown leftovers ──
-  const _prevDetail32 = App._renderAddTxDetail?.bind(App)
   /* consolidated: removed legacy _renderAddTxDetail from line 4433 */
 
   // Re-apply to current render if add-tx sheet is open
@@ -3265,13 +3273,10 @@ let due = new Date(
     persist(); App.openWalletDetail(walletId); toast('บันทึกรายการลงทุนแล้ว', 'success')
   }
 
-  const prevOpenWalletDetailV4 = App.openWalletDetail?.bind(App)
   /* consolidated: removed legacy openWalletDetail from line 5007 */
 
   // Make transaction rows readable for new types.
-  const prevTxTypeLabelV4 = App._txTypeLabel?.bind(App)
   /* consolidated: removed legacy _txTypeLabel from line 5020 */
-  const prevTxRowV4 = App._txRow?.bind(App)
   /* consolidated: removed legacy _txRow from line 5022 */
 
   // Delete/archive protection: block hard delete referenced masters.
@@ -3370,7 +3375,6 @@ let due = new Date(
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>รายละเอียดรายการ</h2></div><div class="sub-scroll tx-detail-sub-screen">${App._txDetailRowsHtml(tx)}<div class="tx-action-grid"><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openEditTx('${esc(tx.id)}')">✏️ แก้ไข</button><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openDuplicateTx('${esc(tx.id)}')">⧉ ทำซ้ำ</button></div><button class="btn btn-outline mt-8" onclick="App.deleteTxFromSub('${esc(tx.id)}','${esc(backType || '')}','${esc(backId || '')}')">🗑 ลบรายการ</button>${tx.isRewardReceived ? '<div class="form-hint" style="margin-top:8px">เมื่อลบ Cashback ระบบจะ rollback ให้กลับไปรับ Cashback รอบนี้ได้อีกครั้ง</div>' : ''}</div>`)
   }
 
-  const prevConfirmDeleteTx41 = App.confirmDeleteTx?.bind(App)
   /* consolidated: removed legacy confirmDeleteTx from line 5145 */
 
   // ── 4. Reports rollback: restore previous report structure ─────────────────
@@ -3466,11 +3470,8 @@ let due = new Date(
     if (inp) inp.value = S.tx.merchant
     document.getElementById('mt-merchant-dropdown')?.classList.add('hidden')
   }
-  const prevRenderDetail41 = App._renderAddTxDetail?.bind(App)
   /* consolidated: removed legacy _renderAddTxDetail from line 5229 */
-  const prevToggleTxFlag41 = App._toggleTxFlag?.bind(App)
   /* consolidated: removed legacy _toggleTxFlag from line 5250 */
-  const prevSaveTx41 = App.saveTx?.bind(App)
   /* consolidated: removed legacy saveTx from line 5260 */
 
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
@@ -3605,44 +3606,6 @@ let due = new Date(
     if (document.body.classList.contains('keyboard-open')) requestAnimationFrame(reassertStableAppHeight)
   }, { passive:true })
 
-  // 5) Thai statement format and labels.
-  function statusText(st) { return st?.paid ? 'ชำระแล้ว' : 'ค้างชำระ' }
-  function statementHtml(cardId, st) {
-    if (!st) return ''
-    return `<div class="statement-compact statement-compact-th"><div class="statement-main"><div><b>สรุปรอบบัตรเครดิต</b><span>รอบ ${thaiDateShort(st.start)} – ${thaiDateShort(st.end)}</span><span>วันกำหนดชำระ ${thaiDateShort(st.dueDate)}</span></div><em class="status-pill ${st.paid ? 'ok':'warn'}">${statusText(st)}</em></div><div class="statement-metrics"><div><span>ยอดใช้ในรอบ</span><strong>${money(st.purchaseTotal)}</strong></div><div><span>ชำระแล้ว</span><strong>${money(st.paidTotal)}</strong></div><div><span>ค้างชำระ</span><strong>${money(st.balanceDue)}</strong></div></div><button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen('${esc(cardId)}')">สมุดสิทธิประโยชน์</button></div>`
-  }
-
-  App.openCCDetail = function v42OpenCCDetail(cardId) {
-    const card = walletById(cardId)
-    if (!card) return
-    const benefit = App._benefit?.(cardId) || {}
-    const period = Calc.getStatementPeriod(card.cycleDay || 25)
-    const txns = (S.transactions || []).filter(t => t.walletId === cardId).sort((a,b) => String(b.date||'').localeCompare(String(a.date||''))).slice(0, 20)
-    const allCycleTxns = (S.transactions || []).filter(t => t.walletId === cardId && t.type === 'expense' && t.date >= period.start && t.date <= period.end)
-    const rewards = Calc.getCardRewards(allCycleTxns, benefit)
-    const st = App.getCardStatement?.(cardId)
-    const owed = Math.abs(Number(card.balance || 0))
-    const usedPct = card.limit ? Math.min((owed / Number(card.limit || 1)) * 100, 100) : 0
-    const due = card.dueDay ? Calc.getDueDate(card.dueDay) : null
-    const installments = (App.getInstallmentGroups?.() || []).filter(g => g.walletId === cardId).slice(0, 3)
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon || '')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button></div></div>
-      <div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}">
-        <div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color || '#DC2626')},${esc(card.color || '#DC2626')}BB);color:#fff;border:0">
-          <div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${card.cycleDay || 25} · ชำระวันที่ ${card.dueDay || '-'}</div>
-          <div style="font-size:13px;opacity:.72;margin-bottom:4px">ยอดค้างชำระ</div><div class="big">${money(owed)}</div>
-          ${card.limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct > 80 ? '#FCA5A5' : 'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due ? ` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)` : ''}</div>` : ''}
-        </div>
-        ${statementHtml(cardId, st)}
-        <div class="card card-pad" style="margin-bottom:12px"><div class="cc-detail-header"><div><div style="font-size:14px;font-weight:800">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${thaiDateShort(period.start)} ถึง ${thaiDateShort(period.end)}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button></div><div class="reward-grid" style="margin-top:10px"><div class="reward-tile"><span>คะแนน</span><strong>${number(rewards.points,0)}</strong></div><div class="reward-tile"><span>เงินคืน</span><strong>${money(rewards.cashback)}</strong></div></div></div>
-        ${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : '<div class="sec-title">ผ่อนชำระ</div>'}
-        <div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next ? `งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDateShort(g.next.date)}` : 'ครบแล้ว'}</span></div><strong>${money(g.remaining || 0)}</strong></div>`).join('') : App._emptyState('🧾','ยังไม่มีรายการผ่อน','')}</div></div>
-        ${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : '<div class="sec-title">รายการล่าสุดของบัตรนี้</div>'}
-        <div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState('📋','ยังไม่มีรายการ','')}</div></div>
-      </div>`)
-    setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
-  }
-
-  const prevRewardScreenV42 = App.openRewardLedgerScreen?.bind(App)
   /* consolidated: removed legacy openRewardLedgerScreen from line 5436 */
 
   App.openRecurringScreen = function v42RecurringScreen() {
@@ -3651,7 +3614,6 @@ let due = new Date(
   }
 
   // 6) Restore AI financial advisor card on the rolled-back Reports screen.
-  const prevReportsV42 = App.renderReports?.bind(App)
   /* consolidated: removed legacy renderReports from line 5462 */
 
   // 8) Installment group edit flow.
@@ -3881,7 +3843,7 @@ let due = new Date(
       <div style="font-size:14px;font-weight:700;margin-bottom:12px">&#x1F4C5; รอบบัญชีบัตร</div>
       <div class="benefit-form-grid">
         ${f('ccb-cycleDay','วันตัดรอบ (1&#x2013;31)', w.cycleDay, 'วันในทุกเดือนที่ระบบตัดรอบบัญชี')}
-        ${f('ccb-dueDay','วันครบกำหนดชำระ (1&#x2013;31)', w.dueDay, 'วันในทุกเดือนที่ต้องชำระยอด')}
+        ${f('ccb-dueAfterCycleDays','ชำระหลังวันตัดยอดกี่วัน (1&#x2013;30)', w.dueAfterCycleDays, 'ระบบจะคำนวณวันครบกำหนดจากวันตัดรอบ + จำนวนวันนี้')}
       </div>
     </div>`
     const pointsForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิดคะแนนสะสม</b><button class="toggle${p.enabled ? ' on' : ''}" id="ccb-points-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${fDec('ccb-bahtPerPoint','ใช้จ่ายทุก X บาท = 1 คะแนน',p.bahtPerPoint)}${fDec('ccb-multi','คะแนนเพิ่ม X เท่า',p.multiplier||1)}${fDec('ccb-maxTxnPoint','สูงสุด/รายการ',p.maxPerTxn)}${fDec('ccb-maxCyclePoint','สูงสุด/รอบบัญชี',p.maxPerCycle)}</div></div>`
@@ -3945,7 +3907,6 @@ let due = new Date(
       : Number(w?.balance || 0)
   }
 
-  const prev_marketText45 = App._marketText?.bind(App)
   /* consolidated: removed legacy _marketText from line 5799 */
 
   App.refreshMarketPrices = async function v45RefreshMarket() {
@@ -3977,7 +3938,6 @@ let due = new Date(
     else App.showToast?.('Sync ราคาไม่ได้ ใช้ราคาสำรองแทน', 'error')
   }
 
-  const prevSaveWalletV45 = App.saveWallet?.bind(App) || function(){}
   /* consolidated: removed legacy saveWallet from line 5839 */
 
   // ═══════════════════════════════════════════════════════════════════
@@ -4084,92 +4044,6 @@ let due = new Date(
     setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  // FIX 4: CC wallet card — "ครบกำหนดชำระ" left + date below, chip right
-  // ═══════════════════════════════════════════════════════════════════
-  const prevWalletCardV45 = App._walletCard?.bind(App)
-  /* consolidated: removed legacy _walletCard from line 5965 */
-  // ═══════════════════════════════════════════════════════════════════
-  // FIX 5: Wallet page — refresh in "การลงทุน" header, + in page header
-  // ═══════════════════════════════════════════════════════════════════
-  App.renderWallets = function v45RenderWallets() {
-    const wallets = S.wallets || []
-    const assets  = wallets.filter(w => ['bank','cash','ewallet','saving'].includes(w.type))
-    const credits = wallets.filter(w => w.type === 'credit')
-    const invests = wallets.filter(w => isInvestType(w.type))
-    const sumBase = assets.reduce((s,w)  => s + Math.max(0, Number(w.balance||0)), 0)
-    const sumInv  = invests.reduce((s,w) => s + Math.max(0, App._investmentValueTHB(w)||Number(w.balance||0)), 0)
-    const debt    = credits.reduce((s,w) => s + Math.abs(Number(w.balance||0)), 0)
-
-    const summaryEl = document.getElementById('wallets-summary')
-    if (summaryEl) summaryEl.innerHTML = `<div class="wallet-summary-grid wallet-summary-grid-fixed">
-      <div class="wallet-summary-card"><span>สินทรัพย์รวม</span>
-      <strong class="c-income">${S.settings?.hideMoney ? '฿*****' : fmt(sumBase + sumInv)}</strong></div>
-      <div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${S.settings?.hideMoney ? '฿*****' : fmt(debt)}</strong></div>
-    </div>`
-
-    // Inject "+ เพิ่มกระเป๋า" alongside h1 (once only)
-    const pageHeader = document.querySelector('#page-wallets .page-header')
-if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
-  const h1 = pageHeader.querySelector('h1')
-  if (h1) {
-    const row = document.createElement('div')
-    row.className = 'wallets-h1-row'
-    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center'
-    h1.replaceWith(row)
-    row.appendChild(h1)
-
-    // 1. สร้างกลุ่มสำหรับปุ่ม (Actions Container) เพื่อให้ปุ่มอยู่ด้วยกันทางขวา
-    const actions = document.createElement('div')
-    actions.style.cssText = 'display:flex;gap:8px;align-items:center' // ใช้ gap เพื่อเว้นระยะห่างระหว่างปุ่ม
-
-    // 2. สร้างปุ่ม Refresh
-    const refreshBtn = document.createElement('button')
-    refreshBtn.className = 'btn btn-secondary btn-sm wallet-section-refresh-btn'
-    refreshBtn.innerHTML = '↻ Refresh'
-    refreshBtn.onclick = (e) => {
-      e.stopPropagation()
-      App.refreshMarketPrices()
-    }
-
-    // 3. สร้างปุ่ม Add
-    const addBtn = document.createElement('button')
-    addBtn.className = 'btn btn-primary btn-sm wallets-header-add-btn'
-    addBtn.style.cssText = 'width:auto;padding:8px 14px;flex-shrink:0'
-    addBtn.textContent = '+ เพิ่มกระเป๋า'
-    addBtn.onclick = () => App.openWalletForm(null)
-
-    // 4. เรียงลำดับ: ใส่ Refresh ก่อน แล้วตามด้วย Add เข้าไปในกลุ่ม actions
-    actions.appendChild(refreshBtn)
-    actions.appendChild(addBtn)
-
-    // 5. นำกลุ่มปุ่มทั้งหมดไปใส่ใน row ต่อจาก h1
-    row.appendChild(actions)
-  }
-}
-
-    const content = document.getElementById('wallets-content')
-    if (!content) return
-    content.style.display = 'block'; content.style.visibility = 'visible'
-
-    const gold    = (S.marketPrices||{}).thaiGold || (S.marketPrices||{}).auroraGold
-    const updated = gold?.fetchedAt ? new Date(gold.fetchedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}) : ''
-    const goldNote = `<div class="wallet-market-note"><b>ราคาทอง:</b><br>ทองรูปพรรณรับซื้อ${gold?.jewelryBuy?` ${fmt(gold.jewelryBuy)}/บาททอง`:' ยังไม่ Sync'}${updated?` · อัปเดต ${esc(updated)}`:''}</div>`
-
-    const empty = txt => `<div class="card card-pad wallet-empty-card">${esc(txt)}</div>`
-    const section = (title, icon, list, emptyTxt, grid, extra='') =>
-      `<section class="wallet-section-block">
-        <div class="wallet-section-title wallet-section-title-row"><span>${icon} ${esc(title)}</span>${extra}</div>
-        ${list.length ? `<div class="${grid?'wallet-grid-2':'wallet-list-stack'}">${list.map(App._walletCard).join('')}</div>` : empty(emptyTxt)}
-      </section>`
-
-    content.innerHTML = goldNote
-      + section('สินทรัพย์', '🏦', assets,  'ยังไม่มีสินทรัพย์', true)
-      + section('บัตรเครดิต', '💳', credits, 'ยังไม่มีบัตรเครดิต', false)
-      + section('การลงทุน', '📈', invests, 'เพิ่มทอง / Crypto / FCD เพื่อดูราคาอ้างอิง', true)
-  }
-
-  try { if (S.page === 'wallets') App.renderWallets() } catch (_) {}
 })();
 
 /* ============================================================
@@ -4209,9 +4083,9 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
 
   // ── State migration ────────────────────────────────────────
   function migrateToV5() {
-    if (!S.creditLimitGroups) S.creditLimitGroups = loadV5JSON('mt_credit_limit_groups', [])
-    if (!S.rewardAccounts)    S.rewardAccounts    = loadV5JSON('mt_reward_accounts',     [])
-    S.rewardLedger ||= []
+    if (!Array.isArray(S.creditLimitGroups)) S.creditLimitGroups = []
+    if (!Array.isArray(S.rewardAccounts))    S.rewardAccounts    = []
+    if (!Array.isArray(S.rewardLedger))      S.rewardLedger      = []
     ;(S.wallets || []).filter(w => w.type === 'credit').forEach(w => {
       if (!('issuer' in w))             w.issuer            = ''
       if (!('creditLimitMode' in w))    w.creditLimitMode   = 'individual'
@@ -4318,7 +4192,6 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
   // UPDATED validateTransactionDraft (shared credit limit aware)
   // ══════════════════════════════════════════════════════════
 
-  const _prevValidate = App.validateTransactionDraft?.bind(App)
   App.validateTransactionDraft = function v50ValidateTx(tx, opts = {}) {
     const { isEdit = false, editingTxId } = opts
     const amt = Number(tx.amount || 0)
@@ -4456,7 +4329,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
         <div id="wf-limit-individual" style="${creditLimitMode==='shared'?'display:none':''}">
           <div class="form-group"><label class="form-label">วงเงิน (฿)</label><input class="form-input" type="number" id="wf-limit" value="${w?.limit||''}"></div>
         </div>
-        <div class="form-group"><label class="form-label">วันครบกำหนดชำระ</label><input class="form-input" type="number" id="wf-dueday" min="1" max="31" value="${w?.dueDay||''}"></div>
+        <div class="form-group"><label class="form-label">ชำระหลังวันตัดยอดกี่วัน</label><input class="form-input" type="number" id="wf-due-after-cycle-days" min="1" max="30" value="${w?.dueAfterCycleDays||''}"></div>
         <div class="form-group"><label class="form-label">วันตัดรอบบัญชี</label><input class="form-input" type="number" id="wf-cycle-day" min="1" max="31" value="${w?.cycleDay||''}"></div>
         <div class="form-group">
           <label class="form-label">บัญชีคะแนนสะสม</label>
@@ -4490,10 +4363,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
       </div>
       <div class="form-group">
         <label class="form-label">สี</label>
-        <div class="color-row" id="wf-color-row">
-          ${COLORS.map(c => `<div class="color-dot${(w?.color||'#2563EB')===c?' selected':''}" style="background:${c}" onclick="App._selectWalletColor('${c}')" data-color="${c}"></div>`).join('')}
-        </div>
-        <input type="hidden" id="wf-color" value="${w?.color||'#2563EB'}">
+        ${App.renderEditorColor?.('wf', w?.color || '#2563EB', 'wf-color') || ''}
       </div>
       <div class="form-group" id="wf-balance-group" style="${isCC?'display:none':''}">
         <label class="form-label" id="wf-balance-label">${isInv?'มูลค่าปัจจุบัน / ราคาสำรอง (฿)':'มูลค่าปัจจุบัน (฿)'}</label>
@@ -4598,8 +4468,8 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     if (isCC) {
       const issuer         = document.getElementById('wf-issuer')?.value.trim() || ''
       const creditLimitMode = document.getElementById('wf-credit-limit-mode')?.value || 'individual'
-      const dueDay   = parseInt(document.getElementById('wf-dueday')?.value) || 5
       const cycleDay = parseInt(document.getElementById('wf-cycle-day')?.value) || 25
+      const dueAfterCycleDays = parseInt(document.getElementById('wf-due-after-cycle-days')?.value) || 10
       let   limit    = parseFloat(document.getElementById('wf-limit')?.value) || 50000
 
       let creditLimitGroupId = null
@@ -4636,7 +4506,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
         rewardAccountId = null
       }
 
-      Object.assign(data, { limit, dueDay, cycleDay, issuer, creditLimitMode, creditLimitGroupId, rewardAccountId })
+      Object.assign(data, { limit, dueAfterCycleDays, cycleDay, issuer, creditLimitMode, creditLimitGroupId, rewardAccountId })
     }
 
     if (isInv) {
@@ -4679,9 +4549,9 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     const w = walletById(id)
     if (!w) return
     const cycleDay = parseInt(document.getElementById('ccb-cycleDay')?.value) || w.cycleDay || 25
-    const dueDay   = parseInt(document.getElementById('ccb-dueDay')?.value)   || w.dueDay   || 5
+    const dueAfterCycleDays = parseInt(document.getElementById('ccb-dueAfterCycleDays')?.value) || w.dueAfterCycleDays || 10
     const idx = (S.wallets||[]).findIndex(x => x.id === id)
-    if (idx >= 0) { S.wallets[idx].cycleDay = cycleDay; S.wallets[idx].dueDay = dueDay }
+    if (idx >= 0) { S.wallets[idx].cycleDay = cycleDay; S.wallets[idx].dueAfterCycleDays = dueAfterCycleDays }
     S.ccBenefits[id] = {
       enabled: false,
       points: {
@@ -4746,7 +4616,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     const card = walletById(cardId)
     if (!card) return
     const benefit = App._benefit?.(cardId) || {}
-    const period  = Calc.getStatementPeriod(card.cycleDay || 25)
+    const period  = App.getStatementPeriod(card.cycleDay || 25)
     const txns    = (S.transactions||[]).filter(t => t.walletId===cardId).sort((a,b) => String(b.date||'').localeCompare(String(a.date||''))).slice(0,20)
     const cycleTxns = (S.transactions||[]).filter(t => t.walletId===cardId && t.type==='expense' && t.date>=period.start && t.date<=period.end)
     const rewards   = Calc.getCardRewards(cycleTxns, benefit)
@@ -5285,7 +5155,6 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
   // UPDATED exportData / importData
   // ══════════════════════════════════════════════════════════
 
-  const _prevExportV5 = App.exportData?.bind(App)
   App.exportData = function v50ExportData() {
     migrateToV5()
     const now = nowISO()
@@ -5308,7 +5177,6 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     persist(); App.renderMore?.(); notify('ส่งออกข้อมูลสำเร็จ', 'success')
   }
 
-  const _prevImportV5 = App.importData?.bind(App)
   App.importData = function v50ImportData(input) {
     const file = input?.files?.[0]
     if (!file) return
@@ -5343,7 +5211,6 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
   // UPDATED More page — adds credit-group + reward-account links
   // ══════════════════════════════════════════════════════════
 
-  const _prevRenderMoreV5 = App.renderMore?.bind(App)
   App.renderMore = function v50RenderMore() {
     const content = document.getElementById('more-content')
     if (!content) return
@@ -5353,12 +5220,12 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     const lastExport   = meta.lastExportedAt ? new Date(meta.lastExportedAt).toLocaleString('th-TH') : 'ยังไม่เคย Export'
     const currentProxy = String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '')
     const ACCENTS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
-    function row({ icon, label, value='', onclick='', danger=false }) {
+    function row({ icon, label, value='', onclick='', danger=false, toggle='' }) {
       return `<div class="settings-row"${onclick?` onclick="${onclick}"`:''}>
         <div class="s-icon">${icon}</div>
         <div class="s-label"${danger?' style="color:var(--expense)"':''}">${label}</div>
         ${value ? `<div class="s-value">${value}</div>` : ''}
-        <div class="s-arrow"${danger?' style="color:var(--expense)"':''}>›</div>
+        ${toggle || `<div class="s-arrow"${danger?' style="color:var(--expense)"':''}>›</div>`}
       </div>`
     }
     content.innerHTML = `
@@ -5389,7 +5256,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
         </div>
         <div class="sec-title">การแสดงผล</div>
         <div class="card card-pad">
-          ${row({ icon:'🌙', label:'โหมดมืด', onclick:'App.toggleDark()' })}
+          ${row({ icon:'🌙', label:'โหมดมืด', onclick:'App.toggleDark()', toggle:`<button class="toggle${S.settings.darkMode ? ' on' : ''}" onclick="event.stopPropagation();App.toggleDark()" aria-label="สลับโหมดมืด" aria-pressed="${S.settings.darkMode ? 'true' : 'false'}"></button>` })}
           <div style="padding:14px 0;border-bottom:1px solid var(--border)">
             <div style="font-size:15px;font-weight:600;margin-bottom:12px">🎨 สีธีม</div>
             <div class="color-row">${ACCENTS.map(c => `<div class="color-dot${S.settings.accentColor===c?' selected':''}" style="background:${c}" onclick="App.setAccent('${c}')"></div>`).join('')}</div>
@@ -5499,7 +5366,6 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
   }
 
   // Also patch getOverdueRecurring to handle monthly type correctly
-  const _prevGetOverdue = typeof getOverdueRecurring !== 'undefined' ? null : null
   // Override via App namespace — the dashboard renderDashboard calls the local getOverdueRecurring
   // We patch it by redefining the function used by renderDashboard:
   App._getOverdueRecurring = function v6GetOverdueRecurring() {
@@ -6282,6 +6148,246 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
       .replace(/-+/g, '-')
   }
 
+  const CRYPTO_SYNC_STALE_MS = 15 * 60 * 1000
+  const CRYPTO_SEARCH_DEBOUNCE_MS = 380
+  let cryptoSearchDebounceTimer = 0
+  let cryptoSearchToken = 0
+  let cryptoSyncInFlight = null
+  let cryptoAutoSyncThrottleUntil = 0
+  let coinCapCache = { fetchedAt: 0, rows: [] }
+
+  function normalizeCryptoName(value = '') {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  function buildCryptoSearchResult(source = {}, fallback = {}) {
+    const coinGeckoId = normalizeCoinGeckoId(source.coinGeckoId || source.id || fallback.coinGeckoId || '')
+    const symbol = String(source.symbol || fallback.symbol || '').trim().toUpperCase()
+    const name = String(source.name || fallback.name || '').trim()
+    const marketCapRankRaw = Number(source.marketCapRank ?? source.market_cap_rank ?? fallback.marketCapRank ?? 0)
+    return {
+      coinGeckoId,
+      symbol,
+      name,
+      image: String(source.image || source.large || source.thumb || fallback.image || '').trim(),
+      marketCapRank: marketCapRankRaw > 0 ? Math.round(marketCapRankRaw) : null,
+      priceSource: String(source.priceSource || fallback.priceSource || (coinGeckoId ? 'CoinGecko' : '')).trim(),
+      priceMode: String(source.priceMode || fallback.priceMode || (coinGeckoId ? 'auto' : 'manual')).trim(),
+      sourceLabel: String(source.sourceLabel || fallback.sourceLabel || (coinGeckoId ? 'CoinGecko' : 'Custom')).trim(),
+      icon: String(source.icon || fallback.icon || symbol.slice(0, 4) || '?').trim(),
+      color: String(source.color || fallback.color || '#F59E0B').trim(),
+      network: String(source.network || fallback.network || '').trim(),
+      decimals: Number.isFinite(Number(source.decimals ?? fallback.decimals)) ? Number(source.decimals ?? fallback.decimals) : 8,
+      type: String(source.type || fallback.type || (coinGeckoId ? 'coin' : 'custom')).trim(),
+    }
+  }
+
+  function getSelectedCryptoFormAsset() {
+    ensureCryptoState()
+    const selected = S.cryptoForm?.selectedAsset
+    if (selected?.coinGeckoId || selected?.symbol || selected?.name) return buildCryptoSearchResult(selected)
+    const selectedId = String(S.cryptoForm?.selectedPresetId || '')
+    const preset = PRESET_BY_ID[selectedId]
+    return preset ? buildCryptoSearchResult(preset, { sourceLabel: 'Preset' }) : null
+  }
+
+  function collectActiveCryptoAssets() {
+    ensureCryptoState()
+    const assets = []
+    const seenIds = new Set()
+    ;(S.cryptoHoldings || []).forEach(holding => {
+      const asset = App.getCryptoAsset(holding.assetId)
+      const marketId = normalizeCoinGeckoId(asset?.coinGeckoId)
+      if (!asset || !marketId || seenIds.has(marketId)) return
+      seenIds.add(marketId)
+      assets.push(asset)
+    })
+    ;(S.cryptoAssets || []).forEach(asset => {
+      const marketId = normalizeCoinGeckoId(asset?.coinGeckoId)
+      if (!marketId || asset?.active === false || seenIds.has(marketId)) return
+      seenIds.add(marketId)
+      assets.push(asset)
+    })
+    return assets
+  }
+
+  function getCryptoFxRateTHB() {
+    const rate = Number(S.marketPrices?.fx?.rates?.THB || 0)
+    return rate > 0 ? rate : 0
+  }
+
+  function latestCryptoSyncTime() {
+    const metaTs = S.cryptoSyncMeta?.lastSuccessAt ? new Date(S.cryptoSyncMeta.lastSuccessAt).getTime() : 0
+    return Math.max(metaTs || 0, latestCryptoUpdatedAt() || 0)
+  }
+
+  function cryptoPricesAreStale() {
+    const latest = latestCryptoSyncTime()
+    if (!latest) return true
+    return (Date.now() - latest) >= CRYPTO_SYNC_STALE_MS
+  }
+
+  async function fetchCoinGeckoSearch(query = '') {
+    const q = String(query || '').trim()
+    if (!q) return []
+    const url = `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) throw new Error(`CoinGecko search HTTP ${res.status}`)
+    const json = await res.json()
+    return (json?.coins || []).slice(0, 10).map(row => buildCryptoSearchResult({
+      coinGeckoId: row?.id,
+      symbol: row?.symbol,
+      name: row?.name,
+      image: row?.large || row?.thumb || '',
+      marketCapRank: row?.market_cap_rank,
+      priceSource: 'CoinGecko',
+      priceMode: 'auto',
+      sourceLabel: 'CoinGecko',
+    }))
+  }
+
+  async function fetchCoinGeckoSimplePrices(ids = []) {
+    const normalizedIds = [...new Set((ids || []).map(normalizeCoinGeckoId).filter(Boolean))]
+    if (!normalizedIds.length) return {}
+    const params = new URLSearchParams({
+      ids: normalizedIds.join(','),
+      vs_currencies: 'thb,usd',
+      include_24hr_change: 'true',
+      include_last_updated_at: 'true',
+    })
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?${params.toString()}`, { cache: 'no-store' })
+    if (!res.ok) throw new Error(`CoinGecko price HTTP ${res.status}`)
+    const json = await res.json()
+    const fetchedAt = nowISO()
+    const prices = {}
+    normalizedIds.forEach(id => {
+      const row = json?.[id]
+      if (!row || (Number(row?.thb || 0) <= 0 && Number(row?.usd || 0) <= 0)) return
+      const lastUpdatedAt = Number(row?.last_updated_at || 0)
+      prices[id] = {
+        thb: Number(row?.thb || 0),
+        usd: Number(row?.usd || 0),
+        change24h: Number(row?.thb_24h_change ?? row?.usd_24h_change ?? 0),
+        source: 'CoinGecko',
+        fetchedAt,
+        lastUpdatedAt: lastUpdatedAt > 0 ? new Date(lastUpdatedAt * 1000).toISOString() : fetchedAt,
+      }
+    })
+    return prices
+  }
+
+  async function fetchUsdThbRate() {
+    const existing = getCryptoFxRateTHB()
+    if (existing > 0) return existing
+    const res = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB', { cache: 'no-store' })
+    if (!res.ok) throw new Error(`FX HTTP ${res.status}`)
+    const json = await res.json()
+    const rate = Number(json?.rates?.THB || 0)
+    if (rate > 0) {
+      S.marketPrices ||= {}
+      S.marketPrices.fx = json
+      return rate
+    }
+    throw new Error('ไม่พบอัตรา USD/THB')
+  }
+
+  async function fetchCoinCapRows() {
+    const now = Date.now()
+    if (coinCapCache.rows.length && (now - Number(coinCapCache.fetchedAt || 0)) < 10 * 60 * 1000) {
+      return coinCapCache.rows
+    }
+    const res = await fetch('https://api.coincap.io/v2/assets?limit=2000', { cache: 'no-store' })
+    if (!res.ok) throw new Error(`CoinCap HTTP ${res.status}`)
+    const json = await res.json()
+    const rows = Array.isArray(json?.data) ? json.data : []
+    coinCapCache = { fetchedAt: now, rows }
+    return rows
+  }
+
+  function matchCoinCapAsset(asset, rows = []) {
+    const targetSymbol = String(asset?.symbol || '').trim().toUpperCase()
+    const targetName = normalizeCryptoName(asset?.name || '')
+    if (!targetSymbol && !targetName) return null
+    const exactSymbol = rows.filter(row => String(row?.symbol || '').trim().toUpperCase() === targetSymbol)
+    if (exactSymbol.length === 1) return exactSymbol[0]
+    const exactName = exactSymbol.find(row => normalizeCryptoName(row?.name || '') === targetName)
+    if (exactName) return exactName
+    const symbolAndName = rows.find(row => String(row?.symbol || '').trim().toUpperCase() === targetSymbol && normalizeCryptoName(row?.name || '') === targetName)
+    if (symbolAndName) return symbolAndName
+    return null
+  }
+
+  async function fetchCoinCapFallbackPrices(assets = []) {
+    const pendingAssets = (assets || []).filter(asset => normalizeCoinGeckoId(asset?.coinGeckoId))
+    if (!pendingAssets.length) return { prices: {}, syncedIds: [], failedIds: [] }
+    const usdThb = await fetchUsdThbRate()
+    if (!(usdThb > 0)) throw new Error('ไม่พบอัตรา USD/THB สำหรับ CoinCap fallback')
+    const rows = await fetchCoinCapRows()
+    const fetchedAt = nowISO()
+    const prices = {}
+    const syncedIds = []
+    const failedIds = []
+    pendingAssets.forEach(asset => {
+      const marketId = normalizeCoinGeckoId(asset?.coinGeckoId)
+      const match = matchCoinCapAsset(asset, rows)
+      const usd = Number(match?.priceUsd || 0)
+      if (!marketId || !match || !(usd > 0)) {
+        if (marketId) failedIds.push(marketId)
+        return
+      }
+      prices[marketId] = {
+        thb: Number((usd * usdThb).toFixed(8)),
+        usd,
+        source: 'CoinCap',
+        fetchedAt,
+        lastUpdatedAt: fetchedAt,
+      }
+      syncedIds.push(marketId)
+    })
+    return { prices, syncedIds, failedIds }
+  }
+
+  function applyCryptoPriceRows(priceRows = {}) {
+    ensureCryptoState()
+    S.marketPrices ||= {}
+    S.marketPrices.crypto ||= {}
+    Object.entries(priceRows || {}).forEach(([id, row]) => {
+      if (!id || typeof row !== 'object') return
+      S.marketPrices.crypto[id] = {
+        ...(S.marketPrices.crypto[id] || {}),
+        ...row,
+      }
+    })
+    S.marketPrices.updatedAt = nowISO()
+  }
+
+  function updateCryptoSyncMeta({
+    attemptAt,
+    successAt = '',
+    errorAt = '',
+    errorMessage = '',
+    source = '',
+    syncedIds = [],
+    failedIds = [],
+  } = {}) {
+    ensureCryptoState()
+    S.cryptoSyncMeta = {
+      ...(S.cryptoSyncMeta || {}),
+      lastAttemptAt: attemptAt || nowISO(),
+      lastSuccessAt: successAt || S.cryptoSyncMeta?.lastSuccessAt || '',
+      lastErrorAt: errorAt || '',
+      lastErrorMessage: errorMessage || '',
+      source: source || '',
+      syncedIds: [...new Set((syncedIds || []).filter(Boolean))],
+      failedIds: [...new Set((failedIds || []).filter(Boolean))],
+    }
+  }
+
   function searchCryptoPresets(query = '') {
     const q = String(query || '').trim().toLowerCase()
     const qNorm = normalizeCoinGeckoId(query)
@@ -6339,15 +6445,17 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
 
   function createHoldingRow(holding, { showEditButton = false } = {}) {
     const asset = App.getCryptoAsset(holding.assetId)
-    const price = App.getCryptoPriceTHB(holding)
     const value = App.getCryptoHoldingValueTHB(holding)
     const hidden = !!S.settings?.hideMoney
     return `<div class="card card-pad crypto-holding-row" onclick="App.openCryptoPortfolioDetail('${esc(holding.id)}')">
-      <div class="crypto-coin-main">
-        <div class="wallet-pill" style="background:${esc((asset?.color || '#F59E0B'))}20;color:${esc(asset?.color || '#F59E0B')}">${esc(asset?.icon || asset?.symbol || '?')}</div>
-        <div style="min-width:0">
-          <div class="list-item-name">${esc(asset?.symbol || '?')} · ${esc(asset?.name || 'Unknown')}</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+        <div class="crypto-coin-main" style="min-width:0;flex:1">
+          <div class="wallet-pill" style="background:${esc((asset?.color || '#F59E0B'))}20;color:${esc(asset?.color || '#F59E0B')}">${esc(asset?.icon || asset?.symbol || '?')}</div>
+          <div style="min-width:0">
+            <div class="list-item-name">${esc(asset?.symbol || '?')}</div>
+          </div>
         </div>
+        ${showEditButton ? `<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();App.openCryptoHoldingForm('${esc(holding.id)}')" style="width:auto;flex:0 0 auto;border-color:var(--line);color:var(--muted)">แก้ไข</button>` : ''}
       </div>
       <div class="crypto-row-metrics">
         <div class="crypto-row-metric">
@@ -6429,6 +6537,8 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     S.migrations.cryptoCentralizedV1 = true
     return changed
   }
+  App.ensureCryptoState = ensureCryptoState
+  App.migrateLegacyCryptoWallets = migrateLegacyCryptoWallets
 
   App.getCryptoAsset = function(assetId) {
     ensureCryptoState()
@@ -6498,41 +6608,116 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     }
   }
 
+  async function syncCryptoPrices({ silent = false } = {}) {
+    ensureCryptoState()
+    if (cryptoSyncInFlight) return cryptoSyncInFlight
+    cryptoSyncInFlight = (async () => {
+      const attemptAt = nowISO()
+      const activeAssets = collectActiveCryptoAssets()
+      const activeIds = [...new Set(activeAssets.map(asset => normalizeCoinGeckoId(asset?.coinGeckoId)).filter(Boolean))]
+      if (!activeIds.length) {
+        updateCryptoSyncMeta({
+          attemptAt,
+          source: 'Manual',
+          syncedIds: [],
+          failedIds: [],
+          errorAt: '',
+          errorMessage: '',
+        })
+        persist()
+        if (!silent) notify('ยังไม่มีเหรียญที่ sync ราคาอัตโนมัติได้ ใช้ราคาสำรองแทน', 'warn')
+        return { syncedIds: [], failedIds: [], usedFallback: false }
+      }
+
+      const geckoSources = {}
+      let syncedIds = []
+      let geckoError = null
+      try {
+        Object.assign(geckoSources, await fetchCoinGeckoSimplePrices(activeIds))
+        syncedIds = Object.keys(geckoSources)
+      } catch (err) {
+        geckoError = err
+      }
+
+      const missingIds = activeIds.filter(id => !syncedIds.includes(id))
+      const fallbackAssets = activeAssets.filter(asset => missingIds.includes(normalizeCoinGeckoId(asset?.coinGeckoId)))
+      let fallbackPrices = {}
+      let fallbackSyncedIds = []
+      let fallbackFailedIds = missingIds.slice()
+      let fallbackError = null
+      if (missingIds.length) {
+        try {
+          const fallback = await fetchCoinCapFallbackPrices(fallbackAssets)
+          fallbackPrices = fallback.prices || {}
+          fallbackSyncedIds = [...new Set(fallback.syncedIds || [])]
+          fallbackFailedIds = [...new Set((fallback.failedIds || []).concat(missingIds.filter(id => !fallbackSyncedIds.includes(id))))]
+        } catch (err) {
+          fallbackError = err
+        }
+      }
+
+      const mergedPrices = { ...geckoSources, ...fallbackPrices }
+      const finalSyncedIds = [...new Set(Object.keys(mergedPrices))]
+      const finalFailedIds = activeIds.filter(id => !finalSyncedIds.includes(id))
+      if (finalSyncedIds.length) applyCryptoPriceRows(mergedPrices)
+      const sourceLabel = fallbackSyncedIds.length ? (syncedIds.length ? 'CoinGecko+CoinCap' : 'CoinCap') : 'CoinGecko'
+      const errorMessage = geckoError
+        ? String(geckoError?.message || geckoError || 'sync failed')
+        : fallbackError
+          ? String(fallbackError?.message || fallbackError || 'fallback failed')
+          : finalFailedIds.length
+            ? `Sync ไม่ครบ ${finalFailedIds.length} เหรียญ`
+            : ''
+      updateCryptoSyncMeta({
+        attemptAt,
+        successAt: finalSyncedIds.length ? nowISO() : '',
+        errorAt: errorMessage ? nowISO() : '',
+        errorMessage,
+        source: sourceLabel,
+        syncedIds: finalSyncedIds,
+        failedIds: finalFailedIds,
+      })
+      persist()
+      App.render?.()
+      const cryptoSubScreenOpen = document.getElementById('sub-screen')?.classList.contains('open')
+        && (document.querySelector('#sub-screen .sub-header h2')?.textContent || '').includes('Crypto Portfolio')
+      if (cryptoSubScreenOpen) App.openCryptoPortfolioDetail()
+
+      if (!silent) {
+        if (finalSyncedIds.length && !finalFailedIds.length) {
+          notify(fallbackSyncedIds.length ? 'Sync ราคา Crypto สำเร็จ (มี CoinCap fallback)' : 'Sync ราคา Crypto สำเร็จ', 'success')
+        } else if (finalSyncedIds.length) {
+          notify('Sync ราคา Crypto ได้บางส่วน บางเหรียญใช้ราคาสำรองเดิม', 'warn')
+        } else {
+          notify('Sync ราคา Crypto ไม่สำเร็จ ใช้ราคาสำรองแทน', 'error')
+        }
+      }
+      return { syncedIds: finalSyncedIds, failedIds: finalFailedIds, usedFallback: fallbackSyncedIds.length > 0 }
+    })()
+    try {
+      return await cryptoSyncInFlight
+    } finally {
+      cryptoSyncInFlight = null
+    }
+  }
+
+  App.maybeAutoSyncCryptoPrices = function(reason = 'auto') {
+    ensureCryptoState()
+    if (cryptoSyncInFlight) return cryptoSyncInFlight
+    const now = Date.now()
+    if (now < cryptoAutoSyncThrottleUntil) return Promise.resolve(null)
+    cryptoAutoSyncThrottleUntil = now + 60 * 1000
+    if (!cryptoPricesAreStale()) return Promise.resolve(null)
+    return syncCryptoPrices({ silent: true, reason })
+  }
+
   async function syncMarketSuite({ cryptoOnly = false } = {}) {
     ensureCryptoState()
     const next = { ...(S.marketPrices || {}), crypto: { ...(S.marketPrices?.crypto || {}) } }
-    let cryptoOk = false
     let fxOk = false
     let goldOk = false
-    let cryptoAttempted = false
-    const activeIds = [...new Set((S.cryptoHoldings || [])
-      .map(h => App.getCryptoAsset(h.assetId))
-      .filter(a => a?.active !== false && normalizeCoinGeckoId(a?.coinGeckoId))
-      .map(a => normalizeCoinGeckoId(a.coinGeckoId)))]
-
-    if (activeIds.length) {
-      cryptoAttempted = true
-      try {
-        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(activeIds.join(','))}&vs_currencies=thb,usd`
-        const res = await fetch(url, { cache: 'no-store' })
-        if (!res.ok) throw new Error(`crypto http ${res.status}`)
-        const json = await res.json()
-        Object.entries(json || {}).forEach(([id, row]) => {
-          if (!id || typeof row !== 'object') return
-          next.crypto[id] = {
-            ...(next.crypto[id] || {}),
-            thb: Number(row?.thb || 0),
-            usd: Number(row?.usd || 0),
-            source: 'CoinGecko',
-            fetchedAt: nowISO(),
-          }
-        })
-        cryptoOk = Object.keys(json || {}).length > 0
-        if (cryptoOk) S.cryptoSyncMeta = { lastSuccessAt: nowISO(), lastErrorAt: '', lastAttemptAt: nowISO() }
-      } catch (err) {
-        S.cryptoSyncMeta = { ...(S.cryptoSyncMeta || {}), lastErrorAt: nowISO(), lastAttemptAt: nowISO(), lastErrorMessage: String(err?.message || err || 'sync failed') }
-      }
-    }
+    const cryptoResult = await syncCryptoPrices({ silent: true })
+    let cryptoOk = !!cryptoResult?.syncedIds?.length
 
     if (!cryptoOnly) {
       try {
@@ -6546,13 +6731,14 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     }
 
     next.updatedAt = nowISO()
+    next.crypto = { ...(S.marketPrices?.crypto || {}), ...(next.crypto || {}) }
     S.marketPrices = next
     persist()
     App.render?.()
 
     if (cryptoOnly) {
-      if (cryptoOk) notify('Sync ราคา Crypto สำเร็จ', 'success')
-      else if (!cryptoAttempted) notify('ยังไม่มีเหรียญที่ sync ราคาอัตโนมัติได้ ใช้ราคาสำรองแทน', 'warn')
+      if (cryptoOk && !(cryptoResult?.failedIds || []).length) notify('Sync ราคา Crypto สำเร็จ', 'success')
+      else if (cryptoOk) notify('Sync ราคา Crypto ได้บางส่วน บางเหรียญใช้ราคาสำรองเดิม', 'warn')
       else notify('Sync ราคา Crypto ไม่สำเร็จ ใช้ราคาสำรองแทน', 'warn')
       return
     }
@@ -6562,7 +6748,12 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
   }
 
   App.refreshCryptoPrices = function() {
-    return syncMarketSuite({ cryptoOnly: true })
+    const shouldReopen = document.getElementById('sub-screen')?.classList.contains('open')
+      && (document.querySelector('#sub-screen .sub-header h2')?.textContent || '').includes('Crypto Portfolio')
+    return syncMarketSuite({ cryptoOnly: true }).then(result => {
+      if (shouldReopen) App.openCryptoPortfolioDetail()
+      return result
+    })
   }
 
   App.refreshMarketPrices = function() {
@@ -6591,10 +6782,15 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     const locationOptions = [...new Set([...CRYPTO_LOCATIONS, locationValue].filter(Boolean))]
     const customCoinGeckoId = asset?.coinGeckoId && !preset ? asset.coinGeckoId : ''
     const customMode = !preset && !!asset
+    const selectedAsset = buildCryptoSearchResult(asset || preset || {}, preset ? { sourceLabel: 'Preset' } : {})
     S.cryptoForm = {
       mode: customMode ? 'custom' : 'preset',
       query: preset ? `${preset.symbol} ${preset.name}` : '',
       selectedPresetId: selectedCoinGeckoId,
+      selectedAsset: selectedCoinGeckoId ? selectedAsset : null,
+      searchResults: [],
+      searchLoading: false,
+      searchError: '',
     }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCryptoPortfolioDetail()">←</button><h2>${holding ? 'แก้ไขเหรียญ' : 'เพิ่มเหรียญ'}</h2><div style="display:flex;gap:6px">${holding ? `<button class="btn btn-outline btn-sm" onclick="App.deleteCryptoHolding('${esc(holding.id)}')" style="min-width:50px">ลบ</button>` : ''}<button class="btn btn-primary btn-sm" onclick="App.saveCryptoHolding('${esc(holdingId)}')" style="min-width:50px">บันทึก</button></div></div>
       <div class="sub-scroll">
@@ -6607,8 +6803,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
         <div id="crypto-preset-section" style="${customMode ? 'display:none' : ''}">
           <div class="form-group">
             <label class="form-label">ค้นหาเหรียญ</label>
-            <input class="form-input search-input" id="crypto-search-query" placeholder="พิมพ์ BTC, ETH, Bitcoin, Ethereum" value="${esc(S.cryptoForm.query || '')}" oninput="App._renderCryptoPresetResults()">
-            <div class="form-hint">เลือกจากรายการเพื่อให้ระบบใช้ Symbol, Name และ CoinGecko ID ที่ถูกต้องอัตโนมัติ</div>
+            <input class="form-input search-input" id="crypto-search-query" placeholder="พิมพ์ชื่อเหรียญ เช่น BTC, ETH" value="${esc(S.cryptoForm.query || '')}" oninput="App._queueCryptoSearch()">
           </div>
           <div id="crypto-selected-asset"></div>
           <div id="crypto-search-results" class="crypto-search-results"></div>
@@ -6626,15 +6821,14 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
         <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="crypto-note" value="${esc(holding?.note || '')}" placeholder="เช่น DCA, long-term, cold wallet"></div>
       </div>`)
     App._bindCryptoSearchInput()
-    requestAnimationFrame(() => App._renderCryptoPresetResults())
+    requestAnimationFrame(() => App._queueCryptoSearch(true))
   }
 
   App._bindCryptoSearchInput = function() {
     const queryInput = document.getElementById('crypto-search-query')
     if (!queryInput || queryInput.dataset.bound === '1') return
     queryInput.dataset.bound = '1'
-    queryInput.addEventListener('input', () => App._renderCryptoPresetResults())
-    queryInput.addEventListener('focus', () => App._renderCryptoPresetResults())
+    queryInput.addEventListener('focus', () => App._queueCryptoSearch(true))
   }
 
   App._setCryptoFormMode = function(mode) {
@@ -6651,27 +6845,101 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     if (customSection) customSection.style.display = nextMode === 'custom' ? '' : 'none'
     presetBtn?.classList.toggle('active', nextMode === 'preset')
     customBtn?.classList.toggle('active', nextMode === 'custom')
-    if (nextMode === 'preset') App._renderCryptoPresetResults()
+    if (nextMode === 'preset') App._queueCryptoSearch(true)
   }
 
-  App._selectCryptoPreset = function(coinGeckoId) {
+  App._queueCryptoSearch = function(immediate = false) {
     ensureCryptoState()
-    const preset = PRESET_BY_ID[String(coinGeckoId || '')]
-    if (!preset) return
+    const query = String(document.getElementById('crypto-search-query')?.value || '').trim()
+    S.cryptoForm = { ...(S.cryptoForm || {}), query }
+    clearTimeout(cryptoSearchDebounceTimer)
+    if (immediate) {
+      App._runCryptoSearch(query)
+      return
+    }
+    cryptoSearchDebounceTimer = setTimeout(() => App._runCryptoSearch(query), CRYPTO_SEARCH_DEBOUNCE_MS)
+  }
+
+  App._runCryptoSearch = async function(query = '') {
+    ensureCryptoState()
+    const nextQuery = String(query || document.getElementById('crypto-search-query')?.value || '').trim()
+    const token = ++cryptoSearchToken
+    S.cryptoForm = {
+      ...(S.cryptoForm || {}),
+      query: nextQuery,
+      searchLoading: !!nextQuery,
+      searchError: '',
+    }
+    App._renderCryptoPresetResults()
+    if (!nextQuery) {
+      const fallback = searchCryptoPresets('')
+        .slice(0, 8)
+        .map(({ preset }) => buildCryptoSearchResult(preset, { sourceLabel: 'Preset' }))
+      if (token !== cryptoSearchToken) return
+      S.cryptoForm = { ...(S.cryptoForm || {}), searchResults: fallback, searchLoading: false, searchError: '' }
+      App._renderCryptoPresetResults()
+      return
+    }
+    try {
+      const results = await fetchCoinGeckoSearch(nextQuery)
+      if (token !== cryptoSearchToken) return
+      S.cryptoForm = {
+        ...(S.cryptoForm || {}),
+        searchResults: results,
+        searchLoading: false,
+        searchError: '',
+      }
+    } catch (err) {
+      if (token !== cryptoSearchToken) return
+      const fallback = searchCryptoPresets(nextQuery)
+        .slice(0, 8)
+        .map(({ preset }) => buildCryptoSearchResult(preset, { sourceLabel: 'Preset' }))
+      S.cryptoForm = {
+        ...(S.cryptoForm || {}),
+        searchResults: fallback,
+        searchLoading: false,
+        searchError: String(err?.message || err || 'search failed'),
+      }
+    }
+    App._renderCryptoPresetResults()
+  }
+
+  App._selectCryptoPreset = async function(coinGeckoId) {
+    ensureCryptoState()
+    const id = normalizeCoinGeckoId(coinGeckoId)
+    const result = (S.cryptoForm?.searchResults || []).find(row => normalizeCoinGeckoId(row?.coinGeckoId) === id)
+      || buildCryptoSearchResult(PRESET_BY_ID[id] || {}, { sourceLabel: PRESET_BY_ID[id] ? 'Preset' : 'CoinGecko' })
+    if (!result?.coinGeckoId) return
     S.cryptoForm = {
       ...(S.cryptoForm || {}),
       mode: 'preset',
-      selectedPresetId: preset.coinGeckoId,
-      query: `${preset.symbol} ${preset.name}`,
+      selectedPresetId: result.coinGeckoId,
+      selectedAsset: buildCryptoSearchResult(result, { priceSource: 'CoinGecko', priceMode: 'auto' }),
+      query: `${result.symbol} ${result.name}`.trim(),
     }
     const hidden = document.getElementById('crypto-selected-preset-id')
     const queryInput = document.getElementById('crypto-search-query')
     const modeInput = document.getElementById('crypto-form-mode')
-    if (hidden) hidden.value = preset.coinGeckoId
+    if (hidden) hidden.value = result.coinGeckoId
     if (queryInput) queryInput.value = S.cryptoForm.query
     if (modeInput) modeInput.value = 'preset'
     App._setCryptoFormMode('preset')
     App._renderCryptoPresetResults()
+    try {
+      const prices = await fetchCoinGeckoSimplePrices([result.coinGeckoId])
+      if (prices[result.coinGeckoId]) {
+        applyCryptoPriceRows(prices)
+        updateCryptoSyncMeta({
+          attemptAt: nowISO(),
+          successAt: nowISO(),
+          source: 'CoinGecko',
+          syncedIds: [result.coinGeckoId],
+          failedIds: [],
+        })
+        persist()
+        App._renderCryptoPresetResults()
+      }
+    } catch (_) {}
   }
 
   App._renderCryptoPresetResults = function() {
@@ -6683,31 +6951,44 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     if (!resultsBox || !selectedBox) return
     const query = String(queryInput?.value || S.cryptoForm?.query || '').trim()
     const selectedId = String(selectedInput?.value || S.cryptoForm?.selectedPresetId || '')
+    const selectedAsset = getSelectedCryptoFormAsset()
+    const selectedPrice = selectedAsset?.coinGeckoId ? S.marketPrices?.crypto?.[selectedAsset.coinGeckoId] : null
     S.cryptoForm = { ...(S.cryptoForm || {}), query, selectedPresetId: selectedId }
-    const selectedPreset = PRESET_BY_ID[selectedId] || null
-    selectedBox.innerHTML = selectedPreset
+    selectedBox.innerHTML = selectedAsset
       ? `<div class="card card-pad crypto-selected-asset-card">
           <div class="crypto-coin-main">
-            <div class="wallet-pill" style="background:${esc(selectedPreset.color)}20;color:${esc(selectedPreset.color)}">${esc(selectedPreset.icon || selectedPreset.symbol)}</div>
-            <div>
-              <div class="list-item-name">${esc(selectedPreset.symbol)} · ${esc(selectedPreset.name)}</div>
-              <div class="list-item-sub">CoinGecko ID: ${esc(selectedPreset.coinGeckoId)} · ${esc(selectedPreset.network || '-')}</div>
+            <div class="wallet-pill" style="background:${esc(selectedAsset.color)}20;color:${esc(selectedAsset.color)}">${selectedAsset.image ? `<img src="${esc(selectedAsset.image)}" alt="${esc(selectedAsset.symbol)}" style="width:18px;height:18px;border-radius:50%;object-fit:cover">` : esc(selectedAsset.icon || selectedAsset.symbol)}</div>
+            <div style="min-width:0">
+              <div class="list-item-name">${esc(selectedAsset.symbol)} · ${esc(selectedAsset.name)}</div>
+              <div class="list-item-sub">CoinGecko ID: ${esc(selectedAsset.coinGeckoId || '-')} · Rank ${selectedAsset.marketCapRank || '-'} · ${esc(selectedAsset.sourceLabel || 'CoinGecko')}</div>
+              ${(Number(selectedPrice?.thb || 0) > 0 || Number(selectedPrice?.usd || 0) > 0) ? `<div class="list-item-sub">THB ${plainMoney(Number(selectedPrice?.thb || 0))}${Number(selectedPrice?.usd || 0) > 0 ? ` · USD ${Number(selectedPrice.usd).toLocaleString('en-US', { maximumFractionDigits: 6 })}` : ''}</div>` : `<div class="list-item-sub">ยังไม่มีราคาล่าสุด ระบบจะดึงอีกครั้งตอนบันทึก/refresh</div>`}
             </div>
           </div>
         </div>`
       : `<div class="form-hint" style="margin-bottom:10px">ยังไม่ได้เลือกเหรียญจากรายการ</div>`
 
-    const matches = searchCryptoPresets(query)
-    resultsBox.innerHTML = matches.map(({ preset: p }) => `<button type="button" class="crypto-search-result${selectedId === p.coinGeckoId ? ' selected' : ''}" onclick="App._selectCryptoPreset('${esc(p.coinGeckoId)}')">
+    const matches = Array.isArray(S.cryptoForm?.searchResults) ? S.cryptoForm.searchResults : []
+    if (S.cryptoForm?.searchLoading) {
+      resultsBox.innerHTML = `<div class="form-hint">กำลังค้นหาเหรียญจาก CoinGecko...</div>`
+      return
+    }
+    const errorHint = S.cryptoForm?.searchError ? `<div class="form-hint" style="margin-bottom:8px">ค้นหา CoinGecko ไม่สำเร็จ ระบบแสดง preset ที่ใกล้เคียงแทน</div>` : ''
+    resultsBox.innerHTML = errorHint + (matches.map(p => {
+      const priceRow = p.coinGeckoId ? S.marketPrices?.crypto?.[p.coinGeckoId] : null
+      const badgeClass = selectedId === p.coinGeckoId ? 'fresh' : (p.sourceLabel === 'CoinGecko' ? 'stale' : 'manual')
+      const badgeLabel = selectedId === p.coinGeckoId ? 'เลือกแล้ว' : (p.sourceLabel || 'เลือก')
+      return `<button type="button" class="crypto-search-result${selectedId === p.coinGeckoId ? ' selected' : ''}" onclick="App._selectCryptoPreset('${esc(p.coinGeckoId)}')">
       <span class="csr-main">
-        <span class="wallet-pill" style="background:${esc(p.color)}20;color:${esc(p.color)}">${esc(p.icon || p.symbol)}</span>
+        <span class="wallet-pill" style="background:${esc(p.color)}20;color:${esc(p.color)}">${p.image ? `<img src="${esc(p.image)}" alt="${esc(p.symbol)}" style="width:18px;height:18px;border-radius:50%;object-fit:cover">` : esc(p.icon || p.symbol)}</span>
         <span>
           <span class="list-item-name">${esc(p.symbol)} · ${esc(p.name)}</span>
-          <span class="list-item-sub">${esc(p.coinGeckoId)}</span>
+          <span class="list-item-sub">${esc(p.coinGeckoId || '-')} · Rank ${p.marketCapRank || '-'} · ${esc(p.sourceLabel || 'CoinGecko')}</span>
+          ${(Number(priceRow?.thb || 0) > 0 || Number(priceRow?.usd || 0) > 0) ? `<span class="list-item-sub">THB ${plainMoney(Number(priceRow?.thb || 0))}${Number(priceRow?.usd || 0) > 0 ? ` · USD ${Number(priceRow.usd).toLocaleString('en-US', { maximumFractionDigits: 6 })}` : ''}</span>` : ''}
         </span>
       </span>
-      <span class="crypto-price-badge ${selectedId === p.coinGeckoId ? 'fresh' : 'manual'}">${selectedId === p.coinGeckoId ? 'เลือกแล้ว' : 'เลือก'}</span>
-    </button>`).join('') || `<div class="form-hint">ไม่พบเหรียญใน preset ลองใช้ Custom Coin</div>`
+      <span class="crypto-price-badge ${badgeClass}">${esc(badgeLabel)}</span>
+    </button>`
+    }).join('') || `<div class="form-hint">${query ? 'ไม่พบเหรียญ ลองพิมพ์ชื่อ/สัญลักษณ์อื่น หรือใช้ Custom Coin' : 'พิมพ์ชื่อเหรียญหรือ symbol เพื่อค้นหาจาก CoinGecko'}</div>`)
   }
 
   App.deleteCryptoHolding = function(holdingId) {
@@ -6736,26 +7017,27 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     const mode = String(document.getElementById('crypto-form-mode')?.value || 'preset')
     const selectedPresetId = String(document.getElementById('crypto-selected-preset-id')?.value || '')
     const preset = PRESET_BY_ID[selectedPresetId] || null
+    const selectedAsset = getSelectedCryptoFormAsset()
     const customSymbol = String(document.getElementById('crypto-custom-symbol')?.value || '').trim().toUpperCase()
     const customName = String(document.getElementById('crypto-custom-name')?.value || '').trim()
     const manualCoinGeckoId = normalizeCoinGeckoId(document.getElementById(mode === 'custom' ? 'crypto-custom-coingecko-id' : 'crypto-selected-preset-id')?.value || '')
     const source = mode === 'preset'
-      ? { symbol: preset?.symbol || '', name: preset?.name || '', coinGeckoId: preset?.coinGeckoId || '' }
+      ? { symbol: selectedAsset?.symbol || preset?.symbol || '', name: selectedAsset?.name || preset?.name || '', coinGeckoId: selectedAsset?.coinGeckoId || preset?.coinGeckoId || '' }
       : { symbol: customSymbol, name: customName, coinGeckoId: manualCoinGeckoId }
     const inferredPreset = preset || inferCryptoPreset(source)
-    const symbol = String(inferredPreset?.symbol || customSymbol || '').trim().toUpperCase()
-    const name = String(inferredPreset?.name || customName || '').trim()
-    const coinGeckoId = normalizeCoinGeckoId(inferredPreset?.coinGeckoId || manualCoinGeckoId)
+    const symbol = String(selectedAsset?.symbol || inferredPreset?.symbol || customSymbol || '').trim().toUpperCase()
+    const name = String(selectedAsset?.name || inferredPreset?.name || customName || '').trim()
+    const coinGeckoId = normalizeCoinGeckoId(selectedAsset?.coinGeckoId || inferredPreset?.coinGeckoId || manualCoinGeckoId)
     const units = Number(document.getElementById('crypto-units')?.value || 0)
     const averageCostTHB = round2(Number(document.getElementById('crypto-avg-cost')?.value || 0))
     const manualPriceTHB = round2(Number(document.getElementById('crypto-manual-price')?.value || 0))
     const location = String(document.getElementById('crypto-location')?.value || 'Wallet').trim() || 'Wallet'
     const note = String(document.getElementById('crypto-note')?.value || '').trim()
 
-    if (mode === 'preset' && !preset) { notify('กรุณาเลือกเหรียญจากรายการก่อนบันทึก', 'error'); return }
+    if (mode === 'preset' && !coinGeckoId) { notify('กรุณาเลือกเหรียญจากรายการก่อนบันทึก', 'error'); return }
     if (!symbol || !name) { notify('กรุณาระบุ Symbol และชื่อเหรียญ', 'error'); return }
     if (units < 0 || averageCostTHB < 0 || manualPriceTHB < 0) { notify('จำนวนเหรียญและราคาต้องไม่ติดลบ', 'error'); return }
-    if (!inferredPreset && !manualPriceTHB && !coinGeckoId) { notify('Custom coin ควรใส่ราคาสำรอง หรือเลือกเหรียญจากรายการยอดนิยม', 'warn'); return }
+    if (!inferredPreset && !selectedAsset?.coinGeckoId && !manualPriceTHB && !coinGeckoId) { notify('Custom coin ควรใส่ราคาสำรอง หรือเลือกเหรียญจากรายการยอดนิยม', 'warn'); return }
 
     let asset = null
     if (coinGeckoId) asset = App.getCryptoAssetByCoinGeckoId(coinGeckoId)
@@ -6769,9 +7051,13 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
         type: inferredPreset?.type || (coinGeckoId ? 'coin' : 'custom'),
         network: inferredPreset?.network || '',
         contractAddress: '',
-        decimals: Number(inferredPreset?.decimals || 8),
-        icon: inferredPreset?.icon || symbol.slice(0, 4),
-        color: inferredPreset?.color || '#F59E0B',
+        decimals: Number(selectedAsset?.decimals || inferredPreset?.decimals || 8),
+        icon: selectedAsset?.icon || inferredPreset?.icon || symbol.slice(0, 4),
+        color: selectedAsset?.color || inferredPreset?.color || '#F59E0B',
+        image: selectedAsset?.image || '',
+        marketCapRank: selectedAsset?.marketCapRank || null,
+        priceSource: coinGeckoId ? 'CoinGecko' : '',
+        priceMode: coinGeckoId ? 'auto' : 'manual',
         active: true,
       }
       S.cryptoAssets.push(asset)
@@ -6780,11 +7066,15 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
         symbol,
         name,
         coinGeckoId,
-        type: inferredPreset?.type || asset.type || (coinGeckoId ? 'coin' : 'custom'),
-        network: inferredPreset?.network || asset.network || '',
-        decimals: Number(inferredPreset?.decimals || asset.decimals || 8),
-        icon: inferredPreset?.icon || asset.icon || symbol.slice(0, 4),
-        color: inferredPreset?.color || asset.color || '#F59E0B',
+        type: selectedAsset?.type || inferredPreset?.type || asset.type || (coinGeckoId ? 'coin' : 'custom'),
+        network: selectedAsset?.network || inferredPreset?.network || asset.network || '',
+        decimals: Number(selectedAsset?.decimals || inferredPreset?.decimals || asset.decimals || 8),
+        icon: selectedAsset?.icon || inferredPreset?.icon || asset.icon || symbol.slice(0, 4),
+        color: selectedAsset?.color || inferredPreset?.color || asset.color || '#F59E0B',
+        image: selectedAsset?.image || asset.image || '',
+        marketCapRank: selectedAsset?.marketCapRank || asset.marketCapRank || null,
+        priceSource: coinGeckoId ? 'CoinGecko' : (asset.priceSource || ''),
+        priceMode: coinGeckoId ? 'auto' : (asset.priceMode || 'manual'),
         active: true,
       })
     }
@@ -6823,7 +7113,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     App.openCryptoPortfolioDetail()
     notify(holdingId ? 'อัปเดตเหรียญแล้ว' : 'เพิ่มเหรียญแล้ว', 'success')
     if (coinGeckoId) {
-      await App.refreshCryptoPrices()
+      await syncCryptoPrices({ silent: true })
       App.openCryptoPortfolioDetail()
     }
   }
@@ -6919,6 +7209,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
 
   App.openCryptoPortfolioDetail = function(selectedHoldingId = '') {
     ensureCryptoState()
+    App.maybeAutoSyncCryptoPrices?.('portfolio-open')
     const summary = App.getCryptoPortfolioSummary()
     const holdings = summary.holdings.slice().sort((a, b) => App.getCryptoHoldingValueTHB(b) - App.getCryptoHoldingValueTHB(a))
     const txRows = (S.cryptoTransactions || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 30)
@@ -7018,7 +7309,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
       ? `<div class="crypto-holdings-grid">${cryptoSummary.holdings.slice().sort((a, b) => App.getCryptoHoldingValueTHB(b) - App.getCryptoHoldingValueTHB(a)).map(createHoldingRow).join('')}</div>`
       : `<div class="wallet-empty-card crypto-empty-state"><div><b>ยังไม่มี Crypto Holding</b><div class="list-item-sub">เพิ่ม BTC, ETH, USDT หรือเหรียญ custom ได้ที่นี่</div></div><button class="btn btn-primary" onclick="event.stopPropagation();App.openCryptoHoldingForm()" style="width:auto">เพิ่มเหรียญแรก</button></div>`
     const cryptoSection = `<section class="wallet-section-block">
-      <div class="wallet-section-title wallet-section-title-row"><span>🪙 Crypto Portfolio</span><button class="btn btn-secondary btn-sm" onclick="App.openCryptoPortfolioDetail()" style="width:auto">ดูทั้งหมด</button></div>
+      <div class="wallet-section-title wallet-section-title-row"><span>🪙 Crypto Portfolio</span></div>
       <div class="wallet-card wallet-card-colored crypto-portfolio-card" style="--wallet-color:#F59E0B;--wallet-color-2:#D97706" onclick="App.openCryptoPortfolioDetail()">
         <div class="crypto-portfolio-glow"></div>
         <div class="wc-header">
@@ -7043,8 +7334,8 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     content.innerHTML = goldNote
       + section('สินทรัพย์', '🏦', assets, 'ยังไม่มีสินทรัพย์', true)
       + section('บัตรเครดิต', '💳', credits, 'ยังไม่มีบัตรเครดิต', false)
-      + cryptoSection
       + section('การลงทุน', '📈', invests, 'เพิ่มทอง / FCD เพื่อดูราคาอ้างอิง', true)
+      + cryptoSection
   }
 
   App.renderReports = function() {
@@ -7204,4 +7495,260 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     try { App.recalculateWalletBalances?.({ save: false, recordSnapshot: true }) } catch (_) {}
     persist()
   }
+})()
+
+/* ============================================================
+   V6.7 Backup schema + CC due-after-cycle + viewport bottom-nav
+   ============================================================ */
+;(function v67BackupCreditViewport(){
+  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
+  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[ch]))
+  const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
+  const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
+  const walletById = id => (S.wallets || []).find(w => w.id === id) || null
+  const genId = () => (typeof Calc?.genId === 'function' ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2)))
+  const TH_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  const prevImportData = App.importData?.bind(App)
+  const prevRestoreBackup = App.restorePreImportBackup?.bind(App)
+  const prevWalletCard = App._walletCard?.bind(App)
+  const prevOpenCCDetail = App.openCCDetail?.bind(App)
+  let stableViewportHeight = Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 0)
+
+  function clampCycleDay(day) {
+    return Math.max(1, Math.min(31, Number(day) || 25))
+  }
+
+  function clampDueAfter(days) {
+    return Math.max(1, Math.min(30, Number(days) || 10))
+  }
+
+  function thaiDate(dateStr) {
+    const [y, m, d] = String(dateStr || '').split('-').map(Number)
+    if (!y || !m || !d) return esc(dateStr || '-')
+    return `${d} ${TH_MONTHS_SHORT[m - 1]} ${String((y + 543) % 100).padStart(2, '0')}`
+  }
+
+  function statementRewardRecorded(statementId) {
+    return (S.rewardLedger || []).some(r =>
+      r.statementId === statementId &&
+      (r.type === 'cashback_received' || r.type === 'points_earned' || r.type === 'cashback_statement_credit' || r.type === 'history_only')
+    )
+  }
+
+  function deriveDueAfterCycleDays(cycleDay, dueDay, refDate = today()) {
+    const [y, m] = String(refDate || today()).split('-').map(Number)
+    const year = y || new Date().getFullYear()
+    const monthIndex = (m || 1) - 1
+    const end = new Date(year, monthIndex, Calc.clampDay(year, monthIndex, clampCycleDay(cycleDay)))
+    const dueMonthIndex = Number(dueDay || 1) > Number(cycleDay || 25) ? monthIndex : monthIndex + 1
+    const dueYear = new Date(year, dueMonthIndex, 1).getFullYear()
+    const dueMonth = new Date(year, dueMonthIndex, 1).getMonth()
+    const due = new Date(dueYear, dueMonth, Calc.clampDay(dueYear, dueMonth, Number(dueDay || 1)))
+    const diff = Math.round((due - end) / 86400000)
+    return clampDueAfter(diff > 0 ? diff : 10)
+  }
+
+  function normalizeCreditCardWallets() {
+    let changed = false
+    ;(S.wallets || []).forEach(w => {
+      if (w.type !== 'credit') return
+      const cycleDay = clampCycleDay(w.cycleDay || 25)
+      const dueAfterCycleDays = w.dueAfterCycleDays
+        ? clampDueAfter(w.dueAfterCycleDays)
+        : deriveDueAfterCycleDays(cycleDay, w.dueDay || 5, today())
+      if (w.cycleDay !== cycleDay) { w.cycleDay = cycleDay; changed = true }
+      if (w.dueAfterCycleDays !== dueAfterCycleDays) { w.dueAfterCycleDays = dueAfterCycleDays; changed = true }
+      const nextDue = Calc.getCreditCardDueDate(`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Calc.clampDay(new Date().getFullYear(), new Date().getMonth(), cycleDay)).padStart(2,'0')}`, dueAfterCycleDays)
+      const legacyDueDay = Number(String(nextDue).slice(-2)) || w.dueDay || 5
+      if (w.dueDay !== legacyDueDay) { w.dueDay = legacyDueDay; changed = true }
+    })
+    return changed
+  }
+
+  App.getCreditCardDueInfo = function(card, refDate = today()) {
+    if (!card) return null
+    const statement = App.getCardStatement?.(card.id, refDate)
+    if (statement?.dueDate) return Calc.getDaysUntilDate(statement.dueDate)
+    const fallback = Calc.getCreditCardDueDate(refDate, clampDueAfter(card.dueAfterCycleDays || 10))
+    return fallback ? Calc.getDaysUntilDate(fallback) : null
+  }
+
+  App.getCardStatement = function(cardId, refDate = today()) {
+    const card = walletById(cardId)
+    if (!card) return null
+    const cycleDay = clampCycleDay(card.cycleDay || 25)
+    const dueAfterCycleDays = clampDueAfter(card.dueAfterCycleDays || deriveDueAfterCycleDays(cycleDay, card.dueDay || 5, refDate))
+    const [ry, rm, rd] = String(refDate).split('-').map(Number)
+    let end = new Date(ry, (rm || 1) - 1, Calc.clampDay(ry, (rm || 1) - 1, cycleDay))
+    if ((rd || 1) <= cycleDay) end = new Date(ry, (rm || 1) - 2, Calc.clampDay(new Date(ry, (rm || 1) - 2, 1).getFullYear(), new Date(ry, (rm || 1) - 2, 1).getMonth(), cycleDay))
+    const start = new Date(end)
+    start.setMonth(start.getMonth() - 1)
+    start.setDate(start.getDate() + 1)
+    const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}`
+    const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2,'0')}-${String(start.getDate()).padStart(2,'0')}`
+    const dueStr = Calc.getCreditCardDueDate(endStr, dueAfterCycleDays)
+    const id = `${cardId}:${startStr}:${endStr}`
+    const purchases = (S.transactions || []).filter(t => t.type === 'expense' && t.walletId === cardId && t.date >= startStr && t.date <= endStr)
+    const payments = (S.transactions || []).filter(t => t.type === 'cc_payment' && t.toWalletId === cardId && (t.statementId === id || (t.date > endStr && t.date <= dueStr)))
+    const purchaseTotal = purchases.reduce((s, t) => s + Number(t.amount || 0), 0)
+    const paidTotal = payments.reduce((s, t) => s + Number(t.amount || 0), 0)
+    const balanceDue = Math.max(0, Math.round((purchaseTotal - paidTotal) * 100) / 100)
+    const reward = Calc.getCardRewards ? Calc.getCardRewards(purchases, App._benefit?.(cardId) || {}) : { points: 0, cashback: 0 }
+    return { id, cardId, start: startStr, end: endStr, dueDate: dueStr, dueAfterCycleDays, purchases, payments, purchaseTotal, paidTotal, balanceDue, paid: balanceDue <= 0 && purchaseTotal > 0, reward }
+  }
+
+  App._walletCard = function(w) {
+    if (w?.type !== 'credit') return prevWalletCard ? prevWalletCard(w) : ''
+    const color   = w.color || '#DC2626'
+    const name    = `${w.icon||''} ${w.name||''}`.trim()
+    const owed    = Math.abs(Number(w.balance||0))
+    const limit   = App.getCreditLimitForCard(w)
+    const avail   = limit ? App.getAvailableCreditForCard(w) : 0
+    const due     = App.getCreditCardDueInfo(w)
+    const pct     = limit ? Math.min(100, Math.max(0, owed / limit * 100)) : 0
+    const editBtn = `<button class="wc-edit-btn" onclick="event.stopPropagation();App.openWalletForm('${esc(w.id)}')" aria-label="แก้ไข">✏️</button>`
+    const payBtn  = `<button class="wallet-chip-btn wc-card-pay-btn" onclick="event.stopPropagation();App.openCCPay('${esc(w.id)}')">ชำระ</button>`
+    let sharedBadge = ''
+    if (w.creditLimitMode === 'shared' && w.creditLimitGroupId) {
+      const g = App.getCreditLimitGroup(w.creditLimitGroupId)
+      const gUsed = App.getCreditUsageForLimitGroup(w.creditLimitGroupId)
+      const gAvail = Math.max(0, (g?.limit || 0) - gUsed)
+      sharedBadge = g ? `<div class="v5-shared-badge">วงเงินร่วม ${esc(g.name)} · คงเหลือ ${money(gAvail)}</div>` : ''
+    }
+    return `<div class="wallet-card wallet-card-colored wallet-card-credit" style="--wallet-color:${esc(color)};--wallet-color-2:${esc(color)}BB" onclick="App.openCCDetail('${esc(w.id)}')">
+      <div class="wc-header">
+        <div><div class="wc-name">${esc(name)}</div><div class="wc-type">บัตรเครดิต${w.issuer ? ` · ${esc(w.issuer)}` : ''}${limit ? ` · วงเงิน ${money(limit)}` : ''}</div></div>
+        <div class="wc-card-actions">${payBtn}${editBtn}</div>
+      </div>
+      <div class="wc-balance">-${money(owed)}</div>
+      ${sharedBadge}
+      ${due ? `<div class="cc-due-strip${due.daysLeft<=3?' urgent':''}"><span>ครบกำหนดชำระ</span><em>${due.daysLeft===0?'วันนี้':`อีก ${due.daysLeft} วัน`}</em><strong>${esc(due.dueStr)}</strong></div>` : ''}
+      ${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct>80?'rgba(252,165,165,.95)':'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ ${pct.toFixed(0)}%</span><span>คงเหลือ ${money(avail)}</span></div></div>` : ''}
+    </div>`
+  }
+
+  App.openCCDetail = function(cardId) {
+    const card = walletById(cardId)
+    if (!card) return prevOpenCCDetail?.(cardId)
+    const benefit = App._benefit?.(cardId) || {}
+    const st = App.getCardStatement?.(cardId)
+    const period = st
+      ? { start: st.start, end: st.end }
+      : App.getStatementPeriod(card.cycleDay || 25)
+    const txns = (S.transactions||[]).filter(t => t.walletId===cardId).sort((a,b) => String(b.date||'').localeCompare(String(a.date||''))).slice(0,20)
+    const cycleTxns = (S.transactions||[]).filter(t => t.walletId===cardId && t.type==='expense' && t.date>=period.start && t.date<=period.end)
+    const rewards = Calc.getCardRewards(cycleTxns, benefit)
+    const owed = Math.abs(Number(card.balance||0))
+    const limit = App.getCreditLimitForCard(card)
+    const avail = App.getAvailableCreditForCard(card)
+    const usedPct = limit ? Math.min((owed/limit)*100, 100) : 0
+    const due = App.getCreditCardDueInfo(card)
+    const installments = (App.getInstallmentGroups?.() || []).filter(g => g.walletId===cardId).slice(0,3)
+    const rewardAcct = App.getRewardAccountForCard(cardId)
+    const statementText = `${card.cycleDay||25} · ชำระหลังตัดยอด ${clampDueAfter(card.dueAfterCycleDays || 10)} วัน`
+    function statusText(s) { return s?.paid ? 'ชำระแล้ว' : 'ค้างชำระ' }
+    const rewardAcctHtml = rewardAcct ? `<div class="v5-reward-acct-info"><span>⭐ ${esc(rewardAcct.name)}</span><strong>${App.getRewardAccountBalance(rewardAcct.id).toLocaleString('en-US')} คะแนน</strong></div>` : ''
+    const hasRewards = rewards.points > 0 || rewards.cashback > 0
+    const alreadyRecorded = st && statementRewardRecorded(st.id)
+    const recordBtn = hasRewards ? `<button class="btn btn-primary btn-sm v5-record-btn" onclick="App.recordActualRewards('${esc(cardId)}')" style="width:100%;margin-top:8px">${alreadyRecorded ? '✓ บันทึกแล้ว · บันทึกซ้ำ?' : 'บันทึกยอดที่ได้รับจริง'}</button>` : ''
+    const stHtml = st ? `<div class="statement-compact statement-compact-th"><div class="statement-main"><div><b>สรุปรอบบัตรเครดิต</b><span>รอบ ${thaiDate(st.start)} – ${thaiDate(st.end)}</span><span>วันกำหนดชำระ ${thaiDate(st.dueDate)}</span></div><em class="status-pill ${st.paid?'ok':'warn'}">${statusText(st)}</em></div><div class="statement-metrics"><div><span>ยอดใช้ในรอบ</span><strong>${money(st.purchaseTotal)}</strong></div><div><span>ชำระแล้ว</span><strong>${money(st.paidTotal)}</strong></div><div><span>ค้างชำระ</span><strong>${money(st.balanceDue)}</strong></div></div><button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen('${esc(cardId)}')">สมุดสิทธิประโยชน์</button></div>` : ''
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon||'')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button></div></div><div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}"><div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0"><div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${esc(statementText)}</div><div style="font-size:13px;opacity:.72;margin-bottom:4px">ยอดค้างชำระ</div><div class="big">${money(owed)}</div>${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}</div>${stHtml}<div class="card card-pad" style="margin-bottom:12px"><div class="cc-detail-header"><div><div style="font-size:14px;font-weight:800">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${thaiDate(period.start)} ถึง ${thaiDate(period.end)}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button></div><div class="reward-grid" style="margin-top:10px"><div class="reward-tile"><span>คะแนน</span><strong>${rewards.points.toLocaleString('en-US')}</strong></div><div class="reward-tile"><span>เงินคืน</span><strong>${money(rewards.cashback)}</strong></div></div>${rewardAcctHtml}${recordBtn}</div>${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : ''}<div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}</div></div>${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}<div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div></div>`)
+    setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
+  }
+
+  App._applyBackupPayload = function(data) {
+    const normalized = Storage.normalizeBackupPayload(data)
+    BACKUP_SCHEMA_KEYS.forEach(key => {
+      if (key === 'settings') S.settings = { ...(S.settings || {}), ...(normalized.settings || {}) }
+      else S[key] = normalized[key]
+    })
+    S.cryptoSyncMeta ||= {}
+    if (normalizeCreditCardWallets()) {}
+    App.ensureCryptoState?.()
+    App.migrateLegacyCryptoWallets?.()
+    App.ensureLedgerBaselines?.(true)
+    App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+    persist()
+    applyTheme?.()
+    App.render?.()
+    return normalized
+  }
+
+  App.exportData = function() {
+    normalizeCreditCardWallets()
+    const payload = Storage.buildExportPayload(S)
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `money-tracker-backup-${today()}.json`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    if (S.settings?.storageMeta) S.settings.storageMeta.lastExportedAt = payload.exportedAt
+    persist()
+    App.renderMore?.()
+    notify('ส่งออกข้อมูลสำเร็จ', 'success')
+  }
+
+  App.importData = function(input) {
+    const file = input?.files?.[0]
+    if (!file) return prevImportData?.(input)
+    Storage.importJSON(file, data => {
+      const checked = App._validateImportPayload?.(data) || { ok:true, warnings:[], data }
+      if (!checked.ok) { notify('นำเข้าไม่ได้: ' + (checked.errors || []).join(', '), 'error'); if (input) input.value = ''; return }
+      const payload = checked.data || data
+      App.showConfirm?.({
+        title:'ตรวจสอบก่อนนำเข้า',
+        danger:true,
+        confirmLabel:'นำเข้า',
+        body:`Wallets: ${(payload.wallets||[]).length} · Transactions: ${(payload.transactions||[]).length} · ระบบจะเก็บ backup ก่อนแทนที่ข้อมูลปัจจุบัน`,
+        onConfirm() {
+          try { localStorage.setItem('mt_pre_import_backup', JSON.stringify(Storage.buildExportPayload(S))) } catch (_) {}
+          App._applyBackupPayload(payload)
+          notify(`นำเข้าสำเร็จ${(checked.warnings || []).length ? ` · มีคำเตือน ${(checked.warnings || []).length} จุด` : ''}`, 'success')
+          if (input) input.value = ''
+        },
+        onCancel() { if (input) input.value = '' },
+      })
+    }, err => { notify('นำเข้าล้มเหลว: ' + err, 'error'); if (input) input.value = '' })
+  }
+
+  App.restorePreImportBackup = function() {
+    let backup = null
+    try { backup = JSON.parse(localStorage.getItem('mt_pre_import_backup') || 'null') } catch (_) {}
+    if (!backup) return prevRestoreBackup ? prevRestoreBackup() : notify('ยังไม่มี backup ก่อนนำเข้า', 'warn')
+    App.showConfirm?.({
+      title:'กู้คืน Backup ก่อนนำเข้า',
+      danger:true,
+      confirmLabel:'กู้คืน',
+      body:`จะย้อนข้อมูลกลับไปก่อน import ล่าสุด (${backup.exportedAt ? new Date(backup.exportedAt).toLocaleString('th-TH') : 'ไม่ทราบเวลา'})`,
+      onConfirm() { App._applyBackupPayload(backup); notify('กู้คืน backup แล้ว', 'success') },
+    })
+  }
+
+  App.syncAppViewportHeight = function() {
+    const vv = window.visualViewport
+    const visualHeight = Math.round(vv?.height || window.innerHeight || document.documentElement.clientHeight || stableViewportHeight || 0)
+    const layoutHeight = Math.round(window.innerHeight || document.documentElement.clientHeight || visualHeight || stableViewportHeight || 0)
+    const keyboardOpen = document.body?.classList.contains('keyboard-open') || (layoutHeight - visualHeight > 120)
+    if (!keyboardOpen && visualHeight > 0) stableViewportHeight = visualHeight
+    const nextHeight = keyboardOpen ? Math.max(stableViewportHeight, layoutHeight) : visualHeight
+    if (nextHeight > 0) document.documentElement.style.setProperty('--app-height', `${nextHeight}px`)
+  }
+
+  normalizeCreditCardWallets()
+  App.syncAppViewportHeight()
+  const syncViewportSoon = () => requestAnimationFrame(() => App.syncAppViewportHeight())
+  window.addEventListener('resize', syncViewportSoon, { passive:true })
+  window.addEventListener('orientationchange', () => setTimeout(syncViewportSoon, 60), { passive:true })
+  window.visualViewport?.addEventListener('resize', syncViewportSoon, { passive:true })
+  window.visualViewport?.addEventListener('scroll', syncViewportSoon, { passive:true })
+  document.addEventListener('focusin', syncViewportSoon, true)
+  document.addEventListener('focusout', () => setTimeout(syncViewportSoon, 120), true)
+  setTimeout(() => {
+    try { App.maybeAutoSyncCryptoPrices?.('startup') } catch (_) {}
+  }, 1200)
+  persist()
 })()

@@ -20,7 +20,7 @@ const Calc = {
 
   labelDate(dateStr) {
     if (!dateStr) return ''
-    const today = TODAY
+    const today = (typeof getTODAY === 'function') ? getTODAY() : TODAY
     const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
     const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`
     if (dateStr === today)  return 'วันนี้'
@@ -37,6 +37,44 @@ const Calc = {
     return `${d} ${months[m - 1]}`
   },
 
+  fmtAssetUnits(n, decimals = 8) {
+    const value = Number(n || 0)
+    if (!Number.isFinite(value)) return '0'
+    if (value === 0) return '0'
+    const abs = Math.abs(value)
+    const maxDigits = Math.min(8, Math.max(0, Number(decimals || 8)))
+    const minDigits = abs > 0 && abs < 1 ? Math.min(maxDigits, 8) : 0
+    return value.toLocaleString('en-US', {
+      minimumFractionDigits: minDigits,
+      maximumFractionDigits: maxDigits,
+    }).replace(/\.?0+$/, '')
+  },
+
+  clampDay(year, monthIndex, day) {
+    const last = new Date(year, Number(monthIndex || 0) + 1, 0).getDate()
+    return Math.max(1, Math.min(Number(day) || 1, last))
+  },
+
+  getCreditCardDueDate(statementEndDate, dueAfterCycleDays = 10) {
+    const [y, m, d] = String(statementEndDate || '').split('-').map(Number)
+    if (!y || !m || !d) return ''
+    const end = new Date(y, m - 1, d)
+    end.setDate(end.getDate() + Math.max(1, Number(dueAfterCycleDays || 10)))
+    return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+  },
+
+  getDaysUntilDate(dateStr, refDate = null) {
+    const [y, m, d] = String(dateStr || '').split('-').map(Number)
+    if (!y || !m || !d) return { daysLeft: 0, dueStr: '' }
+    const due = new Date(y, m - 1, d)
+    const base = refDate ? new Date(refDate) : new Date()
+    const today = new Date(base.getFullYear(), base.getMonth(), base.getDate())
+    const dueDate = new Date(due.getFullYear(), due.getMonth(), due.getDate())
+    const daysLeft = Math.ceil((dueDate - today) / 86400000)
+    const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+    return { daysLeft, dueStr: `${dueDate.getDate()} ${months[dueDate.getMonth()]}`, dateStr: `${dueDate.getFullYear()}-${String(dueDate.getMonth()+1).padStart(2,'0')}-${String(dueDate.getDate()).padStart(2,'0')}` }
+  },
+
   // Last n months as 'YYYY-MM' strings (newest first)
   getMonths(n = 6) {
     const months = []
@@ -51,11 +89,9 @@ const Calc = {
   // Due date info for credit cards
   getDueDate(dueDay) {
     const now = new Date()
-    let due = new Date(now.getFullYear(), now.getMonth(), dueDay)
-    if (due < now) due = new Date(now.getFullYear(), now.getMonth() + 1, dueDay)
-    const daysLeft = Math.ceil((due - now) / 86400000)
-    const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
-    return { daysLeft, dueStr: `${due.getDate()} ${months[due.getMonth()]}` }
+    const due = new Date(now.getFullYear(), now.getMonth(), Number(dueDay || now.getDate()))
+    if (due < now) due.setMonth(due.getMonth() + 1)
+    return Calc.getDaysUntilDate(`${due.getFullYear()}-${String(due.getMonth()+1).padStart(2,'0')}-${String(due.getDate()).padStart(2,'0')}`)
   },
 
   genId() {

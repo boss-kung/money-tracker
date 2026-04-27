@@ -42,7 +42,7 @@ const DEFAULT_WALLETS = [
   { id: 'w1', name: 'ธ.ไทยพาณิชย์', type: 'bank',    icon: '🏦', color: '#6D28D9', balance: 28500 },
   { id: 'w2', name: 'เงินสด',        type: 'cash',    icon: '💵', color: '#059669', balance: 3200  },
   { id: 'w3', name: 'TrueMoney',      type: 'ewallet', icon: '📱', color: '#F59E0B', balance: 1800  },
-  { id: 'w4', name: 'KTC Cashback',   type: 'credit',  icon: '💳', color: '#DC2626', balance: -12900, limit: 50000, dueDay: 5, cycleDay: 25 },
+  { id: 'w4', name: 'KTC Cashback',   type: 'credit',  icon: '💳', color: '#DC2626', balance: -12900, limit: 50000, dueDay: 5, cycleDay: 25, dueAfterCycleDays: 10 },
   { id: 'w5', name: 'ทองคำ',         type: 'gold',    icon: '🥇', color: '#D97706', balance: 15000, symbol: 'XAU' },
   { id: 'w6', name: 'Bitcoin',       type: 'crypto',  icon: '₿', color: '#F59E0B', balance: 12000, symbol: 'BTC' },
   { id: 'w7', name: 'FCD USD',       type: 'fcd',     icon: '💱', color: '#0891B2', balance: 10000, symbol: 'USD', currency: 'USD' },
@@ -108,3 +108,28 @@ const DEFAULT_CC_BENEFITS = {
 const DEFAULT_INCOME_BUDGETS = [
   { categoryId: 'salary', monthlyLimit: 35000 },
 ]
+
+const DEFAULT_CRYPTO_PRESETS = [
+  { symbol: 'BTC',  name: 'Bitcoin',          coinGeckoId: 'bitcoin',           type: 'coin',  network: 'Bitcoin',  decimals: 8,  icon: '₿',  color: '#F7931A' },
+  { symbol: 'ETH',  name: 'Ethereum',         coinGeckoId: 'ethereum',          type: 'coin',  network: 'Ethereum', decimals: 8,  icon: 'Ξ',  color: '#627EEA' },
+  { symbol: 'BNB',  name: 'BNB',              coinGeckoId: 'binancecoin',       type: 'coin',  network: 'BNB',      decimals: 8,  icon: 'BNB', color: '#F3BA2F' },
+  { symbol: 'SOL',  name: 'Solana',           coinGeckoId: 'solana',            type: 'coin',  network: 'Solana',   decimals: 8,  icon: 'SOL', color: '#14F195' },
+  { symbol: 'XRP',  name: 'XRP',              coinGeckoId: 'ripple',            type: 'coin',  network: 'XRP',      decimals: 6,  icon: 'XRP', color: '#23292F' },
+  { symbol: 'ADA',  name: 'Cardano',          coinGeckoId: 'cardano',           type: 'coin',  network: 'Cardano',  decimals: 6,  icon: 'ADA', color: '#0033AD' },
+  { symbol: 'DOGE', name: 'Dogecoin',         coinGeckoId: 'dogecoin',          type: 'coin',  network: 'Dogecoin', decimals: 4,  icon: 'Ð',  color: '#C2A633' },
+  { symbol: 'USDT', name: 'Tether',           coinGeckoId: 'tether',            type: 'token', network: 'Ethereum', decimals: 2,  icon: '₮',  color: '#26A17B' },
+  { symbol: 'USDC', name: 'USD Coin',         coinGeckoId: 'usd-coin',          type: 'token', network: 'Ethereum', decimals: 2,  icon: 'USDC', color: '#2775CA' },
+  { symbol: 'TON',  name: 'Toncoin',          coinGeckoId: 'the-open-network',  type: 'coin',  network: 'TON',      decimals: 6,  icon: 'TON', color: '#0098EA' },
+  { symbol: 'AVAX', name: 'Avalanche',        coinGeckoId: 'avalanche-2',       type: 'coin',  network: 'Avalanche',decimals: 6,  icon: 'AVAX', color: '#E84142' },
+  { symbol: 'DOT',  name: 'Polkadot',         coinGeckoId: 'polkadot',          type: 'coin',  network: 'Polkadot', decimals: 6,  icon: 'DOT', color: '#E6007A' },
+  { symbol: 'LINK', name: 'Chainlink',        coinGeckoId: 'chainlink',         type: 'token', network: 'Ethereum', decimals: 6,  icon: 'LINK', color: '#2A5ADA' },
+  { symbol: 'POL',  name: 'Polygon Ecosystem',coinGeckoId: 'polygon-ecosystem-token', type: 'token', network: 'Polygon', decimals: 6, icon: 'POL', color: '#8247E5' },
+  { symbol: 'MATIC',name: 'Polygon',          coinGeckoId: 'matic-network',     type: 'token', network: 'Polygon',  decimals: 6,  icon: 'MATIC', color: '#8247E5' },
+]
+
+const DEFAULT_CRYPTO_ASSETS = []
+const DEFAULT_CRYPTO_HOLDINGS = []
+const DEFAULT_CRYPTO_TRANSACTIONS = []
+const DEFAULT_MIGRATIONS = {
+  cryptoCentralizedV1: false,
+}
