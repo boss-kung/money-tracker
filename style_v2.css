@@ -4368,7 +4368,7 @@ html.dark .v64-rec-tab.active {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 12px;
+  padding: 6px;
 }
 .crypto-summary-item span {
   display: block;

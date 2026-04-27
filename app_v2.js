@@ -83,6 +83,7 @@ let S = {
   budgets: [],
   settings: { darkMode: false, accentColor: '#2563EB' },
   recurring: [], merchants: [], ccBenefits: {}, incomeBudgets: [], marketPrices: {}, txMode: 'add', editingTxId: null,
+  cryptoAssets: [], cryptoHoldings: [], cryptoTransactions: [], migrations: { cryptoCentralizedV1: false },
 
   // Add-transaction flow
   tx: {
@@ -562,6 +563,10 @@ function init() {
   S.ccBenefits   = data.ccBenefits || {}
   S.incomeBudgets = data.incomeBudgets || []
   S.marketPrices  = data.marketPrices  || {}
+  S.cryptoAssets = data.cryptoAssets || []
+  S.cryptoHoldings = data.cryptoHoldings || []
+  S.cryptoTransactions = data.cryptoTransactions || []
+  S.migrations = { cryptoCentralizedV1: false, ...(data.migrations || {}) }
 
   applyTheme()
 
@@ -796,7 +801,7 @@ App.render();
     if (!tx) return
     S.txMode = 'edit'
     S.editingTxId = id
-    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '' }
+    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxDetail()
     App.openOverlay('overlay-add-tx')
@@ -807,7 +812,7 @@ App.render();
     if (!tx) return
     S.txMode = 'duplicate'
     S.editingTxId = null
-    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '' }
+    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
@@ -1293,7 +1298,7 @@ App.render();
   /* consolidated: removed legacy setTxType from line 2420 */
 
   function getFrequentCategories(type) {
-    const cats = S.categories[type] || []
+    const cats = (S.categories[type] || []).filter(c => !c.archived)
     const usage = {}
     S.transactions.filter(t => t.type === type && t.categoryId).forEach(t => usage[t.categoryId] = (usage[t.categoryId] || 0) + 1)
     return [...cats].sort((a,b) => (usage[b.id] || 0) - (usage[a.id] || 0))
@@ -1314,8 +1319,12 @@ App.render();
     const amount = parseFloat(S.tx.amount || 0)
     const display = Number.isFinite(amount) ? amount.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0'
     const color = typeColor(type)
-    const walletOptions = S.wallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
-    const toWalletOptions = S.wallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
+    const INVEST_TYPES = new Set(['gold','crypto','fcd'])
+    const isTransfer = type === 'transfer'
+    const activeWallets = S.wallets.filter(w => !w.archived)
+    const pickableWallets = isTransfer ? activeWallets : activeWallets.filter(w => !INVEST_TYPES.has(w.type))
+    const walletOptions = pickableWallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
+    const toWalletOptions = activeWallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
     const isExpense = type === 'expense'
     const box = document.getElementById('add-tx-content')
     if (!box) return
@@ -1325,9 +1334,25 @@ App.render();
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div class="cat-grid cat-grid-compact" id="cat-grid">${shownCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}${hasMore ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.showAllTxCategories()"><span class="cat-icon">⋯</span><span>เพิ่มเติม</span></button>` : ''}${S.txShowAllCats && allCats.length > 5 ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.hideAllTxCategories()"><span class="cat-icon">⌃</span><span>ย่อ</span></button>` : ''}</div></div>` : ''}
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);${type === 'transfer' ? 'App._renderAddTxDetail()' : ''}">${walletOptions}</select></div>
-          ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value)"></div>`}
+          ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value);App._showMerchantDropdown?.(this.value)" onfocus="App._showMerchantDropdown?.(this.value)" onblur="setTimeout(()=>document.getElementById('mt-merchant-dropdown')?.classList.add('hidden'),180)"></div>`}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value)"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
           ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
+          ${(() => {
+            if (type !== 'expense' || !S.tx.walletId) return ''
+            const _card = S.wallets.find(w => w.id === S.tx.walletId)
+            if (!_card || _card.type !== 'credit') return ''
+            const _benefit = App._benefit?.(_card.id) || S.ccBenefits?.[_card.id] || {}
+            const _p = _benefit.points || {}; const _c = _benefit.cashback || {}
+            if (!(_benefit.enabled || _p.enabled || _c.enabled || _p.bahtPerPoint > 0 || _c.percent > 0)) return ''
+            const _amt = Number(S.tx.amount || 0); if (!_amt) return ''
+            const _draftTx = { type:'expense', amount:_amt, walletId:S.tx.walletId, rewardIncludePoints:S.tx.rewardIncludePoints!==false, rewardIncludeCashback:S.tx.rewardIncludeCashback!==false }
+            const _rw = Calc.getCardRewards?.([_draftTx], _benefit) || { points:0, cashback:0 }
+            const _ip = S.tx.rewardIncludePoints !== false; const _ic = S.tx.rewardIncludeCashback !== false
+            let _rows = ''
+            if (_p.enabled || _p.bahtPerPoint > 0) _rows += `<div class="tx-reward-toggle-row"><span>${_rw.points>0&&_ip?`+${_rw.points} คะแนน`:'คะแนนสะสม'}</span><button type="button" class="toggle${_ip?' on':''}" onclick="App._toggleRewardFlag('rewardIncludePoints')"></button></div>`
+            if (_c.enabled || _c.percent > 0) _rows += `<div class="tx-reward-toggle-row"><span>${_rw.cashback>0&&_ic?`+฿${_rw.cashback.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} cashback`:'Cashback'}</span><button type="button" class="toggle${_ic?' on':''}" onclick="App._toggleRewardFlag('rewardIncludeCashback')"></button></div>`
+            return `<div class="tx-cc-reward-section"><div class="form-label" style="margin-bottom:6px">สิทธิประโยชน์บัตร ${esc(_card.icon||'💳')} ${esc(_card.name)}</div>${_rows}</div>`
+          })()}
         </div>
         <div class="add-detail-actions"><button class="btn btn-secondary" onclick="App._backToAmount()">← แก้จำนวน</button><button class="btn btn-primary" style="background:${color};box-shadow:0 4px 16px ${color}44" onclick="App.saveTx()">${S.txMode === 'edit' ? 'บันทึก' : `บันทึก ${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}`}</button></div>
       </div>`
@@ -1977,6 +2002,7 @@ App.render();
 
   // ── 3. Recurring due-alert helpers ──────────────────────────
   function getOverdueRecurring() {
+    if (App._getOverdueRecurringLite) return App._getOverdueRecurringLite()
     const today = getTODAY()
     return (S.recurring || []).filter(r => {
       if (r.paused) return false
@@ -2735,9 +2761,7 @@ App.render();
     S.settings.storageMeta.storageMode = 'local-only'
     if (basePersist) basePersist()
     else Storage.saveAll(S)
-    saveJSON('mt_reward_ledger', S.rewardLedger || [])
-    saveJSON('mt_net_worth_snapshots', S.netWorthSnapshots || [])
-    saveJSON('mt_investment_snapshots', S.investmentSnapshots || [])
+    // rewardLedger / netWorthSnapshots / investmentSnapshots now saved by Storage.saveAll
   }
 
   // ── Phase 1: Ledger balance source of truth ────────────────────────────────
@@ -2813,33 +2837,8 @@ App.render();
   /* consolidated: removed legacy render from line 4612 */
 
   // ── Phase 1: validation / import/export / backup status ───────────────────
-  App.validateTransactionDraft = function(tx, { isEdit = false } = {}) {
-    const amt = Number(tx.amount || 0)
-    if (!tx.type) return 'ไม่พบประเภทรายการ'
-    if (!amt || amt <= 0) return 'กรุณาระบุจำนวนเงินมากกว่า 0'
-    if (!tx.walletId) return 'กรุณาเลือกกระเป๋าเงิน'
-    const w = walletById(tx.walletId)
-    if (!w) return 'ไม่พบกระเป๋าเงินที่เลือก'
-
-    if (tx.type === 'transfer') {
-      if (!tx.toWalletId) return 'กรุณาเลือกกระเป๋าปลายทาง'
-      if (tx.toWalletId === tx.walletId) return 'กระเป๋าต้นทางและปลายทางต้องไม่เหมือนกัน'
-      const to = walletById(tx.toWalletId)
-      if (!to) return 'ไม่พบกระเป๋าปลายทาง'
-      if (w.type === 'credit' || to.type === 'credit') return 'บัตรเครดิตต้องใช้เมนูชำระบัตร ไม่ใช่โอนเงิน'
-      if (!isEdit && Number(w.balance || 0) < amt) return 'ยอดเงินในกระเป๋าต้นทางไม่เพียงพอ'
-    } else if (tx.type === 'expense') {
-      if (!tx.categoryId) return 'กรุณาเลือกหมวดหมู่รายจ่าย'
-      if (!isEdit && w.type !== 'credit' && Number(w.balance || 0) < amt) return 'ยอดเงินในกระเป๋าไม่เพียงพอ'
-      if (!isEdit && w.type === 'credit' && Number(w.limit || 0) > 0) {
-        const available = Number(w.limit || 0) - Math.abs(Number(w.balance || 0))
-        if (amt > available) return `วงเงินบัตรคงเหลือ ${money(Math.max(0, available))} ไม่พอ`
-      }
-    } else if (tx.type === 'income') {
-      if (!tx.categoryId) return 'กรุณาเลือกหมวดหมู่รายรับ'
-    }
-    return null
-  }
+  // V4 validateTransactionDraft — superseded by V5 version; kept for reference only.
+  // The active validator is App.validateTransactionDraft defined in the V5 block.
 
   App._rewardEstimateForTx = function(tx) {
     const card = walletById(tx.walletId)
@@ -2863,6 +2862,8 @@ App.render();
       date: S.tx.date || today(),
       isRecurring: !!S.tx.isRecurring,
       isInstallment: !!S.tx.isInstallment,
+      rewardIncludePoints: S.tx.rewardIncludePoints !== false,
+      rewardIncludeCashback: S.tx.rewardIncludeCashback !== false,
     }
     const reward = App._rewardEstimateForTx(tx)
     if (reward) tx.rewardEstimate = reward
@@ -2872,7 +2873,7 @@ App.render();
   App.saveTx = function v40SaveTx() {
     const isEdit = S.txMode === 'edit' && !!S.editingTxId
     const draft = { ...S.tx, amount:Number(S.tx.amount || 0) }
-    const err = App.validateTransactionDraft(draft, { isEdit })
+    const err = App.validateTransactionDraft(draft, { isEdit, editingTxId: S.editingTxId })
     if (err) { toast(err, 'error'); return }
 
     const months = parseInt(S.tx.installmentMonths || 0)
@@ -3126,24 +3127,80 @@ let due = new Date(
 
   App.openRecurringForm = function(id) {
     const r = id ? (S.recurring || []).find(x => x.id === id) : null
-    const cats = [...(S.categories.expense || []), ...(S.categories.income || [])]
-    const walletOpts = (S.wallets || []).filter(w => w.type !== 'credit' && !isInvestWallet(w)).map(w => `<option value="${esc(w.id)}"${r?.walletId===w.id?' selected':''}>${esc(w.icon || '')} ${esc(w.name)}</option>`).join('')
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openRecurringScreen()">←</button><h2>${r?'แก้ไข':'เพิ่ม'}รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.saveRecurring('${esc(id || '')}')" style="width:auto">บันทึก</button></div><div class="sub-scroll"><div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" id="rec-name" value="${esc(r?.name || '')}"></div><div class="form-group"><label class="form-label">ประเภท</label><select class="form-input" id="rec-type"><option value="expense"${(r?.type||'expense')==='expense'?' selected':''}>รายจ่าย</option><option value="income"${r?.type==='income'?' selected':''}>รายรับ</option></select></div><div class="form-group"><label class="form-label">จำนวนเงิน</label><input class="form-input" type="number" id="rec-amount" value="${esc(r?.amount || '')}"></div><div class="form-group"><label class="form-label">ทุกกี่วัน</label><input class="form-input" type="number" id="rec-days" value="${esc(r?.everyDays || 30)}"></div><div class="form-group"><label class="form-label">เริ่ม/ครบกำหนดถัดไป</label><input class="form-input" type="date" id="rec-next" value="${esc(r?.nextDueDate || r?.startDate || today())}"></div><div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="rec-cat">${cats.map(c => `<option value="${esc(c.id)}"${r?.categoryId===c.id?' selected':''}>${esc(c.icon || '')} ${esc(c.label)}</option>`).join('')}</select></div><div class="form-group"><label class="form-label">กระเป๋าเงิน</label><select class="form-input" id="rec-wallet">${walletOpts}</select></div></div>`)
+    const cats = [...(S.categories?.expense || []), ...(S.categories?.income || [])]
+    const walletOpts = (S.wallets || []).filter(w => w.type !== 'credit' && !isInvestWallet(w) && !w.archived)
+      .map(w => `<option value="${esc(w.id)}"${r?.walletId===w.id?' selected':''}>${esc(w.icon||'')} ${esc(w.name)}</option>`).join('')
+    const isMonthly = r?.recurrenceType === 'monthly'
+    const typeOpts = ['expense','income'].map(t =>
+      `<option value="${t}"${(r?.type||'expense')===t?' selected':''}>${t==='expense'?'รายจ่าย':'รายรับ'}</option>`
+    ).join('')
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.openRecurringScreen()">←</button>
+        <h2>${r?'แก้ไข':'เพิ่ม'}รายการประจำ</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.saveRecurring('${esc(id||'')}')" style="width:auto">บันทึก</button>
+      </div>
+      <div class="sub-scroll">
+        <div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" id="rec-name" value="${esc(r?.name||'')}"></div>
+        <div class="form-group"><label class="form-label">ประเภท</label><select class="form-input" id="rec-type">${typeOpts}</select></div>
+        <div class="form-group"><label class="form-label">จำนวนเงิน</label><input class="form-input" type="number" inputmode="decimal" id="rec-amount" value="${esc(r?.amount||'')}"></div>
+        <div class="form-group">
+          <label class="form-label">ความถี่</label>
+          <select class="form-input" id="rec-rectype" onchange="(function(){var m=this.value==='monthly';document.getElementById('rec-monthly-fields').style.display=m?'':'none';document.getElementById('rec-days-field').style.display=m?'none':''}).call(this)">
+            <option value="days"${!isMonthly?' selected':''}>ทุกกี่วัน</option>
+            <option value="monthly"${isMonthly?' selected':''}>รายเดือน (วันที่กำหนด)</option>
+          </select>
+        </div>
+        <div id="rec-days-field" style="display:${isMonthly?'none':''}">
+          <div class="form-group"><label class="form-label">ทุกกี่วัน</label><input class="form-input" type="number" inputmode="numeric" id="rec-days" value="${esc(r?.everyDays||30)}"></div>
+        </div>
+        <div id="rec-monthly-fields" style="display:${isMonthly?'':'none'}">
+          <div class="form-group"><label class="form-label">วันที่ของเดือน (1–31)</label><input class="form-input" type="number" inputmode="numeric" id="rec-day-of-month" min="1" max="31" value="${esc(r?.recurringDayOfMonth||1)}"><div class="form-hint">ระบบจะปรับให้อัตโนมัติหากเดือนนั้นไม่มีวันดังกล่าว</div></div>
+          <div class="form-group"><label class="form-label">จำนวนเดือน (ว่างไว้ = ไม่สิ้นสุด)</label><input class="form-input" type="number" inputmode="numeric" id="rec-duration-months" min="1" value="${esc(r?.durationMonths||'')}" placeholder="ไม่จำกัด"></div>
+        </div>
+        <div class="form-group"><label class="form-label">เริ่ม / ครบกำหนดถัดไป</label><input class="form-input" type="date" id="rec-next" value="${esc(r?.nextDueDate||r?.startDate||today())}"></div>
+        <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="rec-cat">${cats.map(c=>`<option value="${esc(c.id)}"${r?.categoryId===c.id?' selected':''}>${esc(c.icon||'')} ${esc(c.label)}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">กระเป๋าเงิน</label><select class="form-input" id="rec-wallet">${walletOpts}</select></div>
+      </div>`)
   }
 
   App.saveRecurring = function(id) {
-    const name = document.getElementById('rec-name')?.value?.trim() || ''
-    const type = document.getElementById('rec-type')?.value || 'expense'
-    const amount = Number(document.getElementById('rec-amount')?.value || 0)
-    const everyDays = parseInt(document.getElementById('rec-days')?.value || 30)
-    const categoryId = document.getElementById('rec-cat')?.value || ''
-    const walletId = document.getElementById('rec-wallet')?.value || ''
-    const nextDueDate = document.getElementById('rec-next')?.value || today()
+    const g = i => document.getElementById(i)
+    const name = g('rec-name')?.value?.trim() || ''
+    const type = g('rec-type')?.value || 'expense'
+    const amount = Number(g('rec-amount')?.value || 0)
+    const recType = g('rec-rectype')?.value || 'days'
+    const everyDays = parseInt(g('rec-days')?.value || 30)
+    const dayOfMonth = Math.max(1, Math.min(31, parseInt(g('rec-day-of-month')?.value || 1) || 1))
+    const durationMonths = parseInt(g('rec-duration-months')?.value || 0) || null
+    const categoryId = g('rec-cat')?.value || ''
+    const walletId = g('rec-wallet')?.value || ''
+    const nextDueDateRaw = g('rec-next')?.value || today()
     const cat = catById(categoryId)
     if (!name || amount <= 0 || !walletId || !categoryId) { toast('กรุณากรอกข้อมูลรายการประจำให้ครบ', 'error'); return }
-    const data = { name, type, amount, everyDays, categoryId, categoryName:cat?.label, icon:cat?.icon, color:cat?.color, walletId, nextDueDate, paused:false }
-    if (id) { const idx = S.recurring.findIndex(r => r.id === id); if (idx >= 0) S.recurring[idx] = { ...S.recurring[idx], ...data } }
-    else S.recurring.push({ id:Calc.genId(), ...data })
+
+    let nextDueDate = nextDueDateRaw
+    if (recType === 'monthly') {
+      const [y, m] = nextDueDateRaw.split('-').map(Number)
+      const clamped = clampDay(y, m - 1, dayOfMonth)
+      nextDueDate = `${y}-${String(m).padStart(2,'0')}-${String(clamped).padStart(2,'0')}`
+    }
+
+    const data = {
+      name, type, amount, everyDays, categoryId,
+      categoryName: cat?.label, icon: cat?.icon, color: cat?.color,
+      walletId, nextDueDate, paused: false,
+      recurrenceType: recType === 'monthly' ? 'monthly' : undefined,
+      recurringDayOfMonth: recType === 'monthly' ? dayOfMonth : undefined,
+      durationMonths: recType === 'monthly' && durationMonths ? durationMonths : undefined,
+    }
+    if (!S.recurring) S.recurring = []
+    if (id) {
+      const idx = S.recurring.findIndex(r => r.id === id)
+      if (idx >= 0) S.recurring[idx] = { ...S.recurring[idx], ...data }
+    } else {
+      S.recurring.push({ id: Calc.genId(), ...data })
+    }
     persist(); App.openRecurringScreen(); toast('บันทึกรายการประจำแล้ว', 'success')
   }
 
@@ -4169,9 +4226,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
   persist = function v50Persist() {
     migrateToV5()
     _basePersistV5()
-    saveV5JSON('mt_credit_limit_groups', S.creditLimitGroups || [])
-    saveV5JSON('mt_reward_accounts',     S.rewardAccounts    || [])
-    saveV5JSON('mt_reward_ledger',       S.rewardLedger      || [])
+    // creditLimitGroups / rewardAccounts / rewardLedger now saved by Storage.saveAll
   }
 
   // ── ═══════════════════════════════════════════════════════
@@ -4265,7 +4320,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
 
   const _prevValidate = App.validateTransactionDraft?.bind(App)
   App.validateTransactionDraft = function v50ValidateTx(tx, opts = {}) {
-    const { isEdit = false } = opts
+    const { isEdit = false, editingTxId } = opts
     const amt = Number(tx.amount || 0)
     if (!tx.type) return 'ไม่พบประเภทรายการ'
     if (!amt || amt <= 0) return 'กรุณาระบุจำนวนเงินมากกว่า 0'
@@ -4273,23 +4328,40 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     const w = walletById(tx.walletId)
     if (!w) return 'ไม่พบกระเป๋าเงินที่เลือก'
 
+    // For edits: simulate effective balance by reverting the original transaction
+    const origTx = isEdit && editingTxId ? (S.transactions || []).find(t => t.id === editingTxId) : null
+    function effectiveBalance(walletId) {
+      const wallet = walletById(walletId)
+      if (!wallet) return 0
+      let bal = Number(wallet.balance || 0)
+      if (origTx && origTx.walletId === walletId) {
+        if (origTx.type === 'expense') bal += Number(origTx.amount || 0)
+        else if (origTx.type === 'income') bal -= Number(origTx.amount || 0)
+        else if (origTx.type === 'transfer' || origTx.type === 'cc_payment') bal += Number(origTx.amount || 0)
+      }
+      if (origTx && origTx.toWalletId === walletId) {
+        if (origTx.type === 'transfer' || origTx.type === 'cc_payment') bal -= Number(origTx.amount || 0)
+      }
+      return bal
+    }
+
     if (tx.type === 'transfer') {
       if (!tx.toWalletId) return 'กรุณาเลือกกระเป๋าปลายทาง'
       if (tx.toWalletId === tx.walletId) return 'กระเป๋าต้นทางและปลายทางต้องไม่เหมือนกัน'
       const to = walletById(tx.toWalletId)
       if (!to) return 'ไม่พบกระเป๋าปลายทาง'
       if (w.type === 'credit' || to.type === 'credit') return 'บัตรเครดิตต้องใช้เมนูชำระบัตร ไม่ใช่โอนเงิน'
-      if (!isEdit && Number(w.balance || 0) < amt) return 'ยอดเงินในกระเป๋าต้นทางไม่เพียงพอ'
+      if (effectiveBalance(tx.walletId) < amt) return 'ยอดเงินในกระเป๋าต้นทางไม่เพียงพอ'
     } else if (tx.type === 'expense') {
       if (!tx.categoryId) return 'กรุณาเลือกหมวดหมู่รายจ่าย'
-      if (!isEdit && w.type !== 'credit' && Number(w.balance || 0) < amt) return 'ยอดเงินในกระเป๋าไม่เพียงพอ'
-      if (!isEdit && w.type === 'credit') {
+      if (w.type !== 'credit' && effectiveBalance(tx.walletId) < amt) return 'ยอดเงินในกระเป๋าไม่เพียงพอ'
+      if (w.type === 'credit') {
         const limit = App.getCreditLimitForCard(w)
         if (limit > 0) {
-          const available = App.getAvailableCreditForCard(w)
+          const origAmt = (origTx && origTx.walletId === tx.walletId && origTx.type === 'expense') ? Number(origTx.amount || 0) : 0
+          const available = App.getAvailableCreditForCard(w) + origAmt
           if (amt > available) {
-            const modeLabel = (w.creditLimitMode === 'shared' && w.creditLimitGroupId)
-              ? '(วงเงินร่วม)' : ''
+            const modeLabel = (w.creditLimitMode === 'shared' && w.creditLimitGroupId) ? '(วงเงินร่วม)' : ''
             return `วงเงินบัตรคงเหลือ ${money(Math.max(0, available))} ${modeLabel} ไม่พอสำหรับ ${money(amt)}`
           }
         }
@@ -4429,7 +4501,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
       </div>
       ${isCC ? `<div class="form-group" id="wf-cc-balance-group">
         <label class="form-label">ยอดค้างชำระ (฿)</label>
-        <input class="form-input" type="number" id="wf-balance" value="${w ? Math.abs(w.balance||0) : ''}">
+        <input class="form-input" type="number" id="wf-cc-balance" value="${w ? Math.abs(w.balance||0) : ''}">
       </div>` : ''}
       <div id="wf-cc-fields" style="${isCC?'':'display:none'}">${ccExtraHtml}</div>
       ${investHtml}
@@ -4512,9 +4584,9 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     const name  = document.getElementById('wf-name')?.value.trim()
     const type  = document.getElementById('wf-type')?.value || 'bank'
     const color = document.getElementById('wf-color')?.value || '#2563EB'
-    const rawBalance = parseFloat(document.getElementById('wf-balance')?.value) || 0
     const isCC  = type === 'credit'
     const isInv = ['gold','crypto','fcd'].includes(type)
+    const rawBalance = parseFloat(document.getElementById(isCC ? 'wf-cc-balance' : 'wf-balance')?.value) || 0
     const ICONS = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', saving:'🏦', gold:'🥇', crypto:'₿', fcd:'💱' }
 
     if (!name) { notify('กรุณากรอกชื่อกระเป๋า', 'error'); return }
@@ -4546,6 +4618,8 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
           creditLimitGroupId = groupSel
           const g = App.getCreditLimitGroup(groupSel)
           if (g) limit = g.limit
+        } else {
+          notify('กรุณาเลือกกลุ่มวงเงินร่วม หรือสร้างกลุ่มใหม่', 'error'); return
         }
       }
 
@@ -5392,87 +5466,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
   })()
 
   // ── 2. Recurring monthly fields ───────────────────────────────────────────
-  const _prevOpenRecurringForm = App.openRecurringForm?.bind(App)
-  App.openRecurringForm = function v6OpenRecurringForm(id) {
-    const r = id ? (S.recurring || []).find(x => x.id === id) : null
-    const cats = [...(S.categories?.expense || []), ...(S.categories?.income || [])]
-    function isInvestWallet(w) { return ['gold','crypto','fcd'].includes(w.type) }
-    const walletOpts = (S.wallets || []).filter(w => w.type !== 'credit' && !isInvestWallet(w))
-      .map(w => `<option value="${esc(w.id)}"${r?.walletId===w.id?' selected':''}>${esc(w.icon||'')} ${esc(w.name)}</option>`).join('')
-    const isMonthly = r?.recurrenceType === 'monthly'
-    const typeOpts = ['expense','income'].map(t =>
-      `<option value="${t}"${(r?.type||'expense')===t?' selected':''}>${t==='expense'?'รายจ่าย':'รายรับ'}</option>`
-    ).join('')
-    App.openSubScreen(`
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App.openRecurringScreen()">←</button>
-        <h2>${r?'แก้ไข':'เพิ่ม'}รายการประจำ</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.saveRecurring('${esc(id||'')}')" style="width:auto">บันทึก</button>
-      </div>
-      <div class="sub-scroll">
-        <div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" id="rec-name" value="${esc(r?.name||'')}"></div>
-        <div class="form-group"><label class="form-label">ประเภท</label><select class="form-input" id="rec-type">${typeOpts}</select></div>
-        <div class="form-group"><label class="form-label">จำนวนเงิน</label><input class="form-input" type="number" inputmode="decimal" id="rec-amount" value="${esc(r?.amount||'')}"></div>
-        <div class="form-group">
-          <label class="form-label">ความถี่</label>
-          <select class="form-input" id="rec-rectype" onchange="(function(){var m=this.value==='monthly';document.getElementById('rec-monthly-fields').style.display=m?'':'none';document.getElementById('rec-days-field').style.display=m?'none':''}).call(this)">
-            <option value="days"${!isMonthly?' selected':''}>ทุกกี่วัน</option>
-            <option value="monthly"${isMonthly?' selected':''}>รายเดือน (วันที่กำหนด)</option>
-          </select>
-        </div>
-        <div id="rec-days-field" style="display:${isMonthly?'none':''}">
-          <div class="form-group"><label class="form-label">ทุกกี่วัน</label><input class="form-input" type="number" inputmode="numeric" id="rec-days" value="${esc(r?.everyDays||30)}"></div>
-        </div>
-        <div id="rec-monthly-fields" style="display:${isMonthly?'':'none'}">
-          <div class="form-group"><label class="form-label">วันที่ของเดือน (1–31)</label><input class="form-input" type="number" inputmode="numeric" id="rec-day-of-month" min="1" max="31" value="${esc(r?.recurringDayOfMonth||1)}"><div class="form-hint">ระบบจะปรับให้อัตโนมัติหากเดือนนั้นไม่มีวันดังกล่าว</div></div>
-          <div class="form-group"><label class="form-label">จำนวนเดือน (ว่างไว้ = ไม่สิ้นสุด)</label><input class="form-input" type="number" inputmode="numeric" id="rec-duration-months" min="1" value="${esc(r?.durationMonths||'')}" placeholder="ไม่จำกัด"></div>
-        </div>
-        <div class="form-group"><label class="form-label">เริ่ม / ครบกำหนดถัดไป</label><input class="form-input" type="date" id="rec-next" value="${esc(r?.nextDueDate||r?.startDate||today())}"></div>
-        <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="rec-cat">${cats.map(c=>`<option value="${esc(c.id)}"${r?.categoryId===c.id?' selected':''}>${esc(c.icon||'')} ${esc(c.label)}</option>`).join('')}</select></div>
-        <div class="form-group"><label class="form-label">กระเป๋าเงิน</label><select class="form-input" id="rec-wallet">${walletOpts}</select></div>
-      </div>`)
-  }
-
-  App.saveRecurring = function v6SaveRecurring(id) {
-    const g = i => document.getElementById(i)
-    const name = g('rec-name')?.value?.trim() || ''
-    const type = g('rec-type')?.value || 'expense'
-    const amount = Number(g('rec-amount')?.value || 0)
-    const recType = g('rec-rectype')?.value || 'days'
-    const everyDays = parseInt(g('rec-days')?.value || 30)
-    const dayOfMonth = Math.max(1, Math.min(31, parseInt(g('rec-day-of-month')?.value || 1) || 1))
-    const durationMonths = parseInt(g('rec-duration-months')?.value || 0) || null
-    const categoryId = g('rec-cat')?.value || ''
-    const walletId = g('rec-wallet')?.value || ''
-    const nextDueDateRaw = g('rec-next')?.value || today()
-    const catObj = App._findCat?.(categoryId)
-    if (!name || amount <= 0 || !walletId || !categoryId) { notify('กรุณากรอกข้อมูลรายการประจำให้ครบ', 'error'); return }
-
-    let nextDueDate = nextDueDateRaw
-    if (recType === 'monthly') {
-      // Clamp the user-set date to use the correct day of month
-      const [y, m] = nextDueDateRaw.split('-').map(Number)
-      const clamped = clampDay(y, m - 1, dayOfMonth)
-      nextDueDate = `${y}-${String(m).padStart(2,'0')}-${String(clamped).padStart(2,'0')}`
-    }
-
-    const data = {
-      name, type, amount, everyDays, categoryId,
-      categoryName: catObj?.label, icon: catObj?.icon, color: catObj?.color,
-      walletId, nextDueDate, paused: false,
-      recurrenceType: recType === 'monthly' ? 'monthly' : undefined,
-      recurringDayOfMonth: recType === 'monthly' ? dayOfMonth : undefined,
-      durationMonths: recType === 'monthly' && durationMonths ? durationMonths : undefined,
-    }
-    if (!S.recurring) S.recurring = []
-    if (id) {
-      const idx = S.recurring.findIndex(r => r.id === id)
-      if (idx >= 0) S.recurring[idx] = { ...S.recurring[idx], ...data }
-    } else {
-      S.recurring.push({ id: Calc.genId(), ...data })
-    }
-    persist(); App.openRecurringScreen(); notify('บันทึกรายการประจำแล้ว', 'success')
-  }
+  // openRecurringForm and saveRecurring consolidated into V4 source (Fix 17).
 
   App.postRecurringNow = function v6PostRecurringNow(id) {
     const r = (S.recurring || []).find(x => x.id === id)
@@ -5528,38 +5522,9 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     S.tx.rewardIncludeCashback = true
   }
 
-  // ── 4. cleanTxFromDraft: include reward eligibility flags ─────────────────
-  // We patch saveTx to read the flags from S.tx before building the tx object.
-  const _prevSaveTx = App.saveTx?.bind(App)
-  App.saveTx = function v6SaveTx() {
-    // Inject flags into S.tx so any cleanTxFromDraft call picks them up
-    if (S.tx.type === 'expense') {
-      const w = walletById(S.tx.walletId)
-      if (w?.type === 'credit') {
-        // flags are already set on S.tx by _toggleRewardFlag or by openAddTx init
-        // cleanTxFromDraft currently doesn't copy them — we extend S.tx then call prev
-        S.tx._rewardIncludePoints = S.tx.rewardIncludePoints !== false
-        S.tx._rewardIncludeCashback = S.tx.rewardIncludeCashback !== false
-      }
-    }
-    _prevSaveTx?.()
-  }
-
-  // Patch cleanTxFromDraft indirectly — we need access to the inner function.
-  // Since cleanTxFromDraft is a closure, we intercept at the recalculate step instead:
-  // The actual fix: override _rewardEstimateForTx to pass the draft with correct flags.
-  const _prevRewardEstimate = App._rewardEstimateForTx?.bind(App)
-  App._rewardEstimateForTx = function v6RewardEstimate(tx) {
-    // If called for the current draft, merge eligibility flags from S.tx
-    if (tx && tx.walletId === S.tx?.walletId && !tx.id) {
-      tx = {
-        ...tx,
-        rewardIncludePoints: S.tx?.rewardIncludePoints !== false,
-        rewardIncludeCashback: S.tx?.rewardIncludeCashback !== false,
-      }
-    }
-    return _prevRewardEstimate?.(tx) || null
-  }
+  // ── 4. cleanTxFromDraft reward flags ─────────────────────────────────────
+  // rewardIncludePoints / rewardIncludeCashback are now set directly in
+  // cleanTxFromDraft (source-of-truth fix), so no saveTx patch needed here.
 
   // ── 5. _toggleRewardFlag ──────────────────────────────────────────────────
   App._toggleRewardFlag = function(key) {
@@ -5567,76 +5532,7 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
     App._renderAddTxDetail?.()
   }
 
-  // ── 6. _renderAddTxDetail: wire merchant combo + CC reward section ─────────
-  const _prevRenderAddTxDetail = App._renderAddTxDetail?.bind(App)
-  App._renderAddTxDetail = function v6RenderAddTxDetail() {
-    _prevRenderAddTxDetail?.()
-
-    // (a) Wire merchant combo
-    const inp = document.getElementById('tx-merchant')
-    if (inp && !inp.dataset.v6combo) {
-      inp.dataset.v6combo = '1'
-      // Remove existing oninput if any and replace
-      inp.oninput = null
-      inp.addEventListener('focus', () => App._showMerchantDropdown?.(inp.value), { passive: true })
-      inp.addEventListener('input', () => {
-        App._txField?.('merchant', inp.value)
-        App._showMerchantDropdown?.(inp.value)
-      })
-      inp.addEventListener('blur', () => {
-        setTimeout(() => document.getElementById('mt-merchant-dropdown')?.classList.add('hidden'), 180)
-      }, { passive: true })
-    }
-
-    // (b) CC reward section for CC expense
-    const type = S.tx.type
-    const walletId = S.tx.walletId
-    if (type !== 'expense' || !walletId) return
-    const card = walletById(walletId)
-    if (!card || card.type !== 'credit') return
-    const benefit = App._benefit?.(card.id) || S.ccBenefits?.[card.id] || {}
-    const p = benefit.points || {}
-    const c = benefit.cashback || {}
-    const anyBenefit = benefit.enabled || p.enabled || c.enabled || p.bahtPerPoint > 0 || c.percent > 0
-    if (!anyBenefit) return
-
-    // Estimate rewards with current flags
-    const amount = Number(S.tx.amount || 0)
-    if (!amount) return
-    const draftTx = {
-      type: 'expense', amount,
-      walletId,
-      rewardIncludePoints: S.tx.rewardIncludePoints !== false,
-      rewardIncludeCashback: S.tx.rewardIncludeCashback !== false,
-    }
-    const reward = Calc.getCardRewards?.([draftTx], benefit) || { points: 0, cashback: 0 }
-    const inclPts = S.tx.rewardIncludePoints !== false
-    const inclCb = S.tx.rewardIncludeCashback !== false
-
-    let rows = ''
-    if (p.enabled || p.bahtPerPoint > 0) {
-      rows += `<div class="tx-reward-toggle-row">
-        <span>${reward.points > 0 && inclPts ? `+${reward.points} คะแนน` : 'คะแนนสะสม'}</span>
-        <button type="button" class="toggle${inclPts?' on':''}" onclick="App._toggleRewardFlag('rewardIncludePoints')"></button>
-      </div>`
-    }
-    if (c.enabled || c.percent > 0) {
-      rows += `<div class="tx-reward-toggle-row">
-        <span>${reward.cashback > 0 && inclCb ? `+฿${reward.cashback.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} cashback` : 'Cashback'}</span>
-        <button type="button" class="toggle${inclCb?' on':''}" onclick="App._toggleRewardFlag('rewardIncludeCashback')"></button>
-      </div>`
-    }
-
-    const section = document.createElement('div')
-    section.className = 'tx-cc-reward-section'
-    section.innerHTML = `<div class="form-label" style="margin-bottom:6px">สิทธิประโยชน์บัตร ${esc(card.icon||'💳')} ${esc(card.name)}</div>${rows}`
-
-    // Insert before add-detail-actions
-    const shell = document.querySelector('.add-detail-scroll')
-    if (shell && !shell.querySelector('.tx-cc-reward-section')) {
-      shell.appendChild(section)
-    }
-  }
+  // ── 6. _renderAddTxDetail: merchant combo + CC reward section consolidated into V4 source (Fix 17).
 
   // ── 7. syncKeyboardClass: scroll focused input into view ──────────────────
   // Patch the existing visualViewport handler to also scroll input into view
@@ -5651,3 +5547,1661 @@ if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
   // ── Apply ─────────────────────────────────────────────────────────────────
   try { App.render?.() } catch(_) {}
 })();
+
+/* ============================================================
+   V6.4 Add transaction hotfix
+   - Preserve draft decimal display while typing (e.g. 555.)
+   - Restore inline recurring schedule fields in add-tx detail
+   - Create/update a recurring schedule when saving a recurring tx
+   ============================================================ */
+;(function v64AddTxDecimalAndRecurringFix(){
+  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const typeColor = type => type === 'income' ? 'var(--income)' : type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
+  const typeLabel = type => type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'
+  const primaryWallet = () => S.wallets?.find(w => w.type !== 'credit')?.id || S.wallets?.[0]?.id || ''
+  const today = () => (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
+
+  function pad2(n) { return String(n).padStart(2, '0') }
+  function clampDay(year, monthIndex, day) { return Math.min(Number(day) || 1, new Date(year, monthIndex + 1, 0).getDate()) }
+  function addDays(dateStr, days) {
+    const [y,m,d] = String(dateStr || today()).split('-').map(Number)
+    const dt = new Date(y || new Date().getFullYear(), (m || 1) - 1, d || 1)
+    dt.setDate(dt.getDate() + Number(days || 0))
+    return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`
+  }
+  function addMonths(dateStr, months, preferredDay) {
+    const [y,m,d] = String(dateStr || today()).split('-').map(Number)
+    const target = new Date(y || new Date().getFullYear(), (m || 1) - 1 + Number(months || 0), 1)
+    const day = clampDay(target.getFullYear(), target.getMonth(), preferredDay || d || 1)
+    return `${target.getFullYear()}-${pad2(target.getMonth() + 1)}-${pad2(day)}`
+  }
+
+  // Format while typing without losing transient decimals: 555. -> 555. and 555.0 -> 555.0
+  function formatDraftAmount(raw) {
+    let s = String(raw ?? '0').trim()
+    if (!s || s === '.') return s === '.' ? '0.' : '0'
+    s = s.replace(/[^0-9.]/g, '')
+    const hasTrailingDot = s.endsWith('.')
+    const dot = s.indexOf('.')
+    let intPart = dot >= 0 ? s.slice(0, dot) : s
+    let decPart = dot >= 0 ? s.slice(dot + 1).replace(/\./g, '').slice(0, 2) : ''
+    intPart = intPart.replace(/^0+(?=\d)/, '') || '0'
+    const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    if (dot >= 0) return `${grouped}.${decPart}${hasTrailingDot && decPart === '' ? '' : ''}`
+    return grouped
+  }
+  const numericAmount = raw => Number(String(raw || '0').replace(/,/g, '')) || 0
+
+  App._formatDraftAmount = formatDraftAmount
+
+  App._renderAddTxAmount = function v64RenderAddTxAmount() {
+    const title = S.txMode === 'edit' ? 'แก้ไขรายการ' : S.txMode === 'duplicate' ? 'ทำซ้ำรายการ' : 'เพิ่มรายการ'
+    const amount = String(S.tx.amount || '')
+    const num = numericAmount(amount)
+    const display = formatDraftAmount(amount)
+    const tabs = [
+      ['expense','จ่าย','-'],
+      ['income','รับ','+'],
+      ['transfer','โอน','↔']
+    ]
+    const color = typeColor(S.tx.type)
+    const canNext = num > 0
+    const box = document.getElementById('add-tx-content')
+    if (!box) return
+    box.innerHTML = `<div style="display:flex;flex-direction:column;height:100%">
+      <div class="sheet-header"><h2>${esc(title)}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
+      <div class="type-tabs">${tabs.map(([v,l,i]) => `<button class="type-tab type-${v}${S.tx.type === v ? ' active' : ''}" onclick="App._setTxType('${v}')"><span aria-hidden="true">${i}</span> ${l}</button>`).join('')}</div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 20px">
+        <div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">${esc(typeLabel(S.tx.type))}</div>
+        <div class="amount-display" style="color:${canNext ? color : '#D1D5DB'}">${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}</div>
+        <div class="quick-amount-row">${[50,100,200,500,1000].map(n => `<button onclick="App._quickAmount(${n})">฿${n}</button>`).join('')}</div>
+      </div>
+      <div style="padding-bottom:8px">
+        <div class="numpad">${['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(k => `<button class="numpad-key${k === '⌫' ? ' del' : ''}" onclick="App._numpad('${k}')">${k}</button>`).join('')}</div>
+        <div style="padding:8px 16px 0"><button class="btn btn-primary" style="background:${canNext ? color : '#D1D5DB'};box-shadow:${canNext ? `0 4px 16px ${color}44` : 'none'}" onclick="App._goToDetail()">${canNext ? `ถัดไป  ฿${display} →` : 'ใส่จำนวนเงิน'}</button></div>
+      </div>
+    </div>`
+  }
+
+  const prevSetTxType = App._setTxType?.bind(App)
+  App._setTxType = function v64SetTxType(type) {
+    prevSetTxType ? prevSetTxType(type) : (S.tx.type = type)
+    if (type !== 'expense') {
+      S.tx.isRecurring = false
+      S.tx.isInstallment = false
+    }
+  }
+
+  function initRecurringDefaults() {
+    const date = S.tx?.date || today()
+    const day = Math.max(1, Math.min(31, parseInt(String(date).slice(-2), 10) || new Date().getDate()))
+    if (!S.tx.recurrenceType) S.tx.recurrenceType = 'monthly'
+    if (!S.tx.recurringDayOfMonth) S.tx.recurringDayOfMonth = day
+    if (!S.tx.everyDays) S.tx.everyDays = 30
+    if (S.tx.durationMonths === undefined) S.tx.durationMonths = ''
+  }
+
+  const prevToggleTxFlag = App._toggleTxFlag?.bind(App)
+  App._toggleTxFlag = function v64ToggleTxFlag(key) {
+    if (prevToggleTxFlag) prevToggleTxFlag(key)
+    else {
+      S.tx[key] = !S.tx[key]
+      if (key === 'isInstallment' && !S.tx[key]) S.tx.installmentMonths = ''
+      App._renderAddTxDetail?.()
+    }
+    if (key === 'isRecurring' && S.tx?.isRecurring) {
+      initRecurringDefaults()
+      App._renderAddTxDetail?.()
+    }
+  }
+
+  App._setTxRecurringType = function v64SetTxRecurringType(type) {
+    S.tx.recurrenceType = type === 'days' ? 'days' : 'monthly'
+    initRecurringDefaults()
+    App._renderAddTxDetail?.()
+  }
+
+  function recurringInlineHtml() {
+    initRecurringDefaults()
+    const isDays = S.tx.recurrenceType === 'days'
+    return `<div class="recurring-inline-options v64-recurring-options" data-v64-recurring="1">
+      <div class="v64-recurring-head"><b>ตั้งค่ารายการประจำ</b><span>สร้างรอบถัดไปจากรายการนี้</span></div>
+      <div class="v64-recurring-tabs">
+        <button type="button" class="v64-rec-tab${!isDays ? ' active' : ''}" onclick="App._setTxRecurringType('monthly')">รายเดือน</button>
+        <button type="button" class="v64-rec-tab${isDays ? ' active' : ''}" onclick="App._setTxRecurringType('days')">ทุกกี่วัน</button>
+      </div>
+      ${isDays ? `
+        <div class="form-group"><label class="form-label">ทุกกี่วัน</label><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.everyDays || 30)}" oninput="App._txField('everyDays', this.value)"></div>
+      ` : `
+        <div class="form-split-row">
+          <div><label class="form-label">ทุกวันที่ของเดือน</label><input class="form-input" type="number" min="1" max="31" inputmode="numeric" value="${esc(S.tx.recurringDayOfMonth || 1)}" oninput="App._txField('recurringDayOfMonth', this.value)"><div class="form-hint">ถ้าเดือนนั้นไม่มีวันนี้ ระบบจะใช้วันสุดท้ายของเดือน</div></div>
+          <div><label class="form-label">ระยะเวลา (เดือน)</label><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.durationMonths || '')}" placeholder="ไม่จำกัด" oninput="App._txField('durationMonths', this.value)"></div>
+        </div>
+      `}
+    </div>`
+  }
+
+  function syncDetailAmountDisplay() {
+    const display = formatDraftAmount(S.tx?.amount || '0')
+    const prefix = S.tx?.type === 'income' ? '+' : S.tx?.type === 'expense' ? '-' : ''
+    const summary = document.querySelector('.amount-summary-card strong')
+    if (summary) summary.textContent = `${prefix}฿${display}`
+    const saveBtn = document.querySelector('.add-detail-actions .btn-primary')
+    if (saveBtn && S.txMode !== 'edit') saveBtn.textContent = `บันทึก ${prefix}฿${display}`
+  }
+
+  const prevRenderAddTxDetail = App._renderAddTxDetail?.bind(App)
+  App._renderAddTxDetail = function v64RenderAddTxDetail() {
+    prevRenderAddTxDetail?.()
+    syncDetailAmountDisplay()
+    if (S.tx?.type !== 'expense' || !S.tx?.isRecurring) return
+    const scroll = document.querySelector('#add-tx-content .add-detail-scroll')
+    if (!scroll || scroll.querySelector('[data-v64-recurring="1"]')) return
+    const flagGrid = scroll.querySelector('.tx-flag-grid')
+    const flagGroup = flagGrid?.closest('.form-group')
+    const holder = document.createElement('div')
+    holder.innerHTML = recurringInlineHtml()
+    const node = holder.firstElementChild
+    if (flagGroup) flagGroup.insertAdjacentElement('afterend', node)
+    else scroll.appendChild(node)
+  }
+
+  function catById(id) {
+    return [...(S.categories?.expense || []), ...(S.categories?.income || [])].find(c => c.id === id) || null
+  }
+  function walletByIdLocal(id) { return (S.wallets || []).find(w => w.id === id) || null }
+  function recurringExistsForDraft(draft) {
+    return (S.recurring || []).some(r =>
+      r.createdFromTxId && draft._savedTxId && r.createdFromTxId === draft._savedTxId
+    )
+  }
+  function createRecurringFromDraft(draft) {
+    if (!draft?.isRecurring || draft.type !== 'expense') return
+    if (!draft.walletId || !draft.categoryId || !(Number(draft.amount) > 0)) return
+    if (!S.recurring) S.recurring = []
+    if (recurringExistsForDraft(draft)) return
+
+    const cat = catById(draft.categoryId)
+    const wallet = walletByIdLocal(draft.walletId)
+    if (!wallet || wallet.type === 'credit') return
+
+    const recType = draft.recurrenceType === 'days' ? 'days' : 'monthly'
+    const durationMonths = parseInt(draft.durationMonths || 0, 10) || null
+    const everyDays = Math.max(1, parseInt(draft.everyDays || 30, 10) || 30)
+    const dayOfMonth = Math.max(1, Math.min(31, parseInt(draft.recurringDayOfMonth || String(draft.date || today()).slice(-2), 10) || 1))
+    const baseDate = draft.date || today()
+    const nextDueDate = recType === 'monthly' ? addMonths(baseDate, 1, dayOfMonth) : addDays(baseDate, everyDays)
+    const name = String(draft.merchant || draft.note || cat?.label || 'รายการประจำ').trim()
+
+    const data = {
+      id: Calc?.genId ? Calc.genId() : `rec_${Date.now()}`,
+      name,
+      type: draft.type,
+      amount: Number(draft.amount || 0),
+      everyDays,
+      categoryId: draft.categoryId,
+      categoryName: cat?.label,
+      icon: cat?.icon || '🔁',
+      color: cat?.color,
+      walletId: draft.walletId,
+      nextDueDate,
+      paused: durationMonths === 1,
+      createdFromTxId: draft._savedTxId || undefined,
+      createdAt: new Date().toISOString(),
+      recurrenceType: recType === 'monthly' ? 'monthly' : undefined,
+      recurringDayOfMonth: recType === 'monthly' ? dayOfMonth : undefined,
+      durationMonths: recType === 'monthly' && durationMonths ? durationMonths : undefined,
+      _postedCount: durationMonths ? 1 : undefined,
+    }
+    S.recurring.push(data)
+    try { persist() } catch (_) {}
+    try { App.showToast?.('สร้างรายการประจำรอบถัดไปแล้ว', 'success') } catch (_) {}
+  }
+
+  const prevOpenAddTx = App.openAddTx?.bind(App)
+  App.openAddTx = function v64OpenAddTx() {
+    if (prevOpenAddTx) prevOpenAddTx()
+    else {
+      S.txMode = 'add'
+      S.editingTxId = null
+      S.tx = { step:'amount', type:'expense', amount:'0', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', note:'', date:today(), isRecurring:false, isInstallment:false, installmentMonths:'' }
+      App._renderAddTxAmount?.()
+      App.openOverlay?.('overlay-add-tx')
+    }
+    if (S.tx) {
+      S.tx.recurrenceType ||= 'monthly'
+      S.tx.everyDays ||= 30
+      S.tx.durationMonths ??= ''
+      S.tx.recurringDayOfMonth ||= parseInt(String(S.tx.date || today()).slice(-2), 10) || 1
+    }
+  }
+
+  const prevSaveTx = App.saveTx?.bind(App)
+  App.saveTx = function v64SaveTx() {
+    const beforeIds = new Set((S.transactions || []).map(t => t.id))
+    const draft = { ...(S.tx || {}) }
+    const mode = S.txMode
+    if (draft.isRecurring) {
+      initRecurringDefaults()
+      Object.assign(draft, {
+        recurrenceType: S.tx.recurrenceType,
+        recurringDayOfMonth: S.tx.recurringDayOfMonth,
+        durationMonths: S.tx.durationMonths,
+        everyDays: S.tx.everyDays,
+      })
+    }
+    if (prevSaveTx) prevSaveTx()
+    if (mode === 'edit') return
+    if (!draft.isRecurring || draft.type !== 'expense') return
+    const created = (S.transactions || []).find(t => !beforeIds.has(t.id) && Number(t.amount || 0) === Number(draft.amount || 0) && t.type === draft.type && t.walletId === draft.walletId)
+    createRecurringFromDraft({ ...draft, amount: Number(draft.amount || 0), _savedTxId: created?.id })
+  }
+
+  try {
+    if (document.getElementById('overlay-add-tx')?.classList.contains('open')) {
+      if (S.tx?.step === 'detail') App._renderAddTxDetail?.()
+      else App._renderAddTxAmount?.()
+    }
+  } catch (_) {}
+})()
+
+
+/* ============================================================
+   V6.5 Recurring Lite ledger
+   - Store occurrence metadata on generated transactions.
+   - Use transaction existence + skipped exceptions as quota source.
+   - Show a delete-choice modal for every recurring transaction.
+   ============================================================ */
+;(function v65RecurringLiteLedger(){
+  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const today = () => (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
+  const notify = (msg, type='info') => { try { toast(msg, type) } catch { try { App.showToast?.(msg, type) } catch { console.log(msg) } } }
+  const money = n => { try { return moneyFmt(Number(n) || 0) } catch { return `฿${(Number(n)||0).toLocaleString('th-TH')}` } }
+  const dateLabel = d => { try { return Calc.labelDate(d) } catch { return d || '' } }
+
+  function parseDateParts(dateStr) {
+    const [y, m, d] = String(dateStr || today()).split('-').map(Number)
+    return { y: y || new Date().getFullYear(), m: m || 1, d: d || 1 }
+  }
+  function pad(n) { return String(n).padStart(2, '0') }
+  function clampDay(year, monthIndex, day) {
+    return Math.max(1, Math.min(Number(day) || 1, new Date(year, monthIndex + 1, 0).getDate()))
+  }
+  function addDays(dateStr, days) {
+    const { y, m, d } = parseDateParts(dateStr)
+    const dt = new Date(y, m - 1, d)
+    dt.setDate(dt.getDate() + Number(days || 0))
+    return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`
+  }
+  function addMonths(dateStr, months, preferredDay) {
+    const { y, m, d } = parseDateParts(dateStr)
+    const target = new Date(y, (m - 1) + Number(months || 0), 1)
+    const day = clampDay(target.getFullYear(), target.getMonth(), preferredDay || d || 1)
+    return `${target.getFullYear()}-${pad(target.getMonth()+1)}-${pad(day)}`
+  }
+  function recType(r) {
+    return (r?.recurrenceType === 'monthly' || r?.recurringDayOfMonth || r?.durationMonths || r?.totalOccurrences) ? 'monthly' : 'days'
+  }
+  function recStartDate(r) {
+    if (!r) return today()
+    if (r.startDate) return r.startDate
+    const createdTx = (S.transactions || []).find(t => t.id && t.id === r.createdFromTxId)
+    if (createdTx?.recurringDueDate) return createdTx.recurringDueDate
+    if (createdTx?.date) return createdTx.date
+    const firstTx = (S.transactions || [])
+      .filter(t => t.sourceRecurringId === r.id || t.recurringId === r.id)
+      .sort((a,b) => String(a.recurringDueDate || a.date || '').localeCompare(String(b.recurringDueDate || b.date || '')))[0]
+    if (firstTx?.recurringDueDate) return firstTx.recurringDueDate
+    if (firstTx?.date) return firstTx.date
+    return r.nextDueDate || r.createdAt?.slice?.(0,10) || today()
+  }
+  function preferredDay(r) {
+    return Math.max(1, Math.min(31, Number(r?.recurringDayOfMonth || String(recStartDate(r)).slice(-2) || 1) || 1))
+  }
+  function totalOccurrences(r) {
+    const n = Number(r?.totalOccurrences || r?.durationMonths || 0)
+    return n > 0 ? n : null
+  }
+  function occurrenceDate(r, occurrenceNo) {
+    const start = recStartDate(r)
+    const n = Math.max(1, Number(occurrenceNo || 1))
+    if (recType(r) === 'monthly') return addMonths(start, n - 1, preferredDay(r))
+    const days = Math.max(1, Number(r?.everyDays || 30) || 30)
+    return addDays(start, (n - 1) * days)
+  }
+  function instanceKey(recurringId, occurrenceNo, scheduledDate) {
+    return `${recurringId}__${occurrenceNo}__${scheduledDate}`
+  }
+  function ensureExceptions(r) {
+    if (!Array.isArray(r.recurringExceptions)) r.recurringExceptions = []
+    return r.recurringExceptions
+  }
+  function isSkipped(r, occurrenceNo, scheduledDate) {
+    return ensureExceptions(r).some(e =>
+      e && e.status === 'skipped' &&
+      (Number(e.occurrenceNo) === Number(occurrenceNo) || e.instanceKey === instanceKey(r.id, occurrenceNo, scheduledDate) || e.scheduledDate === scheduledDate)
+    )
+  }
+  function txMatchesOccurrence(t, r, occurrenceNo, scheduledDate) {
+    if (!t || !r) return false
+    const key = instanceKey(r.id, occurrenceNo, scheduledDate)
+    if (t.recurringInstanceKey && t.recurringInstanceKey === key) return true
+    if (t.sourceRecurringId !== r.id && t.recurringId !== r.id) return false
+    if (Number(t.recurringOccurrenceNo || 0) === Number(occurrenceNo)) return true
+    return String(t.recurringDueDate || '') === String(scheduledDate)
+  }
+  function hasOccurrenceTx(r, occurrenceNo, scheduledDate) {
+    return (S.transactions || []).some(t => txMatchesOccurrence(t, r, occurrenceNo, scheduledDate))
+  }
+  function usedQuota(r) {
+    if (!r?.id) return 0
+    const keys = new Set()
+    ;(S.transactions || []).forEach(t => {
+      if (t.sourceRecurringId !== r.id && t.recurringId !== r.id) return
+      const occurrenceNo = Number(t.recurringOccurrenceNo || 0)
+      const scheduledDate = t.recurringDueDate || (occurrenceNo ? occurrenceDate(r, occurrenceNo) : t.date)
+      keys.add(t.recurringInstanceKey || (occurrenceNo ? instanceKey(r.id, occurrenceNo, scheduledDate) : `${r.id}__date__${scheduledDate}`))
+    })
+    ensureExceptions(r).forEach(e => { if (e.status === 'skipped') keys.add(e.instanceKey || `${r.id}__skip__${e.occurrenceNo || ''}__${e.scheduledDate || ''}`) })
+    return keys.size
+  }
+  function nextOccurrence(r, opts = {}) {
+    const includeFuture = opts.includeFuture !== false
+    const t = today()
+    const total = totalOccurrences(r)
+    const limit = total || 240
+    for (let no = 1; no <= limit; no++) {
+      const scheduledDate = occurrenceDate(r, no)
+      if (hasOccurrenceTx(r, no, scheduledDate)) continue
+      if (isSkipped(r, no, scheduledDate)) continue
+      if (!includeFuture && scheduledDate > t) return null
+      return { occurrenceNo: no, scheduledDate, instanceKey: instanceKey(r.id, no, scheduledDate), due: scheduledDate <= t, totalOccurrences: total }
+    }
+    return null
+  }
+  function updateRecurringNext(r) {
+    if (!r?.id) return null
+    const info = nextOccurrence(r, { includeFuture: true })
+    r._postedCount = usedQuota(r)
+    if (info) {
+      r.nextDueDate = info.scheduledDate
+      r.nextOccurrenceNo = info.occurrenceNo
+      return info
+    }
+    if (totalOccurrences(r)) {
+      r.paused = true
+      r.completedAt ||= new Date().toISOString()
+    }
+    return null
+  }
+  function migrateRecurringLite() {
+    if (!Array.isArray(S.recurring)) S.recurring = []
+    if (!Array.isArray(S.transactions)) S.transactions = []
+    let changed = false
+    S.recurring.forEach(r => {
+      if (!r || !r.id) return
+      if (!Array.isArray(r.recurringExceptions)) { r.recurringExceptions = []; changed = true }
+      const start = recStartDate(r)
+      if (!r.startDate) { r.startDate = start; changed = true }
+      if (r.durationMonths && !r.totalOccurrences) { r.totalOccurrences = Number(r.durationMonths); changed = true }
+      if (r.recurrenceType === 'monthly' && !r.recurringDayOfMonth) { r.recurringDayOfMonth = Number(String(start).slice(-2)) || 1; changed = true }
+      const related = S.transactions
+        .filter(t => t.id === r.createdFromTxId || t.sourceRecurringId === r.id || t.recurringId === r.id)
+        .sort((a,b) => String(a.recurringDueDate || a.date || '').localeCompare(String(b.recurringDueDate || b.date || '')))
+      related.forEach((t, idx) => {
+        let no = Number(t.recurringOccurrenceNo || 0)
+        if (!no && t.id === r.createdFromTxId) no = 1
+        if (!no && t.recurringDueDate) {
+          const total = totalOccurrences(r) || Math.max(related.length + 6, 24)
+          for (let i = 1; i <= total; i++) {
+            if (occurrenceDate(r, i) === t.recurringDueDate) { no = i; break }
+          }
+        }
+        if (!no) no = idx + 1
+        const scheduledDate = t.recurringDueDate || occurrenceDate(r, no)
+        if (t.sourceRecurringId !== r.id) { t.sourceRecurringId = r.id; changed = true }
+        if (!t.recurringDueDate) { t.recurringDueDate = scheduledDate; changed = true }
+        if (!t.recurringOccurrenceNo) { t.recurringOccurrenceNo = no; changed = true }
+        const key = instanceKey(r.id, no, t.recurringDueDate)
+        if (!t.recurringInstanceKey) { t.recurringInstanceKey = key; changed = true }
+        if (!t.isRecurring) { t.isRecurring = true; changed = true }
+      })
+      const oldNext = r.nextDueDate
+      updateRecurringNext(r)
+      if (oldNext !== r.nextDueDate) changed = true
+    })
+    if (changed) { try { persist() } catch (_) {} }
+    return changed
+  }
+
+  function addSkippedException(r, info) {
+    const ex = ensureExceptions(r)
+    const key = info.instanceKey || instanceKey(r.id, info.occurrenceNo, info.scheduledDate)
+    if (!ex.some(e => e.instanceKey === key || (Number(e.occurrenceNo) === Number(info.occurrenceNo) && e.scheduledDate === info.scheduledDate))) {
+      ex.push({ instanceKey: key, occurrenceNo: info.occurrenceNo, scheduledDate: info.scheduledDate, status: 'skipped', createdAt: new Date().toISOString() })
+    }
+  }
+  function removeSkippedException(r, info) {
+    if (!r || !Array.isArray(r.recurringExceptions) || !info) return
+    const key = info.instanceKey || instanceKey(r.id, info.occurrenceNo, info.scheduledDate)
+    r.recurringExceptions = r.recurringExceptions.filter(e => !(e.instanceKey === key || (Number(e.occurrenceNo) === Number(info.occurrenceNo) && e.scheduledDate === info.scheduledDate)))
+  }
+  function infoFromTx(tx) {
+    const r = (S.recurring || []).find(x => x.id === tx?.sourceRecurringId || x.id === tx?.recurringId)
+    if (!r) return { recurring: null, occurrence: null }
+    let no = Number(tx.recurringOccurrenceNo || 0)
+    let scheduledDate = tx.recurringDueDate || ''
+    if (!no && scheduledDate) {
+      const limit = totalOccurrences(r) || 240
+      for (let i = 1; i <= limit; i++) {
+        if (occurrenceDate(r, i) === scheduledDate) { no = i; break }
+      }
+    }
+    if (!no) no = 1
+    if (!scheduledDate) scheduledDate = occurrenceDate(r, no)
+    return { recurring: r, occurrence: { occurrenceNo: no, scheduledDate, instanceKey: instanceKey(r.id, no, scheduledDate), totalOccurrences: totalOccurrences(r) } }
+  }
+  function isRecurringTx(tx) { return !!(tx && (tx.sourceRecurringId || tx.recurringId || tx.recurringInstanceKey)) }
+  function cleanupRewardReceived(tx) {
+    if (!tx || !tx.isRewardReceived) return
+    S.rewardLedger = (S.rewardLedger || []).filter(r => {
+      if (tx.rewardLedgerId && r.id === tx.rewardLedgerId) return false
+      if (tx.statementId && r.statementId === tx.statementId && r.type === 'cashback_received') return false
+      return true
+    })
+  }
+  function deleteOnlyTx(tx) {
+    cleanupRewardReceived(tx)
+    S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
+  }
+  function finalizeDelete({ tx, backType = '', backId = '', message = 'ลบรายการแล้ว' }) {
+    const { recurring } = infoFromTx(tx)
+    if (recurring) updateRecurringNext(recurring)
+    S.deleteConfirm = false
+    App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+    try { persist() } catch (_) {}
+    if (document.getElementById('overlay-tx-detail')?.classList.contains('open')) App.closeOverlay?.('overlay-tx-detail')
+    if (backType === 'cc' && backId) App.openCCDetail?.(backId)
+    else if (backType === 'wallet' && backId) App.openWalletDetail?.(backId)
+    else if (backType) App.closeSubScreen?.()
+    else App.render?.()
+    notify(message, 'success')
+  }
+  function deleteRecurringTxWithMode(tx, mode, context = {}) {
+    const { recurring, occurrence } = infoFromTx(tx)
+    if (!recurring || !occurrence) {
+      deleteOnlyTx(tx)
+      finalizeDelete({ tx, ...context })
+      return
+    }
+    if (mode === 'refund') {
+      deleteOnlyTx(tx)
+      removeSkippedException(recurring, occurrence)
+      finalizeDelete({ tx, ...context, message:'ลบรายการและคืนรอบประจำแล้ว' })
+      return
+    }
+    if (mode === 'skip') {
+      deleteOnlyTx(tx)
+      addSkippedException(recurring, occurrence)
+      finalizeDelete({ tx, ...context, message:'ลบรายการและข้ามรอบนี้แล้ว' })
+      return
+    }
+    if (mode === 'disable') {
+      deleteOnlyTx(tx)
+      recurring.paused = true
+      recurring.disabledAt = new Date().toISOString()
+      recurring.disabledReason = 'disabled_from_transaction_delete'
+      finalizeDelete({ tx, ...context, message:'ลบรายการนี้และหยุดรายการประจำแล้ว' })
+    }
+  }
+  function showRecurringDeleteChoice(tx, context = {}) {
+    migrateRecurringLite()
+    const { recurring, occurrence } = infoFromTx(tx)
+    if (!recurring || !occurrence) {
+      App.showConfirm?.({ title:'ลบรายการ', danger:true, body:`ยืนยันลบรายการ ${money(tx.amount)}?`, confirmLabel:'ลบ', onConfirm(){ deleteOnlyTx(tx); finalizeDelete({ tx, ...context }) } })
+      return
+    }
+    document.getElementById('v65-rec-delete-overlay')?.remove()
+    const total = occurrence.totalOccurrences ? `/${occurrence.totalOccurrences}` : ''
+    const el = document.createElement('div')
+    el.id = 'v65-rec-delete-overlay'
+    el.className = 'v23-confirm-overlay v65-rec-delete-overlay'
+    el.innerHTML = `<div class="v23-confirm-sheet v65-rec-delete-sheet" role="alertdialog" aria-modal="true">
+      <div class="v23-confirm-title">ลบรายการประจำ</div>
+      <div class="v23-confirm-body v65-rec-delete-body">
+        รายการนี้มาจาก “${esc(recurring.name || tx.merchant || 'รายการประจำ')}”<br>
+        <span>รอบที่ ${esc(occurrence.occurrenceNo)}${esc(total)} · กำหนด ${esc(dateLabel(occurrence.scheduledDate))}</span>
+      </div>
+      <div class="v65-rec-delete-actions">
+        <button class="btn btn-secondary" data-action="refund">ลบและคืนรอบประจำ</button>
+        <button class="btn btn-secondary" data-action="skip">ลบและข้ามรอบนี้</button>
+        <button class="btn v23-btn-danger" data-action="disable">ลบและหยุดรายการประจำ</button>
+        <button class="btn btn-secondary v65-rec-cancel" data-action="cancel">ยกเลิก</button>
+      </div>
+    </div>`
+    document.body.appendChild(el)
+    el.addEventListener('click', e => {
+      const btn = e.target.closest('[data-action]')
+      if (!btn && e.target !== el) return
+      const action = btn?.dataset.action || 'cancel'
+      if (action === 'cancel') { el.remove(); return }
+      el.remove()
+      deleteRecurringTxWithMode(tx, action, context)
+    })
+  }
+
+  App._getOverdueRecurringLite = function v65GetOverdueRecurringLite() {
+    migrateRecurringLite()
+    const t = today()
+    return (S.recurring || []).filter(r => {
+      if (!r || r.paused) return false
+      const info = nextOccurrence(r, { includeFuture: true })
+      if (!info) return false
+      r.nextDueDate = info.scheduledDate
+      r.nextOccurrenceNo = info.occurrenceNo
+      return info.scheduledDate <= t
+    })
+  }
+
+  App.postRecurringNow = function v65PostRecurringNow(id) {
+    migrateRecurringLite()
+    const r = (S.recurring || []).find(x => x.id === id)
+    if (!r) return
+    if (r.paused) { notify('รายการประจำนี้ถูกหยุดไว้', 'warn'); return }
+    const info = nextOccurrence(r, { includeFuture: true })
+    if (!info) { r.paused = true; persist(); notify('รายการประจำนี้ครบจำนวนรอบแล้ว', 'info'); return }
+    if ((S.transactions || []).some(t => txMatchesOccurrence(t, r, info.occurrenceNo, info.scheduledDate))) {
+      notify('รายการนี้ถูกบันทึกสำหรับรอบนี้แล้ว', 'warn')
+      updateRecurringNext(r); persist(); return
+    }
+    const tx = {
+      id: Calc.genId(),
+      type: r.type || 'expense',
+      amount: Number(r.amount || 0),
+      walletId: r.walletId,
+      categoryId: r.categoryId,
+      merchant: r.name,
+      note: '🔁 รายการประจำ',
+      date: info.scheduledDate <= today() ? today() : info.scheduledDate,
+      isRecurring: true,
+      sourceRecurringId: id,
+      recurringDueDate: info.scheduledDate,
+      recurringOccurrenceNo: info.occurrenceNo,
+      recurringInstanceKey: info.instanceKey,
+    }
+    const err = App.validateTransactionDraft?.(tx)
+    if (err) { notify(err, 'error'); return }
+    S.transactions.unshift(tx)
+    r.lastPostedAt = today()
+    updateRecurringNext(r)
+    App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+    try { persist() } catch (_) {}
+    if (document.getElementById('sub-screen')?.classList.contains('open')) App.openRecurringScreen?.()
+    else App.render?.()
+    notify(`บันทึก "${r.name}" แล้ว`, 'success')
+  }
+
+  App.skipRecurringNow = function v65SkipRecurringNow(id) {
+    migrateRecurringLite()
+    const r = (S.recurring || []).find(x => x.id === id)
+    if (!r) return
+    const info = nextOccurrence(r, { includeFuture: true })
+    if (!info) { r.paused = true; persist(); notify('รายการประจำนี้ครบจำนวนรอบแล้ว', 'info'); return }
+    addSkippedException(r, info)
+    r.lastSkippedAt = today()
+    updateRecurringNext(r)
+    try { persist() } catch (_) {}
+    if (document.getElementById('sub-screen')?.classList.contains('open')) App.openRecurringScreen?.()
+    else App.renderDashboard?.()
+    notify(`ข้าม "${r.name}" แล้ว`, 'info')
+  }
+  App.skipRecurring = function v65SkipRecurring(id) { App.skipRecurringNow(id) }
+
+  const prevDeleteTx = App.deleteTx?.bind(App)
+  App.deleteTx = function v65DeleteTx() {
+    const tx = (S.transactions || []).find(t => t.id === S.selectedTxId)
+    if (isRecurringTx(tx)) { showRecurringDeleteChoice(tx); return }
+    prevDeleteTx ? prevDeleteTx() : (S.deleteConfirm = true, App._renderTxDetail?.())
+  }
+
+  const prevConfirmDeleteTx = App.confirmDeleteTx?.bind(App)
+  App.confirmDeleteTx = function v65ConfirmDeleteTx() {
+    const tx = (S.transactions || []).find(t => t.id === S.selectedTxId)
+    if (isRecurringTx(tx)) { showRecurringDeleteChoice(tx); return }
+    if (prevConfirmDeleteTx) return prevConfirmDeleteTx()
+  }
+
+  const prevDeleteTxFromSub = App.deleteTxFromSub?.bind(App)
+  App.deleteTxFromSub = function v65DeleteTxFromSub(id, backType = '', backId = '') {
+    const tx = (S.transactions || []).find(t => t.id === id)
+    if (!tx) return
+    if (isRecurringTx(tx)) { showRecurringDeleteChoice(tx, { backType, backId }); return }
+    if (prevDeleteTxFromSub) return prevDeleteTxFromSub(id, backType, backId)
+  }
+
+  const prevSaveTx = App.saveTx?.bind(App)
+  App.saveTx = function v65SaveTx() {
+    const beforeTxIds = new Set((S.transactions || []).map(t => t.id))
+    const beforeRecIds = new Set((S.recurring || []).map(r => r.id))
+    const draft = { ...(S.tx || {}) }
+    const modeBefore = S.txMode
+    const result = prevSaveTx?.()
+    try {
+      if (modeBefore === 'edit' || !draft.isRecurring || draft.type !== 'expense') return result
+      const createdTx = (S.transactions || []).find(t => !beforeTxIds.has(t.id) && Number(t.amount || 0) === Number(draft.amount || 0) && t.type === draft.type && t.walletId === draft.walletId)
+      const createdRec = (S.recurring || []).find(r => !beforeRecIds.has(r.id) || (createdTx?.id && r.createdFromTxId === createdTx.id))
+      if (createdTx && createdRec) {
+        const startDate = draft.date || createdTx.date || today()
+        createdRec.startDate = startDate
+        if (createdRec.durationMonths && !createdRec.totalOccurrences) createdRec.totalOccurrences = Number(createdRec.durationMonths)
+        if (createdRec.recurrenceType === 'monthly' && !createdRec.recurringDayOfMonth) createdRec.recurringDayOfMonth = Number(draft.recurringDayOfMonth || String(startDate).slice(-2)) || 1
+        const scheduledDate = occurrenceDate(createdRec, 1)
+        createdTx.sourceRecurringId = createdRec.id
+        createdTx.recurringDueDate = scheduledDate
+        createdTx.recurringOccurrenceNo = 1
+        createdTx.recurringInstanceKey = instanceKey(createdRec.id, 1, scheduledDate)
+        createdTx.isRecurring = true
+        updateRecurringNext(createdRec)
+        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+        persist()
+      }
+    } catch (err) {
+      console.warn('V6.5 recurring metadata sync failed', err)
+    }
+    return result
+  }
+
+  try { migrateRecurringLite() } catch (err) { console.warn('V6.5 recurring migration failed', err) }
+})()
+
+/* ============================================================
+   V6.6 Centralized Crypto Portfolio
+   - Centralized holdings/assets/transactions
+   - Safe migration from legacy crypto wallets
+   - Wallets-page portfolio section + reports summary
+   ============================================================ */
+;(function v66CentralizedCryptoPortfolio() {
+  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[ch]))
+  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
+  const nowISO = () => new Date().toISOString()
+  const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
+  const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
+  const plainMoney = n => Calc.fmt(Number(n) || 0)
+  const round2 = n => Math.round((Number(n) || 0) * 100) / 100
+  const round8 = n => Math.round((Number(n) || 0) * 1e8) / 1e8
+  const unitFmt = (n, decimals = 8) => Calc.fmtAssetUnits ? Calc.fmtAssetUnits(n, decimals) : Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: Math.min(8, Math.max(0, Number(decimals || 8))) })
+  const TH_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  const CRYPTO_LOCATIONS = ['Binance', 'Bitkub', 'Wallet', 'Ledger', 'Other']
+  const CRYPTO_PRESETS = Array.isArray(globalThis.DEFAULT_CRYPTO_PRESETS) ? DEFAULT_CRYPTO_PRESETS : []
+  const PRESET_BY_ID = Object.fromEntries(CRYPTO_PRESETS.map(p => [p.coinGeckoId, p]))
+  const PRESET_BY_SYMBOL = Object.fromEntries(CRYPTO_PRESETS.map(p => [String(p.symbol || '').toUpperCase(), p]))
+  const PRESET_BY_NAME = Object.fromEntries(CRYPTO_PRESETS.map(p => [String(p.name || '').trim().toLowerCase(), p]))
+  const prevRenderDashboard = App.renderDashboard?.bind(App)
+  const prevRenderReports = App.renderReports?.bind(App)
+  const prevExportData = App.exportData?.bind(App)
+  const prevImportData = App.importData?.bind(App)
+  const prevSaveWallet = App.saveWallet?.bind(App)
+  const prevOpenWalletForm = App.openWalletForm?.bind(App)
+  S.cryptoSyncMeta ||= {}
+
+  function walletById(id) {
+    return (S.wallets || []).find(w => w.id === id) || null
+  }
+
+  function ensureCryptoState() {
+    S.marketPrices ||= {}
+    S.marketPrices.crypto ||= {}
+    S.cryptoAssets ||= []
+    S.cryptoHoldings ||= []
+    S.cryptoTransactions ||= []
+    S.migrations ||= {}
+    S.cryptoForm ||= {}
+    if (typeof S.migrations.cryptoCentralizedV1 !== 'boolean') S.migrations.cryptoCentralizedV1 = false
+  }
+
+  function visibleWallets() {
+    return (S.wallets || []).filter(w => !w.hiddenFromWalletList)
+  }
+
+  function inferCryptoPreset(source = {}) {
+    const coinGeckoId = String(source.coinGeckoId || '').trim()
+    if (coinGeckoId && PRESET_BY_ID[coinGeckoId]) return PRESET_BY_ID[coinGeckoId]
+    const symbol = String(source.symbol || '').trim().toUpperCase()
+    if (symbol && PRESET_BY_SYMBOL[symbol]) return PRESET_BY_SYMBOL[symbol]
+    const name = String(source.name || '').trim().toLowerCase()
+    if (name && PRESET_BY_NAME[name]) return PRESET_BY_NAME[name]
+    return null
+  }
+
+  function normalizeCoinGeckoId(value = '') {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[_\s]+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+  }
+
+  function searchCryptoPresets(query = '') {
+    const q = String(query || '').trim().toLowerCase()
+    const qNorm = normalizeCoinGeckoId(query)
+    return CRYPTO_PRESETS
+      .map(p => {
+        const hay = [
+          String(p.symbol || '').toLowerCase(),
+          String(p.name || '').toLowerCase(),
+          String(p.coinGeckoId || '').toLowerCase(),
+          String(p.network || '').toLowerCase(),
+        ]
+        const score = !q ? 1
+          : hay.some(v => v === q || normalizeCoinGeckoId(v) === qNorm) ? 100
+          : hay.some(v => v.startsWith(q) || normalizeCoinGeckoId(v).startsWith(qNorm)) ? 60
+          : hay.some(v => v.includes(q) || normalizeCoinGeckoId(v).includes(qNorm)) ? 30
+          : 0
+        return { preset: p, score }
+      })
+      .filter(row => row.score > 0)
+      .sort((a, b) => b.score - a.score || String(a.preset.symbol).localeCompare(String(b.preset.symbol)))
+      .slice(0, 12)
+  }
+
+  function cryptoStatusClass(status) {
+    if (status === 'fresh') return 'fresh'
+    if (status === 'stale') return 'stale'
+    if (status === 'manual fallback') return 'manual'
+    return 'error'
+  }
+
+  function cryptoStatusLabel(status) {
+    return ({
+      fresh: 'สด',
+      stale: 'ราคาเก่า',
+      'manual fallback': 'Manual',
+      'sync failed': 'Sync ไม่สำเร็จ',
+      'no price': 'ไม่มีราคา',
+    })[status] || status || '-'
+  }
+
+  function latestCryptoUpdatedAt() {
+    return Object.values(S.marketPrices?.crypto || {})
+      .map(row => row?.fetchedAt ? new Date(row.fetchedAt).getTime() : 0)
+      .filter(Boolean)
+      .sort((a, b) => b - a)[0] || 0
+  }
+
+  function updateWalletOpeningBalance(walletId, deltaTHB) {
+    const wallet = walletById(walletId)
+    if (!wallet || wallet.type === 'credit' || ['gold','crypto','fcd'].includes(wallet.type)) return false
+    wallet.openingBalance = round2((Number(wallet.openingBalance || wallet.balance || 0) + Number(deltaTHB || 0)))
+    wallet.balance = round2((Number(wallet.balance || 0) + Number(deltaTHB || 0)))
+    return true
+  }
+
+  function createHoldingRow(holding, { showEditButton = false } = {}) {
+    const asset = App.getCryptoAsset(holding.assetId)
+    const price = App.getCryptoPriceTHB(holding)
+    const value = App.getCryptoHoldingValueTHB(holding)
+    const hidden = !!S.settings?.hideMoney
+    return `<div class="card card-pad crypto-holding-row" onclick="App.openCryptoPortfolioDetail('${esc(holding.id)}')">
+      <div class="crypto-coin-main">
+        <div class="wallet-pill" style="background:${esc((asset?.color || '#F59E0B'))}20;color:${esc(asset?.color || '#F59E0B')}">${esc(asset?.icon || asset?.symbol || '?')}</div>
+        <div style="min-width:0">
+          <div class="list-item-name">${esc(asset?.symbol || '?')} · ${esc(asset?.name || 'Unknown')}</div>
+        </div>
+      </div>
+      <div class="crypto-row-metrics">
+        <div class="crypto-row-metric">
+  <span>ราคา</span>
+  <strong>
+    ${hidden ? '฿*****' : `${unitFmt(holding.units, asset?.decimals || 8)} ${esc(asset?.symbol || '')}`}
+  </strong>
+</div>
+        <div class="crypto-row-metric"><span>มูลค่า</span><strong>${hidden ? '฿*****' : plainMoney(value)}</strong></div>
+      </div>
+    </div>`
+  }
+
+  function syncCryptoAssetActiveFlags() {
+    const referencedIds = new Set((S.cryptoHoldings || []).map(h => h.assetId))
+    ;(S.cryptoAssets || []).forEach(asset => { asset.active = referencedIds.has(asset.id) })
+  }
+
+  function migrateLegacyCryptoWallets() {
+    ensureCryptoState()
+    if (S.migrations.cryptoCentralizedV1 === true) {
+      ;(S.wallets || []).filter(w => w.type === 'crypto' && w.legacyMigratedToCryptoPortfolio).forEach(w => {
+        w.hiddenFromWalletList = true
+        w.excludeFromNetWorth = true
+      })
+      return false
+    }
+    const legacyWallets = (S.wallets || []).filter(w => w.type === 'crypto')
+    let changed = false
+    legacyWallets.forEach(wallet => {
+      const preset = inferCryptoPreset(wallet) || {}
+      const assetKey = preset.coinGeckoId || wallet.coinGeckoId || `legacy-${String(wallet.symbol || wallet.name || wallet.id).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+      let asset = (S.cryptoAssets || []).find(a => (a.coinGeckoId && a.coinGeckoId === assetKey) || a.id === assetKey)
+      if (!asset) {
+        asset = {
+          id: Calc.genId(),
+          symbol: String(wallet.symbol || preset.symbol || wallet.name || 'CUSTOM').trim().toUpperCase(),
+          name: wallet.name || preset.name || String(wallet.symbol || 'Custom Coin').trim(),
+          coinGeckoId: preset.coinGeckoId || wallet.coinGeckoId || (String(assetKey).startsWith('legacy-') ? '' : assetKey),
+          type: preset.type || 'custom',
+          network: preset.network || '',
+          contractAddress: wallet.contractAddress || '',
+          decimals: Number.isFinite(Number(wallet.decimals)) ? Number(wallet.decimals) : Number(preset.decimals || 8),
+          icon: wallet.icon || preset.icon || String(wallet.symbol || 'C').slice(0, 4).toUpperCase(),
+          color: wallet.color || preset.color || '#F59E0B',
+          active: true,
+        }
+        S.cryptoAssets.push(asset)
+        changed = true
+      }
+      if (!(S.cryptoHoldings || []).some(h => h.legacyWalletId === wallet.id)) {
+        const walletUnits = Number(wallet.units || 0)
+        const inferredUnits = walletUnits > 0 ? walletUnits : ((Number(wallet.manualPrice || 0) > 0 && Number(wallet.balance || 0) > 0) ? Number(wallet.balance || 0) / Number(wallet.manualPrice || 1) : 0)
+        const units = round8(inferredUnits)
+        const manualPrice = round2(Number(wallet.manualPrice || ((units > 0 && Number(wallet.balance || 0) > 0) ? Number(wallet.balance || 0) / units : 0) || 0))
+        S.cryptoHoldings.push({
+          id: Calc.genId(),
+          assetId: asset.id,
+          units,
+          averageCostTHB: manualPrice,
+          manualPriceTHB: manualPrice,
+          location: wallet.name || 'Wallet',
+          note: `Migrated from legacy wallet ${wallet.name || wallet.id}`,
+          legacyWalletId: wallet.id,
+          createdAt: wallet.createdAt || nowISO(),
+          updatedAt: nowISO(),
+        })
+        changed = true
+      }
+      wallet.hiddenFromWalletList = true
+      wallet.excludeFromNetWorth = true
+      wallet.legacyMigratedToCryptoPortfolio = true
+      wallet.units = 0
+      wallet.openingUnits = 0
+      wallet.balance = 0
+      changed = true
+    })
+    syncCryptoAssetActiveFlags()
+    S.migrations.cryptoCentralizedV1 = true
+    return changed
+  }
+
+  App.getCryptoAsset = function(assetId) {
+    ensureCryptoState()
+    return (S.cryptoAssets || []).find(a => a.id === assetId) || null
+  }
+
+  App.getCryptoAssetByCoinGeckoId = function(coinGeckoId) {
+    ensureCryptoState()
+    const normalized = normalizeCoinGeckoId(coinGeckoId)
+    return (S.cryptoAssets || []).find(a => normalizeCoinGeckoId(a.coinGeckoId) === normalized) || null
+  }
+
+  App.getCryptoPriceTHB = function(assetOrHolding) {
+    ensureCryptoState()
+    const holding = assetOrHolding?.assetId ? assetOrHolding : null
+    const asset = holding ? App.getCryptoAsset(holding.assetId) : assetOrHolding
+    const marketId = normalizeCoinGeckoId(asset?.coinGeckoId)
+    const live = marketId ? Number(S.marketPrices?.crypto?.[marketId]?.thb || 0) : 0
+    if (live > 0) return live
+    const manual = Number(holding?.manualPriceTHB || assetOrHolding?.manualPriceTHB || 0)
+    if (manual > 0) return manual
+    return 0
+  }
+
+  App.getCryptoPriceStatus = function(assetOrHolding) {
+    ensureCryptoState()
+    const holding = assetOrHolding?.assetId ? assetOrHolding : null
+    const asset = holding ? App.getCryptoAsset(holding.assetId) : assetOrHolding
+    const marketId = normalizeCoinGeckoId(asset?.coinGeckoId)
+    const row = marketId ? S.marketPrices?.crypto?.[marketId] : null
+    const live = Number(row?.thb || 0)
+    if (live > 0) {
+      const ageMs = row?.fetchedAt ? (Date.now() - new Date(row.fetchedAt).getTime()) : Infinity
+      return ageMs <= 12 * 60 * 60 * 1000 ? 'fresh' : 'stale'
+    }
+    const manual = Number(holding?.manualPriceTHB || assetOrHolding?.manualPriceTHB || 0)
+    if (manual > 0) return 'manual fallback'
+    if (marketId && S.cryptoSyncMeta?.lastErrorAt) return 'sync failed'
+    return 'no price'
+  }
+
+  App.getCryptoHoldingValueTHB = function(holding) {
+    return round2(Number(holding?.units || 0) * Number(App.getCryptoPriceTHB(holding) || 0))
+  }
+
+  App.getCryptoHoldingCostTHB = function(holding) {
+    return round2(Number(holding?.units || 0) * Number(holding?.averageCostTHB || 0))
+  }
+
+  App.getCryptoHoldingUnrealizedPLTHB = function(holding) {
+    return round2(App.getCryptoHoldingValueTHB(holding) - App.getCryptoHoldingCostTHB(holding))
+  }
+
+  App.getCryptoPortfolioSummary = function() {
+    ensureCryptoState()
+    const holdings = (S.cryptoHoldings || []).filter(h => Number(h.units || 0) >= 0)
+    const totalValueTHB = round2(holdings.reduce((sum, h) => sum + App.getCryptoHoldingValueTHB(h), 0))
+    const totalCostTHB = round2(holdings.reduce((sum, h) => sum + App.getCryptoHoldingCostTHB(h), 0))
+    const totalUnrealizedPLTHB = round2(totalValueTHB - totalCostTHB)
+    const updatedAt = latestCryptoUpdatedAt()
+    return {
+      holdings,
+      totalValueTHB,
+      totalCostTHB,
+      totalUnrealizedPLTHB,
+      lastUpdatedAt: updatedAt ? new Date(updatedAt).toISOString() : '',
+    }
+  }
+
+  async function syncMarketSuite({ cryptoOnly = false } = {}) {
+    ensureCryptoState()
+    const next = { ...(S.marketPrices || {}), crypto: { ...(S.marketPrices?.crypto || {}) } }
+    let cryptoOk = false
+    let fxOk = false
+    let goldOk = false
+    let cryptoAttempted = false
+    const activeIds = [...new Set((S.cryptoHoldings || [])
+      .map(h => App.getCryptoAsset(h.assetId))
+      .filter(a => a?.active !== false && normalizeCoinGeckoId(a?.coinGeckoId))
+      .map(a => normalizeCoinGeckoId(a.coinGeckoId)))]
+
+    if (activeIds.length) {
+      cryptoAttempted = true
+      try {
+        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(activeIds.join(','))}&vs_currencies=thb,usd`
+        const res = await fetch(url, { cache: 'no-store' })
+        if (!res.ok) throw new Error(`crypto http ${res.status}`)
+        const json = await res.json()
+        Object.entries(json || {}).forEach(([id, row]) => {
+          if (!id || typeof row !== 'object') return
+          next.crypto[id] = {
+            ...(next.crypto[id] || {}),
+            thb: Number(row?.thb || 0),
+            usd: Number(row?.usd || 0),
+            source: 'CoinGecko',
+            fetchedAt: nowISO(),
+          }
+        })
+        cryptoOk = Object.keys(json || {}).length > 0
+        if (cryptoOk) S.cryptoSyncMeta = { lastSuccessAt: nowISO(), lastErrorAt: '', lastAttemptAt: nowISO() }
+      } catch (err) {
+        S.cryptoSyncMeta = { ...(S.cryptoSyncMeta || {}), lastErrorAt: nowISO(), lastAttemptAt: nowISO(), lastErrorMessage: String(err?.message || err || 'sync failed') }
+      }
+    }
+
+    if (!cryptoOnly) {
+      try {
+        const res = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY,SGD,HKD,AUD,NZD,CAD,CHF', { cache: 'no-store' })
+        if (res.ok) { next.fx = await res.json(); fxOk = true }
+      } catch (_) {}
+      try {
+        const gold = await App._fetchThaiGoldViaSource?.()
+        if (gold?.jewelryBuy) { next.thaiGold = gold; next.auroraGold = gold; goldOk = true }
+      } catch (_) {}
+    }
+
+    next.updatedAt = nowISO()
+    S.marketPrices = next
+    persist()
+    App.render?.()
+
+    if (cryptoOnly) {
+      if (cryptoOk) notify('Sync ราคา Crypto สำเร็จ', 'success')
+      else if (!cryptoAttempted) notify('ยังไม่มีเหรียญที่ sync ราคาอัตโนมัติได้ ใช้ราคาสำรองแทน', 'warn')
+      else notify('Sync ราคา Crypto ไม่สำเร็จ ใช้ราคาสำรองแทน', 'warn')
+      return
+    }
+
+    if (cryptoOk || fxOk || goldOk) notify(goldOk ? 'Sync ราคาทอง, Crypto และ FX สำเร็จ' : 'อัปเดตราคาแล้ว', 'success')
+    else notify('Sync ราคาไม่ได้ ใช้ราคาสำรองแทน', 'error')
+  }
+
+  App.refreshCryptoPrices = function() {
+    return syncMarketSuite({ cryptoOnly: true })
+  }
+
+  App.refreshMarketPrices = function() {
+    return syncMarketSuite({ cryptoOnly: false })
+  }
+
+  const prevNetWorth = Calc.getNetWorth?.bind(Calc)
+  Calc.getNetWorth = function(wallets) {
+    const baseWallets = (wallets || []).filter(w => !w.excludeFromNetWorth)
+    const base = prevNetWorth ? prevNetWorth(baseWallets) : { assets: 0, debt: 0, net: 0 }
+    const cryptoValue = App.getCryptoPortfolioSummary().totalValueTHB
+    return {
+      assets: round2(Number(base.assets || 0) + cryptoValue),
+      debt: round2(Number(base.debt || 0)),
+      net: round2(Number(base.assets || 0) + cryptoValue - Number(base.debt || 0)),
+    }
+  }
+
+  App.openCryptoHoldingForm = function(holdingId = '') {
+    ensureCryptoState()
+    const holding = (S.cryptoHoldings || []).find(h => h.id === holdingId) || null
+    const asset = holding ? App.getCryptoAsset(holding.assetId) : null
+    const preset = inferCryptoPreset(asset || {}) || null
+    const selectedCoinGeckoId = preset?.coinGeckoId || ''
+    const locationValue = holding?.location || 'Wallet'
+    const locationOptions = [...new Set([...CRYPTO_LOCATIONS, locationValue].filter(Boolean))]
+    const customCoinGeckoId = asset?.coinGeckoId && !preset ? asset.coinGeckoId : ''
+    const customMode = !preset && !!asset
+    S.cryptoForm = {
+      mode: customMode ? 'custom' : 'preset',
+      query: preset ? `${preset.symbol} ${preset.name}` : '',
+      selectedPresetId: selectedCoinGeckoId,
+    }
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCryptoPortfolioDetail()">←</button><h2>${holding ? 'แก้ไขเหรียญ' : 'เพิ่มเหรียญ'}</h2><div style="display:flex;gap:6px">${holding ? `<button class="btn btn-outline btn-sm" onclick="App.deleteCryptoHolding('${esc(holding.id)}')" style="min-width:50px">ลบ</button>` : ''}<button class="btn btn-primary btn-sm" onclick="App.saveCryptoHolding('${esc(holdingId)}')" style="min-width:50px">บันทึก</button></div></div>
+      <div class="sub-scroll">
+        <input type="hidden" id="crypto-form-mode" value="${customMode ? 'custom' : 'preset'}">
+        <input type="hidden" id="crypto-selected-preset-id" value="${esc(selectedCoinGeckoId)}">
+        <div class="tab-strip crypto-form-tabs">
+          <button class="tab-btn${customMode ? '' : ' active'}" id="crypto-mode-preset-btn" onclick="App._setCryptoFormMode('preset')">ค้นหาเหรียญ</button>
+          <button class="tab-btn${customMode ? ' active' : ''}" id="crypto-mode-custom-btn" onclick="App._setCryptoFormMode('custom')">Custom Coin</button>
+        </div>
+        <div id="crypto-preset-section" style="${customMode ? 'display:none' : ''}">
+          <div class="form-group">
+            <label class="form-label">ค้นหาเหรียญ</label>
+            <input class="form-input search-input" id="crypto-search-query" placeholder="พิมพ์ BTC, ETH, Bitcoin, Ethereum" value="${esc(S.cryptoForm.query || '')}" oninput="App._renderCryptoPresetResults()">
+            <div class="form-hint">เลือกจากรายการเพื่อให้ระบบใช้ Symbol, Name และ CoinGecko ID ที่ถูกต้องอัตโนมัติ</div>
+          </div>
+          <div id="crypto-selected-asset"></div>
+          <div id="crypto-search-results" class="crypto-search-results"></div>
+        </div>
+        <div id="crypto-custom-section" style="${customMode ? '' : 'display:none'}">
+          <div class="form-group"><label class="form-label">Symbol</label><input class="form-input" id="crypto-custom-symbol" value="${esc(!preset ? asset?.symbol || '' : '')}" placeholder="เช่น MYCOIN"></div>
+          <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="crypto-custom-name" value="${esc(!preset ? asset?.name || '' : '')}" placeholder="เช่น My Coin"></div>
+          <div class="form-group"><label class="form-label">CoinGecko ID (ถ้ามี)</label><input class="form-input" id="crypto-custom-coingecko-id" value="${esc(customCoinGeckoId)}" placeholder="เช่น my-coin"></div>
+          <div class="form-hint">ถ้าไม่มี CoinGecko ID ระบบจะใช้ราคาสำรองอย่างเดียว</div>
+        </div>
+        <div class="form-group"><label class="form-label">จำนวนเหรียญ</label><input class="form-input" type="number" step="0.00000001" min="0" id="crypto-units" value="${holding ? esc(holding.units) : ''}"></div>
+        <div class="form-group"><label class="form-label">ต้นทุนเฉลี่ยต่อเหรียญ (THB)</label><input class="form-input" type="number" step="0.01" min="0" id="crypto-avg-cost" value="${holding ? esc(holding.averageCostTHB) : ''}"></div>
+        <div class="form-group"><label class="form-label">ราคาสำรองต่อเหรียญ (THB)</label><input class="form-input" type="number" step="0.01" min="0" id="crypto-manual-price" value="${holding ? esc(holding.manualPriceTHB) : ''}"></div>
+        <div class="form-group"><label class="form-label">Location</label><select class="form-input" id="crypto-location">${locationOptions.map(loc => `<option value="${esc(loc)}"${loc === locationValue ? ' selected' : ''}>${esc(loc)}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="crypto-note" value="${esc(holding?.note || '')}" placeholder="เช่น DCA, long-term, cold wallet"></div>
+      </div>`)
+    App._bindCryptoSearchInput()
+    requestAnimationFrame(() => App._renderCryptoPresetResults())
+  }
+
+  App._bindCryptoSearchInput = function() {
+    const queryInput = document.getElementById('crypto-search-query')
+    if (!queryInput || queryInput.dataset.bound === '1') return
+    queryInput.dataset.bound = '1'
+    queryInput.addEventListener('input', () => App._renderCryptoPresetResults())
+    queryInput.addEventListener('focus', () => App._renderCryptoPresetResults())
+  }
+
+  App._setCryptoFormMode = function(mode) {
+    ensureCryptoState()
+    const nextMode = mode === 'custom' ? 'custom' : 'preset'
+    S.cryptoForm = { ...(S.cryptoForm || {}), mode: nextMode }
+    const hidden = document.getElementById('crypto-form-mode')
+    const presetSection = document.getElementById('crypto-preset-section')
+    const customSection = document.getElementById('crypto-custom-section')
+    const presetBtn = document.getElementById('crypto-mode-preset-btn')
+    const customBtn = document.getElementById('crypto-mode-custom-btn')
+    if (hidden) hidden.value = nextMode
+    if (presetSection) presetSection.style.display = nextMode === 'preset' ? '' : 'none'
+    if (customSection) customSection.style.display = nextMode === 'custom' ? '' : 'none'
+    presetBtn?.classList.toggle('active', nextMode === 'preset')
+    customBtn?.classList.toggle('active', nextMode === 'custom')
+    if (nextMode === 'preset') App._renderCryptoPresetResults()
+  }
+
+  App._selectCryptoPreset = function(coinGeckoId) {
+    ensureCryptoState()
+    const preset = PRESET_BY_ID[String(coinGeckoId || '')]
+    if (!preset) return
+    S.cryptoForm = {
+      ...(S.cryptoForm || {}),
+      mode: 'preset',
+      selectedPresetId: preset.coinGeckoId,
+      query: `${preset.symbol} ${preset.name}`,
+    }
+    const hidden = document.getElementById('crypto-selected-preset-id')
+    const queryInput = document.getElementById('crypto-search-query')
+    const modeInput = document.getElementById('crypto-form-mode')
+    if (hidden) hidden.value = preset.coinGeckoId
+    if (queryInput) queryInput.value = S.cryptoForm.query
+    if (modeInput) modeInput.value = 'preset'
+    App._setCryptoFormMode('preset')
+    App._renderCryptoPresetResults()
+  }
+
+  App._renderCryptoPresetResults = function() {
+    ensureCryptoState()
+    const queryInput = document.getElementById('crypto-search-query')
+    const selectedInput = document.getElementById('crypto-selected-preset-id')
+    const selectedBox = document.getElementById('crypto-selected-asset')
+    const resultsBox = document.getElementById('crypto-search-results')
+    if (!resultsBox || !selectedBox) return
+    const query = String(queryInput?.value || S.cryptoForm?.query || '').trim()
+    const selectedId = String(selectedInput?.value || S.cryptoForm?.selectedPresetId || '')
+    S.cryptoForm = { ...(S.cryptoForm || {}), query, selectedPresetId: selectedId }
+    const selectedPreset = PRESET_BY_ID[selectedId] || null
+    selectedBox.innerHTML = selectedPreset
+      ? `<div class="card card-pad crypto-selected-asset-card">
+          <div class="crypto-coin-main">
+            <div class="wallet-pill" style="background:${esc(selectedPreset.color)}20;color:${esc(selectedPreset.color)}">${esc(selectedPreset.icon || selectedPreset.symbol)}</div>
+            <div>
+              <div class="list-item-name">${esc(selectedPreset.symbol)} · ${esc(selectedPreset.name)}</div>
+              <div class="list-item-sub">CoinGecko ID: ${esc(selectedPreset.coinGeckoId)} · ${esc(selectedPreset.network || '-')}</div>
+            </div>
+          </div>
+        </div>`
+      : `<div class="form-hint" style="margin-bottom:10px">ยังไม่ได้เลือกเหรียญจากรายการ</div>`
+
+    const matches = searchCryptoPresets(query)
+    resultsBox.innerHTML = matches.map(({ preset: p }) => `<button type="button" class="crypto-search-result${selectedId === p.coinGeckoId ? ' selected' : ''}" onclick="App._selectCryptoPreset('${esc(p.coinGeckoId)}')">
+      <span class="csr-main">
+        <span class="wallet-pill" style="background:${esc(p.color)}20;color:${esc(p.color)}">${esc(p.icon || p.symbol)}</span>
+        <span>
+          <span class="list-item-name">${esc(p.symbol)} · ${esc(p.name)}</span>
+          <span class="list-item-sub">${esc(p.coinGeckoId)}</span>
+        </span>
+      </span>
+      <span class="crypto-price-badge ${selectedId === p.coinGeckoId ? 'fresh' : 'manual'}">${selectedId === p.coinGeckoId ? 'เลือกแล้ว' : 'เลือก'}</span>
+    </button>`).join('') || `<div class="form-hint">ไม่พบเหรียญใน preset ลองใช้ Custom Coin</div>`
+  }
+
+  App.deleteCryptoHolding = function(holdingId) {
+    ensureCryptoState()
+    const holding = (S.cryptoHoldings || []).find(h => h.id === holdingId)
+    if (!holding) return
+    const asset = App.getCryptoAsset(holding.assetId)
+    App.showConfirm?.({
+      title: 'ลบเหรียญ Crypto',
+      danger: true,
+      body: `ต้องการลบ ${asset?.symbol || 'เหรียญนี้'} ออกจากพอร์ตหรือไม่? รายการซื้อขายของ holding นี้จะถูกลบด้วย`,
+      confirmLabel: 'ลบ',
+      onConfirm() {
+        S.cryptoHoldings = (S.cryptoHoldings || []).filter(h => h.id !== holdingId)
+        S.cryptoTransactions = (S.cryptoTransactions || []).filter(tx => tx.holdingId !== holdingId)
+        syncCryptoAssetActiveFlags()
+        persist()
+        App.openCryptoPortfolioDetail()
+        notify('ลบเหรียญแล้ว', 'success')
+      },
+    })
+  }
+
+  App.saveCryptoHolding = async function(holdingId = '', forceDuplicate = false) {
+    ensureCryptoState()
+    const mode = String(document.getElementById('crypto-form-mode')?.value || 'preset')
+    const selectedPresetId = String(document.getElementById('crypto-selected-preset-id')?.value || '')
+    const preset = PRESET_BY_ID[selectedPresetId] || null
+    const customSymbol = String(document.getElementById('crypto-custom-symbol')?.value || '').trim().toUpperCase()
+    const customName = String(document.getElementById('crypto-custom-name')?.value || '').trim()
+    const manualCoinGeckoId = normalizeCoinGeckoId(document.getElementById(mode === 'custom' ? 'crypto-custom-coingecko-id' : 'crypto-selected-preset-id')?.value || '')
+    const source = mode === 'preset'
+      ? { symbol: preset?.symbol || '', name: preset?.name || '', coinGeckoId: preset?.coinGeckoId || '' }
+      : { symbol: customSymbol, name: customName, coinGeckoId: manualCoinGeckoId }
+    const inferredPreset = preset || inferCryptoPreset(source)
+    const symbol = String(inferredPreset?.symbol || customSymbol || '').trim().toUpperCase()
+    const name = String(inferredPreset?.name || customName || '').trim()
+    const coinGeckoId = normalizeCoinGeckoId(inferredPreset?.coinGeckoId || manualCoinGeckoId)
+    const units = Number(document.getElementById('crypto-units')?.value || 0)
+    const averageCostTHB = round2(Number(document.getElementById('crypto-avg-cost')?.value || 0))
+    const manualPriceTHB = round2(Number(document.getElementById('crypto-manual-price')?.value || 0))
+    const location = String(document.getElementById('crypto-location')?.value || 'Wallet').trim() || 'Wallet'
+    const note = String(document.getElementById('crypto-note')?.value || '').trim()
+
+    if (mode === 'preset' && !preset) { notify('กรุณาเลือกเหรียญจากรายการก่อนบันทึก', 'error'); return }
+    if (!symbol || !name) { notify('กรุณาระบุ Symbol และชื่อเหรียญ', 'error'); return }
+    if (units < 0 || averageCostTHB < 0 || manualPriceTHB < 0) { notify('จำนวนเหรียญและราคาต้องไม่ติดลบ', 'error'); return }
+    if (!inferredPreset && !manualPriceTHB && !coinGeckoId) { notify('Custom coin ควรใส่ราคาสำรอง หรือเลือกเหรียญจากรายการยอดนิยม', 'warn'); return }
+
+    let asset = null
+    if (coinGeckoId) asset = App.getCryptoAssetByCoinGeckoId(coinGeckoId)
+    if (!asset && !coinGeckoId) asset = (S.cryptoAssets || []).find(a => !a.coinGeckoId && String(a.symbol || '').toUpperCase() === symbol && String(a.name || '').toLowerCase() === name.toLowerCase()) || null
+    if (!asset) {
+      asset = {
+        id: Calc.genId(),
+        symbol,
+        name,
+        coinGeckoId,
+        type: inferredPreset?.type || (coinGeckoId ? 'coin' : 'custom'),
+        network: inferredPreset?.network || '',
+        contractAddress: '',
+        decimals: Number(inferredPreset?.decimals || 8),
+        icon: inferredPreset?.icon || symbol.slice(0, 4),
+        color: inferredPreset?.color || '#F59E0B',
+        active: true,
+      }
+      S.cryptoAssets.push(asset)
+    } else {
+      Object.assign(asset, {
+        symbol,
+        name,
+        coinGeckoId,
+        type: inferredPreset?.type || asset.type || (coinGeckoId ? 'coin' : 'custom'),
+        network: inferredPreset?.network || asset.network || '',
+        decimals: Number(inferredPreset?.decimals || asset.decimals || 8),
+        icon: inferredPreset?.icon || asset.icon || symbol.slice(0, 4),
+        color: inferredPreset?.color || asset.color || '#F59E0B',
+        active: true,
+      })
+    }
+
+    const duplicate = (S.cryptoHoldings || []).find(h => h.id !== holdingId && h.assetId === asset.id && String(h.location || '') === location)
+    if (duplicate && !forceDuplicate) {
+      App.showConfirm?.({
+        title: 'พบเหรียญซ้ำใน Location เดียวกัน',
+        body: 'ต้องการบันทึกต่อหรือไม่? ระบบจะแยก holding ไว้คนละรายการ',
+        confirmLabel: 'บันทึกต่อ',
+        onConfirm() { App.saveCryptoHolding(holdingId, true) },
+      })
+      return
+    }
+
+    if (holdingId) {
+      const row = (S.cryptoHoldings || []).find(h => h.id === holdingId)
+      if (!row) return
+      Object.assign(row, { assetId: asset.id, units: round8(units), averageCostTHB, manualPriceTHB, location, note, updatedAt: nowISO() })
+    } else {
+      S.cryptoHoldings.push({
+        id: Calc.genId(),
+        assetId: asset.id,
+        units: round8(units),
+        averageCostTHB,
+        manualPriceTHB,
+        location,
+        note,
+        legacyWalletId: '',
+        createdAt: nowISO(),
+        updatedAt: nowISO(),
+      })
+    }
+    syncCryptoAssetActiveFlags()
+    persist()
+    App.openCryptoPortfolioDetail()
+    notify(holdingId ? 'อัปเดตเหรียญแล้ว' : 'เพิ่มเหรียญแล้ว', 'success')
+    if (coinGeckoId) {
+      await App.refreshCryptoPrices()
+      App.openCryptoPortfolioDetail()
+    }
+  }
+
+  App.openCryptoTxForm = function(type, holdingId = '') {
+    ensureCryptoState()
+    const holding = (S.cryptoHoldings || []).find(h => h.id === holdingId) || null
+    const asset = holding ? App.getCryptoAsset(holding.assetId) : null
+    const location = holding?.location || 'Wallet'
+    const sourceWallets = visibleWallets().filter(w => !['credit','gold','crypto','fcd'].includes(w.type))
+    const targetUnits = type === 'adjust' ? (holding ? holding.units : 0) : ''
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCryptoPortfolioDetail('${esc(holdingId)}')">←</button><h2>${type === 'buy' ? 'ซื้อ' : type === 'sell' ? 'ขาย' : 'ปรับจำนวน'} ${esc(asset?.symbol || '')}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCryptoTx('${esc(type)}','${esc(holdingId)}')" style="width:auto">บันทึก</button></div>
+      <div class="sub-scroll">
+        <div class="card card-pad" style="margin-bottom:12px">
+          <div class="list-item-name">${esc(asset?.symbol || '')} · ${esc(asset?.name || '')}</div>
+          <div class="list-item-sub">ถืออยู่ ${unitFmt(holding?.units || 0, asset?.decimals || 8)} ${esc(asset?.symbol || '')}${location ? ` · ${esc(location)}` : ''}</div>
+        </div>
+        <div class="form-group"><label class="form-label">${type === 'adjust' ? 'จำนวนใหม่ทั้งหมด' : 'จำนวนเหรียญ'}</label><input class="form-input" type="number" step="0.00000001" min="0" id="crypto-tx-units" value="${esc(targetUnits)}"></div>
+        ${type !== 'adjust' ? `<div class="form-group"><label class="form-label">ราคาต่อเหรียญ (THB)</label><input class="form-input" type="number" step="0.01" min="0" id="crypto-tx-price" value="${esc(App.getCryptoPriceTHB(holding) || holding?.averageCostTHB || '')}"></div>` : ''}
+        ${type !== 'adjust' ? `<div class="form-group"><label class="form-label">ค่าธรรมเนียม (THB)</label><input class="form-input" type="number" step="0.01" min="0" id="crypto-tx-fee" value=""></div>` : ''}
+        ${type !== 'adjust' ? `<div class="form-group"><label class="form-label">${type === 'buy' ? 'จ่ายจากกระเป๋า' : 'รับเงินเข้ากระเป๋า'}</label><select class="form-input" id="crypto-tx-wallet"><option value="">ไม่ระบุ</option>${sourceWallets.map(w => `<option value="${esc(w.id)}">${esc(w.icon || '')} ${esc(w.name)} · ${money(w.balance)}</option>`).join('')}</select></div>` : ''}
+        <div class="form-group"><label class="form-label">วันที่</label><input class="form-input" type="date" id="crypto-tx-date" value="${today()}"></div>
+        <div class="form-group"><label class="form-label">หมายเหตุ</label><input class="form-input" id="crypto-tx-note" placeholder="${type === 'adjust' ? 'จำเป็นสำหรับการปรับจำนวน' : 'เช่น DCA, Take profit'}"></div>
+      </div>`)
+  }
+
+  App.saveCryptoTx = function(type, holdingId) {
+    ensureCryptoState()
+    const holding = (S.cryptoHoldings || []).find(h => h.id === holdingId)
+    if (!holding) { notify('ไม่พบ holding', 'error'); return }
+    const asset = App.getCryptoAsset(holding.assetId)
+    const inputUnits = Number(document.getElementById('crypto-tx-units')?.value || 0)
+    const priceTHB = round2(Number(document.getElementById('crypto-tx-price')?.value || 0))
+    const feeTHB = round2(Number(document.getElementById('crypto-tx-fee')?.value || 0))
+    const sourceWalletId = String(document.getElementById('crypto-tx-wallet')?.value || '')
+    const date = String(document.getElementById('crypto-tx-date')?.value || today())
+    const note = String(document.getElementById('crypto-tx-note')?.value || '').trim()
+
+    if (inputUnits < 0) { notify('จำนวนเหรียญต้องไม่ติดลบ', 'error'); return }
+    if (type === 'adjust' && !note) { notify('การปรับจำนวนต้องระบุหมายเหตุ', 'error'); return }
+    if (type !== 'adjust' && (inputUnits <= 0 || priceTHB < 0 || feeTHB < 0)) { notify('กรุณาระบุจำนวน ราคา และค่าธรรมเนียมให้ถูกต้อง', 'error'); return }
+
+    const oldUnits = Number(holding.units || 0)
+    const oldAvg = Number(holding.averageCostTHB || 0)
+    let realizedGainTHB = 0
+    let txUnits = inputUnits
+
+    if (type === 'buy') {
+      const totalCost = round2((inputUnits * priceTHB) + feeTHB)
+      const cashWallet = walletById(sourceWalletId)
+      if (cashWallet && Number(cashWallet.balance || 0) < totalCost) { notify('ยอดเงินต้นทางไม่พอสำหรับซื้อ', 'error'); return }
+      const newUnits = round8(oldUnits + inputUnits)
+      const newAverageCostTHB = newUnits > 0 ? round2((((oldUnits * oldAvg) + (inputUnits * priceTHB) + feeTHB) / newUnits)) : 0
+      holding.units = newUnits
+      holding.averageCostTHB = newAverageCostTHB
+      holding.updatedAt = nowISO()
+      if (sourceWalletId) updateWalletOpeningBalance(sourceWalletId, -totalCost)
+    } else if (type === 'sell') {
+      if (inputUnits <= 0) { notify('กรุณาระบุจำนวนที่ต้องการขาย', 'error'); return }
+      if (inputUnits > oldUnits) { notify('ขายเกินจำนวนที่ถืออยู่ไม่ได้', 'error'); return }
+      const proceeds = round2(inputUnits * priceTHB)
+      realizedGainTHB = round2(proceeds - (inputUnits * oldAvg) - feeTHB)
+      holding.units = round8(oldUnits - inputUnits)
+      if (holding.units <= 0) holding.averageCostTHB = 0
+      holding.updatedAt = nowISO()
+      if (sourceWalletId) updateWalletOpeningBalance(sourceWalletId, proceeds - feeTHB)
+    } else {
+      const newUnits = round8(inputUnits)
+      txUnits = round8(newUnits - oldUnits)
+      holding.units = newUnits
+      holding.updatedAt = nowISO()
+    }
+
+    S.cryptoTransactions.unshift({
+      id: Calc.genId(),
+      type,
+      holdingId: holding.id,
+      assetId: asset?.id || holding.assetId,
+      units: round8(txUnits),
+      priceTHB: type === 'adjust' ? 0 : priceTHB,
+      feeTHB: type === 'adjust' ? 0 : feeTHB,
+      sourceWalletId: sourceWalletId || '',
+      date,
+      realizedGainTHB: round2(realizedGainTHB),
+      note,
+      createdAt: nowISO(),
+    })
+    syncCryptoAssetActiveFlags()
+    persist()
+    App.openCryptoPortfolioDetail(holding.id)
+    notify('บันทึกรายการ Crypto แล้ว', 'success')
+  }
+
+  App.openCryptoPortfolioDetail = function(selectedHoldingId = '') {
+    ensureCryptoState()
+    const summary = App.getCryptoPortfolioSummary()
+    const holdings = summary.holdings.slice().sort((a, b) => App.getCryptoHoldingValueTHB(b) - App.getCryptoHoldingValueTHB(a))
+    const txRows = (S.cryptoTransactions || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 30)
+    const lastUpdated = summary.lastUpdatedAt ? new Date(summary.lastUpdatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : 'ยังไม่ sync'
+    const selected = holdings.find(h => h.id === selectedHoldingId) || holdings[0] || null
+    const actionButtons = selected ? `<div class="crypto-action-row"><button class="btn btn-primary" onclick="App.openCryptoTxForm('buy','${esc(selected.id)}')">Buy</button><button class="btn btn-secondary" onclick="App.openCryptoTxForm('sell','${esc(selected.id)}')">Sell</button><button class="btn btn-secondary" onclick="App.openCryptoTxForm('adjust','${esc(selected.id)}')">Adjust</button><button class="btn btn-outline" onclick="App.openCryptoHoldingForm('${esc(selected.id)}')">Edit</button></div>` : ''
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>Crypto Portfolio</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.refreshCryptoPrices()" style="width:auto">Sync ราคา</button><button class="btn btn-primary btn-sm" onclick="App.openCryptoHoldingForm()" style="width:auto">+ เพิ่มเหรียญ</button></div></div>
+      <div class="sub-scroll">
+        <div class="card card-pad crypto-portfolio-card" style="margin-bottom:12px">
+          <div class="list-item-name">ภาพรวมพอร์ต</div>
+          <div class="list-item-sub">ราคาอัปเดตล่าสุด ${esc(lastUpdated)}</div>
+          <div class="crypto-summary-grid" style="margin-top:12px">
+            <div class="crypto-summary-item"><span>มูลค่ารวม</span><strong style="font-size: 18px; color: var(--primary)">${S.settings?.hideMoney ? '฿*****' : plainMoney(summary.totalValueTHB)}</strong></div>
+            <div class="crypto-summary-item"><span>ต้นทุนรวม</span><strong style="font-size: 18px;">${S.settings?.hideMoney ? '฿*****' : plainMoney(summary.totalCostTHB)}</strong></div>
+            <div class="crypto-summary-item"><span>Unrealized P/L</span><strong class="${summary.totalUnrealizedPLTHB >= 0 ? 'c-income' : 'c-expense'}">${S.settings?.hideMoney ? '฿*****' : `${summary.totalUnrealizedPLTHB < 0 ? '-' : ''}${plainMoney(Math.abs(summary.totalUnrealizedPLTHB))}`}</strong></div>
+            <div class="crypto-summary-item"><span>จำนวน Holding</span><strong>${holdings.length}</strong></div>
+          </div>
+        </div>
+        ${actionButtons}
+        <div class="sec-title">Holdings</div>
+        ${holdings.length ? holdings.map(h => createHoldingRow(h, { showEditButton: true })).join('') : App._emptyState?.('🪙', 'ยังไม่มี Crypto Holding', 'กด + เพิ่มเหรียญ เพื่อเริ่มต้น') || ''}
+        <div class="sec-title" style="margin-top:16px">ประวัติรายการ Crypto</div>
+        <div class="card">
+          <div style="padding:0 16px">
+            ${txRows.length ? txRows.map(tx => {
+              const txHolding = (S.cryptoHoldings || []).find(h => h.id === tx.holdingId)
+              const txAsset = App.getCryptoAsset(tx.assetId || txHolding?.assetId)
+              const realized = Number(tx.realizedGainTHB || 0)
+              const priceText = tx.type === 'adjust' ? 'ปรับจำนวน' : `${plainMoney(tx.priceTHB)} / เหรียญ`
+              return `<div class="list-item">
+                <div class="list-item-info">
+                  <div class="list-item-name">${esc(tx.type.toUpperCase())} · ${esc(txAsset?.symbol || '')}</div>
+                  <div class="list-item-sub">${unitFmt(tx.units, txAsset?.decimals || 8)} · ${esc(priceText)} · ${esc(Calc.shortDate ? Calc.shortDate(tx.date) : tx.date)}</div>
+                  ${tx.note ? `<div class="list-item-sub">${esc(tx.note)}</div>` : ''}
+                </div>
+                <div style="text-align:right">
+                  ${tx.type === 'sell' ? `<div class="${realized >= 0 ? 'c-income' : 'c-expense'}">${S.settings?.hideMoney ? '฿*****' : `${realized < 0 ? '-' : ''}${plainMoney(Math.abs(realized))}`}</div><div class="list-item-sub">Realized</div>` : `<div class="list-item-sub">${tx.feeTHB ? `Fee ${plainMoney(tx.feeTHB)}` : ''}</div>`}
+                </div>
+              </div>`
+            }).join('') : App._emptyState?.('🧾', 'ยังไม่มีรายการ Crypto', '') || ''}
+          </div>
+        </div>
+      </div>`)
+  }
+
+  App.renderWallets = function() {
+    ensureCryptoState()
+    const wallets = visibleWallets()
+    const assets = wallets.filter(w => ['bank','cash','ewallet','saving'].includes(w.type))
+    const credits = wallets.filter(w => w.type === 'credit')
+    const invests = wallets.filter(w => ['gold','fcd'].includes(w.type))
+    const cryptoSummary = App.getCryptoPortfolioSummary()
+    const sumBase = assets.reduce((s, w) => s + Math.max(0, Number(w.balance || 0)), 0)
+    const sumInv = invests.reduce((s, w) => s + Math.max(0, App._investmentValueTHB?.(w) || Number(w.balance || 0)), 0)
+    const debt = credits.reduce((s, w) => s + Math.abs(Number(w.balance || 0)), 0)
+    const summaryEl = document.getElementById('wallets-summary')
+    if (summaryEl) summaryEl.innerHTML = `<div class="wallet-summary-grid wallet-summary-grid-fixed">
+      <div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${S.settings?.hideMoney ? '฿*****' : plainMoney(sumBase + sumInv + cryptoSummary.totalValueTHB)}</strong></div>
+      <div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${S.settings?.hideMoney ? '฿*****' : plainMoney(debt)}</strong></div>
+    </div>`
+
+    const pageHeader = document.querySelector('#page-wallets .page-header')
+    if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
+      const h1 = pageHeader.querySelector('h1')
+      if (h1) {
+        const row = document.createElement('div')
+        row.className = 'wallets-h1-row'
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center'
+        h1.replaceWith(row)
+        row.appendChild(h1)
+        const actions = document.createElement('div')
+        actions.style.cssText = 'display:flex;gap:8px;align-items:center'
+        const refreshBtn = document.createElement('button')
+        refreshBtn.className = 'btn btn-secondary btn-sm wallet-section-refresh-btn'
+        refreshBtn.innerHTML = '↻ Refresh'
+        refreshBtn.onclick = e => { e.stopPropagation(); App.refreshMarketPrices() }
+        const addBtn = document.createElement('button')
+        addBtn.className = 'btn btn-primary btn-sm wallets-header-add-btn'
+        addBtn.style.cssText = 'width:auto;padding:8px 14px;flex-shrink:0'
+        addBtn.textContent = '+ เพิ่มกระเป๋า'
+        addBtn.onclick = () => App.openWalletForm(null)
+        actions.appendChild(refreshBtn)
+        actions.appendChild(addBtn)
+        row.appendChild(actions)
+      }
+    }
+
+    const content = document.getElementById('wallets-content')
+    if (!content) return
+    const gold = (S.marketPrices || {}).thaiGold || (S.marketPrices || {}).auroraGold
+    const goldUpdated = gold?.fetchedAt ? new Date(gold.fetchedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : ''
+    const goldNote = `<div class="wallet-market-note"><b>ราคาทอง:</b><br>ทองรูปพรรณรับซื้อ${gold?.jewelryBuy ? ` ${plainMoney(gold.jewelryBuy)}/บาททอง` : ' ยังไม่ Sync'}${goldUpdated ? ` · อัปเดต ${esc(goldUpdated)}` : ''}</div>`
+    const empty = txt => `<div class="card card-pad wallet-empty-card">${esc(txt)}</div>`
+    const section = (title, icon, list, emptyTxt, grid, extra = '') => `<section class="wallet-section-block"><div class="wallet-section-title wallet-section-title-row"><span>${icon} ${esc(title)}</span>${extra}</div>${list.length ? `<div class="${grid ? 'wallet-grid-2' : 'wallet-list-stack'}">${list.map(App._walletCard).join('')}</div>` : empty(emptyTxt)}</section>`
+    const cryptoUpdated = cryptoSummary.lastUpdatedAt ? new Date(cryptoSummary.lastUpdatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : 'ยังไม่ sync'
+    const cryptoHoldingsHtml = cryptoSummary.holdings.length
+      ? `<div class="crypto-holdings-grid">${cryptoSummary.holdings.slice().sort((a, b) => App.getCryptoHoldingValueTHB(b) - App.getCryptoHoldingValueTHB(a)).map(createHoldingRow).join('')}</div>`
+      : `<div class="wallet-empty-card crypto-empty-state"><div><b>ยังไม่มี Crypto Holding</b><div class="list-item-sub">เพิ่ม BTC, ETH, USDT หรือเหรียญ custom ได้ที่นี่</div></div><button class="btn btn-primary" onclick="event.stopPropagation();App.openCryptoHoldingForm()" style="width:auto">เพิ่มเหรียญแรก</button></div>`
+    const cryptoSection = `<section class="wallet-section-block">
+      <div class="wallet-section-title wallet-section-title-row"><span>🪙 Crypto Portfolio</span><button class="btn btn-secondary btn-sm" onclick="App.openCryptoPortfolioDetail()" style="width:auto">ดูทั้งหมด</button></div>
+      <div class="wallet-card wallet-card-colored crypto-portfolio-card" style="--wallet-color:#F59E0B;--wallet-color-2:#D97706" onclick="App.openCryptoPortfolioDetail()">
+        <div class="crypto-portfolio-glow"></div>
+        <div class="wc-header">
+          <div>
+            <div class="wc-name">🪙 Crypto Portfolio</div>
+          </div>
+          <button class="wc-edit-btn" onclick="event.stopPropagation();App.openCryptoHoldingForm()" aria-label="เพิ่มเหรียญ">＋</button>
+        </div>
+        <div class="wc-balance">${S.settings?.hideMoney ? '฿*****' : plainMoney(cryptoSummary.totalValueTHB)}</div>
+        <div class="crypto-portfolio-strip">
+          <div class="crypto-portfolio-pill"><span>ต้นทุน</span><strong>${S.settings?.hideMoney ? '฿*****' : plainMoney(cryptoSummary.totalCostTHB)}</strong></div>
+          <div class="crypto-portfolio-pill"><span>จำนวนเหรียญที่ถือ</span><strong>${cryptoSummary.holdings.length}</strong></div>
+        </div>
+        <div class="wc-prog-info crypto-portfolio-meta">
+          <span>กำไร/ขาดทุนที่ยังไม่เกิดขึ้นจริง ${S.settings?.hideMoney ? '฿*****' : `${cryptoSummary.totalUnrealizedPLTHB < 0 ? '-' : ''}${plainMoney(Math.abs(cryptoSummary.totalUnrealizedPLTHB))}`}</span>
+          <span>อัปเดต ${esc(cryptoUpdated)}</span>
+        </div>
+      </div>
+      ${cryptoHoldingsHtml}
+    </section>`
+
+    content.innerHTML = goldNote
+      + section('สินทรัพย์', '🏦', assets, 'ยังไม่มีสินทรัพย์', true)
+      + section('บัตรเครดิต', '💳', credits, 'ยังไม่มีบัตรเครดิต', false)
+      + cryptoSection
+      + section('การลงทุน', '📈', invests, 'เพิ่มทอง / FCD เพื่อดูราคาอ้างอิง', true)
+  }
+
+  App.renderReports = function() {
+    prevRenderReports?.()
+    const content = document.getElementById('reports-content')
+    if (!content) return
+    const summary = App.getCryptoPortfolioSummary()
+    const month = String(S.rptMonth || today().slice(0, 7))
+    const realizedThisMonth = round2((S.cryptoTransactions || [])
+      .filter(tx => tx.type === 'sell' && String(tx.date || '').startsWith(month))
+      .reduce((sum, tx) => sum + Number(tx.realizedGainTHB || 0), 0))
+  }
+
+  App.renderDashboard = function() {
+    prevRenderDashboard?.()
+    const content = document.getElementById('dashboard-content')
+    if (!content) return
+    const visibleAssets = visibleWallets().filter(w => w.type !== 'credit')
+    const cryptoSummary = App.getCryptoPortfolioSummary()
+    const cards = visibleAssets.slice(0, 2).map(w => `<div class="mt-wallet-mini" onclick="App.openWalletDetail('${esc(w.id)}')">
+      <div class="icon">${esc(w.icon || '◈')}</div>
+      <div class="value">${S.settings?.hideMoney ? '฿*****' : plainMoney(App._investmentValueTHB ? App._investmentValueTHB(w) : (w.balance || 0))}</div>
+      <div class="name">${esc(w.name)}</div>
+    </div>`)
+    if (cryptoSummary.holdings.length) {
+      cards.push(`<div class="mt-wallet-mini" onclick="App.openCryptoPortfolioDetail()">
+        <div class="icon">🪙</div>
+        <div class="value">${S.settings?.hideMoney ? '฿*****' : plainMoney(cryptoSummary.totalValueTHB)}</div>
+        <div class="name">Crypto</div>
+      </div>`)
+    }
+    const html = cards.length ? `<div class="mt-wallet-mini-grid">${cards.join('')}</div>` : ''
+    const existing = content.querySelector('.mt-wallet-mini-grid')
+    if (existing) existing.outerHTML = html
+    else if (html) content.querySelector('.mt-stat-row')?.insertAdjacentHTML('beforebegin', html)
+  }
+
+  App.exportData = function(input) {
+    ensureCryptoState()
+    if (prevExportData && prevExportData !== App.exportData) {
+      const now = nowISO()
+      const data = {
+        exportedAt: now,
+        appVersion: '6.6',
+        storageMode: 'local-only',
+        transactions: S.transactions,
+        wallets: S.wallets,
+        categories: S.categories,
+        budgets: S.budgets,
+        recurring: S.recurring,
+        merchants: S.merchants,
+        ccBenefits: S.ccBenefits,
+        incomeBudgets: S.incomeBudgets,
+        marketPrices: S.marketPrices || {},
+        settings: S.settings,
+        rewardLedger: S.rewardLedger || [],
+        netWorthSnapshots: S.netWorthSnapshots || [],
+        investmentSnapshots: S.investmentSnapshots || [],
+        creditLimitGroups: S.creditLimitGroups || [],
+        rewardAccounts: S.rewardAccounts || [],
+        cryptoAssets: S.cryptoAssets || [],
+        cryptoHoldings: S.cryptoHoldings || [],
+        cryptoTransactions: S.cryptoTransactions || [],
+        migrations: S.migrations || { cryptoCentralizedV1: true },
+      }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `money-tracker-v66-backup-${today()}.json`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      if (S.settings?.storageMeta) S.settings.storageMeta.lastExportedAt = now
+      persist()
+      App.renderMore?.()
+      notify('ส่งออกข้อมูลสำเร็จ', 'success')
+      return
+    }
+    return prevExportData?.(input)
+  }
+
+  App.importData = function(input) {
+    const file = input?.files?.[0]
+    if (!file) return
+    Storage.importJSON(file, raw => {
+      const checked = App._validateImportPayload?.(raw) || { ok: Array.isArray(raw?.transactions) && Array.isArray(raw?.wallets), errors: [], data: raw }
+      if (!checked.ok) { notify('นำเข้าไม่ได้: ' + (checked.errors || []).join(', '), 'error'); if (input) input.value = ''; return }
+      const data = checked.data || raw
+      App.showConfirm?.({
+        title: 'ตรวจสอบก่อนนำเข้า',
+        danger: true,
+        confirmLabel: 'นำเข้า',
+        body: `Wallets: ${data.wallets.length} · Transactions: ${data.transactions.length} · จะแทนที่ข้อมูลปัจจุบันทั้งหมด`,
+        onConfirm() {
+          try { localStorage.setItem('mt_pre_import_backup', JSON.stringify({ backedUpAt: nowISO(), ...S })) } catch (_) {}
+          S.transactions = data.transactions || []
+          S.wallets = data.wallets || []
+          S.categories = data.categories || S.categories
+          S.budgets = data.budgets || []
+          S.recurring = data.recurring || []
+          S.merchants = data.merchants || []
+          S.ccBenefits = data.ccBenefits || {}
+          S.incomeBudgets = data.incomeBudgets || []
+          S.marketPrices = data.marketPrices || {}
+          S.settings = { ...(S.settings || {}), ...(data.settings || {}) }
+          S.rewardLedger = data.rewardLedger || []
+          S.netWorthSnapshots = data.netWorthSnapshots || []
+          S.investmentSnapshots = data.investmentSnapshots || []
+          S.creditLimitGroups = data.creditLimitGroups || []
+          S.rewardAccounts = data.rewardAccounts || []
+          S.cryptoAssets = data.cryptoAssets || []
+          S.cryptoHoldings = data.cryptoHoldings || []
+          S.cryptoTransactions = data.cryptoTransactions || []
+          S.migrations = { cryptoCentralizedV1: false, ...(data.migrations || {}) }
+          ensureCryptoState()
+          migrateLegacyCryptoWallets()
+          App.ensureLedgerBaselines?.(true)
+          App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
+          persist()
+          applyTheme?.()
+          App.render?.()
+          notify('นำเข้าสำเร็จ', 'success')
+          if (input) input.value = ''
+        },
+        onCancel() { if (input) input.value = '' },
+      })
+    }, err => { notify('นำเข้าล้มเหลว: ' + err, 'error'); if (input) input.value = '' })
+  }
+
+  App.saveWallet = function() {
+    const type = document.getElementById('wf-type')?.value || 'bank'
+    if (type === 'crypto') {
+      notify('เพิ่ม Crypto ผ่าน Crypto Portfolio แทน เพื่อกันข้อมูลซ้ำ', 'warn')
+      App.closeOverlay('overlay-wallet-form')
+      App.openCryptoHoldingForm()
+      return
+    }
+    return prevSaveWallet?.()
+  }
+
+  App.openWalletForm = function(walletId) {
+    const wallet = walletId ? walletById(walletId) : null
+    if (wallet?.legacyMigratedToCryptoPortfolio || wallet?.hiddenFromWalletList) {
+      notify('กระเป๋า Crypto เดิมถูกย้ายไปที่ Crypto Portfolio แล้ว', 'info')
+      App.openCryptoPortfolioDetail()
+      return
+    }
+    return prevOpenWalletForm?.(walletId)
+  }
+
+  ensureCryptoState()
+  const migrated = migrateLegacyCryptoWallets()
+  syncCryptoAssetActiveFlags()
+  if (migrated) {
+    try { App.recalculateWalletBalances?.({ save: false, recordSnapshot: true }) } catch (_) {}
+    persist()
+  }
+})()
