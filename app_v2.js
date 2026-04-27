@@ -82,7 +82,7 @@ let S = {
   categories: { expense: [], income: [] },
   budgets: [],
   settings: { darkMode: false, accentColor: '#2563EB' },
-  recurring: [], merchants: [], ccBenefits: {}, incomeBudgets: [], marketPrices: {}, txMode: 'add', editingTxId: null,
+  recurring: [], merchants: [], ccBenefits: {}, ccBenefitRules: [], incomeBudgets: [], marketPrices: {}, txMode: 'add', editingTxId: null,
   cryptoAssets: [], cryptoHoldings: [], cryptoTransactions: [], cryptoSyncMeta: {}, migrations: { cryptoCentralizedV1: false },
   creditLimitGroups: [], rewardAccounts: [], rewardLedger: [], netWorthSnapshots: [], investmentSnapshots: [],
 
@@ -568,6 +568,7 @@ function init() {
   S.recurring    = data.recurring || []
   S.merchants    = data.merchants || []
   S.ccBenefits   = data.ccBenefits || {}
+  S.ccBenefitRules = data.ccBenefitRules || []
   S.incomeBudgets = data.incomeBudgets || []
   S.marketPrices  = data.marketPrices  || {}
   S.cryptoAssets = data.cryptoAssets || []
@@ -609,7 +610,7 @@ const EMOJIS30=['🍔','🚗','🛍️','💊','🎬','💡','📚','📦','💼
 /* consolidated: removed legacy _toggleTxFlag from line 985 */
 /* consolidated: removed legacy _renderAddTxDetail from line 986 */
 Calc.getCardRewards=function(txns,b){const pe=!!(b?.points?.enabled||b?.enabled),ce=!!(b?.cashback?.enabled||b?.enabled),p=b?.points||{},c=b?.cashback||{};let points=0,cashback=0;(txns||[]).forEach(t=>{if(pe&&t.rewardIncludePoints!==false){let pt=0;if(p.bahtPerPoint)pt+=Math.floor(t.amount/p.bahtPerPoint);pt*=p.multiplier||1;if(p.maxPerTxn)pt=Math.min(pt,p.maxPerTxn);points+=pt}if(ce&&t.rewardIncludeCashback!==false&&(!c.minSpend||t.amount>=c.minSpend)){let base=c.everyBaht?Math.floor(t.amount/c.everyBaht)*c.everyBaht:t.amount,cb=base*((c.percent||0)/100);if(c.tierThreshold&&t.amount<c.tierThreshold)cb=0;if(c.maxPerTxn)cb=Math.min(cb,c.maxPerTxn);cashback+=cb}});if(p.maxPerCycle)points=Math.min(points,p.maxPerCycle);if(c.maxPerCycle)cashback=Math.min(cashback,c.maxPerCycle);return{points:Math.floor(points),cashback:Math.round(cashback*100)/100}};
-App._benefit=id=>S.ccBenefits?.[id]||{points:{},cashback:{}};App._rewardForTx=tx=>{const card=S.wallets.find(w=>w.id===tx.walletId&&w.type==='credit');return card&&tx.type==='expense'?Calc.getCardRewards([tx],App._benefit(card.id)):{points:0,cashback:0}};
+App._benefit=id=>S.ccBenefits?.[id]||{points:{},cashback:{}};App._rewardForTx=tx=>{const card=S.wallets.find(w=>w.id===tx.walletId&&w.type==='credit');if(!(card&&tx.type==='expense'))return{points:0,cashback:0};if(App.getTransactionRewardEstimate){const est=App.getTransactionRewardEstimate(tx)||{points:0,cashback:0};return{points:Number(est.points||0),cashback:Number(est.cashback||0)}}return Calc.getCardRewards([tx],App._benefit(card.id))};
 /* consolidated: removed legacy openCCBenefitScreen from line 997 */
 /* consolidated: removed legacy _investmentUnitPriceTHB from line 1000 *//* consolidated: removed legacy _investmentValueTHB from line 1000 */
 
@@ -796,7 +797,7 @@ App.render();
     if (!tx) return
     S.txMode = 'edit'
     S.editingTxId = id
-    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxDetail()
     App.openOverlay('overlay-add-tx')
@@ -807,7 +808,7 @@ App.render();
     if (!tx) return
     S.txMode = 'duplicate'
     S.editingTxId = null
-    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
@@ -941,7 +942,7 @@ App.render();
   App.openAddTx = function() {
     S.txMode = 'add'
     S.editingTxId = null
-    S.tx = { step:'amount', type:'expense', amount:'0', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', note:'', date:TODAY, isRecurring:false, isInstallment:false, installmentMonths:'' }
+    S.tx = { step:'amount', type:'expense', amount:'0', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', note:'', date:TODAY, isRecurring:false, isInstallment:false, installmentMonths:'', rewardRuleIds:[], rewardEstimate:null }
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
   }
@@ -1330,17 +1331,39 @@ App.render();
             if (type !== 'expense' || !S.tx.walletId) return ''
             const _card = S.wallets.find(w => w.id === S.tx.walletId)
             if (!_card || _card.type !== 'credit') return ''
-            const _benefit = App._benefit?.(_card.id) || S.ccBenefits?.[_card.id] || {}
-            const _p = _benefit.points || {}; const _c = _benefit.cashback || {}
-            if (!(_benefit.enabled || _p.enabled || _c.enabled || _p.bahtPerPoint > 0 || _c.percent > 0)) return ''
             const _amt = Number(S.tx.amount || 0); if (!_amt) return ''
-            const _draftTx = { type:'expense', amount:_amt, walletId:S.tx.walletId, rewardIncludePoints:S.tx.rewardIncludePoints!==false, rewardIncludeCashback:S.tx.rewardIncludeCashback!==false }
-            const _rw = Calc.getCardRewards?.([_draftTx], _benefit) || { points:0, cashback:0 }
-            const _ip = S.tx.rewardIncludePoints !== false; const _ic = S.tx.rewardIncludeCashback !== false
-            let _rows = ''
-            if (_p.enabled || _p.bahtPerPoint > 0) _rows += `<div class="tx-reward-toggle-row"><span>${_rw.points>0&&_ip?`+${_rw.points} คะแนน`:'คะแนนสะสม'}</span><button type="button" class="toggle${_ip?' on':''}" onclick="App._toggleRewardFlag('rewardIncludePoints')"></button></div>`
-            if (_c.enabled || _c.percent > 0) _rows += `<div class="tx-reward-toggle-row"><span>${_rw.cashback>0&&_ic?`+฿${_rw.cashback.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} cashback`:'Cashback'}</span><button type="button" class="toggle${_ic?' on':''}" onclick="App._toggleRewardFlag('rewardIncludeCashback')"></button></div>`
-            return `<div class="tx-cc-reward-section"><div class="form-label" style="margin-bottom:6px">สิทธิประโยชน์บัตร ${esc(_card.icon||'💳')} ${esc(_card.name)}</div>${_rows}</div>`
+            const _draftTx = { id:S.editingTxId || '', type:'expense', amount:_amt, walletId:S.tx.walletId, categoryId:S.tx.categoryId, merchant:S.tx.merchant, note:S.tx.note, date:S.tx.date || TODAY, channel:S.tx.channel || '' }
+            const _suggested = App.getSuggestedBenefitRules?.(_draftTx) || []
+            if (!_suggested.length) return ''
+            S.tx.rewardRuleIds = Array.isArray(S.tx.rewardRuleIds) ? S.tx.rewardRuleIds : []
+            const _estimate = App.calculateSelectedRewardEstimate?.(_draftTx, S.tx.rewardRuleIds) || { cashback:0, points:0, rules:[], warnings:[] }
+            S.tx.rewardEstimate = _estimate
+            const _selectedNames = _suggested.filter(rule => S.tx.rewardRuleIds.includes(rule.id)).map(rule => rule.name)
+            const _rows = _suggested.map(rule => `<button type="button" class="crypto-search-result${S.tx.rewardRuleIds.includes(rule.id) ? ' selected' : ''}" onclick="App._toggleTxRewardRule('${esc(rule.id)}')">
+              <span class="csr-main">
+                <span>
+                  <span class="list-item-name">${esc(rule.name)}</span>
+                  <span class="list-item-sub">${esc(rule.type)}${rule.suggested ? ' · suggested' : ''}${rule.allowStacking ? '' : ' · ไม่ stack'}</span>
+                  ${rule.description ? `<span class="list-item-sub">${esc(rule.description)}</span>` : ''}
+                </span>
+              </span>
+              <span class="crypto-price-badge ${S.tx.rewardRuleIds.includes(rule.id) ? 'fresh' : (rule.suggested ? 'stale' : 'manual')}">${S.tx.rewardRuleIds.includes(rule.id) ? 'เลือกแล้ว' : (rule.suggested ? 'แนะนำ' : 'เลือก')}</span>
+            </button>`).join('')
+            const _warnings = (_estimate.warnings || []).map(msg => `<div class="form-hint" style="color:var(--expense)">${esc(msg)}</div>`).join('')
+            const _caps = (_estimate.rules || []).filter(row => row.capApplied).map(row => `<div class="form-hint">${esc(row.ruleName)}: จำกัดโดย ${esc(row.capReason || 'cap')}</div>`).join('')
+            return `<div class="tx-cc-reward-section">
+              <div class="form-label" style="margin-bottom:6px">สิทธิประโยชน์ที่ใช้กับรายการนี้</div>
+              <div class="form-hint" style="margin-bottom:8px">เลือกเองได้หลาย rule โดย rule ที่เข้าเงื่อนไขจะแสดงเป็น suggested ก่อน</div>
+              <div class="crypto-search-results">${_rows}</div>
+              <div class="card card-pad" style="margin-top:10px">
+                <div class="list-item-name">สรุปโดยประมาณ</div>
+                <div class="list-item-sub">Cashback โดยประมาณ: ฿${Number(_estimate.cashback || 0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+                <div class="list-item-sub">คะแนนโดยประมาณ: ${Number(_estimate.points || 0).toLocaleString('en-US')} คะแนน</div>
+                ${_selectedNames.length ? `<div class="list-item-sub">ใช้สิทธิ์: ${esc(_selectedNames.join(', '))}</div>` : `<div class="list-item-sub">ยังไม่ได้เลือก rule</div>`}
+                ${_caps}
+                ${_warnings}
+              </div>
+            </div>`
           })()}
         </div>
         <div class="add-detail-actions"><button class="btn btn-secondary" onclick="App._backToAmount()">← แก้จำนวน</button><button class="btn btn-primary" style="background:${color};box-shadow:0 4px 16px ${color}44" onclick="App.saveTx()">${S.txMode === 'edit' ? 'บันทึก' : `บันทึก ${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}`}</button></div>
@@ -2851,13 +2874,19 @@ Calc.getUsableMoney = function(wallets) {
   App._rewardEstimateForTx = function(tx) {
     const card = walletById(tx.walletId)
     if (!card || card.type !== 'credit' || tx.type !== 'expense') return null
+    if (Array.isArray(tx.rewardRuleIds) && App.calculateSelectedRewardEstimate) {
+      const estimate = App.calculateSelectedRewardEstimate(tx, tx.rewardRuleIds)
+      return estimate && (estimate.points || estimate.cashback || estimate.rules?.length) ? estimate : null
+    }
     const benefit = App._benefit?.(card.id) || S.ccBenefits?.[card.id] || {}
     const reward = Calc.getCardRewards ? Calc.getCardRewards([tx], benefit) : { points:0, cashback:0 }
     if (!reward.points && !reward.cashback) return null
-    return { points: Number(reward.points || 0), cashback: Math.round(Number(reward.cashback || 0) * 100) / 100, status:'estimated', calculatedAt: localNow() }
+    return { points: Number(reward.points || 0), cashback: Math.round(Number(reward.cashback || 0) * 100) / 100, status:'estimated', calculatedAt: localNow(), source:'legacy' }
   }
 
   function cleanTxFromDraft(id) {
+    const wallet = walletById(S.tx.walletId)
+    const useRewardRules = !!(wallet && wallet.type === 'credit' && S.tx.type === 'expense')
     const tx = {
       id,
       type: S.tx.type,
@@ -2870,6 +2899,7 @@ Calc.getUsableMoney = function(wallets) {
       date: S.tx.date || today(),
       isRecurring: !!S.tx.isRecurring,
       isInstallment: !!S.tx.isInstallment,
+      rewardRuleIds: useRewardRules && Array.isArray(S.tx.rewardRuleIds) ? [...new Set(S.tx.rewardRuleIds.filter(Boolean))] : [],
       rewardIncludePoints: S.tx.rewardIncludePoints !== false,
       rewardIncludeCashback: S.tx.rewardIncludeCashback !== false,
     }
@@ -3824,36 +3854,213 @@ let due = new Date(
 ;(function v45Fixes() {
   const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
   const fmt = n => Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits:2, maximumFractionDigits:2 })
+  const money = n => `฿${fmt(n)}`
   const today = () => new Date().toISOString().slice(0, 10)
   const walletById = id => (S.wallets || []).find(w => w.id === id)
   const persist = () => { try { Storage.saveAll(S) } catch (_) {} }
+  const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
+  const genId = () => (typeof Calc?.genId === 'function' ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2)))
   const isInvestType = t => ['gold','crypto','fcd'].includes(t)
 
   // ═══════════════════════════════════════════════════════════════════
   // FIX 1: openCCBenefitScreen — add editable cycleDay / dueDay section
   // ═══════════════════════════════════════════════════════════════════
-  App.openCCBenefitScreen = function v45OpenCCBenefitScreen(cardId, tab = S.ccBenefitTab || 'points') {
-    S.ccBenefitTab = tab === 'cashback' ? 'cashback' : 'points'
-    const b = S.ccBenefits?.[cardId] || { points:{}, cashback:{} }
-    const p = b.points || {}, c = b.cashback || {}
+  App.openCCBenefitScreen = function(cardId) {
+    App.ensureCCBenefitRulesState?.()
     const w = walletById(cardId) || {}
     const f = (id, label, value, hint='') => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="1" min="1" max="31" id="${id}" value="${value || ''}" placeholder="1–31">${hint ? `<div class="form-hint">${hint}</div>` : ''}</div>`
-    const fDec = (id, label, value, hint='') => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="0.01" id="${id}" value="${value || ''}" placeholder="0">${hint ? `<div class="form-hint">${hint}</div>` : ''}</div>`
+    const rules = App.getCreditCardBenefitRules(cardId)
+    const templateBtns = [
+      ['base_cashback', 'Base cashback'],
+      ['base_points', 'Base points'],
+      ['cashback_targeted', 'Cashback ตามหมวด/ร้าน'],
+      ['points_targeted', 'Points xN ตามหมวด/ร้าน'],
+      ['note', 'Note'],
+      ['exclusion', 'Exclusion'],
+    ].map(([template, label]) => `<button type="button" class="chip mini" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','','${esc(template)}')">${esc(label)}</button>`).join('')
     const statementCard = `<div class="card card-pad" style="margin-bottom:12px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:12px">&#x1F4C5; รอบบัญชีบัตร</div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px">📅 รอบบัญชีบัตร</div>
       <div class="benefit-form-grid">
-        ${f('ccb-cycleDay','วันตัดรอบ (1&#x2013;31)', w.cycleDay, 'วันในทุกเดือนที่ระบบตัดรอบบัญชี')}
-        ${f('ccb-dueAfterCycleDays','ชำระหลังวันตัดยอดกี่วัน (1&#x2013;30)', w.dueAfterCycleDays, 'ระบบจะคำนวณวันครบกำหนดจากวันตัดรอบ + จำนวนวันนี้')}
+        ${f('ccb-cycleDay','วันตัดรอบ (1–31)', w.cycleDay, 'วันในทุกเดือนที่ระบบตัดรอบบัญชี')}
+        ${f('ccb-dueAfterCycleDays','ชำระหลังวันตัดยอดกี่วัน (1–30)', w.dueAfterCycleDays, 'ระบบจะคำนวณวันครบกำหนดจากวันตัดรอบ + จำนวนวันนี้')}
       </div>
+      <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit('${esc(cardId)}')">บันทึกรอบบัญชี</button></div>
     </div>`
-    const pointsForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิดคะแนนสะสม</b><button class="toggle${p.enabled ? ' on' : ''}" id="ccb-points-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${fDec('ccb-bahtPerPoint','ใช้จ่ายทุก X บาท = 1 คะแนน',p.bahtPerPoint)}${fDec('ccb-multi','คะแนนเพิ่ม X เท่า',p.multiplier||1)}${fDec('ccb-maxTxnPoint','สูงสุด/รายการ',p.maxPerTxn)}${fDec('ccb-maxCyclePoint','สูงสุด/รอบบัญชี',p.maxPerCycle)}</div></div>`
-    const cashForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิด Cashback</b><button class="toggle${c.enabled ? ' on' : ''}" id="ccb-cash-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${fDec('ccb-cbPercent','รับเงินคืน X%',c.percent)}${fDec('ccb-cbMin','ขั้นต่ำ (฿)',c.minSpend)}${fDec('ccb-cbTier','เริ่มขั้นบันไดที่ (฿)',c.tierThreshold)}${fDec('ccb-cbEvery','คิดทุก ๆ X บาท',c.everyBaht||1)}${fDec('ccb-cbMaxTxn','สูงสุด/รายการ (฿)',c.maxPerTxn)}${fDec('ccb-cbMaxCycle','สูงสุด/รอบบัญชี (฿)',c.maxPerCycle)}</div></div>`
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">&#x2190;</button><h2>สิทธิประโยชน์บัตร</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefit('${esc(cardId)}')" style="width:auto">บันทึก</button></div>
+    const rulesHtml = rules.length
+      ? rules.map(rule => `<div class="card card-pad" style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+            <div style="min-width:0">
+              <div class="list-item-name">${esc(rule.name)}</div>
+              <div class="list-item-sub">${esc(rule.type)}${rule.isBaseRule ? ' · สิทธิ์พื้นฐาน' : ''}${rule.active ? '' : ' · ปิดใช้งาน'}</div>
+              ${rule.description ? `<div class="list-item-sub">${esc(rule.description)}</div>` : ''}
+            </div>
+            <button class="toggle${rule.active ? ' on' : ''}" onclick="event.stopPropagation();App.toggleCCBenefitRule('${esc(rule.id)}')"></button>
+          </div>
+          <div class="list-item-sub" style="margin-top:8px">
+            ${rule.suggestedConditions?.categories?.length ? `หมวด: ${esc(rule.suggestedConditions.categories.join(', '))} · ` : ''}${rule.suggestedConditions?.merchants?.length ? `ร้าน: ${esc(rule.suggestedConditions.merchants.join(', '))} · ` : ''}${rule.suggestedConditions?.channels?.length ? `ช่องทาง: ${esc(rule.suggestedConditions.channels.join(', '))} · ` : ''}${rule.suggestedConditions?.minSpend ? `ขั้นต่ำ ${money(rule.suggestedConditions.minSpend)}` : ''}
+          </div>
+          <div class="list-item-sub" style="margin-top:4px">
+            ${rule.cashback?.rate ? `Cashback ${rule.cashback.rate}% ` : ''}${rule.cashback?.fixedAmount ? `Cashback fixed ${money(rule.cashback.fixedAmount)} ` : ''}${rule.points?.bahtPerPoint ? `· ${rule.points.bahtPerPoint} บาท = 1 คะแนน x${rule.points.multiplier || 1}` : ''}
+          </div>
+          <div class="flex-row" style="margin-top:10px">
+            <button class="btn btn-outline" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">แก้ไข</button>
+            <button class="btn btn-outline" onclick="App.deleteCCBenefitRule('${esc(rule.id)}')">ลบ</button>
+          </div>
+        </div>`).join('')
+      : App._emptyState?.('🎁', 'ยังไม่มี benefit rule', 'เพิ่มสิทธิ์พื้นฐานหรือ campaign ของบัตรใบนี้') || ''
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่ม rule</button></div>
       <div class="sub-scroll">
         ${statementCard}
-        <div class="benefit-tabs"><button class="benefit-tab ${S.ccBenefitTab==='points'?'active':''}" onclick="App.openCCBenefitScreen('${esc(cardId)}','points')">คะแนนสะสม</button><button class="benefit-tab ${S.ccBenefitTab==='cashback'?'active':''}" onclick="App.openCCBenefitScreen('${esc(cardId)}','cashback')">Cashback</button></div>
-        ${S.ccBenefitTab === 'points' ? pointsForm : cashForm}
+        <div class="sec-title">Template</div>
+        <div class="card card-pad" style="margin-bottom:12px"><div class="chip-row">${templateBtns}</div></div>
+        <div class="sec-title">Rules ของบัตรใบนี้</div>
+        ${rulesHtml}
       </div>`)
+  }
+
+  App._benefitRuleTemplate = function(template = 'base_cashback', cardId = '') {
+    const base = { cardId, active: true, allowStacking: true, isBaseRule: false, priority: 0 }
+    if (template === 'base_points') return { ...base, name: 'Base points', type: 'points', description: 'สิทธิ์พื้นฐานของบัตร', points: { bahtPerPoint: 25, multiplier: 1, multiplierMode: 'total' }, allowStacking: true, isBaseRule: true, priority: 10 }
+    if (template === 'cashback_targeted') return { ...base, name: 'Cashback campaign', type: 'cashback', cashback: { mode: 'percent', rate: 10 }, allowStacking: false }
+    if (template === 'points_targeted') return { ...base, name: 'Points multiplier', type: 'points', points: { bahtPerPoint: 25, multiplier: 5, multiplierMode: 'total' }, allowStacking: true }
+    if (template === 'note') return { ...base, name: 'Manual note', type: 'note', description: 'บันทึกเตือนเงื่อนไขสิทธิ์' }
+    if (template === 'exclusion') return { ...base, name: 'Exclusion', type: 'exclusion', description: 'รายการนี้ไม่นับสิทธิ์' }
+    return { ...base, name: 'Base cashback', type: 'cashback', description: 'สิทธิ์พื้นฐานของบัตร', cashback: { mode: 'percent', rate: 1 }, allowStacking: false, isBaseRule: true, priority: 10 }
+  }
+
+  App.openCCBenefitRuleForm = function(cardId, ruleId = '', template = 'base_cashback') {
+    App.ensureCCBenefitRulesState?.()
+    const current = ruleId ? (S.ccBenefitRules || []).find(rule => rule.id === ruleId) : null
+    const rule = App.normalizeBenefitRule?.(current || App._benefitRuleTemplate(template, cardId), cardId) || (current || App._benefitRuleTemplate(template, cardId))
+    const categoryOptions = (S.categories?.expense || []).map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('')
+    const merchantOptions = (S.merchants || []).map(m => `<option value="${esc(m.name)}">`).join('')
+    const v = n => n ?? ''
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCBenefitScreen('${esc(cardId)}')">←</button><h2>${ruleId ? 'แก้ไขกติกาสิทธิประโยชน์' : 'เพิ่มกติกาสิทธิประโยชน์'}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefitRule('${esc(cardId)}','${esc(ruleId)}')" style="width:auto">บันทึก</button></div>
+      <div class="sub-scroll">
+        <div class="card card-pad" style="margin-bottom:12px">
+          <div class="list-item-name">วิธีใช้งานสั้น ๆ</div>
+          <div class="form-hint">1. ตั้งชื่อสิทธิ์ให้จำง่าย</div>
+          <div class="form-hint">2. ใส่เงื่อนไขที่ใช้แนะนำ เช่น หมวด ร้านค้า หรือยอดขั้นต่ำ</div>
+          <div class="form-hint">3. ตั้งวิธีคำนวณเงินคืน/คะแนน และกำหนดเพดานถ้าต้องการ</div>
+          <div class="form-hint">4. ตอนบันทึกรายการบัตรเครดิต ผู้ใช้จะเป็นคนเลือกสิทธิ์เอง ไม่ได้ใช้ให้อัตโนมัติ</div>
+        </div>
+        <div class="form-group"><label class="form-label">รูปแบบตั้งต้น</label><select class="form-input" id="ccbr-template" onchange="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}',this.value)"><option value="base_cashback"${template==='base_cashback'?' selected':''}>สิทธิ์พื้นฐานแบบเงินคืน</option><option value="base_points"${template==='base_points'?' selected':''}>สิทธิ์พื้นฐานแบบคะแนน</option><option value="cashback_targeted"${template==='cashback_targeted'?' selected':''}>เงินคืนตามหมวด / ร้าน / ช่องทาง</option><option value="points_targeted"${template==='points_targeted'?' selected':''}>คะแนนพิเศษตามหมวด / ร้าน / ช่องทาง</option><option value="note"${template==='note'?' selected':''}>บันทึกเตือน / ข้อความกำกับ</option><option value="exclusion"${template==='exclusion'?' selected':''}>รายการที่ไม่เข้าร่วมสิทธิ์</option></select><div class="form-hint">ใช้เพื่อช่วยตั้งค่าฟิลด์เริ่มต้นให้เร็วขึ้น</div></div>
+        <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input class="form-input" id="ccbr-name" value="${esc(rule.name)}" placeholder="เช่น Shopee 10%, คะแนนพื้นฐาน, Online 5X"></div>
+        <div class="tx-reward-toggle-row"><span>เปิดใช้งาน</span><button type="button" id="ccbr-active" class="toggle${rule.active ? ' on' : ''}" onclick="this.classList.toggle('on')"></button></div>
+        <div class="form-group"><label class="form-label">ประเภทสิทธิ์</label><select class="form-input" id="ccbr-type"><option value="cashback"${rule.type==='cashback'?' selected':''}>เงินคืน</option><option value="points"${rule.type==='points'?' selected':''}>คะแนน</option><option value="both"${rule.type==='both'?' selected':''}>ทั้งเงินคืนและคะแนน</option><option value="note"${rule.type==='note'?' selected':''}>บันทึกเตือน</option><option value="exclusion"${rule.type==='exclusion'?' selected':''}>ไม่เข้าร่วมสิทธิ์</option></select></div>
+        <div class="form-group"><label class="form-label">คำอธิบาย / หมายเหตุเงื่อนไข</label><input class="form-input" id="ccbr-description" value="${esc(rule.description || '')}" placeholder="เช่น ใช้เฉพาะแคมเปญ 1.1 / ต้องลงทะเบียนก่อน"></div>
+        <div class="sec-title">เงื่อนไขสำหรับแนะนำสิทธิ์</div>
+        <div class="card card-pad" style="margin-bottom:12px">
+          <div class="form-hint" style="margin-bottom:8px">ส่วนนี้ใช้เพื่อ “แนะนำ” สิทธิ์บนหน้าบันทึกรายการเท่านั้น ผู้ใช้ยังต้องกดเลือกเอง</div>
+          <div class="form-group"><label class="form-label">หมวดหมู่ (คั่นด้วย comma)</label><input class="form-input" id="ccbr-categories" list="ccbr-categories-list" value="${esc((rule.suggestedConditions.categories || []).join(', '))}" placeholder="เช่น shopping, food"><datalist id="ccbr-categories-list">${categoryOptions}</datalist></div>
+          <div class="form-group"><label class="form-label">ร้านค้า (คั่นด้วย comma)</label><input class="form-input" id="ccbr-merchants" list="ccbr-merchants-list" value="${esc((rule.suggestedConditions.merchants || []).join(', '))}" placeholder="เช่น Shopee, Grab"><datalist id="ccbr-merchants-list">${merchantOptions}</datalist></div>
+          <div class="form-group"><label class="form-label">ช่องทาง</label><select class="form-input" id="ccbr-channel"><option value="">ทุกช่องทาง</option><option value="online"${(rule.suggestedConditions.channels || []).includes('online') ? ' selected' : ''}>ออนไลน์</option><option value="offline"${(rule.suggestedConditions.channels || []).includes('offline') ? ' selected' : ''}>หน้าร้าน / ออฟไลน์</option></select></div>
+          <div class="form-group"><label class="form-label">ขั้นต่ำต่อรายการ</label><input class="form-input" type="number" step="0.01" id="ccbr-minSpend" value="${esc(v(rule.suggestedConditions.minSpend))}"></div>
+        </div>
+        <div class="sec-title">การคำนวณเงินคืน</div>
+        <div class="card card-pad" style="margin-bottom:12px">
+          <div class="form-hint" style="margin-bottom:8px">เลือกว่าจะคิดเป็นเปอร์เซ็นต์ของยอดที่เข้าเงื่อนไข หรือให้เงินคืนคงที่</div>
+          <div class="form-group"><label class="form-label">วิธีคิดเงินคืน</label><select class="form-input" id="ccbr-cb-mode"><option value="percent"${rule.cashback.mode==='percent'?' selected':''}>คิดเป็นเปอร์เซ็นต์</option><option value="fixed"${rule.cashback.mode==='fixed'?' selected':''}>ให้จำนวนคงที่</option></select></div>
+          <div class="form-group"><label class="form-label">อัตราเงินคืน (%)</label><input class="form-input" type="number" step="0.01" id="ccbr-cb-rate" value="${esc(v(rule.cashback.rate))}"></div>
+          <div class="form-group"><label class="form-label">เงินคืนคงที่ (บาท)</label><input class="form-input" type="number" step="0.01" id="ccbr-cb-fixed" value="${esc(v(rule.cashback.fixedAmount))}"></div>
+        </div>
+        <div class="sec-title">การคำนวณคะแนน</div>
+        <div class="card card-pad" style="margin-bottom:12px">
+          <div class="form-hint" style="margin-bottom:8px">ตัวอย่าง: ทุก 25 บาท = 1 คะแนน, ตัวคูณ 5 เท่า</div>
+          <div class="form-group"><label class="form-label">ใช้จ่ายกี่บาท = 1 คะแนน</label><input class="form-input" type="number" step="0.01" id="ccbr-p-baht" value="${esc(v(rule.points.bahtPerPoint))}"></div>
+          <div class="form-group"><label class="form-label">ตัวคูณคะแนน</label><input class="form-input" type="number" step="1" id="ccbr-p-multi" value="${esc(v(rule.points.multiplier || 1))}"></div>
+          <div class="form-group"><label class="form-label">วิธีใช้ตัวคูณ</label><select class="form-input" id="ccbr-p-mode"><option value="total"${rule.points.multiplierMode==='total'?' selected':''}>คูณกับคะแนนรวมของรายการ</option></select></div>
+        </div>
+        <div class="sec-title">เพดาน / ข้อจำกัด</div>
+        <div class="card card-pad" style="margin-bottom:12px">
+          <div class="form-hint" style="margin-bottom:8px">เพดานยอดใช้จ่าย จะตัด “ยอดที่นำมาคำนวณ” ก่อน ส่วนเพดานเงินคืน/คะแนน จะตัด “ผลลัพธ์หลังคำนวณ” อีกที</div>
+          <div class="form-group"><label class="form-label">ยอดใช้จ่ายสูงสุดที่นำมาคำนวณ / รายการ</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-eligible-tx" value="${esc(v(rule.limits.maxEligibleSpendPerTx))}"></div>
+          <div class="form-group"><label class="form-label">ยอดใช้จ่ายสูงสุดที่นำมาคำนวณ / รอบบิล</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-eligible-cycle" value="${esc(v(rule.limits.maxEligibleSpendPerCycle))}"></div>
+          <div class="form-group"><label class="form-label">เงินคืนหรือคะแนนสูงสุด / รายการ</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-reward-tx" value="${esc(v(rule.limits.maxRewardAmountPerTx))}"></div>
+          <div class="form-group"><label class="form-label">เงินคืนหรือคะแนนสูงสุด / รอบบิล</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-reward-cycle" value="${esc(v(rule.limits.maxRewardAmountPerCycle))}"></div>
+        </div>
+        <div class="card card-pad">
+          <div class="form-hint" style="margin-bottom:8px">ใช้กำหนดพฤติกรรมเวลาแสดงผลและเตือนผู้ใช้</div>
+          <div class="tx-reward-toggle-row"><span>อนุญาตให้ใช้ร่วมกับสิทธิ์อื่น</span><button type="button" id="ccbr-stacking" class="toggle${rule.allowStacking ? ' on' : ''}" onclick="this.classList.toggle('on')"></button></div>
+          <div class="tx-reward-toggle-row"><span>เป็นสิทธิ์พื้นฐานของบัตร</span><button type="button" id="ccbr-base" class="toggle${rule.isBaseRule ? ' on' : ''}" onclick="this.classList.toggle('on')"></button></div>
+          <div class="form-group" style="margin-top:12px"><label class="form-label">ลำดับความสำคัญ</label><input class="form-input" type="number" step="1" id="ccbr-priority" value="${esc(v(rule.priority || 0))}"></div>
+        </div>
+      </div>`)
+  }
+
+  App.saveCCBenefitRule = function(cardId, ruleId = '') {
+    App.ensureCCBenefitRulesState?.()
+    const readNum = id => {
+      const n = Number(document.getElementById(id)?.value || 0)
+      return Number.isFinite(n) && n > 0 ? n : null
+    }
+    const rule = App.normalizeBenefitRule?.({
+      id: ruleId || genId(),
+      cardId,
+      name: String(document.getElementById('ccbr-name')?.value || '').trim(),
+      active: document.getElementById('ccbr-active')?.classList.contains('on'),
+      type: document.getElementById('ccbr-type')?.value || 'cashback',
+      description: String(document.getElementById('ccbr-description')?.value || '').trim(),
+      suggestedConditions: {
+        categories: App.splitRuleListInput?.(document.getElementById('ccbr-categories')?.value || '') || [],
+        merchants: App.splitRuleListInput?.(document.getElementById('ccbr-merchants')?.value || '') || [],
+        channels: String(document.getElementById('ccbr-channel')?.value || '').trim() ? [String(document.getElementById('ccbr-channel')?.value || '').trim()] : [],
+        minSpend: readNum('ccbr-minSpend'),
+      },
+      cashback: {
+        mode: document.getElementById('ccbr-cb-mode')?.value || 'percent',
+        rate: readNum('ccbr-cb-rate'),
+        fixedAmount: readNum('ccbr-cb-fixed'),
+      },
+      points: {
+        bahtPerPoint: readNum('ccbr-p-baht'),
+        multiplier: readNum('ccbr-p-multi') || 1,
+        multiplierMode: document.getElementById('ccbr-p-mode')?.value || 'total',
+      },
+      limits: {
+        maxEligibleSpendPerTx: readNum('ccbr-limit-eligible-tx'),
+        maxEligibleSpendPerCycle: readNum('ccbr-limit-eligible-cycle'),
+        maxRewardAmountPerTx: readNum('ccbr-limit-reward-tx'),
+        maxRewardAmountPerCycle: readNum('ccbr-limit-reward-cycle'),
+      },
+      allowStacking: document.getElementById('ccbr-stacking')?.classList.contains('on'),
+      isBaseRule: document.getElementById('ccbr-base')?.classList.contains('on'),
+      priority: Number(document.getElementById('ccbr-priority')?.value || 0) || 0,
+    }, cardId) || null
+    if (!rule.name) { notify('กรุณาระบุชื่อ rule', 'error'); return }
+    const idx = (S.ccBenefitRules || []).findIndex(row => row.id === rule.id)
+    if (idx >= 0) S.ccBenefitRules[idx] = rule
+    else S.ccBenefitRules.push(rule)
+    persist()
+    App.openCCBenefitScreen(cardId)
+    notify('บันทึก benefit rule แล้ว', 'success')
+  }
+
+  App.toggleCCBenefitRule = function(ruleId) {
+    App.ensureCCBenefitRulesState?.()
+    const rule = (S.ccBenefitRules || []).find(row => row.id === ruleId)
+    if (!rule) return
+    rule.active = !rule.active
+    persist()
+    App.openCCBenefitScreen(rule.cardId)
+  }
+
+  App.deleteCCBenefitRule = function(ruleId) {
+    App.ensureCCBenefitRulesState?.()
+    const rule = (S.ccBenefitRules || []).find(row => row.id === ruleId)
+    if (!rule) return
+    App.showConfirm?.({
+      title: 'ลบ benefit rule',
+      danger: true,
+      body: `ต้องการลบ "${rule.name}" หรือไม่?`,
+      confirmLabel: 'ลบ',
+      onConfirm() {
+        S.ccBenefitRules = (S.ccBenefitRules || []).filter(row => row.id !== ruleId)
+        persist()
+        App.openCCBenefitScreen(rule.cardId)
+        notify('ลบ benefit rule แล้ว', 'success')
+      },
+    })
   }
 
   /* consolidated: removed legacy saveCCBenefit from line 5711 */
@@ -4552,26 +4759,28 @@ let due = new Date(
     const dueAfterCycleDays = parseInt(document.getElementById('ccb-dueAfterCycleDays')?.value) || w.dueAfterCycleDays || 10
     const idx = (S.wallets||[]).findIndex(x => x.id === id)
     if (idx >= 0) { S.wallets[idx].cycleDay = cycleDay; S.wallets[idx].dueAfterCycleDays = dueAfterCycleDays }
-    S.ccBenefits[id] = {
-      enabled: false,
-      points: {
-        enabled: document.getElementById('ccb-points-enabled')?.classList.contains('on'),
-        bahtPerPoint:     v('ccb-bahtPerPoint'),
-        multiplier:       v('ccb-multi') || 1,
-        maxPerTxn:        v('ccb-maxTxnPoint'),
-        maxPerCycle:      v('ccb-maxCyclePoint'),
-      },
-      cashback: {
-        enabled: document.getElementById('ccb-cash-enabled')?.classList.contains('on'),
-        percent:       v('ccb-cbPercent'),
-        minSpend:      v('ccb-cbMin'),
-        tierThreshold: v('ccb-cbTier'),
-        everyBaht:     v('ccb-cbEvery') || 1,
-        maxPerTxn:     v('ccb-cbMaxTxn'),
-        maxPerCycle:   v('ccb-cbMaxCycle'),
-      },
+    if (document.getElementById('ccb-points-enabled') || document.getElementById('ccb-cash-enabled')) {
+      S.ccBenefits[id] = {
+        enabled: false,
+        points: {
+          enabled: document.getElementById('ccb-points-enabled')?.classList.contains('on'),
+          bahtPerPoint:     v('ccb-bahtPerPoint'),
+          multiplier:       v('ccb-multi') || 1,
+          maxPerTxn:        v('ccb-maxTxnPoint'),
+          maxPerCycle:      v('ccb-maxCyclePoint'),
+        },
+        cashback: {
+          enabled: document.getElementById('ccb-cash-enabled')?.classList.contains('on'),
+          percent:       v('ccb-cbPercent'),
+          minSpend:      v('ccb-cbMin'),
+          tierThreshold: v('ccb-cbTier'),
+          everyBaht:     v('ccb-cbEvery') || 1,
+          maxPerTxn:     v('ccb-cbMaxTxn'),
+          maxPerCycle:   v('ccb-cbMaxCycle'),
+        },
+      }
     }
-    persist(); App.openCCDetail(id); notify('บันทึกสิทธิประโยชน์แล้ว', 'success')
+    persist(); App.openCCBenefitScreen(id); notify('บันทึกรอบบัญชีแล้ว', 'success')
   }
 
   // ── Updated _walletCard — CC shows shared limit context ─────
@@ -5630,11 +5839,13 @@ let due = new Date(
     else {
       S.txMode = 'add'
       S.editingTxId = null
-      S.tx = { step:'amount', type:'expense', amount:'0', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', note:'', date:today(), isRecurring:false, isInstallment:false, installmentMonths:'' }
+      S.tx = { step:'amount', type:'expense', amount:'0', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', note:'', date:today(), isRecurring:false, isInstallment:false, installmentMonths:'', rewardRuleIds:[], rewardEstimate:null }
       App._renderAddTxAmount?.()
       App.openOverlay?.('overlay-add-tx')
     }
     if (S.tx) {
+      S.tx.rewardRuleIds = Array.isArray(S.tx.rewardRuleIds) ? S.tx.rewardRuleIds : []
+      if (S.tx.rewardEstimate === undefined) S.tx.rewardEstimate = null
       S.tx.recurrenceType ||= 'monthly'
       S.tx.everyDays ||= 30
       S.tx.durationMonths ??= ''
@@ -6120,6 +6331,8 @@ let due = new Date(
     S.cryptoAssets ||= []
     S.cryptoHoldings ||= []
     S.cryptoTransactions ||= []
+    S.settings ||= {}
+    if (!Array.isArray(S.settings.cryptoLocations)) S.settings.cryptoLocations = [...CRYPTO_LOCATIONS]
     S.migrations ||= {}
     S.cryptoForm ||= {}
     if (typeof S.migrations.cryptoCentralizedV1 !== 'boolean') S.migrations.cryptoCentralizedV1 = false
@@ -6435,6 +6648,12 @@ let due = new Date(
       .sort((a, b) => b - a)[0] || 0
   }
 
+  function getCryptoLocationOptions(current = '') {
+    ensureCryptoState()
+    const holdingLocations = (S.cryptoHoldings || []).map(h => String(h.location || '').trim()).filter(Boolean)
+    return [...new Set([...(S.settings?.cryptoLocations || []), ...holdingLocations, String(current || '').trim()].filter(Boolean))]
+  }
+
   function updateWalletOpeningBalance(walletId, deltaTHB) {
     const wallet = walletById(walletId)
     if (!wallet || wallet.type === 'credit' || ['gold','crypto','fcd'].includes(wallet.type)) return false
@@ -6446,13 +6665,27 @@ let due = new Date(
   function createHoldingRow(holding, { showEditButton = false } = {}) {
     const asset = App.getCryptoAsset(holding.assetId)
     const value = App.getCryptoHoldingValueTHB(holding)
+    const unrealized = App.getCryptoHoldingUnrealizedPLTHB(holding)
     const hidden = !!S.settings?.hideMoney
+    if (!showEditButton) {
+      return `<div class="card card-pad crypto-holding-row" onclick="App.openCryptoPortfolioDetail('${esc(holding.id)}')">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div class="wallet-pill" style="background:${esc((asset?.color || '#F59E0B'))}20;color:${esc(asset?.color || '#F59E0B')};width:44px;height:44px;border-radius:14px;font-size:15px;flex:0 0 auto">${esc(asset?.icon || asset?.symbol || '?')}</div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px">
+            <div style="font-size:10px;line-height:1.15;color:var(--muted)">ถืออยู่</div>
+            <div style="font-size:13px;font-weight:700;line-height:1.2;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${hidden ? '*****' : `${unitFmt(holding.units, asset?.decimals || 8)} ${esc(asset?.symbol || '')}`}</div>
+            <div style="font-size:10px;line-height:1.15;color:var(--muted);margin-top:1px">มูลค่า</div>
+            <div style="font-size:13px;font-weight:700;line-height:1.2;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${hidden ? '฿*****' : plainMoney(value)}</div>
+          </div>
+        </div>
+      </div>`
+    }
     return `<div class="card card-pad crypto-holding-row" onclick="App.openCryptoPortfolioDetail('${esc(holding.id)}')">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
         <div class="crypto-coin-main" style="min-width:0;flex:1">
           <div class="wallet-pill" style="background:${esc((asset?.color || '#F59E0B'))}20;color:${esc(asset?.color || '#F59E0B')}">${esc(asset?.icon || asset?.symbol || '?')}</div>
           <div style="min-width:0">
-            <div class="list-item-name">${esc(asset?.symbol || '?')}</div>
+            <div class="list-item-name">${esc(asset?.symbol || '?')} · ${esc(asset?.name || 'Unknown')}</div>
           </div>
         </div>
         ${showEditButton ? `<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();App.openCryptoHoldingForm('${esc(holding.id)}')" style="width:auto;flex:0 0 auto;border-color:var(--line);color:var(--muted)">แก้ไข</button>` : ''}
@@ -6465,6 +6698,7 @@ let due = new Date(
   </strong>
 </div>
         <div class="crypto-row-metric"><span>มูลค่า</span><strong>${hidden ? '฿*****' : plainMoney(value)}</strong></div>
+        <div class="crypto-row-metric"><span>Unrealized P/L</span><strong class="${unrealized >= 0 ? 'c-income' : 'c-expense'}">${hidden ? '฿*****' : `${unrealized < 0 ? '-' : ''}${plainMoney(Math.abs(unrealized))}`}</strong></div>
       </div>
     </div>`
   }
@@ -6779,7 +7013,7 @@ let due = new Date(
     const preset = inferCryptoPreset(asset || {}) || null
     const selectedCoinGeckoId = preset?.coinGeckoId || ''
     const locationValue = holding?.location || 'Wallet'
-    const locationOptions = [...new Set([...CRYPTO_LOCATIONS, locationValue].filter(Boolean))]
+    const locationOptions = getCryptoLocationOptions(locationValue)
     const customCoinGeckoId = asset?.coinGeckoId && !preset ? asset.coinGeckoId : ''
     const customMode = !preset && !!asset
     const selectedAsset = buildCryptoSearchResult(asset || preset || {}, preset ? { sourceLabel: 'Preset' } : {})
@@ -6788,6 +7022,7 @@ let due = new Date(
       query: preset ? `${preset.symbol} ${preset.name}` : '',
       selectedPresetId: selectedCoinGeckoId,
       selectedAsset: selectedCoinGeckoId ? selectedAsset : null,
+      holdingId,
       searchResults: [],
       searchLoading: false,
       searchError: '',
@@ -6817,10 +7052,21 @@ let due = new Date(
         <div class="form-group"><label class="form-label">จำนวนเหรียญ</label><input class="form-input" type="number" step="0.00000001" min="0" id="crypto-units" value="${holding ? esc(holding.units) : ''}"></div>
         <div class="form-group"><label class="form-label">ต้นทุนเฉลี่ยต่อเหรียญ (THB)</label><input class="form-input" type="number" step="0.01" min="0" id="crypto-avg-cost" value="${holding ? esc(holding.averageCostTHB) : ''}"></div>
         <div class="form-group"><label class="form-label">ราคาสำรองต่อเหรียญ (THB)</label><input class="form-input" type="number" step="0.01" min="0" id="crypto-manual-price" value="${holding ? esc(holding.manualPriceTHB) : ''}"></div>
-        <div class="form-group"><label class="form-label">Location</label><select class="form-input" id="crypto-location">${locationOptions.map(loc => `<option value="${esc(loc)}"${loc === locationValue ? ' selected' : ''}>${esc(loc)}</option>`).join('')}</select></div>
+        <div class="form-group">
+          <label class="form-label">Location</label>
+          <input class="form-input" id="crypto-location" list="crypto-location-list" value="${esc(locationValue)}" placeholder="เช่น Binance, Bitkub, Ledger, Wallet" oninput="App._refreshCryptoLocationControls()">
+          <datalist id="crypto-location-list">${locationOptions.map(loc => `<option value="${esc(loc)}">`).join('')}</datalist>
+          <div class="form-hint">พิมพ์ location ใหม่ได้ แล้วกดบันทึก location เพื่อให้ใช้ครั้งต่อไปได้ทันที</div>
+          <div class="flex-row" style="margin-top:8px">
+            <button type="button" class="btn btn-outline" onclick="App.saveCryptoLocationOption()" style="width:auto">บันทึก location นี้</button>
+            <button type="button" class="btn btn-outline" id="crypto-location-delete-btn" onclick="App.deleteCryptoLocationOption()" style="width:auto">ลบ location นี้</button>
+          </div>
+          <div class="chip-row" id="crypto-location-chip-row" style="margin-top:8px">${locationOptions.map(loc => `<button type="button" class="chip mini${loc === locationValue ? ' active' : ''}" onclick="App._setCryptoLocation('${esc(loc)}')">${esc(loc)}</button>`).join('')}</div>
+        </div>
         <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="crypto-note" value="${esc(holding?.note || '')}" placeholder="เช่น DCA, long-term, cold wallet"></div>
       </div>`)
     App._bindCryptoSearchInput()
+    App._refreshCryptoLocationControls()
     requestAnimationFrame(() => App._queueCryptoSearch(true))
   }
 
@@ -6829,6 +7075,48 @@ let due = new Date(
     if (!queryInput || queryInput.dataset.bound === '1') return
     queryInput.dataset.bound = '1'
     queryInput.addEventListener('focus', () => App._queueCryptoSearch(true))
+  }
+
+  App._refreshCryptoLocationControls = function() {
+    ensureCryptoState()
+    const input = document.getElementById('crypto-location')
+    const datalist = document.getElementById('crypto-location-list')
+    const chipRow = document.getElementById('crypto-location-chip-row')
+    const deleteBtn = document.getElementById('crypto-location-delete-btn')
+    const current = String(input?.value || '').trim()
+    const locations = getCryptoLocationOptions(current)
+    if (datalist) datalist.innerHTML = locations.map(loc => `<option value="${esc(loc)}">`).join('')
+    if (chipRow) chipRow.innerHTML = locations.map(loc => `<button type="button" class="chip mini${loc === current ? ' active' : ''}" onclick="App._setCryptoLocation('${esc(loc)}')">${esc(loc)}</button>`).join('')
+    if (deleteBtn) deleteBtn.style.display = current && (S.settings?.cryptoLocations || []).includes(current) ? '' : 'none'
+  }
+
+  App._setCryptoLocation = function(location) {
+    const input = document.getElementById('crypto-location')
+    if (!input) return
+    input.value = String(location || '').trim()
+    App._refreshCryptoLocationControls()
+  }
+
+  App.saveCryptoLocationOption = function() {
+    ensureCryptoState()
+    const input = document.getElementById('crypto-location')
+    const location = String(input?.value || '').trim()
+    if (!location) { notify('กรุณาระบุ location ก่อน', 'warn'); return }
+    S.settings.cryptoLocations = [...new Set([...(S.settings?.cryptoLocations || []), location])]
+    persist()
+    App._refreshCryptoLocationControls()
+    notify('บันทึก location แล้ว', 'success')
+  }
+
+  App.deleteCryptoLocationOption = function() {
+    ensureCryptoState()
+    const input = document.getElementById('crypto-location')
+    const location = String(input?.value || '').trim()
+    if (!location) { notify('กรุณาเลือก location ที่ต้องการลบ', 'warn'); return }
+    S.settings.cryptoLocations = (S.settings?.cryptoLocations || []).filter(loc => String(loc || '').trim() !== location)
+    persist()
+    App._refreshCryptoLocationControls()
+    notify('ลบ location แล้ว', 'success')
   }
 
   App._setCryptoFormMode = function(mode) {
@@ -7388,6 +7676,7 @@ let due = new Date(
         recurring: S.recurring,
         merchants: S.merchants,
         ccBenefits: S.ccBenefits,
+        ccBenefitRules: S.ccBenefitRules || [],
         incomeBudgets: S.incomeBudgets,
         marketPrices: S.marketPrices || {},
         settings: S.settings,
@@ -7440,6 +7729,7 @@ let due = new Date(
           S.recurring = data.recurring || []
           S.merchants = data.merchants || []
           S.ccBenefits = data.ccBenefits || {}
+          S.ccBenefitRules = data.ccBenefitRules || []
           S.incomeBudgets = data.incomeBudgets || []
           S.marketPrices = data.marketPrices || {}
           S.settings = { ...(S.settings || {}), ...(data.settings || {}) }
@@ -7452,6 +7742,7 @@ let due = new Date(
           S.cryptoHoldings = data.cryptoHoldings || []
           S.cryptoTransactions = data.cryptoTransactions || []
           S.migrations = { cryptoCentralizedV1: false, ...(data.migrations || {}) }
+          try { ensureCCBenefitRulesState() } catch (_) {}
           ensureCryptoState()
           migrateLegacyCryptoWallets()
           App.ensureLedgerBaselines?.(true)
@@ -7565,6 +7856,369 @@ let due = new Date(
     return changed
   }
 
+  function splitRuleListInput(value = '') {
+    return [...new Set(String(value || '')
+      .split(',')
+      .map(v => String(v || '').trim())
+      .filter(Boolean))]
+  }
+  App.splitRuleListInput = splitRuleListInput
+
+  function parseRuleNumber(value, fallback = null) {
+    const n = Number(value)
+    return Number.isFinite(n) && n > 0 ? n : fallback
+  }
+
+  function normalizeBenefitRule(rule = {}, cardId = '') {
+    const suggestedConditions = rule.suggestedConditions || {}
+    const cashback = rule.cashback || {}
+    const points = rule.points || {}
+    const limits = rule.limits || {}
+    return {
+      id: String(rule.id || genId()),
+      cardId: String(rule.cardId || cardId || ''),
+      name: String(rule.name || 'New rule').trim(),
+      active: rule.active !== false,
+      type: ['cashback', 'points', 'both', 'note', 'exclusion'].includes(rule.type) ? rule.type : 'cashback',
+      description: String(rule.description || '').trim(),
+      suggestedConditions: {
+        categories: Array.isArray(suggestedConditions.categories) ? suggestedConditions.categories.filter(Boolean) : [],
+        merchants: Array.isArray(suggestedConditions.merchants) ? suggestedConditions.merchants.filter(Boolean) : [],
+        channels: Array.isArray(suggestedConditions.channels) ? suggestedConditions.channels.filter(Boolean) : [],
+        minSpend: parseRuleNumber(suggestedConditions.minSpend, null),
+      },
+      cashback: {
+        mode: cashback.mode === 'fixed' ? 'fixed' : 'percent',
+        rate: parseRuleNumber(cashback.rate, null),
+        fixedAmount: parseRuleNumber(cashback.fixedAmount, null),
+      },
+      points: {
+        bahtPerPoint: parseRuleNumber(points.bahtPerPoint, null),
+        multiplier: parseRuleNumber(points.multiplier, 1) || 1,
+        multiplierMode: points.multiplierMode === 'total' ? 'total' : 'total',
+      },
+      limits: {
+        maxEligibleSpendPerTx: parseRuleNumber(limits.maxEligibleSpendPerTx, null),
+        maxEligibleSpendPerCycle: parseRuleNumber(limits.maxEligibleSpendPerCycle, null),
+        maxRewardAmountPerTx: parseRuleNumber(limits.maxRewardAmountPerTx, null),
+        maxRewardAmountPerCycle: parseRuleNumber(limits.maxRewardAmountPerCycle, null),
+      },
+      allowStacking: rule.allowStacking !== false,
+      isBaseRule: !!rule.isBaseRule,
+      priority: Number.isFinite(Number(rule.priority)) ? Number(rule.priority) : 0,
+      source: String(rule.source || '').trim(),
+    }
+  }
+  App.normalizeBenefitRule = normalizeBenefitRule
+
+  function buildLegacyBenefitRules(cardId, legacy = {}) {
+    const rules = []
+    const p = legacy.points || {}
+    const c = legacy.cashback || {}
+    if (p.enabled || Number(p.bahtPerPoint || 0) > 0) {
+      rules.push(normalizeBenefitRule({
+        id: `legacy-points-${cardId}`,
+        cardId,
+        name: 'Base points',
+        active: true,
+        type: 'points',
+        description: 'Migrated from legacy ccBenefits',
+        suggestedConditions: { minSpend: null },
+        points: {
+          bahtPerPoint: Number(p.bahtPerPoint || 0) || null,
+          multiplier: Number(p.multiplier || 1) || 1,
+          multiplierMode: 'total',
+        },
+        limits: {
+          maxRewardAmountPerTx: Number(p.maxPerTxn || 0) || null,
+          maxRewardAmountPerCycle: Number(p.maxPerCycle || 0) || null,
+        },
+        allowStacking: true,
+        isBaseRule: true,
+        priority: 10,
+        source: 'legacy',
+      }, cardId))
+    }
+    if (c.enabled || Number(c.percent || 0) > 0) {
+      rules.push(normalizeBenefitRule({
+        id: `legacy-cashback-${cardId}`,
+        cardId,
+        name: 'Base cashback',
+        active: true,
+        type: 'cashback',
+        description: 'Migrated from legacy ccBenefits',
+        suggestedConditions: { minSpend: Number(c.minSpend || 0) || null },
+        cashback: {
+          mode: 'percent',
+          rate: Number(c.percent || 0) || null,
+          fixedAmount: null,
+        },
+        limits: {
+          maxRewardAmountPerTx: Number(c.maxPerTxn || 0) || null,
+          maxRewardAmountPerCycle: Number(c.maxPerCycle || 0) || null,
+        },
+        allowStacking: false,
+        isBaseRule: true,
+        priority: 5,
+        source: 'legacy',
+      }, cardId))
+    }
+    return rules
+  }
+
+  function ensureCCBenefitRulesState() {
+    S.ccBenefits ||= {}
+    S.ccBenefitRules ||= []
+    S.migrations ||= {}
+    const next = []
+    const existingByCard = {}
+    ;(S.ccBenefitRules || []).forEach(rule => {
+      const normalized = normalizeBenefitRule(rule, rule.cardId || '')
+      next.push(normalized)
+      if (normalized.cardId) existingByCard[normalized.cardId] = true
+    })
+    Object.keys(S.ccBenefits || {}).forEach(cardId => {
+      if (existingByCard[cardId]) return
+      buildLegacyBenefitRules(cardId, S.ccBenefits?.[cardId] || {}).forEach(rule => next.push(rule))
+    })
+    S.ccBenefitRules = next
+    if (typeof S.migrations.ccBenefitRulesV1 !== 'boolean') S.migrations.ccBenefitRulesV1 = true
+  }
+  App.ensureCCBenefitRulesState = ensureCCBenefitRulesState
+
+  function getCyclePeriodForDate(cardId, refDate = today()) {
+    const st = App.getCardStatement?.(cardId, refDate)
+    if (st?.start && st?.end) return { start: st.start, end: st.end, statementId: st.id || '' }
+    const card = walletById(cardId) || {}
+    const period = App.getStatementPeriod?.(card.cycleDay || 25) || { start: refDate, end: refDate }
+    return { start: period.start, end: period.end, statementId: '' }
+  }
+
+  function rewardTotalForRuleResult(result = {}, rule = {}) {
+    if (rule.type === 'points') return Number(result.points || 0)
+    if (rule.type === 'cashback') return Number(result.cashback || 0)
+    return Number(result.cashback || 0) + Number(result.points || 0)
+  }
+
+  App.getCreditCardBenefitRules = function(cardId) {
+    ensureCCBenefitRulesState()
+    return (S.ccBenefitRules || [])
+      .filter(rule => String(rule.cardId || '') === String(cardId || ''))
+      .sort((a, b) => Number(b.active) - Number(a.active) || Number(b.priority || 0) - Number(a.priority || 0) || String(a.name || '').localeCompare(String(b.name || '')))
+  }
+
+  App.getSuggestedBenefitRules = function(txDraft = {}) {
+    ensureCCBenefitRulesState()
+    const cardId = String(txDraft.walletId || '')
+    const amount = Number(txDraft.amount || 0)
+    const merchant = String(txDraft.merchant || '').trim().toLowerCase()
+    const categoryId = String(txDraft.categoryId || '').trim()
+    const channel = String(txDraft.channel || '').trim().toLowerCase()
+    return App.getCreditCardBenefitRules(cardId)
+      .map(rule => {
+        const cond = rule.suggestedConditions || {}
+        const categories = Array.isArray(cond.categories) ? cond.categories : []
+        const merchants = Array.isArray(cond.merchants) ? cond.merchants : []
+        const channels = Array.isArray(cond.channels) ? cond.channels : []
+        const minSpend = Number(cond.minSpend || 0)
+        const categoryMatch = !categories.length || categories.includes(categoryId)
+        const merchantMatch = !merchants.length || merchants.some(v => String(v || '').trim().toLowerCase() === merchant)
+        const channelMatch = !channels.length || channels.includes('any') || (!!channel && channels.includes(channel))
+        const minSpendMatch = !minSpend || amount >= minSpend
+        const suggested = !!rule.active && categoryMatch && merchantMatch && channelMatch && minSpendMatch
+        const score = (suggested ? 100 : 0) + (rule.isBaseRule ? 15 : 0) + Number(rule.priority || 0)
+        return { ...rule, suggested, suggestionScore: score }
+      })
+      .sort((a, b) => Number(b.suggested) - Number(a.suggested) || Number(b.suggestionScore || 0) - Number(a.suggestionScore || 0) || String(a.name || '').localeCompare(String(b.name || '')))
+  }
+
+  App.getRuleCycleUsage = function(ruleId, cardId, cycleStart, cycleEnd, excludeTxId = '') {
+    let eligibleSpendUsed = 0
+    let cashbackUsed = 0
+    let pointsUsed = 0
+    ;(S.transactions || []).forEach(tx => {
+      if (String(tx.id || '') === String(excludeTxId || '')) return
+      if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return
+      const date = String(tx.date || '')
+      if (date < cycleStart || date > cycleEnd) return
+      const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
+      rows.forEach(row => {
+        if (String(row.ruleId || '') !== String(ruleId || '')) return
+        eligibleSpendUsed += Number(row.eligibleAmount || 0)
+        cashbackUsed += Number(row.cashback || row.finalCashback || 0)
+        pointsUsed += Number(row.points || row.finalPoints || 0)
+      })
+    })
+    return {
+      eligibleSpendUsedBefore: Math.round(eligibleSpendUsed * 100) / 100,
+      cashbackUsedBefore: Math.round(cashbackUsed * 100) / 100,
+      pointsUsedBefore: Math.round(pointsUsed * 100) / 100,
+    }
+  }
+
+  App.applyBenefitRule = function(txDraft, rule, cycleUsage = {}) {
+    const amount = Math.max(0, Number(txDraft?.amount || 0))
+    const cond = rule.suggestedConditions || {}
+    const limits = rule.limits || {}
+    const cashbackCfg = rule.cashback || {}
+    const pointsCfg = rule.points || {}
+    const minSpend = Number(cond.minSpend || 0)
+    let eligibleAmount = amount
+    let capApplied = false
+    const capReasons = []
+    const warnings = []
+    if (minSpend && amount < minSpend) {
+      warnings.push(`ไม่ถึงยอดขั้นต่ำ ${money(minSpend)}`)
+      eligibleAmount = 0
+    }
+    if (limits.maxEligibleSpendPerTx > 0 && eligibleAmount > limits.maxEligibleSpendPerTx) {
+      eligibleAmount = limits.maxEligibleSpendPerTx
+      capApplied = true
+      capReasons.push('maxEligibleSpendPerTx')
+    }
+    let cycleEligibleRemaining = null
+    if (limits.maxEligibleSpendPerCycle > 0) {
+      cycleEligibleRemaining = Math.max(0, Number(limits.maxEligibleSpendPerCycle || 0) - Number(cycleUsage.eligibleSpendUsedBefore || 0))
+      if (eligibleAmount > cycleEligibleRemaining) {
+        eligibleAmount = cycleEligibleRemaining
+        capApplied = true
+        capReasons.push('maxEligibleSpendPerCycle')
+      }
+    }
+    eligibleAmount = Math.max(0, Math.round(eligibleAmount * 100) / 100)
+
+    let rawCashback = 0
+    let rawPoints = 0
+    if (eligibleAmount > 0 && (rule.type === 'cashback' || rule.type === 'both')) {
+      if (cashbackCfg.mode === 'fixed') rawCashback = Number(cashbackCfg.fixedAmount || 0)
+      else rawCashback = eligibleAmount * (Number(cashbackCfg.rate || 0) / 100)
+    }
+    if (eligibleAmount > 0 && (rule.type === 'points' || rule.type === 'both')) {
+      const basePoints = Number(pointsCfg.bahtPerPoint || 0) > 0 ? Math.floor(eligibleAmount / Number(pointsCfg.bahtPerPoint || 1)) : 0
+      rawPoints = basePoints * Number(pointsCfg.multiplier || 1)
+    }
+
+    let cashback = Math.round(rawCashback * 100) / 100
+    let points = Math.floor(rawPoints)
+    if (limits.maxRewardAmountPerTx > 0 && cashback > limits.maxRewardAmountPerTx) {
+      cashback = Number(limits.maxRewardAmountPerTx || 0)
+      capApplied = true
+      capReasons.push('maxRewardAmountPerTx')
+    }
+    if (limits.maxRewardAmountPerCycle > 0) {
+      const remaining = Math.max(0, Number(limits.maxRewardAmountPerCycle || 0) - Number(cycleUsage.cashbackUsedBefore || 0))
+      if (cashback > remaining) {
+        cashback = remaining
+        capApplied = true
+        capReasons.push('maxRewardAmountPerCycle')
+      }
+    }
+    if (limits.maxRewardAmountPerTx > 0 && points > limits.maxRewardAmountPerTx) {
+      points = Math.floor(Number(limits.maxRewardAmountPerTx || 0))
+      capApplied = true
+      capReasons.push('maxRewardAmountPerTx')
+    }
+    if (limits.maxRewardAmountPerCycle > 0) {
+      const remaining = Math.max(0, Number(limits.maxRewardAmountPerCycle || 0) - Number(cycleUsage.pointsUsedBefore || 0))
+      if (points > remaining) {
+        points = Math.floor(remaining)
+        capApplied = true
+        capReasons.push('maxRewardAmountPerCycle')
+      }
+    }
+    if (rule.type === 'note') warnings.push('กฎนี้เป็นบันทึกเตือน ไม่มีการคำนวณรางวัล')
+    if (rule.type === 'exclusion') warnings.push('กฎนี้เป็น exclusion โปรดตรวจสอบว่ารายการนี้ควรได้สิทธิ์หรือไม่')
+    if (rule.type === 'note' || rule.type === 'exclusion') { cashback = 0; points = 0 }
+
+    const capReason = [...new Set(capReasons)].join(', ')
+    return {
+      ruleId: rule.id,
+      ruleName: rule.name,
+      type: rule.type,
+      originalAmount: amount,
+      eligibleAmount,
+      rawReward: rewardTotalForRuleResult({ cashback: rawCashback, points: rawPoints }, rule),
+      finalReward: rewardTotalForRuleResult({ cashback, points }, rule),
+      cashback,
+      points,
+      rawCashback: Math.round(rawCashback * 100) / 100,
+      rawPoints: Math.floor(rawPoints),
+      finalCashback: cashback,
+      finalPoints: points,
+      capApplied,
+      capReason,
+      cycleEligibleSpendUsedBefore: Math.round(Number(cycleUsage.eligibleSpendUsedBefore || 0) * 100) / 100,
+      cycleEligibleSpendRemainingBefore: limits.maxEligibleSpendPerCycle > 0 ? Math.max(0, Number(limits.maxEligibleSpendPerCycle || 0) - Number(cycleUsage.eligibleSpendUsedBefore || 0)) : null,
+      cycleRewardUsedBefore: rule.type === 'points' ? Math.floor(Number(cycleUsage.pointsUsedBefore || 0)) : Math.round(Number(cycleUsage.cashbackUsedBefore || 0) * 100) / 100,
+      cycleRewardRemainingBefore: limits.maxRewardAmountPerCycle > 0
+        ? Math.max(0, Number(limits.maxRewardAmountPerCycle || 0) - Number(rule.type === 'points' ? cycleUsage.pointsUsedBefore : cycleUsage.cashbackUsedBefore || 0))
+        : null,
+      warnings,
+    }
+  }
+
+  App.calculateSelectedRewardEstimate = function(txDraft = {}, selectedRuleIds = []) {
+    ensureCCBenefitRulesState()
+    const card = walletById(txDraft.walletId)
+    if (!card || card.type !== 'credit' || txDraft.type !== 'expense') return null
+    const normalizedIds = [...new Set((selectedRuleIds || []).map(v => String(v || '')).filter(Boolean))]
+    const rules = App.getCreditCardBenefitRules(card.id).filter(rule => normalizedIds.includes(rule.id))
+    const cycle = getCyclePeriodForDate(card.id, txDraft.date || today())
+    const results = []
+    const warnings = []
+    let cashback = 0
+    let points = 0
+    rules.forEach(rule => {
+      const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '')
+      const result = App.applyBenefitRule(txDraft, rule, usage)
+      results.push(result)
+      cashback += Number(result.cashback || 0)
+      points += Number(result.points || 0)
+      ;(result.warnings || []).forEach(msg => warnings.push(`${rule.name}: ${msg}`))
+    })
+    const cashbackRules = rules.filter(rule => (rule.type === 'cashback' || rule.type === 'both'))
+    const nonStackable = cashbackRules.filter(rule => rule.allowStacking === false)
+    if (nonStackable.length > 1) warnings.push('เลือก cashback มากกว่า 1 สิทธิ์ โปรดตรวจสอบว่าใช้ร่วมกันได้จริง')
+    return {
+      cashback: Math.round(cashback * 100) / 100,
+      points: Math.floor(points),
+      rules: results,
+      warnings,
+      cycleStart: cycle.start,
+      cycleEnd: cycle.end,
+      calculatedAt: nowISO(),
+      source: 'manual-selected-rules',
+    }
+  }
+
+  App.getTransactionRewardEstimate = function(tx = {}) {
+    if (tx?.rewardEstimate?.source === 'manual-selected-rules' || Array.isArray(tx?.rewardRuleIds)) return tx.rewardEstimate || { cashback: 0, points: 0, rules: [], warnings: [] }
+    const legacy = App._benefit?.(tx.walletId) || S.ccBenefits?.[tx.walletId] || {}
+    const reward = Calc.getCardRewards ? Calc.getCardRewards([tx], legacy) : { points: 0, cashback: 0 }
+    return { cashback: Math.round(Number(reward.cashback || 0) * 100) / 100, points: Number(reward.points || 0), rules: [], warnings: [], source: 'legacy' }
+  }
+
+  App._toggleTxRewardRule = function(ruleId) {
+    S.tx ||= {}
+    const selected = new Set(Array.isArray(S.tx.rewardRuleIds) ? S.tx.rewardRuleIds : [])
+    if (selected.has(ruleId)) selected.delete(ruleId)
+    else selected.add(ruleId)
+    S.tx.rewardRuleIds = [...selected]
+    const draft = {
+      id: S.editingTxId || '',
+      type: S.tx.type || 'expense',
+      amount: Number(S.tx.amount || 0),
+      walletId: S.tx.walletId || '',
+      categoryId: S.tx.categoryId || '',
+      merchant: S.tx.merchant || '',
+      note: S.tx.note || '',
+      date: S.tx.date || today(),
+      channel: S.tx.channel || '',
+    }
+    S.tx.rewardEstimate = App.calculateSelectedRewardEstimate?.(draft, S.tx.rewardRuleIds) || null
+    App._renderAddTxDetail?.()
+  }
+
   App.getCreditCardDueInfo = function(card, refDate = today()) {
     if (!card) return null
     const statement = App.getCardStatement?.(card.id, refDate)
@@ -7593,7 +8247,14 @@ let due = new Date(
     const purchaseTotal = purchases.reduce((s, t) => s + Number(t.amount || 0), 0)
     const paidTotal = payments.reduce((s, t) => s + Number(t.amount || 0), 0)
     const balanceDue = Math.max(0, Math.round((purchaseTotal - paidTotal) * 100) / 100)
-    const reward = Calc.getCardRewards ? Calc.getCardRewards(purchases, App._benefit?.(cardId) || {}) : { points: 0, cashback: 0 }
+    const reward = purchases.reduce((sum, tx) => {
+      const estimate = App.getTransactionRewardEstimate?.(tx) || { points: 0, cashback: 0 }
+      sum.points += Number(estimate.points || 0)
+      sum.cashback += Number(estimate.cashback || 0)
+      return sum
+    }, { points: 0, cashback: 0 })
+    reward.cashback = Math.round(Number(reward.cashback || 0) * 100) / 100
+    reward.points = Math.floor(Number(reward.points || 0))
     return { id, cardId, start: startStr, end: endStr, dueDate: dueStr, dueAfterCycleDays, purchases, payments, purchaseTotal, paidTotal, balanceDue, paid: balanceDue <= 0 && purchaseTotal > 0, reward }
   }
 
@@ -7630,14 +8291,12 @@ let due = new Date(
   App.openCCDetail = function(cardId) {
     const card = walletById(cardId)
     if (!card) return prevOpenCCDetail?.(cardId)
-    const benefit = App._benefit?.(cardId) || {}
     const st = App.getCardStatement?.(cardId)
     const period = st
       ? { start: st.start, end: st.end }
       : App.getStatementPeriod(card.cycleDay || 25)
     const txns = (S.transactions||[]).filter(t => t.walletId===cardId).sort((a,b) => String(b.date||'').localeCompare(String(a.date||''))).slice(0,20)
-    const cycleTxns = (S.transactions||[]).filter(t => t.walletId===cardId && t.type==='expense' && t.date>=period.start && t.date<=period.end)
-    const rewards = Calc.getCardRewards(cycleTxns, benefit)
+    const rewards = st?.reward || { points: 0, cashback: 0 }
     const owed = Math.abs(Number(card.balance||0))
     const limit = App.getCreditLimitForCard(card)
     const avail = App.getAvailableCreditForCard(card)
@@ -7739,6 +8398,7 @@ let due = new Date(
   }
 
   normalizeCreditCardWallets()
+  try { ensureCCBenefitRulesState() } catch (_) {}
   App.syncAppViewportHeight()
   const syncViewportSoon = () => requestAnimationFrame(() => App.syncAppViewportHeight())
   window.addEventListener('resize', syncViewportSoon, { passive:true })

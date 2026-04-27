@@ -1955,7 +1955,7 @@ body.is-dashboard #dashboard-content {
   border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-sm) !important;
 }
-.card-pad { padding: 14px !important; }
+.card-pad { padding: 8px !important; }
 .form-group { margin-bottom: 10px !important; }
 .chips,
 .wallet-summary-grid,

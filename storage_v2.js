@@ -7,6 +7,7 @@ const KEYS = {
   recurring:           'mt_recurring',
   merchants:           'mt_merchants',
   ccBenefits:          'mt_cc_benefits',
+  ccBenefitRules:      'mt_cc_benefit_rules',
   incomeBudgets:       'mt_income_budgets',
   marketPrices:        'mt_market_prices',
   rewardLedger:        'mt_reward_ledger',
@@ -31,6 +32,7 @@ const BACKUP_SCHEMA_KEYS = [
   'recurring',
   'merchants',
   'ccBenefits',
+  'ccBenefitRules',
   'creditLimitGroups',
   'rewardAccounts',
   'rewardLedger',
@@ -54,6 +56,7 @@ const BACKUP_DEFAULTS = {
   recurring: [],
   merchants: [],
   ccBenefits: {},
+  ccBenefitRules: [],
   creditLimitGroups: [],
   rewardAccounts: [],
   rewardLedger: [],
@@ -99,6 +102,7 @@ const Storage = {
     data.recurring     = Storage.load(KEYS.recurring)      || JSON.parse(JSON.stringify(DEFAULT_RECURRING))
     data.merchants     = Storage.load(KEYS.merchants)      || JSON.parse(JSON.stringify(DEFAULT_MERCHANTS))
     data.ccBenefits    = Storage.load(KEYS.ccBenefits)     || JSON.parse(JSON.stringify(typeof DEFAULT_CC_BENEFITS !== 'undefined' ? DEFAULT_CC_BENEFITS : {}))
+    data.ccBenefitRules = Storage.load(KEYS.ccBenefitRules) || []
     data.incomeBudgets       = Storage.load(KEYS.incomeBudgets)       || JSON.parse(JSON.stringify(typeof DEFAULT_INCOME_BUDGETS !== 'undefined' ? DEFAULT_INCOME_BUDGETS : []))
     data.marketPrices        = Storage.load(KEYS.marketPrices)        || {}
     data.rewardLedger        = Storage.load(KEYS.rewardLedger)        || []
@@ -123,6 +127,7 @@ const Storage = {
     Storage.save(KEYS.recurring,     state.recurring)
     Storage.save(KEYS.merchants,     state.merchants)
     Storage.save(KEYS.ccBenefits,    state.ccBenefits)
+    Storage.save(KEYS.ccBenefitRules, state.ccBenefitRules || [])
     Storage.save(KEYS.incomeBudgets,       state.incomeBudgets)
     Storage.save(KEYS.marketPrices,        state.marketPrices        || {})
     Storage.save(KEYS.rewardLedger,        state.rewardLedger        || [])
