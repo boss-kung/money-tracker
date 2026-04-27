@@ -1297,7 +1297,11 @@ App.render();
   App.hideAllTxCategories = function() { S.txShowAllCats = false; App._renderAddTxDetail() }
   const prevSetTxType = App._setTxType?.bind(App)
   /* consolidated: removed legacy _setTxType from line 2431 */
-  App._selectCat = function(id) { S.tx.categoryId = id; document.querySelectorAll('#cat-grid .cat-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.catid === id)) }
+  App._selectCat = function(id) {
+    S.tx.categoryId = id
+    document.querySelectorAll('#cat-grid .cat-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.catid === id))
+    App._renderAddTxDetail?.()
+  }
 
   App._renderAddTxDetail = function() {
     const type = S.tx.type
@@ -1323,47 +1327,56 @@ App.render();
         <div class="add-detail-scroll">
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div class="cat-grid cat-grid-compact" id="cat-grid">${shownCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}${hasMore ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.showAllTxCategories()"><span class="cat-icon">⋯</span><span>เพิ่มเติม</span></button>` : ''}${S.txShowAllCats && allCats.length > 5 ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.hideAllTxCategories()"><span class="cat-icon">⌃</span><span>ย่อ</span></button>` : ''}</div></div>` : ''}
-          <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);${type === 'transfer' ? 'App._renderAddTxDetail()' : ''}">${walletOptions}</select></div>
+          <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);App._renderAddTxDetail()">${walletOptions}</select></div>
           ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value);App._showMerchantDropdown?.(this.value)" onfocus="App._showMerchantDropdown?.(this.value)" onblur="setTimeout(()=>document.getElementById('mt-merchant-dropdown')?.classList.add('hidden'),180)"></div>`}
-          <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value)"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
+          <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value);App._renderAddTxDetail()"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
           ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
           ${(() => {
-            if (type !== 'expense' || !S.tx.walletId) return ''
-            const _card = S.wallets.find(w => w.id === S.tx.walletId)
-            if (!_card || _card.type !== 'credit') return ''
-            const _amt = Number(S.tx.amount || 0); if (!_amt) return ''
-            const _draftTx = { id:S.editingTxId || '', type:'expense', amount:_amt, walletId:S.tx.walletId, categoryId:S.tx.categoryId, merchant:S.tx.merchant, note:S.tx.note, date:S.tx.date || TODAY, channel:S.tx.channel || '' }
-            const _suggested = App.getSuggestedBenefitRules?.(_draftTx) || []
-            if (!_suggested.length) return ''
-            S.tx.rewardRuleIds = Array.isArray(S.tx.rewardRuleIds) ? S.tx.rewardRuleIds : []
-            const _estimate = App.calculateSelectedRewardEstimate?.(_draftTx, S.tx.rewardRuleIds) || { cashback:0, points:0, rules:[], warnings:[] }
-            S.tx.rewardEstimate = _estimate
-            const _selectedNames = _suggested.filter(rule => S.tx.rewardRuleIds.includes(rule.id)).map(rule => rule.name)
-            const _rows = _suggested.map(rule => `<button type="button" class="crypto-search-result${S.tx.rewardRuleIds.includes(rule.id) ? ' selected' : ''}" onclick="App._toggleTxRewardRule('${esc(rule.id)}')">
-              <span class="csr-main">
-                <span>
-                  <span class="list-item-name">${esc(rule.name)}</span>
-                  <span class="list-item-sub">${esc(rule.type)}${rule.suggested ? ' · suggested' : ''}${rule.allowStacking ? '' : ' · ไม่ stack'}</span>
-                  ${rule.description ? `<span class="list-item-sub">${esc(rule.description)}</span>` : ''}
-                </span>
-              </span>
-              <span class="crypto-price-badge ${S.tx.rewardRuleIds.includes(rule.id) ? 'fresh' : (rule.suggested ? 'stale' : 'manual')}">${S.tx.rewardRuleIds.includes(rule.id) ? 'เลือกแล้ว' : (rule.suggested ? 'แนะนำ' : 'เลือก')}</span>
-            </button>`).join('')
-            const _warnings = (_estimate.warnings || []).map(msg => `<div class="form-hint" style="color:var(--expense)">${esc(msg)}</div>`).join('')
-            const _caps = (_estimate.rules || []).filter(row => row.capApplied).map(row => `<div class="form-hint">${esc(row.ruleName)}: จำกัดโดย ${esc(row.capReason || 'cap')}</div>`).join('')
-            return `<div class="tx-cc-reward-section">
-              <div class="form-label" style="margin-bottom:6px">สิทธิประโยชน์ที่ใช้กับรายการนี้</div>
-              <div class="form-hint" style="margin-bottom:8px">เลือกเองได้หลาย rule โดย rule ที่เข้าเงื่อนไขจะแสดงเป็น suggested ก่อน</div>
-              <div class="crypto-search-results">${_rows}</div>
-              <div class="card card-pad" style="margin-top:10px">
-                <div class="list-item-name">สรุปโดยประมาณ</div>
-                <div class="list-item-sub">Cashback โดยประมาณ: ฿${Number(_estimate.cashback || 0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-                <div class="list-item-sub">คะแนนโดยประมาณ: ${Number(_estimate.points || 0).toLocaleString('en-US')} คะแนน</div>
-                ${_selectedNames.length ? `<div class="list-item-sub">ใช้สิทธิ์: ${esc(_selectedNames.join(', '))}</div>` : `<div class="list-item-sub">ยังไม่ได้เลือก rule</div>`}
-                ${_caps}
-                ${_warnings}
-              </div>
-            </div>`
+            try {
+              if (type !== 'expense' || !S.tx.walletId) return ''
+              const _card = S.wallets.find(w => w.id === S.tx.walletId)
+              if (!_card || _card.type !== 'credit') return ''
+              const _amt = Number(S.tx.amount || 0); if (!_amt) return ''
+              const _today = (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
+              const _draftTx = { id:S.editingTxId || '', type:'expense', amount:_amt, walletId:S.tx.walletId, categoryId:S.tx.categoryId, merchant:S.tx.merchant, note:S.tx.note, date:S.tx.date || _today, channel:S.tx.channel || '' }
+              const _rules = App.getSuggestedBenefitRules?.(_draftTx) || []
+              S.tx.rewardRuleIds = Array.isArray(S.tx.rewardRuleIds) ? S.tx.rewardRuleIds : []
+              const _estimate = App.calculateSelectedRewardEstimate?.(_draftTx, S.tx.rewardRuleIds) || { cashback:0, points:0, rules:[], warnings:[] }
+              S.tx.rewardEstimate = _estimate
+              const _selectedNames = _rules.filter(rule => S.tx.rewardRuleIds.includes(rule.id)).map(rule => rule.name)
+              const _rows = _rules.map(rule => {
+                const _selected = S.tx.rewardRuleIds.includes(rule.id)
+                const _typeText = rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : rule.type === 'note' ? 'บันทึกเตือน' : 'ข้อยกเว้น'
+                const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.allowStacking ? '' : 'ไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
+                return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}" onclick="App._toggleTxRewardRule('${esc(rule.id)}')" aria-pressed="${_selected ? 'true' : 'false'}">
+                  <span class="csr-main">
+                    <span>
+                      <span class="list-item-name">${esc(rule.name)}</span>
+                      <span class="list-item-sub">${esc(_meta)}</span>
+                      ${rule.description ? `<span class="list-item-sub">${esc(rule.description)}</span>` : ''}
+                    </span>
+                  </span>
+                  <span class="reward-rule-toggle${_selected ? ' on' : ''}" aria-hidden="true"><span class="reward-rule-toggle-knob"></span></span>
+                </button>`
+              }).join('')
+              const _warnings = (_estimate.warnings || []).map(msg => `<div class="form-hint" style="color:var(--expense)">${esc(msg)}</div>`).join('')
+              const _caps = (_estimate.rules || []).filter(row => row.capApplied).map(row => `<div class="form-hint">${esc(row.ruleName)}: จำกัดโดย ${esc(row.capReason || 'cap')}</div>`).join('')
+              return `<div class="tx-cc-reward-section">
+                <div class="form-label" style="margin-bottom:6px">สิทธิประโยชน์ที่ใช้กับรายการนี้</div>
+                ${_rules.length ? `<div class="reward-rule-results">${_rows}</div>` : `<div class="card card-pad" style="margin-top:10px; padding:12px; border-radius:12px !important;"><div class="list-item-name">บัตรนี้ยังไม่มีสิทธิประโยชน์</div><div class="list-item-sub">ไปที่รายละเอียดบัตรเครดิต แล้วกด ตั้งค่า เพื่อเพิ่มสิทธิประโยชน์</div></div>`}
+                <div class="card card-pad" style="margin-top:10px; padding:12px; border-radius:12px !important;">
+                  <div class="list-item-name">สรุปสิทธิประโยชน์</div>
+                  <div class="list-item-sub">Cashback โดยประมาณ: ฿${Number(_estimate.cashback || 0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+                  <div class="list-item-sub">คะแนนโดยประมาณ: ${Number(_estimate.points || 0).toLocaleString('en-US')} คะแนน</div>
+                  ${_selectedNames.length ? `<div class="list-item-sub">ใช้สิทธิ์: ${esc(_selectedNames.join(', '))}</div>` : `<div class="list-item-sub">ยังไม่ได้เลือกสิทธิประโยชน์</div>`}
+                  ${_caps}
+                  ${_warnings}
+                </div>
+              </div>`
+            } catch (err) {
+              console.warn('credit-card reward section render failed', err)
+              return ''
+            }
           })()}
         </div>
         <div class="add-detail-actions"><button class="btn btn-secondary" onclick="App._backToAmount()">← แก้จำนวน</button><button class="btn btn-primary" style="background:${color};box-shadow:0 4px 16px ${color}44" onclick="App.saveTx()">${S.txMode === 'edit' ? 'บันทึก' : `บันทึก ${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}`}</button></div>
@@ -2985,27 +2998,6 @@ Calc.getUsableMoney = function(wallets) {
     persist(); App.closeOverlay('overlay-tx-detail'); App.render(); toast('ลบรายการแล้ว', 'success')
   }
 
-  App.exportData = function v40ExportData() {
-    ensureV4State()
-    S.settings.storageMeta.lastExportedAt = localNow()
-    const data = {
-      exportedAt: S.settings.storageMeta.lastExportedAt,
-      appVersion: VERSION,
-      storageMode: 'local-only',
-      transactions:S.transactions, wallets:S.wallets, categories:S.categories,
-      budgets:S.budgets, recurring:S.recurring, merchants:S.merchants,
-      ccBenefits:S.ccBenefits, incomeBudgets:S.incomeBudgets,
-      marketPrices:S.marketPrices || {}, settings:S.settings,
-      rewardLedger:S.rewardLedger || [], netWorthSnapshots:S.netWorthSnapshots || [], investmentSnapshots:S.investmentSnapshots || []
-    }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `money-tracker-v4-backup-${today()}.json`
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
-    persist(); App.renderMore?.(); toast('ส่งออกข้อมูลสำเร็จ', 'success')
-  }
-
   App._validateImportPayload = function(data) {
     const errors = [], warnings = []
     if (!data || typeof data !== 'object') errors.push('ไฟล์ไม่ใช่ JSON object')
@@ -3023,67 +3015,6 @@ Calc.getUsableMoney = function(wallets) {
       return true
     })
     return { ok:true, errors, warnings, data:{ ...data, transactions } }
-  }
-
-  App.importData = function v40ImportData(input) {
-    const file = input?.files?.[0]
-    if (!file) return
-    Storage.importJSON(file, raw => {
-      const checked = App._validateImportPayload(raw)
-      if (!checked.ok) { toast('นำเข้าไม่ได้: ' + checked.errors.join(', '), 'error'); if (input) input.value=''; return }
-      const data = checked.data
-      const summary = [
-        `Wallets: ${data.wallets.length}`,
-        `Transactions: ${data.transactions.length}`,
-        `Recurring: ${(data.recurring || []).length}`,
-        `Skipped/Warnings: ${checked.warnings.length}`
-      ].join(' · ')
-      App.showConfirm({
-        title:'ตรวจสอบก่อนนำเข้า', danger:true,
-        body:`ไฟล์นี้จะแทนที่ข้อมูลปัจจุบันทั้งหมด\n${summary}\nระบบจะเก็บ backup ก่อนนำเข้าไว้ให้กู้คืนได้`,
-        confirmLabel:'นำเข้า',
-        onConfirm(){
-          try { localStorage.setItem('mt_pre_import_backup', JSON.stringify({ backedUpAt:localNow(), transactions:S.transactions, wallets:S.wallets, categories:S.categories, budgets:S.budgets, recurring:S.recurring, merchants:S.merchants, ccBenefits:S.ccBenefits, incomeBudgets:S.incomeBudgets, marketPrices:S.marketPrices || {}, settings:S.settings, rewardLedger:S.rewardLedger || [], netWorthSnapshots:S.netWorthSnapshots || [], investmentSnapshots:S.investmentSnapshots || [] })) } catch (_) {}
-          S.transactions = data.transactions || []
-          S.wallets = data.wallets || []
-          S.categories = data.categories || S.categories
-          S.budgets = data.budgets || []
-          S.recurring = data.recurring || []
-          S.merchants = data.merchants || []
-          S.ccBenefits = data.ccBenefits || {}
-          S.incomeBudgets = data.incomeBudgets || []
-          S.marketPrices = data.marketPrices || {}
-          S.settings = { ...(S.settings || {}), ...(data.settings || {}) }
-          S.rewardLedger = data.rewardLedger || []
-          S.netWorthSnapshots = data.netWorthSnapshots || []
-          S.investmentSnapshots = data.investmentSnapshots || []
-          ensureV4State(); App.ensureLedgerBaselines(true); App.recalculateWalletBalances({ save:false, recordSnapshot:true })
-          persist(); applyTheme?.(); App.render(); toast(`นำเข้าสำเร็จ${checked.warnings.length ? ` · ข้าม/เตือน ${checked.warnings.length} จุด` : ''}`, 'success')
-          if (input) input.value = ''
-        },
-        onCancel(){ if (input) input.value = '' }
-      })
-    }, err => { toast('นำเข้าล้มเหลว: ' + err, 'error'); if (input) input.value='' })
-  }
-
-  App.restorePreImportBackup = function() {
-    const backup = loadJSON('mt_pre_import_backup', null)
-    if (!backup) { toast('ยังไม่มี backup ก่อนนำเข้า', 'warn'); return }
-    App.showConfirm({
-      title:'กู้คืน Backup ก่อนนำเข้า', danger:true,
-      body:`จะย้อนข้อมูลกลับไปก่อน import ล่าสุด (${backup.backedUpAt ? new Date(backup.backedUpAt).toLocaleString('th-TH') : 'ไม่ทราบเวลา'})`,
-      confirmLabel:'กู้คืน',
-      onConfirm(){
-        Object.assign(S, {
-          transactions:backup.transactions || [], wallets:backup.wallets || [], categories:backup.categories || S.categories,
-          budgets:backup.budgets || [], recurring:backup.recurring || [], merchants:backup.merchants || [], ccBenefits:backup.ccBenefits || {},
-          incomeBudgets:backup.incomeBudgets || [], marketPrices:backup.marketPrices || {}, settings:{ ...(S.settings || {}), ...(backup.settings || {}) },
-          rewardLedger:backup.rewardLedger || [], netWorthSnapshots:backup.netWorthSnapshots || [], investmentSnapshots:backup.investmentSnapshots || []
-        })
-        ensureV4State(); App.recalculateWalletBalances({ save:false, recordSnapshot:true })
-        persist(); applyTheme?.(); App.closeSubScreen?.(); App.render(); toast('กู้คืน backup แล้ว', 'success')
-      }
-    })
   }
 
   // ── Phase 2: Credit card statements + reward ledger ───────────────────────
@@ -5364,58 +5295,6 @@ let due = new Date(
   // UPDATED exportData / importData
   // ══════════════════════════════════════════════════════════
 
-  App.exportData = function v50ExportData() {
-    migrateToV5()
-    const now = nowISO()
-    const data = {
-      exportedAt:now, appVersion:'5.0', storageMode:'local-only',
-      transactions:S.transactions, wallets:S.wallets, categories:S.categories,
-      budgets:S.budgets, recurring:S.recurring, merchants:S.merchants,
-      ccBenefits:S.ccBenefits, incomeBudgets:S.incomeBudgets,
-      marketPrices:S.marketPrices||{}, settings:S.settings,
-      rewardLedger:S.rewardLedger||[], netWorthSnapshots:S.netWorthSnapshots||[],
-      investmentSnapshots:S.investmentSnapshots||[],
-      creditLimitGroups:S.creditLimitGroups||[], rewardAccounts:S.rewardAccounts||[],
-    }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `money-tracker-v5-backup-${today()}.json`
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
-    if (S.settings?.storageMeta) S.settings.storageMeta.lastExportedAt = now
-    persist(); App.renderMore?.(); notify('ส่งออกข้อมูลสำเร็จ', 'success')
-  }
-
-  App.importData = function v50ImportData(input) {
-    const file = input?.files?.[0]
-    if (!file) return
-    Storage.importJSON(file, raw => {
-      const checked = App._validateImportPayload?.(raw) || { ok:Array.isArray(raw?.transactions)&&Array.isArray(raw?.wallets), errors:[], warnings:[], data:raw }
-      if (!checked.ok) { notify('นำเข้าไม่ได้: ' + (checked.errors||[]).join(', '), 'error'); if (input) input.value=''; return }
-      const data = checked.data || raw
-      App.showConfirm?.({
-        title:'ตรวจสอบก่อนนำเข้า', danger:true, confirmLabel:'นำเข้า',
-        body:`Wallets: ${data.wallets.length} · Transactions: ${data.transactions.length} · จะแทนที่ข้อมูลปัจจุบันทั้งหมด`,
-        onConfirm() {
-          try { localStorage.setItem('mt_pre_import_backup', JSON.stringify({ backedUpAt:nowISO(), ...S })) } catch (_) {}
-          S.transactions=data.transactions||[]; S.wallets=data.wallets||[]
-          S.categories=data.categories||S.categories; S.budgets=data.budgets||[]
-          S.recurring=data.recurring||[]; S.merchants=data.merchants||[]
-          S.ccBenefits=data.ccBenefits||{}; S.incomeBudgets=data.incomeBudgets||[]
-          S.marketPrices=data.marketPrices||{}; S.settings={...(S.settings||{}),...(data.settings||{})}
-          S.rewardLedger=data.rewardLedger||[]; S.netWorthSnapshots=data.netWorthSnapshots||[]
-          S.investmentSnapshots=data.investmentSnapshots||[]
-          S.creditLimitGroups=data.creditLimitGroups||[]; S.rewardAccounts=data.rewardAccounts||[]
-          migrateToV5()
-          App.ensureLedgerBaselines?.(true); App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-          persist(); applyTheme?.(); App.render?.()
-          notify('นำเข้าสำเร็จ', 'success'); if (input) input.value=''
-        },
-        onCancel() { if (input) input.value='' }
-      })
-    }, err => { notify('นำเข้าล้มเหลว: '+err, 'error'); if (input) input.value='' })
-  }
-
   // ── ═══════════════════════════════════════════════════════
   // UPDATED More page — adds credit-group + reward-account links
   // ══════════════════════════════════════════════════════════
@@ -6315,8 +6194,6 @@ let due = new Date(
   const PRESET_BY_NAME = Object.fromEntries(CRYPTO_PRESETS.map(p => [String(p.name || '').trim().toLowerCase(), p]))
   const prevRenderDashboard = App.renderDashboard?.bind(App)
   const prevRenderReports = App.renderReports?.bind(App)
-  const prevExportData = App.exportData?.bind(App)
-  const prevImportData = App.importData?.bind(App)
   const prevSaveWallet = App.saveWallet?.bind(App)
   const prevOpenWalletForm = App.openWalletForm?.bind(App)
   S.cryptoSyncMeta ||= {}
@@ -7661,103 +7538,6 @@ let due = new Date(
     else if (html) content.querySelector('.mt-stat-row')?.insertAdjacentHTML('beforebegin', html)
   }
 
-  App.exportData = function(input) {
-    ensureCryptoState()
-    if (prevExportData && prevExportData !== App.exportData) {
-      const now = nowISO()
-      const data = {
-        exportedAt: now,
-        appVersion: '6.6',
-        storageMode: 'local-only',
-        transactions: S.transactions,
-        wallets: S.wallets,
-        categories: S.categories,
-        budgets: S.budgets,
-        recurring: S.recurring,
-        merchants: S.merchants,
-        ccBenefits: S.ccBenefits,
-        ccBenefitRules: S.ccBenefitRules || [],
-        incomeBudgets: S.incomeBudgets,
-        marketPrices: S.marketPrices || {},
-        settings: S.settings,
-        rewardLedger: S.rewardLedger || [],
-        netWorthSnapshots: S.netWorthSnapshots || [],
-        investmentSnapshots: S.investmentSnapshots || [],
-        creditLimitGroups: S.creditLimitGroups || [],
-        rewardAccounts: S.rewardAccounts || [],
-        cryptoAssets: S.cryptoAssets || [],
-        cryptoHoldings: S.cryptoHoldings || [],
-        cryptoTransactions: S.cryptoTransactions || [],
-        migrations: S.migrations || { cryptoCentralizedV1: true },
-      }
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `money-tracker-v66-backup-${today()}.json`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-      if (S.settings?.storageMeta) S.settings.storageMeta.lastExportedAt = now
-      persist()
-      App.renderMore?.()
-      notify('ส่งออกข้อมูลสำเร็จ', 'success')
-      return
-    }
-    return prevExportData?.(input)
-  }
-
-  App.importData = function(input) {
-    const file = input?.files?.[0]
-    if (!file) return
-    Storage.importJSON(file, raw => {
-      const checked = App._validateImportPayload?.(raw) || { ok: Array.isArray(raw?.transactions) && Array.isArray(raw?.wallets), errors: [], data: raw }
-      if (!checked.ok) { notify('นำเข้าไม่ได้: ' + (checked.errors || []).join(', '), 'error'); if (input) input.value = ''; return }
-      const data = checked.data || raw
-      App.showConfirm?.({
-        title: 'ตรวจสอบก่อนนำเข้า',
-        danger: true,
-        confirmLabel: 'นำเข้า',
-        body: `Wallets: ${data.wallets.length} · Transactions: ${data.transactions.length} · จะแทนที่ข้อมูลปัจจุบันทั้งหมด`,
-        onConfirm() {
-          try { localStorage.setItem('mt_pre_import_backup', JSON.stringify({ backedUpAt: nowISO(), ...S })) } catch (_) {}
-          S.transactions = data.transactions || []
-          S.wallets = data.wallets || []
-          S.categories = data.categories || S.categories
-          S.budgets = data.budgets || []
-          S.recurring = data.recurring || []
-          S.merchants = data.merchants || []
-          S.ccBenefits = data.ccBenefits || {}
-          S.ccBenefitRules = data.ccBenefitRules || []
-          S.incomeBudgets = data.incomeBudgets || []
-          S.marketPrices = data.marketPrices || {}
-          S.settings = { ...(S.settings || {}), ...(data.settings || {}) }
-          S.rewardLedger = data.rewardLedger || []
-          S.netWorthSnapshots = data.netWorthSnapshots || []
-          S.investmentSnapshots = data.investmentSnapshots || []
-          S.creditLimitGroups = data.creditLimitGroups || []
-          S.rewardAccounts = data.rewardAccounts || []
-          S.cryptoAssets = data.cryptoAssets || []
-          S.cryptoHoldings = data.cryptoHoldings || []
-          S.cryptoTransactions = data.cryptoTransactions || []
-          S.migrations = { cryptoCentralizedV1: false, ...(data.migrations || {}) }
-          try { ensureCCBenefitRulesState() } catch (_) {}
-          ensureCryptoState()
-          migrateLegacyCryptoWallets()
-          App.ensureLedgerBaselines?.(true)
-          App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
-          persist()
-          applyTheme?.()
-          App.render?.()
-          notify('นำเข้าสำเร็จ', 'success')
-          if (input) input.value = ''
-        },
-        onCancel() { if (input) input.value = '' },
-      })
-    }, err => { notify('นำเข้าล้มเหลว: ' + err, 'error'); if (input) input.value = '' })
-  }
-
   App.saveWallet = function() {
     const type = document.getElementById('wf-type')?.value || 'bank'
     if (type === 'crypto') {
@@ -7799,8 +7579,6 @@ let due = new Date(
   const walletById = id => (S.wallets || []).find(w => w.id === id) || null
   const genId = () => (typeof Calc?.genId === 'function' ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2)))
   const TH_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
-  const prevImportData = App.importData?.bind(App)
-  const prevRestoreBackup = App.restorePreImportBackup?.bind(App)
   const prevWalletCard = App._walletCard?.bind(App)
   const prevOpenCCDetail = App.openCCDetail?.bind(App)
   let stableViewportHeight = Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 0)
@@ -7922,7 +7700,7 @@ let due = new Date(
         name: 'Base points',
         active: true,
         type: 'points',
-        description: 'Migrated from legacy ccBenefits',
+        description: '',
         suggestedConditions: { minSpend: null },
         points: {
           bahtPerPoint: Number(p.bahtPerPoint || 0) || null,
@@ -7946,7 +7724,7 @@ let due = new Date(
         name: 'Base cashback',
         active: true,
         type: 'cashback',
-        description: 'Migrated from legacy ccBenefits',
+        description: '',
         suggestedConditions: { minSpend: Number(c.minSpend || 0) || null },
         cashback: {
           mode: 'percent',
@@ -8186,7 +7964,7 @@ let due = new Date(
       warnings,
       cycleStart: cycle.start,
       cycleEnd: cycle.end,
-      calculatedAt: nowISO(),
+      calculatedAt: new Date().toISOString(),
       source: 'manual-selected-rules',
     }
   }
@@ -8353,7 +8131,7 @@ let due = new Date(
 
   App.importData = function(input) {
     const file = input?.files?.[0]
-    if (!file) return prevImportData?.(input)
+    if (!file) return
     Storage.importJSON(file, data => {
       const checked = App._validateImportPayload?.(data) || { ok:true, warnings:[], data }
       if (!checked.ok) { notify('นำเข้าไม่ได้: ' + (checked.errors || []).join(', '), 'error'); if (input) input.value = ''; return }
@@ -8377,7 +8155,7 @@ let due = new Date(
   App.restorePreImportBackup = function() {
     let backup = null
     try { backup = JSON.parse(localStorage.getItem('mt_pre_import_backup') || 'null') } catch (_) {}
-    if (!backup) return prevRestoreBackup ? prevRestoreBackup() : notify('ยังไม่มี backup ก่อนนำเข้า', 'warn')
+    if (!backup) return notify('ยังไม่มี backup ก่อนนำเข้า', 'warn')
     App.showConfirm?.({
       title:'กู้คืน Backup ก่อนนำเข้า',
       danger:true,
@@ -8385,6 +8163,16 @@ let due = new Date(
       body:`จะย้อนข้อมูลกลับไปก่อน import ล่าสุด (${backup.exportedAt ? new Date(backup.exportedAt).toLocaleString('th-TH') : 'ไม่ทราบเวลา'})`,
       onConfirm() { App._applyBackupPayload(backup); notify('กู้คืน backup แล้ว', 'success') },
     })
+  }
+
+  const prevSaveTxFinal = App.saveTx?.bind(App)
+  App.saveTx = function v67SafeSaveTx() {
+    try {
+      return prevSaveTxFinal?.()
+    } catch (err) {
+      console.error('saveTx failed', err)
+      notify(`บันทึกรายการไม่สำเร็จ: ${err?.message || err}`, 'error')
+    }
   }
 
   App.syncAppViewportHeight = function() {
