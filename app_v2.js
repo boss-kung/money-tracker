@@ -1,4 +1,75 @@
 /* ============================================================
+   V6.2 Hard mobile zoom lock
+   Must run before the app boots: injects/updates viewport meta and
+   blocks iOS Safari pinch/double-tap zoom at capture phase.
+   ============================================================ */
+;(function hardMobileZoomLock(){
+  const ua = navigator.userAgent || ''
+  const isCoarsePointer = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+  const isSmallScreen = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches)
+  const isMobileUA = /Android|iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const shouldLockZoom = isMobileUA || isCoarsePointer || isSmallScreen
+  const viewportContent = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+
+  function applyViewportLock(){
+    let viewport = document.querySelector('meta[name="viewport"]')
+    if (!viewport) {
+      viewport = document.createElement('meta')
+      viewport.name = 'viewport'
+      const head = document.head || document.getElementsByTagName('head')[0] || document.documentElement
+      head.insertBefore(viewport, head.firstChild || null)
+    }
+    viewport.setAttribute('content', viewportContent)
+  }
+
+  applyViewportLock()
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyViewportLock, { once: true })
+  } else {
+    applyViewportLock()
+  }
+  window.addEventListener('pageshow', applyViewportLock, { passive: true })
+
+  if (!shouldLockZoom) return
+
+  function cancelZoomEvent(event){
+    if (event.cancelable !== false) event.preventDefault()
+    event.stopPropagation?.()
+    event.stopImmediatePropagation?.()
+    return false
+  }
+
+  function cancelMultiTouch(event){
+    if (event.touches && event.touches.length > 1) return cancelZoomEvent(event)
+  }
+
+  const captureNonPassive = { passive: false, capture: true }
+  const targets = [window, document, document.documentElement]
+
+  targets.forEach(target => {
+    if (!target || !target.addEventListener) return
+    ;['gesturestart', 'gesturechange', 'gestureend'].forEach(type => {
+      target.addEventListener(type, cancelZoomEvent, captureNonPassive)
+    })
+    target.addEventListener('touchstart', cancelMultiTouch, captureNonPassive)
+    target.addEventListener('touchmove', cancelMultiTouch, captureNonPassive)
+  })
+
+  let lastTouchEndAt = 0
+  document.addEventListener('touchend', function(event){
+    const now = Date.now()
+    if (now - lastTouchEndAt <= 320) cancelZoomEvent(event)
+    lastTouchEndAt = now
+  }, captureNonPassive)
+
+  document.addEventListener('dblclick', cancelZoomEvent, captureNonPassive)
+
+  window.addEventListener('wheel', function(event){
+    if (event.ctrlKey || event.metaKey) cancelZoomEvent(event)
+  }, captureNonPassive)
+})()
+
+/* ============================================================
    Money Tracker — app.js
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
@@ -526,7 +597,7 @@ const oldEdit=App.openEditTx;/* consolidated: removed legacy openEditTx from lin
 const oldDup=App.openDuplicateTx;/* consolidated: removed legacy openDuplicateTx from line 991 */
 const oldSave=App.saveTx;/* consolidated: removed legacy saveTx from line 992 */
 const oldRow=App._txRow;/* consolidated: removed legacy _txRow from line 993 */
-Calc.getCardRewards=function(txns,b){const pe=!!(b?.points?.enabled||b?.enabled),ce=!!(b?.cashback?.enabled||b?.enabled),p=b?.points||{},c=b?.cashback||{};let points=0,cashback=0;(txns||[]).forEach(t=>{if(pe){let pt=0;if(p.bahtPerPoint)pt+=Math.floor(t.amount/p.bahtPerPoint);if(p.pointPerBahtEvery)pt+=Math.floor(t.amount/p.pointPerBahtEvery);pt*=p.multiplier||1;if(p.maxPerTxn)pt=Math.min(pt,p.maxPerTxn);points+=pt}if(ce&&(!c.minSpend||t.amount>=c.minSpend)){let base=c.everyBaht?Math.floor(t.amount/c.everyBaht)*c.everyBaht:t.amount,cb=base*((c.percent||0)/100);if(c.tierThreshold&&t.amount<c.tierThreshold)cb=0;if(c.maxPerTxn)cb=Math.min(cb,c.maxPerTxn);cashback+=cb}});if(p.maxPerCycle)points=Math.min(points,p.maxPerCycle);if(c.maxPerCycle)cashback=Math.min(cashback,c.maxPerCycle);return{points:Math.floor(points),cashback:Math.round(cashback*100)/100}};
+Calc.getCardRewards=function(txns,b){const pe=!!(b?.points?.enabled||b?.enabled),ce=!!(b?.cashback?.enabled||b?.enabled),p=b?.points||{},c=b?.cashback||{};let points=0,cashback=0;(txns||[]).forEach(t=>{if(pe&&t.rewardIncludePoints!==false){let pt=0;if(p.bahtPerPoint)pt+=Math.floor(t.amount/p.bahtPerPoint);pt*=p.multiplier||1;if(p.maxPerTxn)pt=Math.min(pt,p.maxPerTxn);points+=pt}if(ce&&t.rewardIncludeCashback!==false&&(!c.minSpend||t.amount>=c.minSpend)){let base=c.everyBaht?Math.floor(t.amount/c.everyBaht)*c.everyBaht:t.amount,cb=base*((c.percent||0)/100);if(c.tierThreshold&&t.amount<c.tierThreshold)cb=0;if(c.maxPerTxn)cb=Math.min(cb,c.maxPerTxn);cashback+=cb}});if(p.maxPerCycle)points=Math.min(points,p.maxPerCycle);if(c.maxPerCycle)cashback=Math.min(cashback,c.maxPerCycle);return{points:Math.floor(points),cashback:Math.round(cashback*100)/100}};
 App._benefit=id=>S.ccBenefits?.[id]||{points:{},cashback:{}};App._rewardForTx=tx=>{const card=S.wallets.find(w=>w.id===tx.walletId&&w.type==='credit');return card&&tx.type==='expense'?Calc.getCardRewards([tx],App._benefit(card.id)):{points:0,cashback:0}};
 const oldTxDetail=App._renderTxDetail;/* consolidated: removed legacy _renderTxDetail from line 996 */
 /* consolidated: removed legacy openCCBenefitScreen from line 997 */
@@ -913,9 +984,21 @@ App.render();
    ============================================================ */
 ;(function v222FinalMobileChrome(){
   const root = document.documentElement
-  const setAppHeight = () => {
+  // Keep the app height stable when the iOS keyboard opens.
+  // visualViewport.height shrinks above the keyboard; using it for --app-height
+  // makes bottom/sticky controls jump into the middle of the screen.
+  let stableAppHeight = Math.round(window.innerHeight || document.documentElement.clientHeight || 0)
+  const isFormControl = el => !!el && el.matches?.('input, textarea, select, [contenteditable="true"]')
+  const isKeyboardLikelyOpen = () => {
     const vv = window.visualViewport
-    const h = Math.round(vv?.height || window.innerHeight || document.documentElement.clientHeight || 0)
+    const layoutH = Math.round(window.innerHeight || document.documentElement.clientHeight || stableAppHeight || 0)
+    const viewportH = Math.round(vv?.height || layoutH)
+    return isFormControl(document.activeElement) || (layoutH - viewportH > 120) || document.body?.classList.contains('keyboard-open')
+  }
+  const setAppHeight = () => {
+    const layoutH = Math.round(window.innerHeight || document.documentElement.clientHeight || stableAppHeight || 0)
+    if (!isKeyboardLikelyOpen() && layoutH > 0) stableAppHeight = layoutH
+    const h = isKeyboardLikelyOpen() ? stableAppHeight : layoutH
     if (h > 0) root.style.setProperty('--app-height', `${h}px`)
   }
 
@@ -1939,11 +2022,18 @@ App.render();
       .sort((a,b) => (b.date || '').localeCompare(a.date || ''))
       .slice(0, 5)
     const assets = S.wallets.filter(w => w.type !== 'credit')
-    const cc = S.wallets.find(w => w.type === 'credit' && Math.abs(Number(w.balance) || 0) > 0)
-    const ccUsed = Math.abs(Number(cc?.balance) || 0)
-    const ccLimit = Number(cc?.limit) || 0
-    const ccPct = ccLimit ? Math.min(100, Math.max(0, (ccUsed / ccLimit) * 100)) : 0
-    const ccDue = cc?.dueDay ? Calc.getDueDate(cc.dueDay) : null
+    const ccCards = S.wallets
+      .filter(w => w.type === 'credit' && Math.abs(Number(w.balance) || 0) > 0 && w.dueDay)
+      .map(w => {
+        const used = Math.abs(Number(w.balance) || 0)
+        const limit = Number(w.limit) || 0
+        const pct = limit ? Math.min(100, Math.max(0, (used / limit) * 100)) : 0
+        const due = Calc.getDueDate(w.dueDay)
+        return { ...w, used, limit, pct, due }
+      })
+      .sort((a, b) => a.due.daysLeft - b.due.daysLeft)
+    const minDaysLeft = ccCards.length ? ccCards[0].due.daysLeft : null
+    const nearDueCards = ccCards.filter(c => c.due.daysLeft === minDaysLeft)
     const transferTotal = S.transactions
       .filter(t => (t.date || '').startsWith(dm) && t.type === 'transfer')
       .reduce((s,t) => s + Number(t.amount || 0), 0)
@@ -2014,27 +2104,19 @@ App.render();
         </div>
       </div>`
 
-    if (cc) {
-      const dueText = ccDue
-        ? `ครบกำหนด ${ESC(ccDue.dueStr)} · อีก ${ccDue.daysLeft} วัน`
-        : `รอบบัญชีตัดวันที่ ${ESC(cc.cycleDay || 25)}`
+    if (nearDueCards.length) {
+      const firstDue = nearDueCards[0].due
       html += `
-        <div class="mt-alert-card" onclick="App.openCCDetail('${ESC(cc.id)}')">
-          <div>
-            <div class="mt-alert-title">💳 ${ESC(cc.name)}</div>
-            <div class="mt-alert-sub">${dueText}</div>
-          </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:16px;font-weight:900;color:var(--expense);letter-spacing:-.04em">${FMT(ccUsed)}</div>
-            ${ccLimit ? `<div style="font-size:10px;color:var(--muted);margin-top:1px">จาก ${FMT(ccLimit)}</div>` : ''}
-          </div>
+        <div class="mt-alert-card">
+          <div class="mt-alert-title">ครบกำหนดชำระ ${ESC(firstDue.dueStr)} <em>อีก ${firstDue.daysLeft} วัน</em></div>
+          ${nearDueCards.map(c => `
+            <div class="mt-alert-row" onclick="App.openCCDetail('${ESC(c.id)}')">
+              <div class="mt-alert-row-info">
+                <span class="mt-alert-row-name">${ESC(c.icon||'💳')} ${ESC(c.name)}</span>
+              </div>
+              <div class="mt-alert-row-amt">${FMT(c.used)}</div>
+            </div>`).join('')}
         </div>`
-      if (ccLimit) {
-        html += `<div class="mt-progress-wrap">
-          <div class="mt-progress-label"><span>วงเงินที่ใช้</span><b style="color:${ccPct > 70 ? 'var(--expense)' : 'var(--text)'}">${ccPct.toFixed(0)}%</b></div>
-          <div class="mt-progress-track"><div class="mt-progress-fill" style="width:${ccPct}%;background:${ccPct > 70 ? 'var(--expense)' : 'var(--primary)'}"></div></div>
-        </div>`
-      }
     }
 
     if (assets.length) {
@@ -2141,7 +2223,7 @@ App.render();
         </div>
         <div class="wc-balance">${MONEY(thbValue)}</div>
         <div class="wc-prog-info wc-invest-units" style="margin-top:6px">
-          <span>${NUM(units, 4)} ${ESC(unitLabel(w))}</span>
+          <span>${S.settings?.hideMoney ? '฿*****' : `${NUM(units, 4)} ${ESC(unitLabel(w))}`}</span>
           <span>${price ? MONEY(price) + '/หน่วย' : 'ยังไม่ Sync'}</span>
         </div>
       </div>`
@@ -2977,7 +3059,14 @@ App.render();
     const start = new Date(end); start.setMonth(start.getMonth() - 1); start.setDate(start.getDate() + 1)
     const endStr = `${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}`
     const startStr = `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}-${String(start.getDate()).padStart(2,'0')}`
-    let due = new Date(end.getFullYear(), end.getMonth() + 1, clampDay(end.getFullYear(), end.getMonth() + 1, dueDay))
+    const dueMonthOffset = dueDay > cycleDay ? 0 : 1
+const dueBase = new Date(end.getFullYear(), end.getMonth() + dueMonthOffset, 1)
+let due = new Date(
+  dueBase.getFullYear(),
+  dueBase.getMonth(),
+  clampDay(dueBase.getFullYear(), dueBase.getMonth(), dueDay)
+)
+
     const dueStr = `${due.getFullYear()}-${String(due.getMonth()+1).padStart(2,'0')}-${String(due.getDate()).padStart(2,'0')}`
     const id = `${cardId}:${startStr}:${endStr}`
     const purchases = (S.transactions || []).filter(t => t.type === 'expense' && t.walletId === cardId && t.date >= startStr && t.date <= endStr)
@@ -3445,6 +3534,20 @@ App.render();
   window.visualViewport?.addEventListener('resize', () => syncKeyboardClass(), { passive:true })
   window.visualViewport?.addEventListener('scroll', () => syncKeyboardClass(), { passive:true })
 
+
+  // Keep --app-height stable after keyboard class changes. This prevents
+  // form action bars/sheets from being laid out against the shrunken visual viewport.
+  const reassertStableAppHeight = () => {
+    const h = Math.round(window.innerHeight || document.documentElement.clientHeight || 0)
+    if (h > 0) document.documentElement.style.setProperty('--app-height', `${h}px`)
+  }
+  document.addEventListener('focusin', ev => {
+    if (isFormControl(ev.target)) requestAnimationFrame(reassertStableAppHeight)
+  }, true)
+  window.visualViewport?.addEventListener('resize', () => {
+    if (document.body.classList.contains('keyboard-open')) requestAnimationFrame(reassertStableAppHeight)
+  }, { passive:true })
+
   // 5) Thai statement format and labels.
   function statusText(st) { return st?.paid ? 'ชำระแล้ว' : 'ค้างชำระ' }
   function statementHtml(cardId, st) {
@@ -3724,7 +3827,7 @@ App.render();
         ${f('ccb-dueDay','วันครบกำหนดชำระ (1&#x2013;31)', w.dueDay, 'วันในทุกเดือนที่ต้องชำระยอด')}
       </div>
     </div>`
-    const pointsForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิดคะแนนสะสม</b><button class="toggle${p.enabled ? ' on' : ''}" id="ccb-points-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${fDec('ccb-bahtPerPoint','X บาท = 1 คะแนน',p.bahtPerPoint)}${fDec('ccb-pointEvery','ทุก X บาทได้ 1 คะแนน',p.pointPerBahtEvery)}${fDec('ccb-multi','คะแนนเพิ่ม X เท่า',p.multiplier||1)}${fDec('ccb-maxTxnPoint','สูงสุด/รายการ',p.maxPerTxn)}${fDec('ccb-maxCyclePoint','สูงสุด/รอบบัญชี',p.maxPerCycle)}</div></div>`
+    const pointsForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิดคะแนนสะสม</b><button class="toggle${p.enabled ? ' on' : ''}" id="ccb-points-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${fDec('ccb-bahtPerPoint','ใช้จ่ายทุก X บาท = 1 คะแนน',p.bahtPerPoint)}${fDec('ccb-multi','คะแนนเพิ่ม X เท่า',p.multiplier||1)}${fDec('ccb-maxTxnPoint','สูงสุด/รายการ',p.maxPerTxn)}${fDec('ccb-maxCyclePoint','สูงสุด/รอบบัญชี',p.maxPerCycle)}</div></div>`
     const cashForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิด Cashback</b><button class="toggle${c.enabled ? ' on' : ''}" id="ccb-cash-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${fDec('ccb-cbPercent','รับเงินคืน X%',c.percent)}${fDec('ccb-cbMin','ขั้นต่ำ (฿)',c.minSpend)}${fDec('ccb-cbTier','เริ่มขั้นบันไดที่ (฿)',c.tierThreshold)}${fDec('ccb-cbEvery','คิดทุก ๆ X บาท',c.everyBaht||1)}${fDec('ccb-cbMaxTxn','สูงสุด/รายการ (฿)',c.maxPerTxn)}${fDec('ccb-cbMaxCycle','สูงสุด/รอบบัญชี (฿)',c.maxPerCycle)}</div></div>`
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">&#x2190;</button><h2>สิทธิประโยชน์บัตร</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefit('${esc(cardId)}')" style="width:auto">บันทึก</button></div>
       <div class="sub-scroll">
@@ -3835,7 +3938,7 @@ App.render();
     const dlgId = 'v45-cashback-dlg'
     document.getElementById(dlgId)?.remove()
     document.getElementById('app').insertAdjacentHTML('beforeend', `
-      <div id="${dlgId}" class="overlay active" role="dialog" aria-modal="true">
+      <div id="${dlgId}" class="overlay open" role="dialog" aria-modal="true">
         <div class="overlay-backdrop" onclick="document.getElementById('${dlgId}').remove()"></div>
         <div class="sheet">
           <div class="sheet-handle"></div>
@@ -3943,28 +4046,50 @@ App.render();
 
     const summaryEl = document.getElementById('wallets-summary')
     if (summaryEl) summaryEl.innerHTML = `<div class="wallet-summary-grid wallet-summary-grid-fixed">
-      <div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${fmt(sumBase+sumInv)}</strong></div>
-      <div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${fmt(debt)}</strong></div>
+      <div class="wallet-summary-card"><span>สินทรัพย์รวม</span>
+      <strong class="c-income">${S.settings?.hideMoney ? '฿*****' : fmt(sumBase + sumInv)}</strong></div>
+      <div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${S.settings?.hideMoney ? '฿*****' : fmt(debt)}</strong></div>
     </div>`
 
     // Inject "+ เพิ่มกระเป๋า" alongside h1 (once only)
     const pageHeader = document.querySelector('#page-wallets .page-header')
-    if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
-      const h1 = pageHeader.querySelector('h1')
-      if (h1) {
-        const row = document.createElement('div')
-        row.className = 'wallets-h1-row'
-        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center'
-        h1.replaceWith(row)
-        row.appendChild(h1)
-        const addBtn = document.createElement('button')
-        addBtn.className = 'btn btn-primary btn-sm wallets-header-add-btn'
-        addBtn.style.cssText = 'width:auto;padding:8px 14px;flex-shrink:0'
-        addBtn.textContent = '+ เพิ่มกระเป๋า'
-        addBtn.onclick = () => App.openWalletForm(null)
-        row.appendChild(addBtn)
-      }
+if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
+  const h1 = pageHeader.querySelector('h1')
+  if (h1) {
+    const row = document.createElement('div')
+    row.className = 'wallets-h1-row'
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center'
+    h1.replaceWith(row)
+    row.appendChild(h1)
+
+    // 1. สร้างกลุ่มสำหรับปุ่ม (Actions Container) เพื่อให้ปุ่มอยู่ด้วยกันทางขวา
+    const actions = document.createElement('div')
+    actions.style.cssText = 'display:flex;gap:8px;align-items:center' // ใช้ gap เพื่อเว้นระยะห่างระหว่างปุ่ม
+
+    // 2. สร้างปุ่ม Refresh
+    const refreshBtn = document.createElement('button')
+    refreshBtn.className = 'btn btn-secondary btn-sm wallet-section-refresh-btn'
+    refreshBtn.innerHTML = '↻ Refresh'
+    refreshBtn.onclick = (e) => {
+      e.stopPropagation()
+      App.refreshMarketPrices()
     }
+
+    // 3. สร้างปุ่ม Add
+    const addBtn = document.createElement('button')
+    addBtn.className = 'btn btn-primary btn-sm wallets-header-add-btn'
+    addBtn.style.cssText = 'width:auto;padding:8px 14px;flex-shrink:0'
+    addBtn.textContent = '+ เพิ่มกระเป๋า'
+    addBtn.onclick = () => App.openWalletForm(null)
+
+    // 4. เรียงลำดับ: ใส่ Refresh ก่อน แล้วตามด้วย Add เข้าไปในกลุ่ม actions
+    actions.appendChild(refreshBtn)
+    actions.appendChild(addBtn)
+
+    // 5. นำกลุ่มปุ่มทั้งหมดไปใส่ใน row ต่อจาก h1
+    row.appendChild(actions)
+  }
+}
 
     const content = document.getElementById('wallets-content')
     if (!content) return
@@ -3975,7 +4100,6 @@ App.render();
     const goldNote = `<div class="wallet-market-note"><b>ราคาทอง:</b><br>ทองรูปพรรณรับซื้อ${gold?.jewelryBuy?` ${fmt(gold.jewelryBuy)}/บาททอง`:' ยังไม่ Sync'}${updated?` · อัปเดต ${esc(updated)}`:''}</div>`
 
     const empty = txt => `<div class="card card-pad wallet-empty-card">${esc(txt)}</div>`
-    const refreshBtn = `<button class="btn btn-secondary btn-sm wallet-section-refresh-btn" onclick="event.stopPropagation();App.refreshMarketPrices()">↻ Refresh</button>`
     const section = (title, icon, list, emptyTxt, grid, extra='') =>
       `<section class="wallet-section-block">
         <div class="wallet-section-title wallet-section-title-row"><span>${icon} ${esc(title)}</span>${extra}</div>
@@ -3985,7 +4109,7 @@ App.render();
     content.innerHTML = goldNote
       + section('สินทรัพย์', '🏦', assets,  'ยังไม่มีสินทรัพย์', true)
       + section('บัตรเครดิต', '💳', credits, 'ยังไม่มีบัตรเครดิต', false)
-      + section('การลงทุน', '📈', invests, 'เพิ่มทอง / Crypto / FCD เพื่อดูราคาอ้างอิง', true, refreshBtn)
+      + section('การลงทุน', '📈', invests, 'เพิ่มทอง / Crypto / FCD เพื่อดูราคาอ้างอิง', true)
   }
 
   try { if (S.page === 'wallets') App.renderWallets() } catch (_) {}
@@ -4489,7 +4613,6 @@ App.render();
       points: {
         enabled: document.getElementById('ccb-points-enabled')?.classList.contains('on'),
         bahtPerPoint:     v('ccb-bahtPerPoint'),
-        pointPerBahtEvery: v('ccb-pointEvery'),
         multiplier:       v('ccb-multi') || 1,
         maxPerTxn:        v('ccb-maxTxnPoint'),
         maxPerCycle:      v('ccb-maxCyclePoint'),
@@ -4682,7 +4805,7 @@ App.render();
     const dlgId = 'v50-record-rewards-dlg'
     document.getElementById(dlgId)?.remove()
     document.getElementById('app')?.insertAdjacentHTML('beforeend', `
-      <div id="${dlgId}" class="overlay active" role="dialog" aria-modal="true">
+      <div id="${dlgId}" class="overlay open" role="dialog" aria-modal="true">
         <div class="overlay-backdrop" onclick="document.getElementById('${dlgId}').remove()"></div>
         <div class="sheet" style="max-height:92dvh">
           <div class="sheet-handle"></div>
@@ -4828,7 +4951,7 @@ App.render();
           <div class="v5-acct-pts">${balance.toLocaleString('en-US')}</div>
           <div style="font-size:11px;color:var(--muted)">คะแนน</div>
         </div>
-        <button class="icon-btn" onclick="App.openAdjustPointsForm('${esc(acct.id)}')" title="ปรับคะแนน">⚙️</button>
+        <button class="icon-btn" onclick="App.openAdjustPointsForm('${esc(acct.id)}')" title="ปรับคะแนน">✏️</button>
       </div>`
     }).join('') : `<div style="font-size:13px;color:var(--muted);padding:12px 0">ยังไม่มีบัญชีคะแนน <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm()" style="width:auto;margin-left:8px">+ เพิ่มบัญชี</button></div>`
 
@@ -5219,4 +5342,312 @@ App.render();
   // ── Apply ──────────────────────────────────────────────────
   try { persist() } catch (_) {}
   try { App.render?.() } catch (_) {}
+})();
+
+/* ============================================================
+   V6.0 — Targeted fixes:
+   1. Data migration: pointPerBahtEvery → bahtPerPoint
+   2. Recurring monthly fields (recurringDayOfMonth, durationMonths)
+   3. Per-transaction CC reward eligibility toggles in add-tx form
+   4. Merchant combo wired to _renderAddTxDetail
+   5. cleanTxFromDraft includes reward eligibility flags
+   6. openAddTx initialises reward eligibility flags
+   7. syncKeyboardClass scrolls focused input into view
+   ============================================================ */
+;(function v60Fixes(){
+  // ── Shared helpers ────────────────────────────────────────────────────────
+  const esc = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))
+  const today = () => typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)
+  function walletById(id) { return (S.wallets || []).find(w => w.id === id) || null }
+  function addMonths(dateStr, n) {
+    const [y, m, d] = String(dateStr || today()).split('-').map(Number)
+    const t = new Date(y, (m || 1) - 1 + n, 1)
+    const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()
+    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(Math.min(d || 1, last)).padStart(2,'0')}`
+  }
+  function clampDay(year, monthIndex, day) {
+    return Math.max(1, Math.min(Number(day) || 1, new Date(year, monthIndex + 1, 0).getDate()))
+  }
+  function addDays(dateStr, days) {
+    const [y,m,d] = String(dateStr || today()).split('-').map(Number)
+    const dt = new Date(y, (m||1)-1, d||1)
+    dt.setDate(dt.getDate() + Number(days || 0))
+    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
+  }
+  function notify(msg, type) { App.showToast?.(msg, type) || console.log(msg) }
+
+  // ── 1. Data migration: pointPerBahtEvery → bahtPerPoint ──────────────────
+  ;(function migratePointPerBaht() {
+    const benefits = S.ccBenefits || {}
+    let changed = false
+    Object.keys(benefits).forEach(id => {
+      const p = benefits[id]?.points || {}
+      if (p.pointPerBahtEvery > 0 && !p.bahtPerPoint) {
+        p.bahtPerPoint = p.pointPerBahtEvery
+        changed = true
+      }
+      delete p.pointPerBahtEvery
+    })
+    if (changed) { try { persist() } catch(_){} }
+  })()
+
+  // ── 2. Recurring monthly fields ───────────────────────────────────────────
+  const _prevOpenRecurringForm = App.openRecurringForm?.bind(App)
+  App.openRecurringForm = function v6OpenRecurringForm(id) {
+    const r = id ? (S.recurring || []).find(x => x.id === id) : null
+    const cats = [...(S.categories?.expense || []), ...(S.categories?.income || [])]
+    function isInvestWallet(w) { return ['gold','crypto','fcd'].includes(w.type) }
+    const walletOpts = (S.wallets || []).filter(w => w.type !== 'credit' && !isInvestWallet(w))
+      .map(w => `<option value="${esc(w.id)}"${r?.walletId===w.id?' selected':''}>${esc(w.icon||'')} ${esc(w.name)}</option>`).join('')
+    const isMonthly = r?.recurrenceType === 'monthly'
+    const typeOpts = ['expense','income'].map(t =>
+      `<option value="${t}"${(r?.type||'expense')===t?' selected':''}>${t==='expense'?'รายจ่าย':'รายรับ'}</option>`
+    ).join('')
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.openRecurringScreen()">←</button>
+        <h2>${r?'แก้ไข':'เพิ่ม'}รายการประจำ</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.saveRecurring('${esc(id||'')}')" style="width:auto">บันทึก</button>
+      </div>
+      <div class="sub-scroll">
+        <div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" id="rec-name" value="${esc(r?.name||'')}"></div>
+        <div class="form-group"><label class="form-label">ประเภท</label><select class="form-input" id="rec-type">${typeOpts}</select></div>
+        <div class="form-group"><label class="form-label">จำนวนเงิน</label><input class="form-input" type="number" inputmode="decimal" id="rec-amount" value="${esc(r?.amount||'')}"></div>
+        <div class="form-group">
+          <label class="form-label">ความถี่</label>
+          <select class="form-input" id="rec-rectype" onchange="(function(){var m=this.value==='monthly';document.getElementById('rec-monthly-fields').style.display=m?'':'none';document.getElementById('rec-days-field').style.display=m?'none':''}).call(this)">
+            <option value="days"${!isMonthly?' selected':''}>ทุกกี่วัน</option>
+            <option value="monthly"${isMonthly?' selected':''}>รายเดือน (วันที่กำหนด)</option>
+          </select>
+        </div>
+        <div id="rec-days-field" style="display:${isMonthly?'none':''}">
+          <div class="form-group"><label class="form-label">ทุกกี่วัน</label><input class="form-input" type="number" inputmode="numeric" id="rec-days" value="${esc(r?.everyDays||30)}"></div>
+        </div>
+        <div id="rec-monthly-fields" style="display:${isMonthly?'':'none'}">
+          <div class="form-group"><label class="form-label">วันที่ของเดือน (1–31)</label><input class="form-input" type="number" inputmode="numeric" id="rec-day-of-month" min="1" max="31" value="${esc(r?.recurringDayOfMonth||1)}"><div class="form-hint">ระบบจะปรับให้อัตโนมัติหากเดือนนั้นไม่มีวันดังกล่าว</div></div>
+          <div class="form-group"><label class="form-label">จำนวนเดือน (ว่างไว้ = ไม่สิ้นสุด)</label><input class="form-input" type="number" inputmode="numeric" id="rec-duration-months" min="1" value="${esc(r?.durationMonths||'')}" placeholder="ไม่จำกัด"></div>
+        </div>
+        <div class="form-group"><label class="form-label">เริ่ม / ครบกำหนดถัดไป</label><input class="form-input" type="date" id="rec-next" value="${esc(r?.nextDueDate||r?.startDate||today())}"></div>
+        <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="rec-cat">${cats.map(c=>`<option value="${esc(c.id)}"${r?.categoryId===c.id?' selected':''}>${esc(c.icon||'')} ${esc(c.label)}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">กระเป๋าเงิน</label><select class="form-input" id="rec-wallet">${walletOpts}</select></div>
+      </div>`)
+  }
+
+  App.saveRecurring = function v6SaveRecurring(id) {
+    const g = i => document.getElementById(i)
+    const name = g('rec-name')?.value?.trim() || ''
+    const type = g('rec-type')?.value || 'expense'
+    const amount = Number(g('rec-amount')?.value || 0)
+    const recType = g('rec-rectype')?.value || 'days'
+    const everyDays = parseInt(g('rec-days')?.value || 30)
+    const dayOfMonth = Math.max(1, Math.min(31, parseInt(g('rec-day-of-month')?.value || 1) || 1))
+    const durationMonths = parseInt(g('rec-duration-months')?.value || 0) || null
+    const categoryId = g('rec-cat')?.value || ''
+    const walletId = g('rec-wallet')?.value || ''
+    const nextDueDateRaw = g('rec-next')?.value || today()
+    const catObj = App._findCat?.(categoryId)
+    if (!name || amount <= 0 || !walletId || !categoryId) { notify('กรุณากรอกข้อมูลรายการประจำให้ครบ', 'error'); return }
+
+    let nextDueDate = nextDueDateRaw
+    if (recType === 'monthly') {
+      // Clamp the user-set date to use the correct day of month
+      const [y, m] = nextDueDateRaw.split('-').map(Number)
+      const clamped = clampDay(y, m - 1, dayOfMonth)
+      nextDueDate = `${y}-${String(m).padStart(2,'0')}-${String(clamped).padStart(2,'0')}`
+    }
+
+    const data = {
+      name, type, amount, everyDays, categoryId,
+      categoryName: catObj?.label, icon: catObj?.icon, color: catObj?.color,
+      walletId, nextDueDate, paused: false,
+      recurrenceType: recType === 'monthly' ? 'monthly' : undefined,
+      recurringDayOfMonth: recType === 'monthly' ? dayOfMonth : undefined,
+      durationMonths: recType === 'monthly' && durationMonths ? durationMonths : undefined,
+    }
+    if (!S.recurring) S.recurring = []
+    if (id) {
+      const idx = S.recurring.findIndex(r => r.id === id)
+      if (idx >= 0) S.recurring[idx] = { ...S.recurring[idx], ...data }
+    } else {
+      S.recurring.push({ id: Calc.genId(), ...data })
+    }
+    persist(); App.openRecurringScreen(); notify('บันทึกรายการประจำแล้ว', 'success')
+  }
+
+  App.postRecurringNow = function v6PostRecurringNow(id) {
+    const r = (S.recurring || []).find(x => x.id === id)
+    if (!r) return
+    const dueDate = r.nextDueDate || today()
+    if ((S.transactions || []).some(t => t.sourceRecurringId === id && t.recurringDueDate === dueDate)) {
+      notify('รายการนี้ถูกบันทึกสำหรับรอบนี้แล้ว', 'warn'); return
+    }
+    const tx = { id: Calc.genId(), type: r.type || 'expense', amount: Number(r.amount || 0), walletId: r.walletId, categoryId: r.categoryId, merchant: r.name, note: '🔁 รายการประจำ', date: dueDate <= today() ? today() : dueDate, isRecurring: true, sourceRecurringId: id, recurringDueDate: dueDate }
+    const err = App.validateTransactionDraft?.(tx)
+    if (err) { notify(err, 'error'); return }
+    S.transactions.unshift(tx)
+    r.lastPostedAt = today()
+
+    if (r.recurrenceType === 'monthly' && r.recurringDayOfMonth) {
+      const next = addMonths(dueDate, 1)
+      const [ny, nm] = next.split('-').map(Number)
+      const nd = clampDay(ny, nm - 1, r.recurringDayOfMonth)
+      r.nextDueDate = `${ny}-${String(nm).padStart(2,'0')}-${String(nd).padStart(2,'0')}`
+      if (r.durationMonths) {
+        r._postedCount = (r._postedCount || 0) + 1
+        if (r._postedCount >= r.durationMonths) r.paused = true
+      }
+    } else {
+      r.nextDueDate = addDays(dueDate, Number(r.everyDays || 30))
+    }
+
+    App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
+    persist(); App.openRecurringScreen?.(); notify(`บันทึก "${r.name}" แล้ว`, 'success')
+  }
+
+  // Also patch getOverdueRecurring to handle monthly type correctly
+  const _prevGetOverdue = typeof getOverdueRecurring !== 'undefined' ? null : null
+  // Override via App namespace — the dashboard renderDashboard calls the local getOverdueRecurring
+  // We patch it by redefining the function used by renderDashboard:
+  App._getOverdueRecurring = function v6GetOverdueRecurring() {
+    const t = today()
+    return (S.recurring || []).filter(r => {
+      if (r.paused) return false
+      if (r.recurrenceType === 'monthly') {
+        return (r.nextDueDate || t) <= t
+      }
+      if (!r.nextDueDate) return !r.lastPostedAt
+      return r.nextDueDate <= t
+    })
+  }
+
+  // ── 3. openAddTx: initialise reward eligibility flags ─────────────────────
+  const _prevOpenAddTx = App.openAddTx?.bind(App)
+  App.openAddTx = function v6OpenAddTx() {
+    _prevOpenAddTx?.()
+    S.tx.rewardIncludePoints = true
+    S.tx.rewardIncludeCashback = true
+  }
+
+  // ── 4. cleanTxFromDraft: include reward eligibility flags ─────────────────
+  // We patch saveTx to read the flags from S.tx before building the tx object.
+  const _prevSaveTx = App.saveTx?.bind(App)
+  App.saveTx = function v6SaveTx() {
+    // Inject flags into S.tx so any cleanTxFromDraft call picks them up
+    if (S.tx.type === 'expense') {
+      const w = walletById(S.tx.walletId)
+      if (w?.type === 'credit') {
+        // flags are already set on S.tx by _toggleRewardFlag or by openAddTx init
+        // cleanTxFromDraft currently doesn't copy them — we extend S.tx then call prev
+        S.tx._rewardIncludePoints = S.tx.rewardIncludePoints !== false
+        S.tx._rewardIncludeCashback = S.tx.rewardIncludeCashback !== false
+      }
+    }
+    _prevSaveTx?.()
+  }
+
+  // Patch cleanTxFromDraft indirectly — we need access to the inner function.
+  // Since cleanTxFromDraft is a closure, we intercept at the recalculate step instead:
+  // The actual fix: override _rewardEstimateForTx to pass the draft with correct flags.
+  const _prevRewardEstimate = App._rewardEstimateForTx?.bind(App)
+  App._rewardEstimateForTx = function v6RewardEstimate(tx) {
+    // If called for the current draft, merge eligibility flags from S.tx
+    if (tx && tx.walletId === S.tx?.walletId && !tx.id) {
+      tx = {
+        ...tx,
+        rewardIncludePoints: S.tx?.rewardIncludePoints !== false,
+        rewardIncludeCashback: S.tx?.rewardIncludeCashback !== false,
+      }
+    }
+    return _prevRewardEstimate?.(tx) || null
+  }
+
+  // ── 5. _toggleRewardFlag ──────────────────────────────────────────────────
+  App._toggleRewardFlag = function(key) {
+    S.tx[key] = S.tx[key] === false ? true : false
+    App._renderAddTxDetail?.()
+  }
+
+  // ── 6. _renderAddTxDetail: wire merchant combo + CC reward section ─────────
+  const _prevRenderAddTxDetail = App._renderAddTxDetail?.bind(App)
+  App._renderAddTxDetail = function v6RenderAddTxDetail() {
+    _prevRenderAddTxDetail?.()
+
+    // (a) Wire merchant combo
+    const inp = document.getElementById('tx-merchant')
+    if (inp && !inp.dataset.v6combo) {
+      inp.dataset.v6combo = '1'
+      // Remove existing oninput if any and replace
+      inp.oninput = null
+      inp.addEventListener('focus', () => App._showMerchantDropdown?.(inp.value), { passive: true })
+      inp.addEventListener('input', () => {
+        App._txField?.('merchant', inp.value)
+        App._showMerchantDropdown?.(inp.value)
+      })
+      inp.addEventListener('blur', () => {
+        setTimeout(() => document.getElementById('mt-merchant-dropdown')?.classList.add('hidden'), 180)
+      }, { passive: true })
+    }
+
+    // (b) CC reward section for CC expense
+    const type = S.tx.type
+    const walletId = S.tx.walletId
+    if (type !== 'expense' || !walletId) return
+    const card = walletById(walletId)
+    if (!card || card.type !== 'credit') return
+    const benefit = App._benefit?.(card.id) || S.ccBenefits?.[card.id] || {}
+    const p = benefit.points || {}
+    const c = benefit.cashback || {}
+    const anyBenefit = benefit.enabled || p.enabled || c.enabled || p.bahtPerPoint > 0 || c.percent > 0
+    if (!anyBenefit) return
+
+    // Estimate rewards with current flags
+    const amount = Number(S.tx.amount || 0)
+    if (!amount) return
+    const draftTx = {
+      type: 'expense', amount,
+      walletId,
+      rewardIncludePoints: S.tx.rewardIncludePoints !== false,
+      rewardIncludeCashback: S.tx.rewardIncludeCashback !== false,
+    }
+    const reward = Calc.getCardRewards?.([draftTx], benefit) || { points: 0, cashback: 0 }
+    const inclPts = S.tx.rewardIncludePoints !== false
+    const inclCb = S.tx.rewardIncludeCashback !== false
+
+    let rows = ''
+    if (p.enabled || p.bahtPerPoint > 0) {
+      rows += `<div class="tx-reward-toggle-row">
+        <span>${reward.points > 0 && inclPts ? `+${reward.points} คะแนน` : 'คะแนนสะสม'}</span>
+        <button type="button" class="toggle${inclPts?' on':''}" onclick="App._toggleRewardFlag('rewardIncludePoints')"></button>
+      </div>`
+    }
+    if (c.enabled || c.percent > 0) {
+      rows += `<div class="tx-reward-toggle-row">
+        <span>${reward.cashback > 0 && inclCb ? `+฿${reward.cashback.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} cashback` : 'Cashback'}</span>
+        <button type="button" class="toggle${inclCb?' on':''}" onclick="App._toggleRewardFlag('rewardIncludeCashback')"></button>
+      </div>`
+    }
+
+    const section = document.createElement('div')
+    section.className = 'tx-cc-reward-section'
+    section.innerHTML = `<div class="form-label" style="margin-bottom:6px">สิทธิประโยชน์บัตร ${esc(card.icon||'💳')} ${esc(card.name)}</div>${rows}`
+
+    // Insert before add-detail-actions
+    const shell = document.querySelector('.add-detail-scroll')
+    if (shell && !shell.querySelector('.tx-cc-reward-section')) {
+      shell.appendChild(section)
+    }
+  }
+
+  // ── 7. syncKeyboardClass: scroll focused input into view ──────────────────
+  // Patch the existing visualViewport handler to also scroll input into view
+  window.visualViewport?.addEventListener('resize', () => {
+    const el = document.activeElement
+    if (!el || !el.matches?.('input, textarea, select')) return
+    requestAnimationFrame(() => {
+      el.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+    })
+  }, { passive: true })
+
+  // ── Apply ─────────────────────────────────────────────────────────────────
+  try { App.render?.() } catch(_) {}
 })();

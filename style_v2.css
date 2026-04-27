@@ -3295,7 +3295,7 @@ body {
   input.form-input, select.form-input, textarea.form-input{font-size:16px!important}
 }
 
-/* @media (max-width: 768px){
+@media (max-width: 768px){
   body.keyboard-open #bottom-nav,
   body.keyboard-open #fab{
     transform:translateY(calc(100% + var(--safe-b) + 28px))!important;
@@ -3305,7 +3305,7 @@ body {
   }
   body.keyboard-open .page-scroll{padding-bottom:24px!important}
   body.keyboard-open .sheet{max-height:calc(var(--app-height) - 6px)!important}
-} */
+}
 
 .statement-compact-th .statement-main span + span{margin-top:1px!important}
 .statement-compact-th .status-pill{font-style:normal;white-space:nowrap}
@@ -4125,36 +4125,48 @@ html.dark .icon-btn {
 }
 
 /* ── V6: keyboard open — compact add-detail-actions ───────── */
-/* body.keyboard-open .add-detail-actions {
+body.keyboard-open .add-detail-actions {
   position: static;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-} */
-
+}
 
 /* ============================================================
-   V6.1 Mobile zoom lock
-   Purpose: prevent accidental page zoom on mobile while keeping
-   vertical scrolling, sheets, dropdowns, and form focus usable.
+   V6.2 Hard mobile zoom lock
+   Prevent page pinch/double-tap zoom on mobile while preserving
+   one-finger vertical scrolling inside the app shell.
    ============================================================ */
-@media (max-width: 768px) {
+@media (hover: none), (pointer: coarse), (max-width: 768px) {
   html,
   body,
   #app {
-    touch-action: pan-x pan-y !important;
-    -ms-touch-action: pan-x pan-y !important;
+    touch-action: pan-y !important;
+    -ms-touch-action: pan-y !important;
     -webkit-text-size-adjust: 100% !important;
     text-size-adjust: 100% !important;
   }
 
-  input,
-  select,
-  textarea {
-    font-size: 16px !important;
+  .page,
+  .page-scroll,
+  .sheet,
+  .sheet-body,
+  .sub-scroll,
+  #sub-screen,
+  #toast-container,
+  #mt-merchant-dropdown {
+    touch-action: pan-y !important;
+    -ms-touch-action: pan-y !important;
   }
 
   button,
   a,
+  input,
+  select,
+  textarea,
+  label,
   .btn,
+  .btn-sm,
+  .btn-icon,
+  .icon-btn,
   .chip,
   .nav-btn,
   .cat-btn,
@@ -4164,8 +4176,71 @@ html.dark .icon-btn {
   .wc-pay-btn,
   .wc-card-pay-btn,
   .numpad-key,
-  .icon-btn,
-  .btn-icon {
+  .toggle,
+  .color-dot,
+  .color-swatch {
     touch-action: manipulation !important;
+    -ms-touch-action: manipulation !important;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+
+
+/* ============================================================
+   V6.3 iOS keyboard stable viewport fix
+   Keep the app layout full-height while the keyboard is open so
+   sheet/action controls do not jump to the middle of the screen.
+   ============================================================ */
+@media (hover: none), (pointer: coarse), (max-width: 768px) {
+  html,
+  body,
+  #app {
+    height: var(--app-height) !important;
+    min-height: var(--app-height) !important;
+  }
+
+  body.keyboard-open,
+  body.keyboard-open #app {
+    height: var(--app-height) !important;
+    min-height: var(--app-height) !important;
+    overflow: hidden !important;
+  }
+
+  body.keyboard-open .overlay.open {
+    align-items: flex-end !important;
+  }
+
+  body.keyboard-open .sheet {
+    max-height: var(--app-height) !important;
+  }
+
+  body.keyboard-open #sheet-add-tx .sheet,
+  body.keyboard-open #overlay-add-tx .sheet {
+    height: var(--app-height) !important;
+    max-height: var(--app-height) !important;
+  }
+
+  body.keyboard-open #sheet-add-tx #add-tx-content,
+  body.keyboard-open #overlay-add-tx #add-tx-content,
+  body.keyboard-open .add-detail-shell {
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+
+  body.keyboard-open .add-detail-scroll {
+    padding-bottom: calc(18px + var(--safe-b)) !important;
+  }
+
+  body.keyboard-open .add-detail-actions {
+    position: static !important;
+    transform: none !important;
+    bottom: auto !important;
+    padding-bottom: calc(12px + var(--safe-b)) !important;
   }
 }
