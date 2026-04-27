@@ -3699,3 +3699,380 @@ html.dark .v23-confirm-actions .btn-secondary {
     padding-left: 0 !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   V5.0 – Credit-limit groups · Reward accounts · Record rewards
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Credit limit mode tabs ──────────────────────────────────── */
+.v5-limit-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.v5-lm-tab {
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--elevated);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.v5-lm-tab.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  font-weight: 700;
+}
+
+.v5-lm-tab:active {
+  transform: scale(.975);
+}
+
+/* ── Shared limit badges ─────────────────────────────────────── */
+.v5-shared-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255,255,255,.82);
+  background: rgba(255,255,255,.18);
+  border-radius: 8px;
+  padding: 4px 9px;
+  margin: 6px 0 4px;
+  display: inline-block;
+}
+
+.v5-shared-badge-detail {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── Limit summary card in CC detail ─────────────────────────── */
+.v5-limit-summary {
+  /* inherits .card .card-pad — just extra overrides */
+}
+
+.v5-ls-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.v5-ls-type-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.v5-ls-type-badge.shared {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+/* ── Limit metrics grid ──────────────────────────────────────── */
+.v5-limit-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.v5-lm {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.v5-lm span {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.v5-lm strong {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+}
+
+/* ── Record rewards button ───────────────────────────────────── */
+.v5-record-btn {
+  margin-top: 10px !important;
+}
+
+/* ── Already-recorded banner ─────────────────────────────────── */
+.v5-already-recorded-banner {
+  background: color-mix(in srgb, #F59E0B 14%, transparent);
+  border: 1px solid color-mix(in srgb, #F59E0B 40%, transparent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #92400E;
+  margin-bottom: 14px;
+}
+
+html.dark .v5-already-recorded-banner {
+  color: #FDE68A;
+  background: color-mix(in srgb, #F59E0B 18%, transparent);
+  border-color: color-mix(in srgb, #F59E0B 36%, transparent);
+}
+
+/* ── Record rewards sheet sections ──────────────────────────── */
+.v5-rr-section {
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+  margin-bottom: 4px;
+}
+
+.v5-rr-section:last-of-type {
+  border-bottom: none;
+}
+
+.v5-rr-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: 8px;
+}
+
+.v5-rr-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  padding: 3px 0;
+}
+
+.v5-rr-row strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--income);
+}
+
+/* ── Cashback destination options ────────────────────────────── */
+.v5-destination-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.v5-dest-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--elevated);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+
+.v5-dest-option input[type="radio"] {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  flex-shrink: 0;
+}
+
+.v5-dest-option:has(input:checked) {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--elevated));
+}
+
+.v5-dest-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.v5-dest-content strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.v5-dest-content span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Reward account rows ─────────────────────────────────────── */
+.v5-acct-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.v5-acct-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.v5-acct-row > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.v5-acct-name {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v5-acct-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.v5-acct-pts {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--primary);
+  letter-spacing: -.025em;
+}
+
+/* ── Pending rewards rows ────────────────────────────────────── */
+.v5-pending-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.v5-pending-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.v5-pending-row > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.v5-pending-row > div:nth-child(2) {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+/* ── Issuer hint ─────────────────────────────────────────────── */
+.v5-issuer-hint {
+  background: color-mix(in srgb, #3B82F6 10%, transparent);
+  border: 1px solid color-mix(in srgb, #3B82F6 30%, transparent);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+html.dark .v5-issuer-hint {
+  background: color-mix(in srgb, #3B82F6 15%, transparent);
+  border-color: color-mix(in srgb, #3B82F6 35%, transparent);
+}
+
+/* ── Reward account info (CC detail) ─────────────────────────── */
+.v5-reward-acct-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--elevated));
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.v5-reward-acct-info strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+/* ── Small icon button ───────────────────────────────────────── */
+.icon-btn {
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 15px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .12s;
+  line-height: 1;
+}
+
+.icon-btn:active {
+  transform: scale(.93);
+  background: var(--border);
+}
+
+/* ── Dark mode overrides ─────────────────────────────────────── */
+html.dark .v5-lm-tab {
+  background: var(--elevated);
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+html.dark .v5-lm-tab.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+html.dark .v5-dest-option {
+  background: var(--elevated);
+  border-color: var(--border);
+}
+
+html.dark .v5-dest-option:has(input:checked) {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, var(--elevated));
+}
+
+html.dark .v5-ls-type-badge {
+  background: var(--elevated);
+  border-color: var(--border);
+}
+
+html.dark .v5-ls-type-badge.shared {
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
+  color: color-mix(in srgb, var(--primary) 90%, #fff);
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+html.dark .icon-btn {
+  background: var(--elevated);
+  border-color: var(--border);
+}
+

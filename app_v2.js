@@ -2116,7 +2116,7 @@ App.render();
   const isInvest = w => w && new Set(['gold','crypto','fcd']).has(w.type)
 
   function unitLabel(w) {
-    if (w.type === 'gold') return 'บาทท.'
+    if (w.type === 'gold') return 'บาททอง'
     if (w.type === 'crypto') return w.symbol || 'coins'
     return w.symbol || 'หน่วย'
   }
@@ -3989,4 +3989,1234 @@ App.render();
   }
 
   try { if (S.page === 'wallets') App.renderWallets() } catch (_) {}
+})();
+
+/* ============================================================
+   V5.0 Credit-limit groups · Centralized rewards · Record-rewards flow
+   ============================================================ */
+;(function v50CreditLimitAndRewards(){
+  'use strict'
+
+  // ── Shared micro-helpers ────────────────────────────────────
+  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
+  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
+  const walletById = id => (S.wallets || []).find(w => w.id === id) || null
+  const genId = () => (typeof Calc !== 'undefined' && Calc.genId) ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2))
+  const nowISO = () => new Date().toISOString()
+  const notify = (msg, type = 'info') => { try { toast(msg, type) } catch { console.log(msg) } }
+  const loadV5JSON = (key, def) => { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : def } catch { return def } }
+  const saveV5JSON = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)) } catch (_) {} }
+
+  // Alias showToast → toast (used in V45 with ?.)
+  App.showToast = App.showToast || notify
+
+  const TH_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  function thaiDate(dateStr) {
+    const [y,m,d] = String(dateStr || '').split('-').map(Number)
+    if (!y||!m||!d) return esc(dateStr || '-')
+    return `${d} ${TH_MONTHS_SHORT[m-1]} ${String((y+543)%100).padStart(2,'0')}`
+  }
+  function thaiDateLong(dateStr) {
+    const [y,m,d] = String(dateStr || '').split('-').map(Number)
+    if (!y||!m||!d) return esc(dateStr || '-')
+    const fullNames = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
+    return `${d} ${fullNames[m-1]} ${y+543}`
+  }
+
+  const KNOWN_ISSUERS = ['KTC','SCB','KBank','BBL','Krungsri','UOB','TTB','Citi','CIMB','GHB','KBTG','Amex']
+
+  // ── State migration ────────────────────────────────────────
+  function migrateToV5() {
+    if (!S.creditLimitGroups) S.creditLimitGroups = loadV5JSON('mt_credit_limit_groups', [])
+    if (!S.rewardAccounts)    S.rewardAccounts    = loadV5JSON('mt_reward_accounts',     [])
+    S.rewardLedger ||= []
+    ;(S.wallets || []).filter(w => w.type === 'credit').forEach(w => {
+      if (!('issuer' in w))             w.issuer            = ''
+      if (!('creditLimitMode' in w))    w.creditLimitMode   = 'individual'
+      if (!('creditLimitGroupId' in w)) w.creditLimitGroupId = null
+      if (!('rewardAccountId' in w))    w.rewardAccountId   = null
+    })
+  }
+  migrateToV5()
+
+  // ── Extend persist ─────────────────────────────────────────
+  const _basePersistV5 = (typeof persist === 'function') ? persist : (() => Storage.saveAll(S))
+  persist = function v50Persist() {
+    migrateToV5()
+    _basePersistV5()
+    saveV5JSON('mt_credit_limit_groups', S.creditLimitGroups || [])
+    saveV5JSON('mt_reward_accounts',     S.rewardAccounts    || [])
+    saveV5JSON('mt_reward_ledger',       S.rewardLedger      || [])
+  }
+
+  // ── ═══════════════════════════════════════════════════════
+  // CREDIT LIMIT HELPERS
+  // ══════════════════════════════════════════════════════════
+
+  App.getCreditLimitGroup = function(groupId) {
+    return (S.creditLimitGroups || []).find(g => g.id === groupId) || null
+  }
+
+  App.getCreditCardsInLimitGroup = function(groupId) {
+    return (S.wallets || []).filter(w => w.type === 'credit' && w.creditLimitGroupId === groupId)
+  }
+
+  // Total credit usage for one card (balance already includes all future installment txns)
+  App.getCreditUsageForCard = function(cardId) {
+    const card = walletById(cardId)
+    if (!card || card.type !== 'credit') return 0
+    return Math.abs(Number(card.balance || 0))
+  }
+
+  // Usage for an entire shared group = sum across linked cards
+  App.getCreditUsageForLimitGroup = function(groupId) {
+    return App.getCreditCardsInLimitGroup(groupId)
+      .reduce((s, c) => s + App.getCreditUsageForCard(c.id), 0)
+  }
+
+  // Effective credit limit for a card (shared group limit or individual)
+  App.getCreditLimitForCard = function(card) {
+    if (!card || card.type !== 'credit') return 0
+    if (card.creditLimitMode === 'shared' && card.creditLimitGroupId) {
+      const g = App.getCreditLimitGroup(card.creditLimitGroupId)
+      return g ? Number(g.limit || 0) : Number(card.limit || 0)
+    }
+    return Number(card.limit || 0)
+  }
+
+  // Available credit for a card (respects shared group)
+  App.getAvailableCreditForCard = function(card) {
+    if (!card || card.type !== 'credit') return Infinity
+    const limit = App.getCreditLimitForCard(card)
+    if (!limit) return Infinity
+    if (card.creditLimitMode === 'shared' && card.creditLimitGroupId) {
+      const used = App.getCreditUsageForLimitGroup(card.creditLimitGroupId)
+      return Math.max(0, limit - used)
+    }
+    const used = App.getCreditUsageForCard(card.id)
+    return Math.max(0, limit - used)
+  }
+
+  // ── ═══════════════════════════════════════════════════════
+  // REWARD ACCOUNT HELPERS
+  // ══════════════════════════════════════════════════════════
+
+  App.getRewardAccountForCard = function(cardId) {
+    const card = walletById(cardId)
+    if (!card || !card.rewardAccountId) return null
+    return (S.rewardAccounts || []).find(a => a.id === card.rewardAccountId) || null
+  }
+
+  App.getRewardAccountBalance = function(accountId) {
+    const acct = (S.rewardAccounts || []).find(a => a.id === accountId)
+    if (!acct) return 0
+    const opening = Number(acct.openingBalance || 0)
+    const net = (S.rewardLedger || [])
+      .filter(r => r.accountId === accountId)
+      .reduce((s, r) => {
+        const pts = Number(r.points || 0)
+        if (r.type === 'points_earned' || r.type === 'points_adjustment') return s + pts
+        if (r.type === 'points_redeemed') return s - pts
+        return s
+      }, 0)
+    return Math.max(0, opening + net)
+  }
+
+  App.getLinkedCardsForAccount = function(accountId) {
+    return (S.wallets || []).filter(w => w.type === 'credit' && w.rewardAccountId === accountId)
+  }
+
+  // Check if this statement already has a recorded reward entry
+  function statementRewardRecorded(statementId) {
+    return (S.rewardLedger || []).some(r =>
+      r.statementId === statementId &&
+      (r.type === 'cashback_received' || r.type === 'points_earned' || r.type === 'cashback_statement_credit' || r.type === 'history_only')
+    )
+  }
+
+  // ── ═══════════════════════════════════════════════════════
+  // UPDATED validateTransactionDraft (shared credit limit aware)
+  // ══════════════════════════════════════════════════════════
+
+  const _prevValidate = App.validateTransactionDraft?.bind(App)
+  App.validateTransactionDraft = function v50ValidateTx(tx, opts = {}) {
+    const { isEdit = false } = opts
+    const amt = Number(tx.amount || 0)
+    if (!tx.type) return 'ไม่พบประเภทรายการ'
+    if (!amt || amt <= 0) return 'กรุณาระบุจำนวนเงินมากกว่า 0'
+    if (!tx.walletId) return 'กรุณาเลือกกระเป๋าเงิน'
+    const w = walletById(tx.walletId)
+    if (!w) return 'ไม่พบกระเป๋าเงินที่เลือก'
+
+    if (tx.type === 'transfer') {
+      if (!tx.toWalletId) return 'กรุณาเลือกกระเป๋าปลายทาง'
+      if (tx.toWalletId === tx.walletId) return 'กระเป๋าต้นทางและปลายทางต้องไม่เหมือนกัน'
+      const to = walletById(tx.toWalletId)
+      if (!to) return 'ไม่พบกระเป๋าปลายทาง'
+      if (w.type === 'credit' || to.type === 'credit') return 'บัตรเครดิตต้องใช้เมนูชำระบัตร ไม่ใช่โอนเงิน'
+      if (!isEdit && Number(w.balance || 0) < amt) return 'ยอดเงินในกระเป๋าต้นทางไม่เพียงพอ'
+    } else if (tx.type === 'expense') {
+      if (!tx.categoryId) return 'กรุณาเลือกหมวดหมู่รายจ่าย'
+      if (!isEdit && w.type !== 'credit' && Number(w.balance || 0) < amt) return 'ยอดเงินในกระเป๋าไม่เพียงพอ'
+      if (!isEdit && w.type === 'credit') {
+        const limit = App.getCreditLimitForCard(w)
+        if (limit > 0) {
+          const available = App.getAvailableCreditForCard(w)
+          if (amt > available) {
+            const modeLabel = (w.creditLimitMode === 'shared' && w.creditLimitGroupId)
+              ? '(วงเงินร่วม)' : ''
+            return `วงเงินบัตรคงเหลือ ${money(Math.max(0, available))} ${modeLabel} ไม่พอสำหรับ ${money(amt)}`
+          }
+        }
+      }
+    } else if (tx.type === 'income') {
+      if (!tx.categoryId) return 'กรุณาเลือกหมวดหมู่รายรับ'
+    }
+    return null
+  }
+
+  // ── ═══════════════════════════════════════════════════════
+  // UPDATED openWalletForm — adds CC fields
+  // ══════════════════════════════════════════════════════════
+
+  App.openWalletForm = function v50OpenWalletForm(walletId) {
+    S.editingWalletId = walletId
+    const w = walletId ? (S.wallets || []).find(x => x.id === walletId) : null
+    const COLORS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
+    const TYPES  = [['bank','🏦','ธนาคาร'],['cash','💵','เงินสด'],['ewallet','📱','E-Wallet'],['credit','💳','บัตรเครดิต'],['gold','🥇','ทอง'],['crypto','₿','Crypto'],['fcd','💱','FCD']]
+    const type   = w?.type || 'bank'
+    const isCC   = type === 'credit'
+    const isInv  = ['gold','crypto','fcd'].includes(type)
+
+    const creditLimitMode = w?.creditLimitMode || 'individual'
+    const issuer          = w?.issuer || ''
+    const rewardAcctId    = w?.rewardAccountId || ''
+    const selectedGroupId = w?.creditLimitGroupId || ''
+
+    const groups   = S.creditLimitGroups || []
+    const accounts = S.rewardAccounts    || []
+
+    // Group options
+    const groupOpts = groups.map(g => {
+      const used  = App.getCreditUsageForLimitGroup(g.id)
+      const avail = Math.max(0, g.limit - used)
+      return `<option value="${esc(g.id)}"${selectedGroupId===g.id?' selected':''}>${esc(g.name)} (คงเหลือ ${money(avail)})</option>`
+    }).join('') + `<option value="new">+ สร้างกลุ่มวงเงินใหม่</option>`
+
+    // Reward account options
+    const acctOpts = `<option value="">ไม่มีบัญชีคะแนน</option>` +
+      accounts.map(a => {
+        const bal = App.getRewardAccountBalance(a.id)
+        return `<option value="${esc(a.id)}"${rewardAcctId===a.id?' selected':''}>${esc(a.name)} (${bal.toLocaleString('en-US')} คะแนน)</option>`
+      }).join('') +
+      `<option value="new">+ สร้างบัญชีคะแนนใหม่</option>`
+
+    // Same-issuer suggestion
+    let issuerSuggestion = ''
+    if (issuer) {
+      const sameIssuerCards = (S.wallets||[]).filter(x => x.id !== walletId && x.type === 'credit' && x.issuer && x.issuer.toLowerCase() === issuer.toLowerCase())
+      if (sameIssuerCards.length > 0 && creditLimitMode !== 'shared') {
+        const names = sameIssuerCards.map(c => esc(c.name)).join(', ')
+        issuerSuggestion = `<div class="form-hint v5-issuer-hint">💡 พบบัตรจากผู้ออกบัตรเดียวกัน: ${names} — ลองเลือก "ใช้วงเงินร่วม"</div>`
+      }
+    }
+
+    const ccExtraHtml = `
+      <div id="wf-cc-extra">
+        <div class="form-group">
+          <label class="form-label">ผู้ออกบัตร / ธนาคาร</label>
+          <input class="form-input" id="wf-issuer" list="wf-issuer-list" value="${esc(issuer)}" placeholder="เช่น KTC, SCB, KBank" oninput="App._onWfIssuerChange()">
+          <datalist id="wf-issuer-list">${KNOWN_ISSUERS.map(i=>`<option value="${i}">`).join('')}</datalist>
+          <div id="wf-issuer-hint">${issuerSuggestion}</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">ประเภทวงเงิน</label>
+          <div class="v5-limit-mode-tabs">
+            <button type="button" class="v5-lm-tab${creditLimitMode==='individual'?' active':''}" onclick="App._selectCreditLimitMode('individual')">วงเงินแยกเฉพาะบัตรนี้</button>
+            <button type="button" class="v5-lm-tab${creditLimitMode==='shared'?' active':''}" onclick="App._selectCreditLimitMode('shared')">ใช้วงเงินร่วม</button>
+          </div>
+          <input type="hidden" id="wf-credit-limit-mode" value="${creditLimitMode}">
+        </div>
+        <div id="wf-shared-group-section" style="${creditLimitMode==='shared'?'':'display:none'}">
+          <div class="form-group">
+            <label class="form-label">กลุ่มวงเงินร่วม</label>
+            <select class="form-input" id="wf-shared-group-select" onchange="App._onCreditLimitGroupChange()">
+              <option value="">— เลือกกลุ่ม —</option>
+              ${groupOpts}
+            </select>
+          </div>
+          <div id="wf-new-group-fields" style="${selectedGroupId==='new'?'':'display:none'}">
+            <div class="form-group">
+              <label class="form-label">ชื่อกลุ่มวงเงินร่วม</label>
+              <input class="form-input" id="wf-new-group-name" placeholder="เช่น KTC วงเงินรวม">
+            </div>
+            <div class="form-group">
+              <label class="form-label">วงเงินรวมของกลุ่ม (฿)</label>
+              <input class="form-input" type="number" min="0" id="wf-new-group-limit" placeholder="100000">
+            </div>
+          </div>
+        </div>
+        <div id="wf-limit-individual" style="${creditLimitMode==='shared'?'display:none':''}">
+          <div class="form-group"><label class="form-label">วงเงิน (฿)</label><input class="form-input" type="number" id="wf-limit" value="${w?.limit||''}"></div>
+        </div>
+        <div class="form-group"><label class="form-label">วันครบกำหนดชำระ</label><input class="form-input" type="number" id="wf-dueday" min="1" max="31" value="${w?.dueDay||''}"></div>
+        <div class="form-group"><label class="form-label">วันตัดรอบบัญชี</label><input class="form-input" type="number" id="wf-cycle-day" min="1" max="31" value="${w?.cycleDay||''}"></div>
+        <div class="form-group">
+          <label class="form-label">บัญชีคะแนนสะสม</label>
+          <select class="form-input" id="wf-reward-account-select" onchange="App._onRewardAccountChange()">
+            ${acctOpts}
+          </select>
+        </div>
+        <div id="wf-new-account-fields" style="display:none">
+          <div class="form-group"><label class="form-label">ชื่อบัญชีคะแนน</label><input class="form-input" id="wf-new-account-name" placeholder="เช่น KTC Forever Points"></div>
+          <div class="form-group"><label class="form-label">คะแนนเริ่มต้น / ยอดปัจจุบัน</label><input class="form-input" type="number" min="0" id="wf-new-account-opening" value="0" placeholder="0"></div>
+        </div>
+      </div>`
+
+    const investHtml = `
+      <div id="wf-invest-fields" style="${isInv?'':'display:none'}">
+        <div class="form-group"><label class="form-label">Symbol / สกุลเงิน</label><input class="form-input" id="wf-symbol" placeholder="BTC, ETH, USD, บาททอง" value="${w?.symbol||w?.currency||''}"></div>
+        <div class="form-group"><label class="form-label">จำนวน Asset</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${w?.units||''}" placeholder="เช่น 0.05, 2.5, 1000"></div>
+        <div class="form-group"><label class="form-label">ราคาต่อหน่วยสำรอง (บาท)</label><input class="form-input" type="number" step="0.01" id="wf-manual-price" value="${w?.manualPrice||''}"></div>
+        <div id="wf-market-price-link" class="market-price-box"></div>
+      </div>`
+
+    document.getElementById('wallet-form-title').textContent = w ? 'แก้ไขกระเป๋า' : 'เพิ่มกระเป๋าเงิน'
+    document.getElementById('wallet-form-content').innerHTML = `
+      <div class="form-group"><label class="form-label">ชื่อกระเป๋า</label><input class="form-input" id="wf-name" value="${esc(w?.name||'')}"></div>
+      <div class="form-group">
+        <label class="form-label">ประเภท</label>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px" id="wf-type-grid">
+          ${TYPES.map(([v,icon,lbl]) => `<button class="cat-btn${type===v?' active':''}" onclick="App._selectWalletType('${v}')" data-type="${v}">${icon}<br><small>${lbl}</small></button>`).join('')}
+        </div>
+        <input type="hidden" id="wf-type" value="${type}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">สี</label>
+        <div class="color-row" id="wf-color-row">
+          ${COLORS.map(c => `<div class="color-dot${(w?.color||'#2563EB')===c?' selected':''}" style="background:${c}" onclick="App._selectWalletColor('${c}')" data-color="${c}"></div>`).join('')}
+        </div>
+        <input type="hidden" id="wf-color" value="${w?.color||'#2563EB'}">
+      </div>
+      <div class="form-group" id="wf-balance-group" style="${isCC?'display:none':''}">
+        <label class="form-label" id="wf-balance-label">${isInv?'มูลค่าปัจจุบัน / ราคาสำรอง (฿)':'มูลค่าปัจจุบัน (฿)'}</label>
+        <input class="form-input" type="number" id="wf-balance" value="${w && !isCC ? Math.abs(w.balance) : ''}">
+      </div>
+      ${isCC ? `<div class="form-group" id="wf-cc-balance-group">
+        <label class="form-label">ยอดค้างชำระ (฿)</label>
+        <input class="form-input" type="number" id="wf-balance" value="${w ? Math.abs(w.balance||0) : ''}">
+      </div>` : ''}
+      <div id="wf-cc-fields" style="${isCC?'':'display:none'}">${ccExtraHtml}</div>
+      ${investHtml}
+      <div class="flex-row" style="margin-top:12px">
+        ${w ? `<button class="btn btn-outline flex-1" onclick="App.deleteWallet('${esc(w.id)}')">ลบ</button>` : ''}
+        <button class="btn btn-primary${w?'':' flex-1'}" onclick="App.saveWallet()" style="${w?'flex:2':''}">${w ? 'บันทึก' : 'เพิ่มกระเป๋า'}</button>
+      </div>`
+    App.openOverlay('overlay-wallet-form')
+    if (isInv) try { syncInvestmentWalletForm?.(type) } catch (_) {}
+  }
+
+  // ── Credit limit mode toggle ────────────────────────────────
+  App._selectCreditLimitMode = function(mode) {
+    const hidden = document.getElementById('wf-credit-limit-mode')
+    if (hidden) hidden.value = mode
+    document.querySelectorAll('.v5-lm-tab').forEach(btn => btn.classList.toggle('active', btn.textContent.includes(mode === 'individual' ? 'แยก' : 'ร่วม')))
+    const sharedSec = document.getElementById('wf-shared-group-section')
+    const indivSec  = document.getElementById('wf-limit-individual')
+    if (sharedSec) sharedSec.style.display = mode === 'shared' ? '' : 'none'
+    if (indivSec)  indivSec.style.display  = mode === 'shared' ? 'none' : ''
+  }
+
+  App._onCreditLimitGroupChange = function() {
+    const sel = document.getElementById('wf-shared-group-select')?.value
+    const newFields = document.getElementById('wf-new-group-fields')
+    if (newFields) newFields.style.display = sel === 'new' ? '' : 'none'
+    // Auto-fill new group limit from card's own limit
+    if (sel === 'new') {
+      const limitInput = document.getElementById('wf-new-group-limit')
+      const cardLimit  = document.getElementById('wf-limit')
+      if (limitInput && cardLimit && !limitInput.value) limitInput.value = cardLimit.value
+    }
+  }
+
+  App._onRewardAccountChange = function() {
+    const sel = document.getElementById('wf-reward-account-select')?.value
+    const newFields = document.getElementById('wf-new-account-fields')
+    if (newFields) newFields.style.display = sel === 'new' ? '' : 'none'
+  }
+
+  App._onWfIssuerChange = function() {
+    const issuer = (document.getElementById('wf-issuer')?.value || '').trim().toLowerCase()
+    const hint   = document.getElementById('wf-issuer-hint')
+    if (!hint || !issuer) { if (hint) hint.innerHTML = ''; return }
+    const editingId = S.editingWalletId
+    const sameIssuer = (S.wallets||[]).filter(x => x.id !== editingId && x.type === 'credit' && x.issuer && x.issuer.toLowerCase() === issuer)
+    if (sameIssuer.length) {
+      const names = sameIssuer.map(c => esc(c.name)).join(', ')
+      const mode = document.getElementById('wf-credit-limit-mode')?.value
+      hint.innerHTML = mode !== 'shared' ? `<div class="form-hint v5-issuer-hint">💡 พบบัตร ${esc(sameIssuer.length)} ใบจากผู้ออกบัตรนี้: ${names}</div>` : ''
+    } else {
+      hint.innerHTML = ''
+    }
+  }
+
+  // ── Updated _selectWalletType ───────────────────────────────
+  App._selectWalletType = function v50SelectWalletType(type) {
+    document.getElementById('wf-type').value = type
+    document.querySelectorAll('#wf-type-grid .cat-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type))
+    const isCC  = type === 'credit'
+    const isInv = ['gold','crypto','fcd'].includes(type)
+    const ccFields = document.getElementById('wf-cc-fields')
+    if (ccFields) ccFields.style.display = isCC ? '' : 'none'
+    const investFields = document.getElementById('wf-invest-fields')
+    if (investFields) investFields.style.display = isInv ? '' : 'none'
+    const balGroup   = document.getElementById('wf-balance-group')
+    const ccBalGroup = document.getElementById('wf-cc-balance-group')
+    if (balGroup)   balGroup.style.display   = isCC ? 'none' : ''
+    if (ccBalGroup) ccBalGroup.style.display = isCC ? ''     : 'none'
+    const balLabel = document.getElementById('wf-balance-label')
+    if (balLabel) balLabel.textContent = isInv ? 'มูลค่าปัจจุบัน / ราคาสำรอง (฿)' : 'มูลค่าปัจจุบัน (฿)'
+    const sym = document.getElementById('wf-symbol')
+    if (sym && type === 'gold' && !sym.value) { sym.value = 'บาททอง'; sym.readOnly = true }
+    else if (sym) sym.readOnly = false
+    try { syncInvestmentWalletForm?.(type) } catch (_) {}
+  }
+
+  // ── Updated saveWallet ──────────────────────────────────────
+  App.saveWallet = function v50SaveWallet() {
+    const name  = document.getElementById('wf-name')?.value.trim()
+    const type  = document.getElementById('wf-type')?.value || 'bank'
+    const color = document.getElementById('wf-color')?.value || '#2563EB'
+    const rawBalance = parseFloat(document.getElementById('wf-balance')?.value) || 0
+    const isCC  = type === 'credit'
+    const isInv = ['gold','crypto','fcd'].includes(type)
+    const ICONS = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', saving:'🏦', gold:'🥇', crypto:'₿', fcd:'💱' }
+
+    if (!name) { notify('กรุณากรอกชื่อกระเป๋า', 'error'); return }
+
+    let balance = isCC ? -Math.abs(rawBalance) : rawBalance
+
+    const data = { name, type, color, icon: ICONS[type] || '💳', balance }
+
+    if (isCC) {
+      const issuer         = document.getElementById('wf-issuer')?.value.trim() || ''
+      const creditLimitMode = document.getElementById('wf-credit-limit-mode')?.value || 'individual'
+      const dueDay   = parseInt(document.getElementById('wf-dueday')?.value) || 5
+      const cycleDay = parseInt(document.getElementById('wf-cycle-day')?.value) || 25
+      let   limit    = parseFloat(document.getElementById('wf-limit')?.value) || 50000
+
+      let creditLimitGroupId = null
+
+      if (creditLimitMode === 'shared') {
+        const groupSel = document.getElementById('wf-shared-group-select')?.value
+        if (groupSel === 'new') {
+          const gName  = document.getElementById('wf-new-group-name')?.value.trim()
+          const gLimit = parseFloat(document.getElementById('wf-new-group-limit')?.value) || limit
+          if (!gName) { notify('กรุณาระบุชื่อกลุ่มวงเงินร่วม', 'error'); return }
+          const newGroup = { id:genId(), name:gName, issuer, limit:gLimit, createdAt:nowISO(), updatedAt:nowISO() }
+          S.creditLimitGroups.push(newGroup)
+          creditLimitGroupId = newGroup.id
+          limit = gLimit
+        } else if (groupSel) {
+          creditLimitGroupId = groupSel
+          const g = App.getCreditLimitGroup(groupSel)
+          if (g) limit = g.limit
+        }
+      }
+
+      // Reward account
+      let rewardAccountId = document.getElementById('wf-reward-account-select')?.value || ''
+      if (rewardAccountId === 'new') {
+        const aName    = document.getElementById('wf-new-account-name')?.value.trim()
+        const aOpening = parseInt(document.getElementById('wf-new-account-opening')?.value) || 0
+        if (!aName) { notify('กรุณาระบุชื่อบัญชีคะแนน', 'error'); return }
+        const newAcct = { id:genId(), name:aName, issuer, type:'points', openingBalance:aOpening, createdAt:nowISO(), updatedAt:nowISO() }
+        S.rewardAccounts.push(newAcct)
+        rewardAccountId = newAcct.id
+      } else if (rewardAccountId === '') {
+        rewardAccountId = null
+      }
+
+      Object.assign(data, { limit, dueDay, cycleDay, issuer, creditLimitMode, creditLimitGroupId, rewardAccountId })
+    }
+
+    if (isInv) {
+      const symbol     = document.getElementById('wf-symbol')?.value.trim().toUpperCase() || (type==='gold'?'บาททอง':type==='fcd'?'USD':'')
+      const units      = parseFloat(document.getElementById('wf-units')?.value) || 0
+      const manualPrice = parseFloat(document.getElementById('wf-manual-price')?.value) || 0
+      Object.assign(data, { symbol, currency:type==='fcd'?(symbol||'USD'):undefined, units, manualPrice })
+    }
+
+    // Ledger-based opening balance
+    const wId   = S.editingWalletId || null
+    const flows = typeof App._ledgerFlows === 'function' ? App._ledgerFlows() : { cash:{}, units:{} }
+    const r2 = n => Math.round((Number(n)||0)*100)/100
+    const r8 = n => Math.round((Number(n)||0)*1e8)/1e8
+    if (isInv) {
+      const flowU = wId ? Number(flows.units?.[wId]||0) : 0
+      data.openingUnits = r8((data.units||0) - flowU)
+      const price = App._investmentUnitPriceTHB?.(data) || data.manualPrice || 0
+      if (price && data.units) data.balance = r2(data.units * price)
+    } else {
+      const flowC = wId ? Number(flows.cash?.[wId]||0) : 0
+      data.openingBalance = r2(balance - flowC)
+    }
+
+    if (S.editingWalletId) {
+      const idx = (S.wallets||[]).findIndex(w => w.id === S.editingWalletId)
+      if (idx >= 0) S.wallets[idx] = { ...S.wallets[idx], ...data }
+    } else {
+      S.wallets.push({ id:genId(), ...data })
+    }
+
+    App.recalculateWalletBalances?.({ save:false, recordSnapshot:false })
+    persist(); App.closeOverlay('overlay-wallet-form'); App.render()
+    notify(S.editingWalletId ? 'แก้ไขกระเป๋าแล้ว' : 'เพิ่มกระเป๋าแล้ว', 'success')
+  }
+
+  // ── Updated saveCCBenefit — saves cycleDay/dueDay too ────────
+  App.saveCCBenefit = function v50SaveCCBenefit(id) {
+    const v = i => parseFloat(document.getElementById(i)?.value) || 0
+    const w = walletById(id)
+    if (!w) return
+    const cycleDay = parseInt(document.getElementById('ccb-cycleDay')?.value) || w.cycleDay || 25
+    const dueDay   = parseInt(document.getElementById('ccb-dueDay')?.value)   || w.dueDay   || 5
+    const idx = (S.wallets||[]).findIndex(x => x.id === id)
+    if (idx >= 0) { S.wallets[idx].cycleDay = cycleDay; S.wallets[idx].dueDay = dueDay }
+    S.ccBenefits[id] = {
+      enabled: false,
+      points: {
+        enabled: document.getElementById('ccb-points-enabled')?.classList.contains('on'),
+        bahtPerPoint:     v('ccb-bahtPerPoint'),
+        pointPerBahtEvery: v('ccb-pointEvery'),
+        multiplier:       v('ccb-multi') || 1,
+        maxPerTxn:        v('ccb-maxTxnPoint'),
+        maxPerCycle:      v('ccb-maxCyclePoint'),
+      },
+      cashback: {
+        enabled: document.getElementById('ccb-cash-enabled')?.classList.contains('on'),
+        percent:       v('ccb-cbPercent'),
+        minSpend:      v('ccb-cbMin'),
+        tierThreshold: v('ccb-cbTier'),
+        everyBaht:     v('ccb-cbEvery') || 1,
+        maxPerTxn:     v('ccb-cbMaxTxn'),
+        maxPerCycle:   v('ccb-cbMaxCycle'),
+      },
+    }
+    persist(); App.openCCDetail(id); notify('บันทึกสิทธิประโยชน์แล้ว', 'success')
+  }
+
+  // ── Updated _walletCard — CC shows shared limit context ─────
+  const _prevWalletCardV5 = App._walletCard?.bind(App)
+  App._walletCard = function v50WalletCard(w) {
+    if (w.type !== 'credit') return _prevWalletCardV5 ? _prevWalletCardV5(w) : ''
+    const color   = w.color || '#DC2626'
+    const name    = `${w.icon||''} ${w.name||''}`.trim()
+    const owed    = Math.abs(Number(w.balance||0))
+    const limit   = App.getCreditLimitForCard(w)
+    const avail   = limit ? App.getAvailableCreditForCard(w) : 0
+    const due     = w.dueDay ? Calc.getDueDate(w.dueDay) : null
+    const pct     = limit ? Math.min(100, Math.max(0, owed / limit * 100)) : 0
+    const editBtn = `<button class="wc-edit-btn" onclick="event.stopPropagation();App.openWalletForm('${esc(w.id)}')" aria-label="แก้ไข">✏️</button>`
+    const payBtn  = `<button class="wallet-chip-btn wc-card-pay-btn" onclick="event.stopPropagation();App.openCCPay('${esc(w.id)}')">ชำระ</button>`
+
+    let sharedBadge = ''
+    if (w.creditLimitMode === 'shared' && w.creditLimitGroupId) {
+      const g       = App.getCreditLimitGroup(w.creditLimitGroupId)
+      const gUsed   = App.getCreditUsageForLimitGroup(w.creditLimitGroupId)
+      const gAvail  = Math.max(0, (g?.limit||0) - gUsed)
+      sharedBadge   = g ? `<div class="v5-shared-badge">วงเงินร่วม ${esc(g.name)} · คงเหลือ ${money(gAvail)}</div>` : ''
+    }
+
+    return `<div class="wallet-card wallet-card-colored wallet-card-credit" style="--wallet-color:${esc(color)};--wallet-color-2:${esc(color)}BB" onclick="App.openCCDetail('${esc(w.id)}')">
+      <div class="wc-header">
+        <div><div class="wc-name">${esc(name)}</div><div class="wc-type">บัตรเครดิต${w.issuer ? ` · ${esc(w.issuer)}` : ''}${limit ? ` · วงเงิน ${money(limit)}` : ''}</div></div>
+        <div class="wc-card-actions">${payBtn}${editBtn}</div>
+      </div>
+      <div class="wc-balance">-${money(owed)}</div>
+      ${sharedBadge}
+      ${due ? `<div class="cc-due-strip${due.daysLeft<=3?' urgent':''}"><span>ครบกำหนดชำระ</span><em>${due.daysLeft===0?'วันนี้':`อีก ${due.daysLeft} วัน`}</em><strong>${esc(due.dueStr)}</strong></div>` : ''}
+      ${limit ? `<div class="wc-limit">
+        <div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct>80?'rgba(252,165,165,.95)':'rgba(255,255,255,.9)'}"></div></div>
+        <div class="wc-prog-info"><span>ใช้ ${pct.toFixed(0)}%</span><span>คงเหลือ ${money(avail)}</span></div>
+      </div>` : ''}
+    </div>`
+  }
+
+  // ── Updated openCCDetail — adds credit limit summary ────────
+  App.openCCDetail = function v50OpenCCDetail(cardId) {
+    const card = walletById(cardId)
+    if (!card) return
+    const benefit = App._benefit?.(cardId) || {}
+    const period  = Calc.getStatementPeriod(card.cycleDay || 25)
+    const txns    = (S.transactions||[]).filter(t => t.walletId===cardId).sort((a,b) => String(b.date||'').localeCompare(String(a.date||''))).slice(0,20)
+    const cycleTxns = (S.transactions||[]).filter(t => t.walletId===cardId && t.type==='expense' && t.date>=period.start && t.date<=period.end)
+    const rewards   = Calc.getCardRewards(cycleTxns, benefit)
+    const st        = App.getCardStatement?.(cardId)
+    const owed      = Math.abs(Number(card.balance||0))
+    const limit     = App.getCreditLimitForCard(card)
+    const avail     = App.getAvailableCreditForCard(card)
+    const usedPct   = limit ? Math.min((owed/limit)*100, 100) : 0
+    const due       = card.dueDay ? Calc.getDueDate(card.dueDay) : null
+    const installments = (App.getInstallmentGroups?.() || []).filter(g => g.walletId===cardId).slice(0,3)
+    const rewardAcct   = App.getRewardAccountForCard(cardId)
+
+    // Credit limit summary block
+    let limitSummaryHtml = ''
+    if (limit > 0) {
+      const isShared = card.creditLimitMode === 'shared' && card.creditLimitGroupId
+      const g = isShared ? App.getCreditLimitGroup(card.creditLimitGroupId) : null
+      const groupUsed = isShared ? App.getCreditUsageForLimitGroup(card.creditLimitGroupId) : owed
+      limitSummaryHtml = `<div class="card card-pad v5-limit-summary" style="margin-bottom:12px">
+        <div class="v5-ls-header">
+          <div>
+            <div style="font-size:14px;font-weight:800">สรุปวงเงิน</div>
+            ${isShared && g ? `<div class="v5-shared-badge-detail">วงเงินร่วม: ${esc(g.name)}</div>` : ''}
+          </div>
+          <span class="v5-ls-type-badge${isShared?' shared':''}"> ${isShared ? 'วงเงินร่วม' : 'วงเงินเฉพาะบัตร'}</span>
+        </div>
+        <div class="v5-limit-metrics">
+          <div class="v5-lm"><span>${isShared?'วงเงินรวม':'วงเงินบัตร'}</span><strong>${money(limit)}</strong></div>
+          <div class="v5-lm"><span>${isShared?'กลุ่มใช้ไป':'ใช้ไป'}</span><strong style="color:var(--expense)">${money(groupUsed)}</strong></div>
+          <div class="v5-lm"><span>คงเหลือ</span><strong style="color:var(--income)">${money(avail)}</strong></div>
+        </div>
+        ${isShared ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">บัตรนี้ใช้ไป ${money(owed)}</div>` : ''}
+      </div>`
+    }
+
+    // Statement block
+    function statusText(s) { return s?.paid ? 'ชำระแล้ว' : 'ค้างชำระ' }
+    const stHtml = st ? `<div class="statement-compact statement-compact-th">
+      <div class="statement-main">
+        <div>
+          <b>สรุปรอบบัตรเครดิต</b>
+          <span>รอบ ${thaiDate(st.start)} – ${thaiDate(st.end)}</span>
+          <span>วันกำหนดชำระ ${thaiDate(st.dueDate)}</span>
+        </div>
+        <em class="status-pill ${st.paid?'ok':'warn'}">${statusText(st)}</em>
+      </div>
+      <div class="statement-metrics">
+        <div><span>ยอดใช้ในรอบ</span><strong>${money(st.purchaseTotal)}</strong></div>
+        <div><span>ชำระแล้ว</span><strong>${money(st.paidTotal)}</strong></div>
+        <div><span>ค้างชำระ</span><strong>${money(st.balanceDue)}</strong></div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen('${esc(cardId)}')">สมุดสิทธิประโยชน์</button>
+    </div>` : ''
+
+    // Reward account info
+    const rewardAcctHtml = rewardAcct ? `<div class="v5-reward-acct-info"><span>⭐ ${esc(rewardAcct.name)}</span><strong>${App.getRewardAccountBalance(rewardAcct.id).toLocaleString('en-US')} คะแนน</strong></div>` : ''
+
+    // Reward grid + record button
+    const hasRewards = rewards.points > 0 || rewards.cashback > 0
+    const alreadyRecorded = st && statementRewardRecorded(st.id)
+    const recordBtn = hasRewards ? `<button class="btn btn-primary btn-sm v5-record-btn" onclick="App.recordActualRewards('${esc(cardId)}')" style="width:100%;margin-top:8px">${alreadyRecorded ? '✓ บันทึกแล้ว · บันทึกซ้ำ?' : 'บันทึกยอดที่ได้รับจริง'}</button>` : ''
+
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>${esc(card.icon||'')} ${esc(card.name)}</h2>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button>
+          <button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button>
+        </div>
+      </div>
+      <div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}">
+        <div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0">
+          <div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${card.cycleDay||25} · ชำระวันที่ ${card.dueDay||'-'}</div>
+          <div style="font-size:13px;opacity:.72;margin-bottom:4px">ยอดค้างชำระ</div>
+          <div class="big">${money(owed)}</div>
+          ${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}
+        </div>
+        ${limitSummaryHtml}
+        ${stHtml}
+        <div class="card card-pad" style="margin-bottom:12px">
+          <div class="cc-detail-header">
+            <div>
+              <div style="font-size:14px;font-weight:800">สิทธิประโยชน์รอบนี้</div>
+              <div style="font-size:12px;color:var(--muted)">${thaiDate(period.start)} ถึง ${thaiDate(period.end)}</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button>
+          </div>
+          <div class="reward-grid" style="margin-top:10px">
+            <div class="reward-tile"><span>คะแนน</span><strong>${rewards.points.toLocaleString('en-US')}</strong></div>
+            <div class="reward-tile"><span>เงินคืน</span><strong>${money(rewards.cashback)}</strong></div>
+          </div>
+          ${rewardAcctHtml}
+          ${recordBtn}
+        </div>
+        ${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : ''}
+        <div class="card" style="margin-bottom:14px">
+          <div style="padding:0 12px">
+            ${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}
+          </div>
+        </div>
+        ${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}
+        <div class="card"><div style="padding:0 16px">${txns.length ? txns.map(t => App._txRow(t)).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div>
+      </div>`)
+    setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
+  }
+
+  // ── ═══════════════════════════════════════════════════════
+  // RECORD ACTUAL REWARDS FLOW  (replaces markCashbackReceived)
+  // ══════════════════════════════════════════════════════════
+
+  App.recordActualRewards = function(cardId) {
+    const card = walletById(cardId)
+    const st   = App.getCardStatement?.(cardId)
+    if (!card || !st) { notify('ยังไม่มีข้อมูลรอบบัญชี', 'warn'); return }
+
+    const calcPoints   = Number(st.reward?.points   || 0)
+    const calcCashback = Number(st.reward?.cashback  || 0)
+    if (!calcPoints && !calcCashback) { notify('ไม่มีสิทธิประโยชน์ในรอบนี้', 'warn'); return }
+
+    const alreadyRecorded = statementRewardRecorded(st.id)
+    const rewardAcct      = App.getRewardAccountForCard(cardId)
+    const otherWallets    = (S.wallets||[]).filter(w => w.id !== cardId && w.type !== 'credit')
+
+    // Wallet dropdown for "income" destination
+    const walletOpts = otherWallets.map(w =>
+      `<option value="${esc(w.id)}">${esc(w.icon||'')} ${esc(w.name)} (${money(w.balance||0)})</option>`
+    ).join('')
+
+    const dlgId = 'v50-record-rewards-dlg'
+    document.getElementById(dlgId)?.remove()
+    document.getElementById('app')?.insertAdjacentHTML('beforeend', `
+      <div id="${dlgId}" class="overlay active" role="dialog" aria-modal="true">
+        <div class="overlay-backdrop" onclick="document.getElementById('${dlgId}').remove()"></div>
+        <div class="sheet" style="max-height:92dvh">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <h2>บันทึกยอดที่ได้รับจริง</h2>
+            <button class="btn-icon" onclick="document.getElementById('${dlgId}').remove()">✕</button>
+          </div>
+          <div class="sheet-body" style="overflow-y:auto">
+            ${alreadyRecorded ? '<div class="v5-already-recorded-banner">⚠️ รอบนี้บันทึกแล้ว — บันทึกอีกครั้งจะสร้างรายการเพิ่ม</div>' : ''}
+            <div class="v5-rr-section">
+              <div class="v5-rr-label">บัตร / รอบบัญชี</div>
+              <div class="v5-rr-row"><span>${esc(card.icon||'💳')} ${esc(card.name)}</span><span style="color:var(--muted);font-size:13px">${thaiDate(st.start)} – ${thaiDate(st.end)}</span></div>
+            </div>
+            <div class="v5-rr-section">
+              <div class="v5-rr-label">ระบบคำนวณ</div>
+              ${calcPoints ? `<div class="v5-rr-row"><span>⭐ คะแนน</span><strong>${calcPoints.toLocaleString('en-US')} pt</strong></div>` : ''}
+              ${calcCashback ? `<div class="v5-rr-row"><span>💰 เงินคืน</span><strong>${money(calcCashback)}</strong></div>` : ''}
+            </div>
+            <div class="v5-rr-section">
+              <div class="v5-rr-label">ยอดที่ได้รับจริง</div>
+              ${calcPoints ? `<div class="form-group"><label class="form-label">⭐ คะแนนที่ได้รับจริง</label><input class="form-input" type="number" min="0" step="1" id="v50-actual-points" value="${calcPoints}"><div class="form-hint">คำนวณโดยระบบ: ${calcPoints.toLocaleString('en-US')} คะแนน</div></div>` : ''}
+              ${calcCashback ? `<div class="form-group"><label class="form-label">💰 เงินคืนที่ได้รับจริง (฿)</label><input class="form-input" type="number" min="0" step="0.01" id="v50-actual-cashback" value="${calcCashback.toFixed(2)}"><div class="form-hint">คำนวณโดยระบบ: ${money(calcCashback)}</div></div>` : ''}
+            </div>
+            ${calcCashback ? `<div class="v5-rr-section">
+              <div class="v5-rr-label">เงินคืนบันทึกเป็น</div>
+              <div class="v5-destination-options">
+                <label class="v5-dest-option">
+                  <input type="radio" name="v50-dest" value="income" checked>
+                  <div class="v5-dest-content"><strong>รับเป็นรายรับ</strong><span>สร้างรายรับเข้ากระเป๋าที่เลือก</span></div>
+                </label>
+                <label class="v5-dest-option">
+                  <input type="radio" name="v50-dest" value="statement_credit">
+                  <div class="v5-dest-content"><strong>เครดิตคืนลดหนี้บัตร</strong><span>ลดยอดค้างชำระของบัตร ไม่นับเป็นรายรับ</span></div>
+                </label>
+                <label class="v5-dest-option">
+                  <input type="radio" name="v50-dest" value="history_only">
+                  <div class="v5-dest-content"><strong>บันทึกเฉพาะประวัติ</strong><span>ไม่กระทบยอดเงินใด</span></div>
+                </label>
+              </div>
+              <div id="v50-income-wallet-row" style="margin-top:10px">
+                <div class="form-group">
+                  <label class="form-label">กระเป๋าที่รับเงินคืน</label>
+                  <select class="form-input" id="v50-income-wallet">${walletOpts}</select>
+                </div>
+              </div>
+            </div>` : ''}
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;padding-bottom:8px">
+              <button class="btn btn-secondary" onclick="document.getElementById('${dlgId}').remove()">ยกเลิก</button>
+              <button class="btn btn-primary" onclick="App._confirmRecordRewards('${esc(cardId)}','${esc(st.id)}')">✓ บันทึก</button>
+            </div>
+          </div>
+        </div>
+      </div>`)
+
+    // Wire up destination radio → show/hide wallet selector
+    setTimeout(() => {
+      document.querySelectorAll('input[name="v50-dest"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+          const incRow = document.getElementById('v50-income-wallet-row')
+          if (incRow) incRow.style.display = radio.value === 'income' ? '' : 'none'
+        })
+      })
+    }, 80)
+  }
+
+  App._confirmRecordRewards = function(cardId, statementId) {
+    const actualPoints   = parseInt(document.getElementById('v50-actual-points')?.value)   || 0
+    const actualCashback = parseFloat(document.getElementById('v50-actual-cashback')?.value) || 0
+    const destination    = document.querySelector('input[name="v50-dest"]:checked')?.value || 'history_only'
+    const incomeWalletId = document.getElementById('v50-income-wallet')?.value || ''
+
+    document.getElementById('v50-record-rewards-dlg')?.remove()
+
+    const card       = walletById(cardId)
+    const rewardAcct = App.getRewardAccountForCard(cardId)
+    const now        = nowISO()
+    const ledgerId   = genId()
+
+    // ── Points → reward account ledger
+    if (actualPoints > 0) {
+      if (rewardAcct) {
+        S.rewardLedger.push({ id:genId(), type:'points_earned', accountId:rewardAcct.id, cardId, statementId, points:actualPoints, amount:0, date:today(), note:'รับคะแนนจากรอบบัญชี', createdAt:now })
+      } else {
+        S.rewardLedger.push({ id:genId(), type:'points_received', cardId, statementId, points:actualPoints, amount:0, date:today(), note:'รับคะแนน (ยังไม่ได้เชื่อมบัญชีคะแนน)', createdAt:now })
+      }
+    }
+
+    // ── Cashback handling
+    if (actualCashback > 0) {
+      if (destination === 'income') {
+        const wallet = walletById(incomeWalletId)
+        if (wallet) {
+          const tx = { id:genId(), type:'income', amount:actualCashback, walletId:incomeWalletId, categoryId:'other_income', merchant:'Cashback', note:`รับ Cashback ${card?.name||''}`, date:today(), isRewardReceived:true, statementId, rewardLedgerId:ledgerId }
+          S.transactions.unshift(tx)
+          S.rewardLedger.push({ id:ledgerId, type:'cashback_received', cardId, statementId, amount:actualCashback, points:0, date:today(), note:'รับเป็นรายรับ', createdAt:now })
+          App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+        } else {
+          notify('กรุณาเลือกกระเป๋าที่รับเงินคืน', 'error'); return
+        }
+      } else if (destination === 'statement_credit') {
+        // Reduce card balance (credit back)
+        const idx = (S.wallets||[]).findIndex(x => x.id === cardId)
+        if (idx >= 0) {
+          S.wallets[idx].balance = Math.min(0, Number(S.wallets[idx].balance||0) + actualCashback)
+          S.wallets[idx].openingBalance = (S.wallets[idx].openingBalance || 0) + actualCashback
+        }
+        S.rewardLedger.push({ id:ledgerId, type:'cashback_statement_credit', cardId, statementId, amount:actualCashback, points:0, date:today(), note:'เครดิตคืนลดหนี้บัตร', createdAt:now })
+      } else {
+        // history_only
+        S.rewardLedger.push({ id:ledgerId, type:'cashback_received', cardId, statementId, amount:actualCashback, points:0, date:today(), note:'บันทึกเฉพาะประวัติ', createdAt:now })
+      }
+    } else if (actualCashback === 0 && actualPoints === 0) {
+      notify('ไม่มียอดที่บันทึก', 'warn'); return
+    }
+
+    persist()
+    notify(`บันทึกแล้ว${actualPoints ? ` · ${actualPoints.toLocaleString('en-US')} คะแนน` : ''}${actualCashback ? ` · ${money(actualCashback)}` : ''}`, 'success')
+    App.openRewardLedgerScreen(cardId)
+  }
+
+  // Keep markCashbackReceived as alias for backward compat
+  App.markCashbackReceived = App.recordActualRewards
+
+  // ── ═══════════════════════════════════════════════════════
+  // CENTRALIZED REWARDS BOOK
+  // ══════════════════════════════════════════════════════════
+
+  App.openRewardLedgerScreen = function v50RewardBook(cardId = '') {
+    migrateToV5()
+    const cards    = (S.wallets||[]).filter(w => w.type === 'credit')
+    const accounts = S.rewardAccounts || []
+
+    // Account summary section
+    const acctSummaryHtml = accounts.length ? accounts.map(acct => {
+      const balance  = App.getRewardAccountBalance(acct.id)
+      const linked   = App.getLinkedCardsForAccount(acct.id)
+      return `<div class="v5-acct-row">
+        <div>
+          <div class="v5-acct-name">${esc(acct.name)}</div>
+          <div class="v5-acct-meta">${esc(acct.issuer||'')}${linked.length ? ` · ${linked.length} บัตร` : ''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div class="v5-acct-pts">${balance.toLocaleString('en-US')}</div>
+          <div style="font-size:11px;color:var(--muted)">คะแนน</div>
+        </div>
+        <button class="icon-btn" onclick="App.openAdjustPointsForm('${esc(acct.id)}')" title="ปรับคะแนน">⚙️</button>
+      </div>`
+    }).join('') : `<div style="font-size:13px;color:var(--muted);padding:12px 0">ยังไม่มีบัญชีคะแนน <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm()" style="width:auto;margin-left:8px">+ เพิ่มบัญชี</button></div>`
+
+    // Pending/receivable rewards per card
+    const pendingHtml = cards.map(c => {
+      const st  = App.getCardStatement?.(c.id)
+      if (!st) return ''
+      const hasReward = st.reward?.points > 0 || st.reward?.cashback > 0
+      if (!hasReward) return ''
+      const recorded = statementRewardRecorded(st.id)
+      return `<div class="v5-pending-row">
+        <div>
+          <div style="font-size:13px;font-weight:700">${esc(c.icon||'💳')} ${esc(c.name)}</div>
+          <div style="font-size:12px;color:var(--muted)">รอบ ${thaiDate(st.start)} – ${thaiDate(st.end)}</div>
+        </div>
+        <div style="text-align:right">
+          ${st.reward.points ? `<div style="font-size:12px">⭐ ${st.reward.points.toLocaleString('en-US')} pt</div>` : ''}
+          ${st.reward.cashback ? `<div style="font-size:12px">💰 ${money(st.reward.cashback)}</div>` : ''}
+        </div>
+        <button class="btn ${recorded?'btn-secondary':'btn-primary'} btn-sm" onclick="App.recordActualRewards('${esc(c.id)}')" style="width:auto;flex-shrink:0;font-size:12px">${recorded?'✓ บันทึกแล้ว':'บันทึกยอดที่ได้รับจริง'}</button>
+      </div>`
+    }).filter(Boolean).join('')
+
+    // History ledger
+    const selected  = cardId || cards[0]?.id || ''
+    const histRows  = (S.rewardLedger||[])
+      .filter(r => !selected || r.cardId === selected || (r.accountId && App.getLinkedCardsForAccount(r.accountId).some(c => c.id === selected)))
+      .slice().reverse()
+    function rTypeLabel(r) {
+      if (r.type === 'cashback_received')       return '💰 รับเงินคืน'
+      if (r.type === 'cashback_statement_credit') return '💳 เครดิตคืนลดหนี้'
+      if (r.type === 'points_earned')            return '⭐ รับคะแนน'
+      if (r.type === 'points_received')          return '⭐ รับคะแนน'
+      if (r.type === 'points_adjustment')        return '🔧 ปรับคะแนน'
+      if (r.type === 'points_redeemed')          return '🎁 ใช้คะแนน'
+      if (r.type === 'history_only')             return '📋 ประวัติ'
+      return esc(r.type)
+    }
+    function rDetail(r) {
+      const pts = Number(r.points||0)
+      const amt = Number(r.amount||0)
+      const parts = []
+      if (amt > 0) parts.push(money(amt))
+      if (pts !== 0) parts.push(`${pts >= 0 ? '+' : ''}${pts.toLocaleString('en-US')} pt`)
+      return parts.join(' · ') || '–'
+    }
+    const histHtml = histRows.length ? histRows.map(r => {
+      const c = r.cardId ? walletById(r.cardId) : null
+      return `<div class="detail-row" style="flex-wrap:wrap">
+        <div>
+          <div style="font-size:13px;font-weight:700">${rTypeLabel(r)}</div>
+          <div style="font-size:11px;color:var(--muted)">${thaiDate(r.date||'')}${c ? ` · ${esc(c.name)}` : ''}</div>
+          ${r.note ? `<div style="font-size:11px;color:var(--muted)">${esc(r.note)}</div>` : ''}
+        </div>
+        <strong style="color:${Number(r.points||0)<0||r.type==='points_redeemed'?'var(--expense)':'var(--income)'}">${rDetail(r)}</strong>
+      </div>`
+    }).join('') : '<div style="font-size:13px;color:var(--muted)">ยังไม่มีประวัติ</div>'
+
+    const filterOpts = `<option value="">ทุกบัตร</option>` + cards.map(c => `<option value="${esc(c.id)}"${c.id===selected?' selected':''}>${esc(c.icon||'')} ${esc(c.name)}</option>`).join('')
+
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>สมุดสิทธิประโยชน์</h2>
+        <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm()" style="width:auto">+ บัญชีคะแนน</button>
+      </div>
+      <div class="sub-scroll">
+        <div class="sec-title">บัญชีคะแนนสะสม</div>
+        <div class="card card-pad" style="margin-bottom:12px">${acctSummaryHtml}</div>
+
+        <div class="sec-title">สิทธิประโยชน์รอรับ</div>
+        <div class="card card-pad" style="margin-bottom:12px">
+          ${pendingHtml || '<div style="font-size:13px;color:var(--muted)">ไม่มีสิทธิประโยชน์รอรับในขณะนี้</div>'}
+        </div>
+
+        <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>ประวัติรับสิทธิ์</span>
+          <select style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border);background:var(--elevated);color:var(--text)" onchange="App.openRewardLedgerScreen(this.value)">${filterOpts}</select>
+        </div>
+        <div class="card card-pad">${histHtml}</div>
+      </div>`)
+    setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
+  }
+
+  // ── ═══════════════════════════════════════════════════════
+  // REWARD ACCOUNT MANAGEMENT
+  // ══════════════════════════════════════════════════════════
+
+  App.openRewardAccountForm = function(accountId) {
+    const a = accountId ? (S.rewardAccounts||[]).find(x => x.id === accountId) : null
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.openRewardLedgerScreen()">←</button>
+        <h2>${a ? 'แก้ไข' : 'เพิ่ม'}บัญชีคะแนน</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.saveRewardAccount('${esc(accountId||'')}')" style="width:auto">บันทึก</button>
+      </div>
+      <div class="sub-scroll">
+        <div class="form-group"><label class="form-label">ชื่อบัญชีคะแนน</label><input class="form-input" id="ra-name" value="${esc(a?.name||'')}" placeholder="เช่น KTC Forever Points"></div>
+        <div class="form-group">
+          <label class="form-label">ผู้ออกบัตร / ธนาคาร</label>
+          <input class="form-input" id="ra-issuer" list="ra-issuer-list" value="${esc(a?.issuer||'')}" placeholder="เช่น KTC">
+          <datalist id="ra-issuer-list">${KNOWN_ISSUERS.map(i=>`<option value="${i}">`).join('')}</datalist>
+        </div>
+        <div class="form-group"><label class="form-label">คะแนนเริ่มต้น / ยอดคงเหลือปัจจุบัน</label><input class="form-input" type="number" min="0" id="ra-opening" value="${a?.openingBalance||0}"><div class="form-hint">ใส่ยอดคะแนนที่มีอยู่แล้ว ก่อนเริ่มใช้งานระบบนี้</div></div>
+        ${a ? `<button class="btn btn-outline" style="margin-top:8px" onclick="App.deleteRewardAccount('${esc(a.id)}')">ลบบัญชีคะแนนนี้</button>` : ''}
+      </div>`)
+  }
+
+  App.saveRewardAccount = function(id) {
+    const name    = document.getElementById('ra-name')?.value.trim()
+    const issuer  = document.getElementById('ra-issuer')?.value.trim() || ''
+    const opening = parseInt(document.getElementById('ra-opening')?.value) || 0
+    if (!name) { notify('กรุณากรอกชื่อบัญชีคะแนน', 'error'); return }
+    if (id) {
+      const idx = (S.rewardAccounts||[]).findIndex(a => a.id === id)
+      if (idx >= 0) { S.rewardAccounts[idx] = { ...S.rewardAccounts[idx], name, issuer, openingBalance:opening, updatedAt:nowISO() } }
+    } else {
+      S.rewardAccounts.push({ id:genId(), name, issuer, type:'points', openingBalance:opening, createdAt:nowISO(), updatedAt:nowISO() })
+    }
+    persist(); App.openRewardLedgerScreen(); notify('บันทึกบัญชีคะแนนแล้ว', 'success')
+  }
+
+  App.deleteRewardAccount = function(id) {
+    App.showConfirm?.({ title:'ลบบัญชีคะแนน', danger:true, confirmLabel:'ลบ',
+      body:'ลบบัญชีคะแนนนี้? บัตรที่เชื่อมอยู่จะไม่มีบัญชีคะแนน',
+      onConfirm() {
+        S.rewardAccounts = (S.rewardAccounts||[]).filter(a => a.id !== id)
+        ;(S.wallets||[]).filter(w => w.rewardAccountId === id).forEach(w => { w.rewardAccountId = null })
+        persist(); App.openRewardLedgerScreen(); notify('ลบบัญชีคะแนนแล้ว', 'success')
+      }
+    })
+  }
+
+  App.openAdjustPointsForm = function(accountId) {
+    const a = (S.rewardAccounts||[]).find(x => x.id === accountId)
+    if (!a) return
+    const bal = App.getRewardAccountBalance(accountId)
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.openRewardLedgerScreen()">←</button>
+        <h2>ปรับคะแนน</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.saveAdjustPoints('${esc(accountId)}')" style="width:auto">บันทึก</button>
+      </div>
+      <div class="sub-scroll">
+        <div class="card card-pad" style="margin-bottom:12px;text-align:center">
+          <div style="font-size:13px;color:var(--muted)">คะแนนปัจจุบัน</div>
+          <div style="font-size:28px;font-weight:800">${bal.toLocaleString('en-US')}</div>
+          <div style="font-size:12px;color:var(--muted)">${esc(a.name)}</div>
+        </div>
+        <div class="form-group"><label class="form-label">จำนวนคะแนนที่ปรับ (+ เพิ่ม / - ลด)</label><input class="form-input" type="number" id="adj-points" placeholder="เช่น 500 หรือ -200"><div class="form-hint">ใส่ค่าบวกเพื่อเพิ่มคะแนน ใส่ค่าลบเพื่อลดคะแนน</div></div>
+        <div class="form-group"><label class="form-label">หมายเหตุ</label><input class="form-input" id="adj-note" placeholder="เช่น คะแนนจากโปรโมชั่น, แก้ไขยอดผิด"></div>
+      </div>`)
+  }
+
+  App.saveAdjustPoints = function(accountId) {
+    const a   = (S.rewardAccounts||[]).find(x => x.id === accountId)
+    if (!a) return
+    const pts  = parseInt(document.getElementById('adj-points')?.value) || 0
+    const note = document.getElementById('adj-note')?.value.trim() || 'ปรับคะแนน'
+    if (!pts) { notify('กรุณาระบุจำนวนคะแนน', 'error'); return }
+    const bal = App.getRewardAccountBalance(accountId)
+    if (bal + pts < 0) { notify(`คะแนนหลังปรับจะติดลบ (${(bal+pts).toLocaleString('en-US')}) กรุณาตรวจสอบ`, 'error'); return }
+    S.rewardLedger.push({ id:genId(), type:'points_adjustment', accountId, cardId:'', statementId:'', points:pts, amount:0, date:today(), note, createdAt:nowISO() })
+    persist(); App.openRewardLedgerScreen(); notify(`ปรับคะแนน ${pts>0?'+':''}${pts.toLocaleString('en-US')} แล้ว`, 'success')
+  }
+
+  // ── ═══════════════════════════════════════════════════════
+  // CREDIT LIMIT GROUP MANAGEMENT
+  // ══════════════════════════════════════════════════════════
+
+  App.openCreditLimitGroupScreen = function() {
+    const groups = S.creditLimitGroups || []
+    const rows = groups.map(g => {
+      const cards = App.getCreditCardsInLimitGroup(g.id)
+      const used  = App.getCreditUsageForLimitGroup(g.id)
+      const avail = Math.max(0, g.limit - used)
+      const pct   = g.limit ? Math.min(100, used/g.limit*100) : 0
+      return `<div class="card card-pad" style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:15px;margin-bottom:2px">${esc(g.name)}</div>
+            ${g.issuer ? `<div style="font-size:12px;color:var(--muted)">${esc(g.issuer)}</div>` : ''}
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">บัตรในกลุ่ม: ${cards.map(c => esc(c.name)).join(', ') || 'ยังไม่มีบัตร'}</div>
+          </div>
+          <button class="icon-btn" onclick="App.openCreditLimitGroupForm('${esc(g.id)}')">✏️</button>
+        </div>
+        <div class="v5-limit-metrics" style="margin-top:10px">
+          <div class="v5-lm"><span>วงเงินรวม</span><strong>${money(g.limit)}</strong></div>
+          <div class="v5-lm"><span>ใช้ไป</span><strong style="color:var(--expense)">${money(used)}</strong></div>
+          <div class="v5-lm"><span>คงเหลือ</span><strong style="color:var(--income)">${money(avail)}</strong></div>
+        </div>
+        <div style="background:var(--elevated);border-radius:999px;height:6px;overflow:hidden;margin-top:8px">
+          <div style="height:100%;width:${pct}%;background:${pct>80?'var(--expense)':'var(--primary)'};border-radius:999px"></div>
+        </div>
+      </div>`
+    }).join('')
+
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>กลุ่มวงเงินร่วม</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.openCreditLimitGroupForm()" style="width:auto">+ เพิ่ม</button>
+      </div>
+      <div class="sub-scroll">
+        ${rows || App._emptyState?.('💳','ยังไม่มีกลุ่มวงเงินร่วม','สร้างกลุ่มเพื่อใช้วงเงินร่วมระหว่างบัตรหลายใบ') || ''}
+      </div>`)
+  }
+
+  App.openCreditLimitGroupForm = function(groupId) {
+    const g = groupId ? (S.creditLimitGroups||[]).find(x => x.id === groupId) : null
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.openCreditLimitGroupScreen()">←</button>
+        <h2>${g ? 'แก้ไข' : 'เพิ่ม'}กลุ่มวงเงินร่วม</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.saveCreditLimitGroup('${esc(groupId||'')}')" style="width:auto">บันทึก</button>
+      </div>
+      <div class="sub-scroll">
+        <div class="form-group"><label class="form-label">ชื่อกลุ่ม</label><input class="form-input" id="clg-name" value="${esc(g?.name||'')}" placeholder="เช่น KTC วงเงินรวม"></div>
+        <div class="form-group">
+          <label class="form-label">ผู้ออกบัตร / ธนาคาร</label>
+          <input class="form-input" id="clg-issuer" list="clg-issuer-list" value="${esc(g?.issuer||'')}" placeholder="เช่น KTC">
+          <datalist id="clg-issuer-list">${KNOWN_ISSUERS.map(i=>`<option value="${i}">`).join('')}</datalist>
+        </div>
+        <div class="form-group"><label class="form-label">วงเงินรวมของกลุ่ม (฿)</label><input class="form-input" type="number" min="0" id="clg-limit" value="${g?.limit||''}"></div>
+        ${g ? `<button class="btn btn-outline" style="margin-top:8px" onclick="App.deleteCreditLimitGroup('${esc(g.id)}')">ลบกลุ่มนี้</button>` : ''}
+      </div>`)
+  }
+
+  App.saveCreditLimitGroup = function(id) {
+    const name   = document.getElementById('clg-name')?.value.trim()
+    const issuer = document.getElementById('clg-issuer')?.value.trim() || ''
+    const limit  = parseFloat(document.getElementById('clg-limit')?.value) || 0
+    if (!name)    { notify('กรุณาระบุชื่อกลุ่ม', 'error'); return }
+    if (limit<=0) { notify('กรุณาระบุวงเงินรวมมากกว่า 0', 'error'); return }
+    if (id) {
+      const idx = (S.creditLimitGroups||[]).findIndex(g => g.id === id)
+      if (idx >= 0) { S.creditLimitGroups[idx] = { ...S.creditLimitGroups[idx], name, issuer, limit, updatedAt:nowISO() } }
+    } else {
+      S.creditLimitGroups.push({ id:genId(), name, issuer, limit, createdAt:nowISO(), updatedAt:nowISO() })
+    }
+    persist(); App.openCreditLimitGroupScreen(); notify('บันทึกกลุ่มวงเงินแล้ว', 'success')
+  }
+
+  App.deleteCreditLimitGroup = function(id) {
+    const linkedCards = App.getCreditCardsInLimitGroup(id)
+    App.showConfirm?.({ title:'ลบกลุ่มวงเงินร่วม', danger:true, confirmLabel:'ลบ',
+      body:`ลบกลุ่มนี้? บัตร ${linkedCards.length} ใบที่เชื่อมอยู่จะกลับเป็นวงเงินเฉพาะบัตร`,
+      onConfirm() {
+        S.creditLimitGroups = (S.creditLimitGroups||[]).filter(g => g.id !== id)
+        linkedCards.forEach(c => { c.creditLimitMode = 'individual'; c.creditLimitGroupId = null })
+        persist(); App.openCreditLimitGroupScreen(); notify('ลบกลุ่มวงเงินแล้ว', 'success')
+      }
+    })
+  }
+
+  // ── ═══════════════════════════════════════════════════════
+  // UPDATED exportData / importData
+  // ══════════════════════════════════════════════════════════
+
+  const _prevExportV5 = App.exportData?.bind(App)
+  App.exportData = function v50ExportData() {
+    migrateToV5()
+    const now = nowISO()
+    const data = {
+      exportedAt:now, appVersion:'5.0', storageMode:'local-only',
+      transactions:S.transactions, wallets:S.wallets, categories:S.categories,
+      budgets:S.budgets, recurring:S.recurring, merchants:S.merchants,
+      ccBenefits:S.ccBenefits, incomeBudgets:S.incomeBudgets,
+      marketPrices:S.marketPrices||{}, settings:S.settings,
+      rewardLedger:S.rewardLedger||[], netWorthSnapshots:S.netWorthSnapshots||[],
+      investmentSnapshots:S.investmentSnapshots||[],
+      creditLimitGroups:S.creditLimitGroups||[], rewardAccounts:S.rewardAccounts||[],
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `money-tracker-v5-backup-${today()}.json`
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    if (S.settings?.storageMeta) S.settings.storageMeta.lastExportedAt = now
+    persist(); App.renderMore?.(); notify('ส่งออกข้อมูลสำเร็จ', 'success')
+  }
+
+  const _prevImportV5 = App.importData?.bind(App)
+  App.importData = function v50ImportData(input) {
+    const file = input?.files?.[0]
+    if (!file) return
+    Storage.importJSON(file, raw => {
+      const checked = App._validateImportPayload?.(raw) || { ok:Array.isArray(raw?.transactions)&&Array.isArray(raw?.wallets), errors:[], warnings:[], data:raw }
+      if (!checked.ok) { notify('นำเข้าไม่ได้: ' + (checked.errors||[]).join(', '), 'error'); if (input) input.value=''; return }
+      const data = checked.data || raw
+      App.showConfirm?.({
+        title:'ตรวจสอบก่อนนำเข้า', danger:true, confirmLabel:'นำเข้า',
+        body:`Wallets: ${data.wallets.length} · Transactions: ${data.transactions.length} · จะแทนที่ข้อมูลปัจจุบันทั้งหมด`,
+        onConfirm() {
+          try { localStorage.setItem('mt_pre_import_backup', JSON.stringify({ backedUpAt:nowISO(), ...S })) } catch (_) {}
+          S.transactions=data.transactions||[]; S.wallets=data.wallets||[]
+          S.categories=data.categories||S.categories; S.budgets=data.budgets||[]
+          S.recurring=data.recurring||[]; S.merchants=data.merchants||[]
+          S.ccBenefits=data.ccBenefits||{}; S.incomeBudgets=data.incomeBudgets||[]
+          S.marketPrices=data.marketPrices||{}; S.settings={...(S.settings||{}),...(data.settings||{})}
+          S.rewardLedger=data.rewardLedger||[]; S.netWorthSnapshots=data.netWorthSnapshots||[]
+          S.investmentSnapshots=data.investmentSnapshots||[]
+          S.creditLimitGroups=data.creditLimitGroups||[]; S.rewardAccounts=data.rewardAccounts||[]
+          migrateToV5()
+          App.ensureLedgerBaselines?.(true); App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+          persist(); applyTheme?.(); App.render?.()
+          notify('นำเข้าสำเร็จ', 'success'); if (input) input.value=''
+        },
+        onCancel() { if (input) input.value='' }
+      })
+    }, err => { notify('นำเข้าล้มเหลว: '+err, 'error'); if (input) input.value='' })
+  }
+
+  // ── ═══════════════════════════════════════════════════════
+  // UPDATED More page — adds credit-group + reward-account links
+  // ══════════════════════════════════════════════════════════
+
+  const _prevRenderMoreV5 = App.renderMore?.bind(App)
+  App.renderMore = function v50RenderMore() {
+    const content = document.getElementById('more-content')
+    if (!content) return
+    const budgetCount  = (S.budgets||[]).length + (S.incomeBudgets||[]).length
+    const meta         = S.settings?.storageMeta || {}
+    const lastSaved    = meta.lastSavedAt    ? new Date(meta.lastSavedAt).toLocaleString('th-TH')    : 'ยังไม่บันทึก'
+    const lastExport   = meta.lastExportedAt ? new Date(meta.lastExportedAt).toLocaleString('th-TH') : 'ยังไม่เคย Export'
+    const currentProxy = String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '')
+    const ACCENTS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
+    function row({ icon, label, value='', onclick='', danger=false }) {
+      return `<div class="settings-row"${onclick?` onclick="${onclick}"`:''}>
+        <div class="s-icon">${icon}</div>
+        <div class="s-label"${danger?' style="color:var(--expense)"':''}">${label}</div>
+        ${value ? `<div class="s-value">${value}</div>` : ''}
+        <div class="s-arrow"${danger?' style="color:var(--expense)"':''}>›</div>
+      </div>`
+    }
+    content.innerHTML = `
+      <div style="padding:0 16px">
+        <div style="font-size:20px;font-weight:800;padding:20px 0 4px">เพิ่มเติม</div>
+        <div class="sec-title">เครื่องมือหลัก</div>
+        <div class="card card-pad">
+          ${row({ icon:'🔁', label:'รายการประจำ', value:`${(S.recurring||[]).length} รายการ`, onclick:'App.openRecurringScreen()' })}
+          ${row({ icon:'🧾', label:'ศูนย์ผ่อนชำระ', onclick:'App.openInstallmentCenter()' })}
+          ${row({ icon:'🎁', label:'สมุดสิทธิประโยชน์', onclick:'App.openRewardLedgerScreen()' })}
+          ${row({ icon:'💳', label:'กลุ่มวงเงินร่วม', value:`${(S.creditLimitGroups||[]).length} กลุ่ม`, onclick:'App.openCreditLimitGroupScreen()' })}
+          ${row({ icon:'💰', label:'งบประมาณรายรับ/รายจ่าย', value:budgetCount?`${budgetCount} หมวด`:'ยังไม่ตั้ง', onclick:'App.openBudgetScreen()' })}
+        </div>
+        <div class="sec-title">จัดการข้อมูล</div>
+        <div class="card card-pad">
+          ${row({ icon:'🏷️', label:'จัดการหมวดหมู่', value:'รายรับ/รายจ่าย', onclick:"App.openCategoryScreen('expense')" })}
+          ${row({ icon:'🏪', label:'ร้านค้า / Platform', value:`${(S.merchants||[]).length} ร้าน`, onclick:'App.openMerchantScreen()' })}
+          ${row({ icon:'🔧', label:'ตรวจสอบยอดคงเหลือ', onclick:'App.openBalanceRepairScreen()' })}
+        </div>
+        <div class="sec-title">สำรองข้อมูล</div>
+        <div class="card card-pad">
+          ${row({ icon:'📤', label:'ส่งออกข้อมูล (JSON)', onclick:'App.exportData()' })}
+          ${row({ icon:'📊', label:'ส่งออก CSV', onclick:'App.exportCSV()' })}
+          ${row({ icon:'📥', label:'นำเข้าข้อมูล (JSON)', onclick:"document.getElementById('import-file-v5').click()" })}
+          <input type="file" id="import-file-v5" accept=".json" style="display:none" onchange="App.importData(this)">
+          ${row({ icon:'🧯', label:'กู้คืน Backup ก่อน Import', onclick:'App.restorePreImportBackup?.()' })}
+          <div class="settings-row"><div class="s-icon">💾</div><div class="s-label">สถานะข้อมูล<br><div class="s-value" style="font-weight:400">บันทึกเมื่อ: ${esc(lastSaved)}<br>Export ข้อมูล: ${esc(lastExport)}</div></div></div>
+        </div>
+        <div class="sec-title">การแสดงผล</div>
+        <div class="card card-pad">
+          ${row({ icon:'🌙', label:'โหมดมืด', onclick:'App.toggleDark()' })}
+          <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+            <div style="font-size:15px;font-weight:600;margin-bottom:12px">🎨 สีธีม</div>
+            <div class="color-row">${ACCENTS.map(c => `<div class="color-dot${S.settings.accentColor===c?' selected':''}" style="background:${c}" onclick="App.setAccent('${c}')"></div>`).join('')}</div>
+          </div>
+        </div>
+        <div class="sec-title">ระบบ</div>
+        <div class="card card-pad">
+          <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+            <div style="font-size:15px;font-weight:700;margin-bottom:8px">Thai Gold API Proxy</div>
+            <input class="form-input" id="gold-proxy-input" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(currentProxy)}" style="margin-bottom:10px">
+            <button class="btn btn-primary" onclick="App.saveGoldProxyUrl()">บันทึก Proxy URL</button>
+            ${currentProxy ? `<div style="font-size:11px;color:var(--income);margin-top:8px">✓ ตั้งค่าแล้ว</div>` : ''}
+          </div>
+          ${row({ icon:'🔄', label:'รีเซ็ตข้อมูลทั้งหมด', danger:true, onclick:'App.resetData()' })}
+        </div>
+        <div style="text-align:center;padding:32px 0 8px">
+          <div style="font-size:40px">💰</div>
+          <div style="font-size:16px;font-weight:700;margin-top:8px">Money Tracker</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">v5.0</div>
+        </div>
+      </div>`
+  }
+
+  // ── Apply ──────────────────────────────────────────────────
+  try { persist() } catch (_) {}
+  try { App.render?.() } catch (_) {}
 })();
