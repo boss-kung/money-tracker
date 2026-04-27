@@ -5675,3 +5675,386 @@ App.render();
 
   try { if (S.page === 'more') App.renderMore() } catch (_) {}
 })();
+
+/* ============================================================
+   V45 Fixes — 5 bugs/UI improvements:
+   1. CC benefit screen: editable cycleDay / dueDay
+   2. Crypto: expanded symbol map + dynamic refresh + unit save
+   3. Cashback confirmation: editable amounts dialog
+   4. CC wallet card: restructured due-date row
+   5. Wallet page: refresh btn in section header, + in page header
+   ============================================================ */
+;(function v45Fixes() {
+  const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  const fmt = n => Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits:2, maximumFractionDigits:2 })
+  const today = () => new Date().toISOString().slice(0, 10)
+  const walletById = id => (S.wallets || []).find(w => w.id === id)
+  const persist = () => { try { Storage.saveAll(S) } catch (_) {} }
+  const isInvestType = t => ['gold','crypto','fcd'].includes(t)
+
+  // ═══════════════════════════════════════════════════════════════════
+  // FIX 1: openCCBenefitScreen — add editable cycleDay / dueDay section
+  // ═══════════════════════════════════════════════════════════════════
+  App.openCCBenefitScreen = function v45OpenCCBenefitScreen(cardId, tab = S.ccBenefitTab || 'points') {
+    S.ccBenefitTab = tab === 'cashback' ? 'cashback' : 'points'
+    const b = S.ccBenefits?.[cardId] || { points:{}, cashback:{} }
+    const p = b.points || {}, c = b.cashback || {}
+    const w = walletById(cardId) || {}
+    const f = (id, label, value, hint='') => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="1" min="1" max="31" id="${id}" value="${value || ''}" placeholder="1–31">${hint ? `<div class="form-hint">${hint}</div>` : ''}</div>`
+    const fDec = (id, label, value, hint='') => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="0.01" id="${id}" value="${value || ''}" placeholder="0">${hint ? `<div class="form-hint">${hint}</div>` : ''}</div>`
+    const statementCard = `<div class="card card-pad" style="margin-bottom:12px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px">&#x1F4C5; รอบบัญชีบัตร</div>
+      <div class="benefit-form-grid">
+        ${f('ccb-cycleDay','วันตัดรอบ (1&#x2013;31)', w.cycleDay, 'วันในทุกเดือนที่ระบบตัดรอบบัญชี')}
+        ${f('ccb-dueDay','วันครบกำหนดชำระ (1&#x2013;31)', w.dueDay, 'วันในทุกเดือนที่ต้องชำระยอด')}
+      </div>
+    </div>`
+    const pointsForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิดคะแนนสะสม</b><button class="toggle${p.enabled ? ' on' : ''}" id="ccb-points-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${fDec('ccb-bahtPerPoint','X บาท = 1 คะแนน',p.bahtPerPoint)}${fDec('ccb-pointEvery','ทุก X บาทได้ 1 คะแนน',p.pointPerBahtEvery)}${fDec('ccb-multi','คะแนนเพิ่ม X เท่า',p.multiplier||1)}${fDec('ccb-maxTxnPoint','สูงสุด/รายการ',p.maxPerTxn)}${fDec('ccb-maxCyclePoint','สูงสุด/รอบบัญชี',p.maxPerCycle)}</div></div>`
+    const cashForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิด Cashback</b><button class="toggle${c.enabled ? ' on' : ''}" id="ccb-cash-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${fDec('ccb-cbPercent','รับเงินคืน X%',c.percent)}${fDec('ccb-cbMin','ขั้นต่ำ (฿)',c.minSpend)}${fDec('ccb-cbTier','เริ่มขั้นบันไดที่ (฿)',c.tierThreshold)}${fDec('ccb-cbEvery','คิดทุก ๆ X บาท',c.everyBaht||1)}${fDec('ccb-cbMaxTxn','สูงสุด/รายการ (฿)',c.maxPerTxn)}${fDec('ccb-cbMaxCycle','สูงสุด/รอบบัญชี (฿)',c.maxPerCycle)}</div></div>`
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">&#x2190;</button><h2>สิทธิประโยชน์บัตร</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefit('${esc(cardId)}')" style="width:auto">บันทึก</button></div>
+      <div class="sub-scroll">
+        ${statementCard}
+        <div class="benefit-tabs"><button class="benefit-tab ${S.ccBenefitTab==='points'?'active':''}" onclick="App.openCCBenefitScreen('${esc(cardId)}','points')">คะแนนสะสม</button><button class="benefit-tab ${S.ccBenefitTab==='cashback'?'active':''}" onclick="App.openCCBenefitScreen('${esc(cardId)}','cashback')">Cashback</button></div>
+        ${S.ccBenefitTab === 'points' ? pointsForm : cashForm}
+      </div>`)
+  }
+
+  App.saveCCBenefit = function v45SaveCCBenefit(cardId) {
+    const cycleDay = parseInt(document.getElementById('ccb-cycleDay')?.value) || 0
+    const dueDay   = parseInt(document.getElementById('ccb-dueDay')?.value)   || 0
+    if (cycleDay || dueDay) {
+      const idx = (S.wallets || []).findIndex(w => w.id === cardId)
+      if (idx >= 0) {
+        if (cycleDay) S.wallets[idx].cycleDay = cycleDay
+        if (dueDay)   S.wallets[idx].dueDay   = dueDay
+      }
+    }
+    const on  = (id, fb=false) => document.getElementById(id)?.classList.contains('on') ?? !!fb
+    const val = (id, fb=0)     => parseFloat(document.getElementById(id)?.value) || Number(fb) || 0
+    const prev = S.ccBenefits?.[cardId] || { points:{}, cashback:{} }
+    const pp = prev.points || {}, pc = prev.cashback || {}
+    S.ccBenefits ||= {}
+    S.ccBenefits[cardId] = {
+      enabled: false,
+      points: {
+        enabled: on('ccb-points-enabled', pp.enabled),
+        bahtPerPoint: val('ccb-bahtPerPoint', pp.bahtPerPoint),
+        pointPerBahtEvery: val('ccb-pointEvery', pp.pointPerBahtEvery),
+        multiplier: val('ccb-multi', pp.multiplier||1) || 1,
+        maxPerTxn: val('ccb-maxTxnPoint', pp.maxPerTxn),
+        maxPerCycle: val('ccb-maxCyclePoint', pp.maxPerCycle),
+      },
+      cashback: {
+        enabled: on('ccb-cash-enabled', pc.enabled),
+        percent: val('ccb-cbPercent', pc.percent),
+        minSpend: val('ccb-cbMin', pc.minSpend),
+        tierThreshold: val('ccb-cbTier', pc.tierThreshold),
+        everyBaht: val('ccb-cbEvery', pc.everyBaht||1) || 1,
+        maxPerTxn: val('ccb-cbMaxTxn', pc.maxPerTxn),
+        maxPerCycle: val('ccb-cbMaxCycle', pc.maxPerCycle),
+      },
+    }
+    persist(); App.openCCDetail(cardId); App.showToast?.('บันทึกสิทธิประโยชน์แล้ว', 'success')
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // FIX 2: Crypto — expanded symbol map, dynamic refresh, unit save
+  // ═══════════════════════════════════════════════════════════════════
+  const CRYPTO_MAP = {
+    BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether',
+    SOL:'solana', ADA:'cardano', XRP:'ripple', DOGE:'dogecoin',
+    DOT:'polkadot', AVAX:'avalanche-2', MATIC:'matic-network',
+    LINK:'chainlink', UNI:'uniswap', LTC:'litecoin', ATOM:'cosmos',
+    XLM:'stellar', BCH:'bitcoin-cash', ETC:'ethereum-classic',
+    FIL:'filecoin', TRX:'tron', NEAR:'near', APT:'aptos',
+    OP:'optimism', ARB:'arbitrum', SUI:'sui', PEPE:'pepe',
+    SHIB:'shiba-inu', USDC:'usd-coin', TON:'the-open-network',
+    HBAR:'hedera-hashgraph', ALGO:'algorand', VET:'vechain',
+    MANA:'decentraland', SAND:'the-sandbox', AXS:'axie-infinity',
+    CRO:'crypto-com-chain', FTM:'fantom', AAVE:'aave', MKR:'maker',
+    INJ:'injective-protocol', IMX:'immutable-x', STX:'blockstack',
+    THETA:'theta-token', FLOW:'flow', CHZ:'chiliz', ENJ:'enjincoin',
+    GALA:'gala', GMT:'stepn', COMP:'compound-governance-token',
+  }
+
+  App._cryptoId = function(w) {
+    if (!w) return null
+    if (w.coinGeckoId) return w.coinGeckoId
+    const sym = String(w.symbol || '').trim().toUpperCase()
+    return sym ? (CRYPTO_MAP[sym] || sym.toLowerCase()) : null
+  }
+
+  App._investmentUnitPriceTHB = function v45InvestmentPrice(w) {
+    if (!w) return 0
+    const p = S.marketPrices || {}
+    if (w.type === 'gold') return Number(p.thaiGold?.jewelryBuy || p.auroraGold?.jewelryBuy || w.manualPrice || 0)
+    if (w.type === 'crypto') {
+      const id = App._cryptoId(w)
+      return Number((id && p.crypto?.[id]?.thb) || w.manualPrice || 0)
+    }
+    if (w.type === 'fcd') {
+      const cur = String(w.currency || w.symbol || 'USD').toUpperCase()
+      const thb = p.fx?.rates?.THB
+      return Number((cur === 'THB' ? 1 : cur === 'USD' ? thb : (thb && p.fx?.rates?.[cur] ? thb / p.fx.rates[cur] : 0)) || w.manualPrice || 0)
+    }
+    return Number(w.manualPrice || 0)
+  }
+
+  App._investmentValueTHB = function(w) {
+    return isInvestType(w?.type)
+      ? ((Number(w.units || 0) * App._investmentUnitPriceTHB(w)) || Number(w.balance || 0))
+      : Number(w?.balance || 0)
+  }
+
+  const prev_marketText45 = App._marketText?.bind(App)
+  App._marketText = function v45MarketText(w) {
+    if (w?.type === 'crypto') {
+      const id  = App._cryptoId(w)
+      const thb = id && (S.marketPrices?.crypto || {})[id]?.thb
+      const sym = String(w.symbol || '').toUpperCase() || 'CRYPTO'
+      return thb ? `${sym} ฿${fmt(thb)}/หน่วย (CoinGecko)` : 'CoinGecko (ยังไม่ sync)'
+    }
+    return prev_marketText45?.(w) || ''
+  }
+
+  App.refreshMarketPrices = async function v45RefreshMarket() {
+    const next = { ...(S.marketPrices || {}) }
+    let anyOk = false, goldOk = false
+    App.showToast?.('กำลัง Sync ราคา…', 'info')
+    const base = new Set(['bitcoin','ethereum','binancecoin','tether'])
+    ;(S.wallets || []).filter(w => w.type === 'crypto').forEach(w => {
+      const id = App._cryptoId(w); if (id) base.add(id)
+    })
+    try {
+      const ids = [...base].join(',')
+      const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=thb,usd`, { cache:'no-store' })
+      if (r.ok) { next.crypto = await r.json(); anyOk = true }
+    } catch (_) {}
+    try {
+      const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' })
+      if (r.ok) { next.fx = await r.json(); anyOk = true }
+    } catch (_) {}
+    try {
+      const gold = await App._fetchThaiGoldViaSource?.()
+      if (gold?.jewelryBuy) { next.thaiGold = gold; next.auroraGold = gold; anyOk = true; goldOk = true }
+    } catch (_) {}
+    next.updatedAt = new Date().toISOString()
+    S.marketPrices = next
+    persist(); App.renderWallets?.(); App.render?.()
+    if (goldOk) App.showToast?.('Sync ราคาทองและ Crypto สำเร็จ', 'success')
+    else if (anyOk) App.showToast?.('อัปเดต Crypto/FX แล้ว (ราคาทองยังไม่ได้)', 'warn')
+    else App.showToast?.('Sync ราคาไม่ได้ ใช้ราคาสำรองแทน', 'error')
+  }
+
+  const prevSaveWalletV45 = App.saveWallet.bind(App)
+  App.saveWallet = function v45SaveWallet() {
+    const type        = document.getElementById('wf-type')?.value
+    const isInv       = isInvestType(type)
+    const editingId   = S.editingWalletId
+    const units       = isInv ? (parseFloat(document.getElementById('wf-units')?.value) || 0) : null
+    const manualPrice = isInv ? (parseFloat(document.getElementById('wf-manual-price')?.value) || 0) : null
+    prevSaveWalletV45()
+    if (!isInv) return
+    const w = editingId ? S.wallets.find(x => x.id === editingId) : S.wallets[S.wallets.length - 1]
+    if (!w) return
+    w.units = units || 0
+    if (manualPrice) w.manualPrice = manualPrice
+    const usePrice = App._investmentUnitPriceTHB(w) || w.manualPrice || 0
+    if (usePrice) w.balance = w.units * usePrice
+    App.recalculateWalletBalances?.({ save:false, recordSnapshot:false })
+    persist(); App.renderWallets?.()
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // FIX 3: markCashbackReceived — editable confirmation dialog
+  // ═══════════════════════════════════════════════════════════════════
+  App.markCashbackReceived = function v45MarkCashbackReceived(cardId) {
+    const st = App.getCardStatement?.(cardId)
+    if (!st) { App.showToast?.('ยังไม่มีข้อมูลรอบบัญชี', 'warn'); return }
+    const alreadyReceived = (S.rewardLedger || []).some(r =>
+      r.type === 'cashback_received' && r.statementId === st.id)
+    if (alreadyReceived) { App.showToast?.('รอบบัญชีนี้บันทึก Cashback แล้ว', 'info'); return }
+    const cashback = Number(st.reward?.cashback || 0)
+    const points   = Number(st.reward?.points   || 0)
+    if (!cashback && !points) { App.showToast?.('ไม่มีสิทธิประโยชน์ในรอบนี้', 'warn'); return }
+    const dlgId = 'v45-cashback-dlg'
+    document.getElementById(dlgId)?.remove()
+    document.getElementById('app').insertAdjacentHTML('beforeend', `
+      <div id="${dlgId}" class="overlay active" role="dialog" aria-modal="true">
+        <div class="overlay-backdrop" onclick="document.getElementById('${dlgId}').remove()"></div>
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <h2>ยืนยันรับสิทธิประโยชน์</h2>
+            <button class="btn-icon" onclick="document.getElementById('${dlgId}').remove()">✕</button>
+          </div>
+          <div class="sheet-body">
+            <p style="font-size:13px;color:var(--muted);margin-bottom:16px">แก้ไขให้ตรงกับที่ได้รับจริง แล้วกดยืนยัน</p>
+            <div class="form-group">
+              <label class="form-label">ฟรี! เงินคืนที่ได้รับจริง (฿)</label>
+              <input class="form-input" type="number" step="0.01" min="0" id="v45-cb-amount" value="${cashback || ''}">
+              <div class="form-hint">ระบบคำนวณ: ${fmt(cashback)} บาท</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">⭐ คะแนนที่ได้รับจริง</label>
+              <input class="form-input" type="number" step="1" min="0" id="v45-cb-points" value="${points || ''}">
+              <div class="form-hint">ระบบคำนวณ: ${Number(points).toLocaleString('th-TH',{maximumFractionDigits:0})} คะแนน</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">
+              <button class="btn btn-secondary" onclick="document.getElementById('${dlgId}').remove()">ยกเลิก</button>
+              <button class="btn btn-primary" onclick="App._v45ConfirmCashback('${esc(cardId)}','${esc(st.id)}')">✓ ยืนยันรับ</button>
+            </div>
+          </div>
+        </div>
+      </div>`)
+    setTimeout(() => document.getElementById('v45-cb-amount')?.focus(), 80)
+  }
+
+  App._v45ConfirmCashback = function(cardId, statementId) {
+    const cashbackAmount = parseFloat(document.getElementById('v45-cb-amount')?.value) || 0
+    const pointsAmount   = parseInt(document.getElementById('v45-cb-points')?.value)   || 0
+    document.getElementById('v45-cashback-dlg')?.remove()
+    const card     = walletById(cardId)
+    const ledgerId = Calc.genId()
+    if (cashbackAmount > 0) {
+      const tx = {
+        id:Calc.genId(), type:'income', amount:cashbackAmount, walletId:cardId,
+        categoryId:undefined, merchant:'Cashback',
+        note:`รับ Cashback ${card?.name || ''}`,
+        date:today(), isRewardReceived:true, statementId, rewardLedgerId:ledgerId,
+      }
+      S.transactions.unshift(tx)
+    }
+    S.rewardLedger ||= []
+    S.rewardLedger.push({
+      id:ledgerId, type:'cashback_received', cardId, statementId,
+      amount:cashbackAmount, points:pointsAmount, date:today(),
+    })
+    if (pointsAmount > 0) {
+      S.rewardLedger.push({
+        id:Calc.genId(), type:'points_received', cardId, statementId,
+        amount:0, points:pointsAmount, date:today(),
+      })
+    }
+    App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+    persist(); App.openRewardLedgerScreen(cardId)
+    App.showToast?.(`บันทึกแล้ว: เงินคืน ${fmt(cashbackAmount)} · คะแนน ${pointsAmount.toLocaleString('th-TH')}`, 'success')
+  }
+
+  // Reward ledger screen: show points in history rows
+  App.openRewardLedgerScreen = function v45RewardLedger(cardId = '') {
+    const cards = (S.wallets || []).filter(w => w.type === 'credit')
+    const selected = cardId || cards[0]?.id || ''
+    const st = selected ? App.getCardStatement?.(selected) : null
+    const receivedAlready = !!(st && (S.rewardLedger || []).some(r =>
+      r.type === 'cashback_received' && r.statementId === st.id))
+    const rows    = st?.purchases || []
+    const received = (S.rewardLedger || []).filter(r => !selected || r.cardId === selected)
+    const thaiDate = d => { try { return new Date(d).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'}) } catch { return String(d||'') } }
+    const rType   = r => r.type === 'cashback_received' ? '💰 รับเงินคืน' : r.type === 'points_received' ? '⭐ รับคะแนน' : esc(r.type)
+    const rDetail = r => r.type === 'points_received'
+      ? `${Number(r.points||0).toLocaleString('th-TH')} คะแนน`
+      : r.amount > 0
+        ? `฿${fmt(r.amount)}${r.points ? ` + ${Number(r.points).toLocaleString('th-TH')} คะแนน` : ''}`
+        : '–'
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>สมุดสิทธิประโยชน์</h2>${st?.reward?.cashback && !receivedAlready ? `<button class="btn btn-primary btn-sm" onclick="App.markCashbackReceived('${esc(selected)}')" style="width:auto">รับสิทธิ์</button>` : ''}</div>
+      <div class="sub-scroll">
+        <div class="form-group"><label class="form-label">เลือกบัตร</label><select class="form-input" onchange="App.openRewardLedgerScreen(this.value)">${cards.map(c => `<option value="${esc(c.id)}"${c.id===selected?' selected':''}>${esc(c.icon||'')} ${esc(c.name)}</option>`).join('')}</select></div>
+        ${st ? `<div class="reward-summary-compact"><div><b>รอบ ${thaiDate(st.start)} – ${thaiDate(st.end)}</b><span>${receivedAlready?'รับสิทธิ์แล้ว':'ยังไม่ได้รับ'}</span><span>กำหนดชำระ ${thaiDate(st.dueDate)}</span></div><div><strong>${Number(st.reward.points||0).toLocaleString('th-TH',{maximumFractionDigits:0})}</strong><span>คะแนน</span></div><div><strong>${fmt(st.reward.cashback||0)}</strong><span>เงินคืน (฿)</span></div></div>` : App._emptyState('💳','ยังไม่มีบัตรเครดิต','')}
+        <div class="sec-title">รายการที่นำไปคำนวณ</div>
+        <div class="card"><div style="padding:0 16px">${rows.length ? rows.map(t => App._txRow(t)).join('') : App._emptyState('🎁','ยังไม่มีรายการในรอบนี้','')}</div></div>
+        <div class="sec-title">ประวัติรับสิทธิ์</div>
+        <div class="card card-pad">${received.length ? received.map(r => `<div class="detail-row"><div><span style="font-size:13px;font-weight:600">${rType(r)}</span><div style="font-size:11px;color:var(--muted)">${thaiDate(r.date||'')}</div></div><b>${rDetail(r)}</b></div>`).join('') : '<div style="font-size:13px;color:var(--muted)">ยังไม่มีประวัติ</div>'}</div>
+      </div>`)
+    setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // FIX 4: CC wallet card — "ครบกำหนดชำระ" left + date below, chip right
+  // ═══════════════════════════════════════════════════════════════════
+  const prevWalletCardV45 = App._walletCard?.bind(App)
+  App._walletCard = function v45WalletCard(w) {
+    if (w.type !== 'credit') return prevWalletCardV45?.(w) || ''
+    const color  = w.color || '#DC2626'
+    const name   = `${w.icon || ''} ${w.name || ''}`.trim()
+    const owed   = Math.abs(Number(w.balance || 0))
+    const limit  = Number(w.limit || 0)
+    const due    = w.dueDay ? Calc.getDueDate(w.dueDay) : null
+    const pct    = limit ? Math.min(100, Math.max(0, owed / limit * 100)) : 0
+    const avail  = limit ? Math.max(0, limit - owed) : 0
+    const MONEY  = n => Number(n||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})
+    const ESC2   = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+    const dueStrip = due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}">
+      <div class="cc-due-left"><span>ครบกำหนดชำระ</span><strong>${ESC2(due.dueStr)}</strong></div>
+      <em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em>
+    </div>` : ''
+    const limitBar = limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct>80?'rgba(252,165,165,.95)':'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : ''
+    return `<div class="wallet-card wallet-card-colored wallet-card-credit" style="--wallet-color:${ESC2(color)};--wallet-color-2:${ESC2(color)}BB" onclick="App.openCCDetail('${ESC2(w.id)}')">
+      <div class="wc-header"><div><div class="wc-name">${ESC2(name)}</div><div class="wc-type">บัตรเครดิต${limit?` · วงเงิน ${MONEY(limit)}`:''}</div></div></div>
+      <div class="wc-balance">-${MONEY(owed)}</div>
+      ${dueStrip}${limitBar}
+      <div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openCCDetail('${ESC2(w.id)}')">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openCCPay('${ESC2(w.id)}')">ชำระ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC2(w.id)}')">แก้ไข</button></div>
+    </div>`
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // FIX 5: Wallet page — refresh in "การลงทุน" header, + in page header
+  // ═══════════════════════════════════════════════════════════════════
+  App.renderWallets = function v45RenderWallets() {
+    const wallets = S.wallets || []
+    const assets  = wallets.filter(w => ['bank','cash','ewallet','saving'].includes(w.type))
+    const credits = wallets.filter(w => w.type === 'credit')
+    const invests = wallets.filter(w => isInvestType(w.type))
+    const sumBase = assets.reduce((s,w)  => s + Math.max(0, Number(w.balance||0)), 0)
+    const sumInv  = invests.reduce((s,w) => s + Math.max(0, App._investmentValueTHB(w)||Number(w.balance||0)), 0)
+    const debt    = credits.reduce((s,w) => s + Math.abs(Number(w.balance||0)), 0)
+
+    const summaryEl = document.getElementById('wallets-summary')
+    if (summaryEl) summaryEl.innerHTML = `<div class="wallet-summary-grid wallet-summary-grid-fixed">
+      <div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${fmt(sumBase+sumInv)}</strong></div>
+      <div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${fmt(debt)}</strong></div>
+    </div>`
+
+    // Inject "+ เพิ่มกระเป๋า" alongside h1 (once only)
+    const pageHeader = document.querySelector('#page-wallets .page-header')
+    if (pageHeader && !pageHeader.querySelector('.wallets-header-add-btn')) {
+      const h1 = pageHeader.querySelector('h1')
+      if (h1) {
+        const row = document.createElement('div')
+        row.className = 'wallets-h1-row'
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center'
+        h1.replaceWith(row)
+        row.appendChild(h1)
+        const addBtn = document.createElement('button')
+        addBtn.className = 'btn btn-primary btn-sm wallets-header-add-btn'
+        addBtn.style.cssText = 'width:auto;padding:8px 14px;flex-shrink:0'
+        addBtn.textContent = '+ เพิ่มกระเป๋า'
+        addBtn.onclick = () => App.openWalletForm(null)
+        row.appendChild(addBtn)
+      }
+    }
+
+    const content = document.getElementById('wallets-content')
+    if (!content) return
+    content.style.display = 'block'; content.style.visibility = 'visible'
+
+    const gold    = (S.marketPrices||{}).thaiGold || (S.marketPrices||{}).auroraGold
+    const updated = gold?.fetchedAt ? new Date(gold.fetchedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}) : ''
+    const goldNote = `<div class="wallet-market-note"><b>ราคาทอง:</b> สมาคมค้าทองคำ · ทองรูปพรรณรับซื้อ${gold?.jewelryBuy?` ${fmt(gold.jewelryBuy)}/บาททอง`:' ยังไม่ Sync'}${updated?` · อัปเดต ${esc(updated)}`:''}</div>`
+
+    const empty = txt => `<div class="card card-pad wallet-empty-card">${esc(txt)}</div>`
+    const refreshBtn = `<button class="btn btn-secondary btn-sm wallet-section-refresh-btn" onclick="event.stopPropagation();App.refreshMarketPrices()">↻ Refresh ราคา</button>`
+    const section = (title, icon, list, emptyTxt, grid, extra='') =>
+      `<section class="wallet-section-block">
+        <div class="wallet-section-title wallet-section-title-row"><span>${icon} ${esc(title)}</span>${extra}</div>
+        ${list.length ? `<div class="${grid?'wallet-grid-2':'wallet-list-stack'}">${list.map(App._walletCard).join('')}</div>` : empty(emptyTxt)}
+      </section>`
+
+    content.innerHTML = goldNote
+      + section('สินทรัพย์', '🏦', assets,  'ยังไม่มีสินทรัพย์', true)
+      + section('บัตรเครดิต', '💳', credits, 'ยังไม่มีบัตรเครดิต', false)
+      + section('การลงทุน', '📈', invests, 'เพิ่มทอง / Crypto / FCD เพื่อดูราคาอ้างอิง', true, refreshBtn)
+  }
+
+  try { if (S.page === 'wallets') App.renderWallets() } catch (_) {}
+})();
