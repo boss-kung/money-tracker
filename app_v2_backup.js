@@ -117,9 +117,69 @@ const App = {
   // ─────────────────────────────────────────────────────────
   // TRANSACTIONS PAGE
   // ─────────────────────────────────────────────────────────
-/* consolidated: removed legacy renderTransactions from line 120 */
-/* consolidated: removed legacy renderTransactionsList from line 142 */
-/* consolidated: removed legacy setTxMonth from line 180 *//* consolidated: removed legacy setTxType from line 181 */
+  renderTransactions() {
+    const months = Calc.getMonths(6)
+
+    // Month chips
+    document.getElementById('tx-month-chips').innerHTML = months.map(m =>
+      `<button class="chip${m === S.txMonth ? ' active' : ''}" onclick="App.setTxMonth('${m}')">${Calc.monthLabel(m)}</button>`
+    ).join('')
+
+    // Type chips
+    document.getElementById('tx-type-chips').innerHTML =
+      [['all','ทั้งหมด'],['expense','จ่าย'],['income','รับ'],['transfer','โอน'],['cc_payment','ชำระบัตร']].map(([v,l]) =>
+        `<button class="chip${S.txType === v ? ' active' : ''}" onclick="App.setTxType('${v}')">${l}</button>`
+      ).join('')
+
+    // Search
+    const searchEl = document.getElementById('tx-search')
+    searchEl.value = S.txSearch
+    searchEl.oninput = e => { S.txSearch = e.target.value; App.renderTransactionsList() }
+
+    App.renderTransactionsList()
+  },
+
+  renderTransactionsList() {
+    const q = S.txSearch.toLowerCase()
+    const filtered = S.transactions.filter(t => {
+      if (!t.date.startsWith(S.txMonth)) return false
+      if (S.txType !== 'all' && t.type !== S.txType) return false
+      if (q) {
+        const cat = App._findCat(t.categoryId)
+        return (t.merchant||'').toLowerCase().includes(q) ||
+               (t.note||'').toLowerCase().includes(q) ||
+               (cat?.label||'').toLowerCase().includes(q)
+      }
+      return true
+    }).sort((a,b) => b.date.localeCompare(a.date))
+
+    const income  = filtered.filter(t => t.type === 'income').reduce((s,t) => s+t.amount, 0)
+    const expense = filtered.filter(t => t.type === 'expense').reduce((s,t) => s+t.amount, 0)
+    document.getElementById('tx-summary').innerHTML =
+      `<span class="c-income">รับ ${Calc.fmt(income)}</span>
+       <span class="c-expense">จ่าย ${Calc.fmt(expense)}</span>
+       <span class="c-muted">สุทธิ ${Calc.fmt(income - expense)}</span>`
+
+    const groups = Calc.groupByDate(filtered)
+    let html = ''
+    if (!filtered.length) {
+      html = App._emptyState('📋', 'ไม่มีรายการ', S.txSearch ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีรายการในช่วงนี้')
+    } else {
+      Object.entries(groups).forEach(([dateLabel, txns]) => {
+        html += `<div class="date-group-label">${dateLabel}</div>
+          <div class="card"><div style="padding:0 16px">`
+        txns.forEach(tx => { html += App._txRow(tx) })
+        html += `</div></div>`
+      })
+    }
+    const el = document.getElementById('tx-list-content')
+    el.innerHTML = html
+    App._bindTxRows('tx-list-content')
+  },
+
+  setTxMonth(m) { S.txMonth = m; App.renderTransactions() },
+  setTxType(t)  { S.txType = t;  App.renderTransactionsList() },
+
   // ─────────────────────────────────────────────────────────
   // WALLETS PAGE
   // ─────────────────────────────────────────────────────────
@@ -130,8 +190,120 @@ const App = {
   // ─────────────────────────────────────────────────────────
   // REPORTS PAGE
   // ─────────────────────────────────────────────────────────
-/* consolidated: removed legacy renderReports from line 193 */
-/* consolidated: removed legacy setRptMonth from line 304 *//* consolidated: removed legacy setRptView from line 305 */
+  renderReports() {
+    const months = Calc.getMonths(6)
+
+    document.getElementById('report-month-chips').innerHTML = months.map(m =>
+      `<button class="chip${m === S.rptMonth ? ' active' : ''}" onclick="App.setRptMonth('${m}')">${Calc.monthLabel(m)}</button>`
+    ).join('')
+
+    document.getElementById('report-view-chips').innerHTML =
+      [['expense','รายจ่าย'],['income','รายรับ'],['budget','งบประมาณ']].map(([v,l]) =>
+        `<button class="chip${S.rptView === v ? ' active' : ''}" onclick="App.setRptView('${v}')">${l}</button>`
+      ).join('')
+
+    const stats  = Calc.getMonthlyStats(S.transactions, S.rptMonth)
+    const nw     = Calc.getNetWorth(S.wallets)
+    const budget = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, S.rptMonth)
+
+    let html = `
+      <!-- Summary cards -->
+      <div class="report-summary-grid">
+        ${[
+          ['รายรับ', stats.income, 'var(--income)'],
+          ['รายจ่าย', stats.expense, 'var(--expense)'],
+          ['สุทธิ', stats.net, stats.net >= 0 ? 'var(--income)' : 'var(--expense)'],
+        ].map(([l,v,c]) => `
+          <div class="card report-summary-card">
+            <div class="report-summary-label">${l}</div>
+            <div class="report-summary-value" style="color:${c}">${Calc.fmt(Math.abs(v))}</div>
+          </div>`).join('')}
+      </div>
+
+      <!-- Net worth -->
+      <div class="card card-pad nw-card" style="margin-bottom:16px">
+        <div class="nw-label">ความมั่งคั่งสุทธิ</div>
+        <div class="nw-value ${nw.net>=0?'c-income':'c-expense'}">${nw.net<0?'-':''}${Calc.fmt(Math.abs(nw.net))}</div>
+        <div class="nw-detail">
+          <span class="nw-item">สินทรัพย์ <strong class="c-income">${Calc.fmt(nw.assets)}</strong></span>
+          <span class="nw-item">หนี้ <strong class="c-expense">${Calc.fmt(nw.debt)}</strong></span>
+        </div>
+      </div>`
+
+    if (S.rptView === 'budget') {
+      html += `<div class="card card-pad">`
+      if (!budget.length) {
+        html += App._emptyState('💰', 'ยังไม่ได้ตั้งงบประมาณ', 'ไปที่ เพิ่มเติม → งบประมาณ')
+      } else {
+        budget.forEach(b => {
+          const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'
+          html += `<div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">
+              <span style="font-weight:600">${b.icon} ${b.label}</span>
+              <span style="color:${b.over?'var(--expense)':'var(--muted)'}">${Calc.fmt(b.spent)} / ${Calc.fmt(b.monthlyLimit)}</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${b.pct}%;background:${barColor}"></div></div>
+            <div style="font-size:11px;color:${b.over?'var(--expense)':'var(--muted)'};margin-top:4px">
+              ${b.over ? `เกิน ${Calc.fmt(b.spent - b.monthlyLimit)}` : `เหลือ ${Calc.fmt(b.monthlyLimit - b.spent)}`}
+            </div>
+          </div>`
+        })
+      }
+      html += `</div>`
+    } else {
+      const cats = S.categories[S.rptView] || []
+      const data = cats.map(c => ({
+        label: c.icon, name: c.label, value: stats.byCategory[c.id] || 0, color: c.color, id: c.id
+      })).filter(d => d.value > 0).sort((a,b) => b.value - a.value)
+      const total = data.reduce((s,d) => s + d.value, 0)
+      const max   = Math.max(...data.map(d => d.value), 1)
+
+      if (!data.length) {
+        html += App._emptyState('📊', 'ไม่มีข้อมูล', 'ยังไม่มีรายการในช่วงเวลานี้')
+      } else {
+        // Bar chart
+        html += `<div class="card card-pad" style="margin-bottom:12px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:16px">${S.rptView==='income'?'รายรับ':'รายจ่าย'}แยกหมวดหมู่</div>
+          <div class="bar-chart">`
+        data.slice(0, 8).forEach(d => {
+          const h = Math.max(4, (d.value / max) * 100)
+          html += `<div class="bar-col">
+            <div class="bar-fill" style="height:${h}%;background:${d.color}"></div>
+            <div class="bar-lbl">${d.label}</div>
+          </div>`
+        })
+        html += `</div></div>`
+
+        // Category list
+        html += `<div class="card"><div style="padding:0 20px">`
+        data.forEach(d => {
+          const pct = total > 0 ? (d.value / total * 100) : 0
+          html += `<div class="detail-row">
+            <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+              <div style="width:36px;height:36px;border-radius:10px;background:${d.color}20;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${d.label}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:14px;font-weight:600">${d.name}</div>
+                <div style="height:4px;border-radius:2px;background:var(--border);margin-top:4px;overflow:hidden">
+                  <div style="height:100%;width:${pct}%;background:${d.color};border-radius:2px"></div>
+                </div>
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;padding-left:12px">
+              <div style="font-size:14px;font-weight:700">${Calc.fmt(d.value)}</div>
+              <div style="font-size:11px;color:var(--muted)">${pct.toFixed(1)}%</div>
+            </div>
+          </div>`
+        })
+        html += `</div></div>`
+      }
+    }
+
+    document.getElementById('reports-content').innerHTML = html
+  },
+
+  setRptMonth(m) { S.rptMonth = m; App.renderReports() },
+  setRptView(v)  { S.rptView = v;  App.renderReports() },
+
   // ─────────────────────────────────────────────────────────
   // MORE / SETTINGS PAGE
   // ─────────────────────────────────────────────────────────
@@ -149,12 +321,24 @@ const App = {
     persist(); applyTheme(); App.renderMore()
   },
 
-/* consolidated: removed legacy exportData from line 324 */
+  exportData() {
+    Storage.exportJSON(S)
+    toast('ส่งออกข้อมูลสำเร็จ', 'success')
+  },
+
   // importData is intentionally defined by the V2+ override block below.
   // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
 
-/* consolidated: removed legacy resetData from line 333 */
+  resetData() {
+    if (!confirm('รีเซ็ตข้อมูลทั้งหมด? ไม่สามารถกู้คืนได้')) return
+    Storage.reset()
+    const fresh = Storage.init()
+    Object.assign(S, fresh)
+    persist(); App.render()
+    toast('รีเซ็ตข้อมูลแล้ว', 'info')
+  },
+
   // ─────────────────────────────────────────────────────────
   // BUDGET SUB-SCREEN
   // ─────────────────────────────────────────────────────────
@@ -180,12 +364,10 @@ const App = {
   _setTxType(type) { S.tx.type = type; S.tx.categoryId = ''; App._renderAddTxAmount() },
 
   _numpad(key) {
-    let v = String(S.tx.amount ?? '0')
-    if (key === '⌫') {
-      v = v.length > 1 ? v.slice(0, -1) : '0'
-    } else if (key === '.') {
-      if (!v.includes('.')) v += '.'
-    } else {
+    let v = S.tx.amount
+    if (key === '⌫') { v = v.length > 1 ? v.slice(0, -1) : '0' }
+    else if (key === '.') { if (!v.includes('.')) v += '.' }
+    else {
       if (v === '0') v = key
       else {
         const parts = (v + key).split('.')
@@ -202,8 +384,87 @@ const App = {
     App._renderAddTxDetail()
   },
 
-/* consolidated: removed legacy _renderAddTxDetail from line 387 */
-/* consolidated: removed legacy _selectCat from line 454 */
+  _renderAddTxDetail() {
+    const cats = S.tx.type === 'income' ? S.categories.income : S.categories.expense
+    const nonCC = S.wallets.filter(w => w.type !== 'credit')
+    const amtColor = S.tx.type === 'income' ? 'var(--income)' : S.tx.type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
+
+    document.getElementById('add-tx-content').innerHTML = `
+      <div class="sheet-header">
+        <h2>รายละเอียด</h2>
+        <button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button>
+      </div>
+      <div style="text-align:center;font-size:36px;font-weight:800;color:${amtColor};padding:12px 0 16px">
+        ฿${parseFloat(S.tx.amount).toLocaleString('en-US')}
+      </div>
+      <div class="sheet-body" style="padding-top:0">
+
+        ${S.tx.type !== 'transfer' ? `
+        <div class="form-group">
+          <label class="form-label">หมวดหมู่</label>
+          <div class="cat-grid" id="cat-grid">
+            ${cats.map(c => `
+              <button class="cat-btn${S.tx.categoryId===c.id?' active':''}"
+                onclick="App._selectCat('${c.id}')">${c.icon} ${c.label}</button>`).join('')}
+          </div>
+        </div>` : ''}
+
+        <div class="form-group">
+          <label class="form-label">${S.tx.type === 'transfer' ? 'จาก' : 'กระเป๋าเงิน'}</label>
+          <select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value)">
+            ${S.wallets.map(w => `<option value="${w.id}"${S.tx.walletId===w.id?' selected':''}>${w.icon} ${w.name}</option>`).join('')}
+          </select>
+        </div>
+
+        ${S.tx.type === 'transfer' ? `
+        <div class="form-group">
+          <label class="form-label">ไปยัง</label>
+          <select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)">
+            <option value="">เลือกปลายทาง</option>
+            ${S.wallets.filter(w => w.id !== S.tx.walletId).map(w =>
+              `<option value="${w.id}"${S.tx.toWalletId===w.id?' selected':''}>${w.icon} ${w.name}</option>`).join('')}
+          </select>
+        </div>` : ''}
+
+        <div class="form-group">
+          <label class="form-label">ร้านค้า / ที่มา</label>
+          <input class="form-input" id="tx-merchant" placeholder="ชื่อร้านค้า..." value="${S.tx.merchant}"
+            oninput="App._txField('merchant',this.value)">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">หมายเหตุ</label>
+          <input class="form-input" id="tx-note" placeholder="หมายเหตุ (ถ้ามี)..." value="${S.tx.note}"
+            oninput="App._txField('note',this.value)">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">วันที่</label>
+          <input class="form-input" type="date" id="tx-date" value="${S.tx.date}"
+            onchange="App._txField('date',this.value)">
+        </div>
+
+        <div class="flex-row mt-8">
+          <button class="btn btn-secondary flex-1" onclick="App._backToAmount()">← แก้ไข</button>
+          <button class="btn btn-primary" style="flex:2" onclick="App.saveTx()">บันทึก</button>
+        </div>
+      </div>`
+  },
+
+  _selectCat(id) {
+    S.tx.categoryId = id
+    document.querySelectorAll('.cat-btn').forEach(b => {
+      b.classList.toggle('active', b.textContent.trim().includes(
+        S.categories[S.tx.type === 'income' ? 'income' : 'expense'].find(c => c.id === id)?.label || ''
+      ))
+    })
+    // Re-render just the cat grid to show active state
+    const cats = S.tx.type === 'income' ? S.categories.income : S.categories.expense
+    document.getElementById('cat-grid').innerHTML = cats.map(c =>
+      `<button class="cat-btn${S.tx.categoryId===c.id?' active':''}"
+        onclick="App._selectCat('${c.id}')">${c.icon} ${c.label}</button>`).join('')
+  },
+
   _txField(field, val) { S.tx[field] = val },
   _backToAmount()      { S.tx.step = 'amount'; App._renderAddTxAmount() },
 
@@ -228,7 +489,18 @@ const App = {
   deleteTx() { S.deleteConfirm = true; App._renderTxDetail() },
   _cancelDelete() { S.deleteConfirm = false; App._renderTxDetail() },
 
-/* consolidated: removed legacy confirmDeleteTx from line 492 */
+  confirmDeleteTx() {
+    const tx = S.transactions.find(t => t.id === S.selectedTxId)
+    if (tx) {
+      App._applyBalance(tx, -1)
+      S.transactions = S.transactions.filter(t => t.id !== S.selectedTxId)
+      persist()
+    }
+    App.closeOverlay('overlay-tx-detail')
+    App.render()
+    toast('ลบรายการแล้ว', 'success')
+  },
+
   // ─────────────────────────────────────────────────────────
   // WALLET FORM
   // ─────────────────────────────────────────────────────────
@@ -251,7 +523,15 @@ const App = {
   // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
 
-/* consolidated: removed legacy deleteWallet from line 526 */
+  deleteWallet(id) {
+    if (!confirm('ลบกระเป๋านี้? รายการที่เกี่ยวข้องจะยังคงอยู่')) return
+    S.wallets = S.wallets.filter(w => w.id !== id)
+    persist()
+    App.closeOverlay('overlay-wallet-form')
+    App.render()
+    toast('ลบกระเป๋าแล้ว', 'success')
+  },
+
   // ─────────────────────────────────────────────────────────
   // CC PAYMENT
   // ─────────────────────────────────────────────────────────
@@ -287,7 +567,32 @@ const App = {
     App.openOverlay('overlay-cc-pay')
   },
 
-/* consolidated: removed legacy saveCCPay from line 570 */
+  saveCCPay() {
+    const walletId = document.getElementById('cc-pay-wallet').value
+    const amount   = parseFloat(document.getElementById('cc-pay-amount').value) || 0
+    const card     = S.wallets.find(w => w.id === S.payingCardId)
+    const owed     = Math.abs(card.balance)
+
+    if (!walletId)   { toast('กรุณาเลือกกระเป๋า', 'error'); return }
+    if (amount <= 0) { toast('กรุณาระบุจำนวน', 'error'); return }
+    if (amount > owed) { toast('ยอดชำระมากกว่ายอดค้าง', 'error'); return }
+
+    // Build the transaction first, then apply balance via _applyBalance so
+    // edit/delete paths can safely reverse it with _applyBalance(tx, -1).
+    const tx = {
+      id: Calc.genId(), type: 'cc_payment',
+      amount, walletId, toWalletId: S.payingCardId,
+      note: `ชำระ ${card.name}`, date: getTODAY(),
+    }
+    S.transactions.unshift(tx)
+    App._applyBalance(tx, 1)
+
+    persist()
+    App.closeOverlay('overlay-cc-pay')
+    App.render()
+    toast(`ชำระ ${Calc.fmt(amount)} สำเร็จ`, 'success')
+  },
+
   // ─────────────────────────────────────────────────────────
   // CC DETAIL (tapping a CC card)
   // ─────────────────────────────────────────────────────────
@@ -315,9 +620,43 @@ const App = {
     return [...S.categories.expense, ...S.categories.income].find(c => c.id === id)
   },
 
-/* consolidated: removed legacy _txRow from line 623 */
-/* consolidated: removed legacy _bindTxRows from line 646 */
-/* consolidated: removed legacy _emptyState from line 652 */
+  _txRow(tx) {
+    const cat    = App._findCat(tx.categoryId)
+    const wallet = S.wallets.find(w => w.id === tx.walletId)
+    const icon   = cat?.icon || (tx.type==='income'?'💰':tx.type==='transfer'?'↔':tx.type==='cc_payment'?'💳':'💸')
+    const bgColor= cat?.color ? cat.color + '20' : 'var(--elevated)'
+    const amtColor = tx.type==='income' ? 'var(--income)' : tx.type==='transfer' ? 'var(--primary)' : 'var(--expense)'
+    const sign   = tx.type==='income' ? '+' : tx.type==='transfer'||tx.type==='cc_payment' ? '↔ ' : '-'
+    const title  = tx.merchant || tx.note || cat?.label || 'รายการ'
+    const sub    = [cat?.label, wallet?.name].filter(Boolean).join(' · ')
+
+    return `<div class="tx-row" data-txid="${tx.id}">
+      <div class="tx-icon" style="background:${bgColor}">${icon}</div>
+      <div class="tx-info">
+        <div class="tx-title">${title}</div>
+        ${sub ? `<div class="tx-sub">${sub}</div>` : ''}
+      </div>
+      <div class="tx-right">
+        <div class="tx-amount" style="color:${amtColor}">${sign}${Calc.fmt(tx.amount)}</div>
+        <div class="tx-date">${Calc.shortDate(tx.date)}</div>
+      </div>
+    </div>`
+  },
+
+  _bindTxRows(containerId) {
+    document.querySelectorAll(`#${containerId} .tx-row`).forEach(el => {
+      el.addEventListener('click', () => App.openTxDetail(el.dataset.txid))
+    })
+  },
+
+  _emptyState(icon, title, sub) {
+    return `<div class="empty">
+      <div class="empty-icon">${icon}</div>
+      <div class="empty-title">${title}</div>
+      ${sub ? `<div class="empty-sub">${sub}</div>` : ''}
+    </div>`
+  },
+
   // _walletTypeLabel is intentionally defined by the V2+ override block below.
   // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
 
@@ -391,15 +730,122 @@ Object.assign(Calc, {
 Object.assign(App, {
   _ensureV2State() { S.recurring ||= []; S.merchants ||= []; S.ccBenefits ||= {}; S.incomeBudgets ||= []; S.marketPrices ||= {} },
 
-/* consolidated: removed legacy renderDashboard from line 733 */
-/* consolidated: removed legacy openAddTx from line 771 *//* consolidated: removed legacy openEditTx from line 776 *//* consolidated: removed legacy openDuplicateTx from line 782 *//* consolidated: removed legacy _renderAddTxAmount from line 788 *//* consolidated: removed legacy saveTx from line 794 *//* consolidated: removed legacy _renderTxDetail from line 808 */
-/* consolidated: removed legacy renderWallets from line 815 *//* consolidated: removed legacy _walletCard from line 822 *//* consolidated: removed legacy refreshMarketPrices from line 828 *//* consolidated: removed legacy _marketText from line 835 */  openWalletForm(walletId) {
+  renderDashboard() {
+    App._ensureV2State()
+    const stats = Calc.getMonthlyStats(S.transactions, THIS_MONTH)
+    const nw = Calc.getNetWorth(S.wallets)
+    const expBudgets = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, THIS_MONTH)
+    const incBudgets = Calc.getIncomeBudgetProgress(S.transactions, S.incomeBudgets, S.categories, THIS_MONTH)
+    const recent = [...S.transactions].sort((a,b) => b.date.localeCompare(a.date)).slice(0, 5)
+    const savW = stats.income > 0 ? Math.min(stats.savingsRate, 100) : 0
+    const grad = `linear-gradient(135deg, ${S.settings.accentColor}, ${S.settings.accentColor}CC)`
+    let html = `<div class="grad-header" style="background:${grad};color:#fff;border-radius:0 0 24px 24px;margin-bottom:16px">
+      <div style="font-size:13px;opacity:.75;margin-bottom:12px">${Calc.monthLabel(THIS_MONTH)}</div>
+      <div class="grad-stats"><div class="grad-stat"><div class="grad-s-label">รายรับ</div><div class="grad-s-value">${Calc.fmt(stats.income)}</div></div><div class="grad-stat"><div class="grad-s-label">รายจ่าย</div><div class="grad-s-value">${Calc.fmt(stats.expense)}</div></div><div class="grad-stat"><div class="grad-s-label">คงเหลือ</div><div class="grad-s-value">${Calc.fmt(stats.net)}</div></div></div>
+      <div class="savings-bar"><div class="savings-fill" style="width:${savW}%"></div></div><div class="savings-text">อัตราการออม ${stats.savingsRate.toFixed(1)}%</div></div>
+      <div class="card card-pad nw-card" style="margin-bottom:12px"><div class="nw-label">ความมั่งคั่งสุทธิ</div><div class="nw-value ${nw.net >= 0 ? 'c-income' : 'c-expense'}">${nw.net >= 0 ? '' : '-'}${Calc.fmt(Math.abs(nw.net))}</div><div class="nw-detail"><span class="nw-item">สินทรัพย์ <strong class="c-income">${Calc.fmt(nw.assets)}</strong></span><span class="nw-item">หนี้สิน <strong class="c-expense">${Calc.fmt(nw.debt)}</strong></span></div></div>`
+    const alerts = S.wallets.filter(w => w.type === 'credit' && Math.abs(w.balance) > 0 && w.dueDay).map(w => ({...w, owed: Math.abs(w.balance), ...Calc.getDueDate(w.dueDay)})).filter(w => w.daysLeft >= 0 && w.daysLeft <= 3).sort((a,b) => a.daysLeft - b.daysLeft)
+    if (alerts.length) {
+      html += `<div class="sec-title">แจ้งเตือนบัตรเครดิต</div>`
+      alerts.forEach(a => html += `<div class="alert-card ${a.daysLeft <= 1 ? 'alert-urgent' : 'alert-warn'}"><div style="display:flex;justify-content:space-between;gap:12px"><div><div style="font-size:14px;font-weight:800">${a.icon} ${a.name}</div><div style="font-size:12px;color:var(--muted);margin-top:2px">ครบกำหนด ${a.dueStr} · ${a.daysLeft === 0 ? 'วันนี้' : `อีก ${a.daysLeft} วัน`}</div></div><div style="font-size:15px;font-weight:800;color:var(--expense)">${Calc.fmt(a.owed)}</div></div><button class="btn btn-primary btn-sm mt-12" onclick="App.openCCPay('${a.id}')">ชำระบัตรนี้</button></div>`)
+    }
+    const insights = []
+    const top = Object.entries(stats.byCategory || {}).sort((a,b) => b[1] - a[1])[0]
+    if (top) { const cat = App._findCat(top[0]); insights.push({icon:'📊', title:`ใช้จ่ายสูงสุด: ${cat?.label || 'ไม่ระบุหมวด'}`, body:`ใช้ ${Calc.fmt(top[1])} หรือ ${stats.expense ? (top[1]/stats.expense*100).toFixed(0) : 0}% ของรายจ่ายเดือนนี้`, bg:'rgba(37,99,235,.08)'}) }
+    const over = expBudgets.find(b => b.over)
+    if (over) insights.push({icon:'⚠️', title:`งบ ${over.label} เกินแล้ว`, body:`เกินงบ ${Calc.fmt(over.spent - over.monthlyLimit)} แนะนำชะลอรายจ่ายหมวดนี้`, bg:'rgba(220,38,38,.08)'})
+    const gap = incBudgets.find(b => b.spent < b.monthlyLimit)
+    if (gap) insights.push({icon:'🎯', title:`รายรับ ${gap.label} ยังต่ำกว่าเป้า`, body:`ยังขาด ${Calc.fmt(gap.monthlyLimit - gap.spent)} จากเป้ารายเดือน`, bg:'rgba(5,150,105,.08)'})
+    if (!insights.length) insights.push({icon:'✅', title:'ภาพรวมยังดูดี', body:'ยังไม่พบหมวดที่เกินงบหรือผิดปกติ', bg:'rgba(5,150,105,.08)'})
+    html += `<div class="sec-title">Insights & คำแนะนำ</div><div class="card card-pad" style="margin-bottom:12px;padding-bottom:10px">${insights.slice(0,3).map(i => `<div class="insight-row" style="background:${i.bg}"><div class="insight-icon">${i.icon}</div><div><div class="insight-title">${i.title}</div><div class="insight-body">${i.body}</div></div></div>`).join('')}</div>`
+    if (expBudgets.length || incBudgets.length) {
+      html += `<div class="card card-pad" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px">งบประมาณเดือนนี้</div>`
+      ;[...expBudgets.slice(0,2), ...incBudgets.slice(0,1)].forEach(b => { const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'; html += `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px"><span>${b.icon} ${b.label}</span><span style="color:${b.over ? 'var(--expense)' : 'var(--muted)'}">${Calc.fmt(b.spent)} / ${Calc.fmt(b.monthlyLimit)}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${b.pct}%;background:${barColor}"></div></div></div>` })
+      html += `</div>`
+    }
+    html += `<div class="card" style="margin-bottom:20px"><div style="padding:16px 20px 0;font-size:14px;font-weight:700">รายการล่าสุด</div>${recent.length ? `<div style="padding:0 20px">${recent.map(tx => App._txRow(tx)).join('')}</div>` : App._emptyState('📋','ยังไม่มีรายการ','แตะ + เพื่อเพิ่มรายการแรก')}</div>`
+    document.getElementById('dashboard-content').innerHTML = html
+    App._bindTxRows('dashboard-content')
+  },
+
+  openAddTx() {
+    S.txMode = 'add'; S.editingTxId = null
+    S.tx = { step:'amount', type:'expense', amount:'0', walletId:S.wallets.find(w => w.type !== 'credit')?.id || S.wallets[0]?.id || '', toWalletId:'', categoryId:'', merchant:'', note:'', date:TODAY }
+    App._renderAddTxAmount(); App.openOverlay('overlay-add-tx')
+  },
+  openEditTx(id) {
+    const tx = S.transactions.find(t => t.id === id); if (!tx) return
+    S.txMode = 'edit'; S.editingTxId = id
+    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:tx.date || TODAY }
+    App.closeOverlay('overlay-tx-detail'); App._renderAddTxDetail(); App.openOverlay('overlay-add-tx')
+  },
+  openDuplicateTx(id) {
+    const tx = S.transactions.find(t => t.id === id); if (!tx) return
+    S.txMode = 'duplicate'; S.editingTxId = null
+    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:TODAY }
+    App.closeOverlay('overlay-tx-detail'); App._renderAddTxAmount(); App.openOverlay('overlay-add-tx'); toast('คัดลอกรายการแล้ว แก้จำนวนเงินก่อนบันทึกได้', 'info')
+  },
+  _renderAddTxAmount() {
+    const title = S.txMode === 'edit' ? 'แก้ไขรายการ' : S.txMode === 'duplicate' ? 'Duplicate รายการ' : 'เพิ่มรายการ'
+    const amtColor = S.tx.type === 'income' ? 'var(--income)' : S.tx.type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
+    const display = parseFloat(S.tx.amount || 0).toLocaleString('en-US', { minimumFractionDigits: S.tx.amount.includes('.') ? (S.tx.amount.split('.')[1]?.length || 0) : 0 })
+    document.getElementById('add-tx-content').innerHTML = `<div class="sheet-header" style="border-bottom:none;padding-bottom:0"><h2>${title}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div><div class="type-tabs">${[['expense','จ่าย'],['income','รับ'],['transfer','โอน']].map(([v,l]) => `<button class="type-tab${S.tx.type===v?' active':''}" onclick="App._setTxType('${v}')">${l}</button>`).join('')}</div><div class="amount-display" style="color:${amtColor}">฿${display}</div><div class="numpad">${['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(k => `<button class="numpad-key${k==='⌫'?' del':''}" onclick="App._numpad('${k}')">${k}</button>`).join('')}</div><div style="padding:0 20px 20px"><button class="btn btn-primary" onclick="App._goToDetail()">ถัดไป →</button></div>`
+  },
+  saveTx() {
+    const amt = parseFloat(S.tx.amount)
+    if (!amt || amt <= 0) { toast('กรุณาระบุจำนวนเงิน', 'error'); return }
+    if (!S.tx.walletId) { toast('กรุณาเลือกกระเป๋าเงิน', 'error'); return }
+    if (S.tx.type === 'transfer' && !S.tx.toWalletId) { toast('กรุณาเลือกปลายทาง', 'error'); return }
+    if (S.tx.type === 'transfer' && S.tx.toWalletId === S.tx.walletId) { toast('กระเป๋าต้นทางและปลายทางต้องไม่เหมือนกัน', 'error'); return }
+    if (S.tx.type !== 'income' && S.tx.type !== 'transfer' && !S.tx.categoryId) { toast('กรุณาเลือกหมวดหมู่', 'error'); return }
+    const wasEdit = S.txMode === 'edit'
+    const tx = { id: wasEdit ? S.editingTxId : Calc.genId(), type:S.tx.type, amount:amt, walletId:S.tx.walletId, toWalletId:S.tx.toWalletId || undefined, categoryId:S.tx.categoryId || undefined, merchant:S.tx.merchant, note:S.tx.note, date:S.tx.date || getTODAY() }
+    if (wasEdit) { const idx = S.transactions.findIndex(t => t.id === S.editingTxId); if (idx >= 0) { App._applyBalance(S.transactions[idx], -1); S.transactions[idx] = tx; App._applyBalance(tx, 1) } }
+    else { S.transactions.unshift(tx); App._applyBalance(tx, 1) }
+    App._registerMerchantFromTx(tx); S.txMode = 'add'; S.editingTxId = null
+    persist(); App.closeOverlay('overlay-add-tx'); App.render(); toast(wasEdit ? 'แก้ไขรายการแล้ว' : 'บันทึกรายการแล้ว', 'success')
+  },
+  _renderTxDetail() {
+    const tx = S.transactions.find(t => t.id === S.selectedTxId); if (!tx) return
+    const cat = App._findCat(tx.categoryId), wallet = S.wallets.find(w => w.id === tx.walletId), toWal = S.wallets.find(w => w.id === tx.toWalletId)
+    const amtColor = tx.type === 'income' ? 'var(--income)' : tx.type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
+    document.getElementById('tx-detail-content').innerHTML = `<div style="text-align:center;margin-bottom:20px"><div style="font-size:48px;font-weight:800;color:${amtColor}">${tx.type==='income'?'+':tx.type==='expense'?'-':''}${Calc.fmt(tx.amount)}</div><div style="font-size:14px;color:var(--muted);margin-top:6px">${Calc.labelDate(tx.date)}</div></div><div>${cat ? `<div class="detail-row"><span class="detail-label">หมวดหมู่</span><span class="detail-value">${cat.icon} ${cat.label}</span></div>` : ''}${wallet ? `<div class="detail-row"><span class="detail-label">กระเป๋าเงิน</span><span class="detail-value">${wallet.icon} ${wallet.name}</span></div>` : ''}${toWal ? `<div class="detail-row"><span class="detail-label">ไปยัง</span><span class="detail-value">${toWal.icon} ${toWal.name}</span></div>` : ''}${tx.merchant ? `<div class="detail-row"><span class="detail-label">ร้านค้า</span><span class="detail-value">${tx.merchant}</span></div>` : ''}${tx.note ? `<div class="detail-row"><span class="detail-label">หมายเหตุ</span><span class="detail-value">${tx.note}</span></div>` : ''}<div class="detail-row"><span class="detail-label">ประเภท</span><span class="detail-value">${App._txTypeLabel(tx.type)}</span></div></div><div class="tx-action-grid"><button class="btn btn-secondary" onclick="App.openEditTx('${tx.id}')">✏️ แก้ไข</button><button class="btn btn-secondary" onclick="App.openDuplicateTx('${tx.id}')">⧉ Duplicate</button></div><div style="margin-top:10px">${S.deleteConfirm ? `<button class="btn btn-danger" onclick="App.confirmDeleteTx()">ยืนยันการลบ</button><button class="btn btn-secondary mt-8" onclick="App._cancelDelete()">ยกเลิก</button>` : `<button class="btn btn-outline" onclick="App.deleteTx()">🗑 ลบรายการ</button>`}</div>`
+  },
+
+  renderWallets() {
+    App._ensureV2State()
+    const g = Calc.getWalletGroups(S.wallets)
+    document.getElementById('wallets-summary').innerHTML = `<div style="flex:1;background:rgba(5,150,105,.12);border-radius:14px;padding:12px"><div style="font-size:12px;color:var(--muted)">สินทรัพย์รวม</div><div style="font-size:18px;font-weight:800;color:var(--income)">${Calc.fmt(g.assetTotal)}</div></div><div style="flex:1;background:rgba(220,38,38,.12);border-radius:14px;padding:12px"><div style="font-size:12px;color:var(--muted)">หนี้สินรวม</div><div style="font-size:18px;font-weight:800;color:var(--expense)">${Calc.fmt(g.liabilityTotal)}</div></div>`
+    const section = (title, icon, list, empty) => `<div class="wallet-section-title">${icon} ${title}</div>${list.length ? list.map(w => App._walletCard(w)).join('') : `<div class="card card-pad" style="font-size:13px;color:var(--muted);margin-bottom:12px">${empty}</div>`}`
+    document.getElementById('wallets-content').innerHTML = `<div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn btn-secondary btn-sm" onclick="App.refreshMarketPrices()">↻ Refresh ราคา</button><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm(null)">+ เพิ่มกระเป๋า</button></div>${section('สินทรัพย์','🏦',g.assets,'ยังไม่มีสินทรัพย์')}${section('หนี้สิน','💳',g.liabilities,'ยังไม่มีบัตรเครดิต')}${section('การลงทุน','📈',g.investments,'เพิ่มทอง / Crypto / FCD เพื่อดูราคาอ้างอิง')}`
+  },
+  _walletCard(w) {
+    const isCC = w.type === 'credit', isInv = ['gold','crypto','fcd'].includes(w.type), owed = Math.abs(w.balance)
+    const usedPct = isCC && w.limit ? Math.min((owed / w.limit) * 100, 100) : 0, due = isCC && w.dueDay ? Calc.getDueDate(w.dueDay) : null, avail = isCC && w.limit ? w.limit - owed : 0
+    const price = isInv ? App._marketText(w) : ''
+    return `<div class="wallet-card" style="background:linear-gradient(135deg,${w.color},${w.color}BB)" onclick="${isCC ? `App.openCCDetail('${w.id}')` : `App.openWalletForm('${w.id}')`}"><div class="wc-header"><div><div class="wc-name">${w.icon} ${w.name}</div><div class="wc-type">${App._walletTypeLabel(w.type)} ${price ? `· ${price}` : ''}</div></div>${isCC ? `<button class="wc-pay-btn" onclick="event.stopPropagation();App.openCCPay('${w.id}')">ชำระ</button>` : isInv ? `<span class="invest-badge">Market</span>` : ''}</div><div class="wc-balance">${isCC ? '-' : ''}${Calc.fmt(isCC ? owed : w.balance)}</div>${isCC && w.limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${usedPct}%;background:${usedPct > 80 ? 'rgba(252,165,165,.9)' : 'rgba(255,255,255,.8)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${usedPct.toFixed(0)}% · คงเหลือ ${Calc.fmt(avail)}</span>${due ? `<span>ครบ ${due.dueStr} (${due.daysLeft}ว.)</span>` : ''}</div></div>` : ''}</div>`
+  },
+  async refreshMarketPrices() {
+    const next = {}
+    try { const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd'); if (r.ok) next.crypto = await r.json() } catch {}
+    try { const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY'); if (r.ok) next.fx = await r.json() } catch {}
+    try { const r = await fetch('https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlcv&h&e=csv'); if (r.ok) next.goldCsv = await r.text() } catch {}
+    next.updatedAt = new Date().toISOString(); S.marketPrices = next; persist(); App.renderWallets(); toast('อัปเดตราคาอ้างอิงแล้ว', 'success')
+  },
+  _marketText(w) {
+    const p = S.marketPrices || {}
+    if (w.type === 'crypto') { const coin = (w.symbol || w.name || '').toLowerCase(); const map = {btc:'bitcoin', bitcoin:'bitcoin', eth:'ethereum', ethereum:'ethereum', bnb:'binancecoin', usdt:'tether'}; const id = map[coin] || map[coin.replace(/[^a-z]/g,'')]; const thb = id && p.crypto?.[id]?.thb; return thb ? `${coin.toUpperCase()} ${Calc.fmt(thb)}` : 'CoinGecko' }
+    if (w.type === 'fcd') { const cur = (w.currency || w.symbol || 'USD').toUpperCase(); const rate = cur === 'USD' ? p.fx?.rates?.THB : (p.fx?.rates?.THB && p.fx?.rates?.[cur] ? p.fx.rates.THB / p.fx.rates[cur] : null); return rate ? `${cur}/THB ${rate.toFixed(2)}` : 'Frankfurter FX' }
+    if (w.type === 'gold') { const line = (p.goldCsv || '').split('\n')[1]; const close = line ? parseFloat(line.split(',').at(-2)) : 0; return close ? `XAU/USD ${close.toLocaleString()}` : 'Stooq XAUUSD' }
+    return ''
+  },
+  openWalletForm(walletId) {
     S.editingWalletId = walletId
     const w = walletId ? S.wallets.find(x => x.id === walletId) : null
     const COLORS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
     const TYPES = [['bank','🏦','ธนาคาร'],['cash','💵','เงินสด'],['ewallet','📱','TrueMoney'],['credit','💳','บัตรเครดิต'],['gold','🥇','ทอง'],['crypto','₿','Crypto'],['fcd','💱','FCD']]
     document.getElementById('wallet-form-title').textContent = w ? 'แก้ไขกระเป๋า' : 'เพิ่มกระเป๋าเงิน'
-    document.getElementById('wallet-form-content').innerHTML = `<div class="form-group"><label class="form-label">ชื่อกระเป๋า</label><input class="form-input" id="wf-name" value="${w?.name||''}"></div><div class="form-group"><label class="form-label">ประเภท</label><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px" id="wf-type-grid">${TYPES.map(([v,icon,lbl]) => `<button class="cat-btn${(w?.type||'bank')===v?' active':''}" onclick="App._selectWalletType('${v}')" data-type="${v}">${icon}<br><small>${lbl}</small></button>`).join('')}</div><input type="hidden" id="wf-type" value="${w?.type||'bank'}"></div><div class="form-group"><label class="form-label">สี</label><div class="color-row" id="wf-color-row">${COLORS.map(c => `<div class="color-dot${(w?.color||'#2563EB')===c?' selected':''}" style="background:${c}" onclick="App._selectWalletColor('${c}')" data-color="${c}"></div>`).join('')}</div><input type="hidden" id="wf-color" value="${w?.color||'#2563EB'}"></div><div class="form-group"><label class="form-label" id="wf-balance-label">${w?.type==='credit'?'ยอดค้างชำระ (฿)':'มูลค่าปัจจุบัน (฿)'}</label><input class="form-input" type="number" id="wf-balance" value="${w ? Math.abs(w.balance) : ''}"></div><div id="wf-cc-fields" style="${(w?.type||'bank')==='credit'?'':'display:none'}"><div class="form-group"><label class="form-label">วงเงิน (฿)</label><input class="form-input" type="number" id="wf-limit" value="${w?.limit||''}"></div><div class="form-group"><label class="form-label">วันครบกำหนดชำระ</label><input class="form-input" type="number" id="wf-dueday" min="1" max="31" value="${w?.dueDay||''}"></div><div class="form-group"><label class="form-label">วันตัดรอบบัญชี</label><input class="form-input" type="number" id="wf-cycle-day" min="1" max="31" value="${w?.cycleDay||''}"></div></div><div id="wf-invest-fields" style="${['gold','crypto','fcd'].includes(w?.type||'bank')?'':'display:none'}"><div class="form-group"><label class="form-label">Symbol / สกุลเงิน</label><input class="form-input" id="wf-symbol" placeholder="BTC, ETH, USD, บาททอง" value="${w?.symbol||w?.currency||''}"></div><div class="form-group"><label class="form-label">จำนวน Asset</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${w?.units||''}" placeholder="เช่น 0.05, 2.5, 1000"></div><div class="form-group"><label class="form-label">ราคาต่อหน่วยสำรอง (บาท)</label><input class="form-input" type="number" step="0.01" id="wf-manual-price" value="${w?.manualPrice||''}" ></div></div><div class="flex-row">${w ? `<button class="btn btn-outline flex-1" onclick="App.deleteWallet('${w.id}')">ลบ</button>` : ''}<button class="btn btn-primary${w?'':' flex-1'}" onclick="App.saveWallet()" style="${w?'flex:2':''}">${w ? 'บันทึก' : 'เพิ่มกระเป๋า'}</button></div>`
+    document.getElementById('wallet-form-content').innerHTML = `<div class="form-group"><label class="form-label">ชื่อกระเป๋า</label><input class="form-input" id="wf-name" value="${w?.name||''}"></div><div class="form-group"><label class="form-label">ประเภท</label><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px" id="wf-type-grid">${TYPES.map(([v,icon,lbl]) => `<button class="cat-btn${(w?.type||'bank')===v?' active':''}" onclick="App._selectWalletType('${v}')" data-type="${v}">${icon}<br><small>${lbl}</small></button>`).join('')}</div><input type="hidden" id="wf-type" value="${w?.type||'bank'}"></div><div class="form-group"><label class="form-label">สี</label><div class="color-row" id="wf-color-row">${COLORS.map(c => `<div class="color-dot${(w?.color||'#2563EB')===c?' selected':''}" style="background:${c}" onclick="App._selectWalletColor('${c}')" data-color="${c}"></div>`).join('')}</div><input type="hidden" id="wf-color" value="${w?.color||'#2563EB'}"></div><div class="form-group"><label class="form-label" id="wf-balance-label">${w?.type==='credit'?'ยอดค้างชำระ (฿)':'มูลค่าปัจจุบัน (฿)'}</label><input class="form-input" type="number" id="wf-balance" value="${w ? Math.abs(w.balance) : ''}"></div><div id="wf-cc-fields" style="${(w?.type||'bank')==='credit'?'':'display:none'}"><div class="form-group"><label class="form-label">วงเงิน (฿)</label><input class="form-input" type="number" id="wf-limit" value="${w?.limit||''}"></div><div class="form-group"><label class="form-label">วันครบกำหนดชำระ</label><input class="form-input" type="number" id="wf-dueday" min="1" max="31" value="${w?.dueDay||''}"></div><div class="form-group"><label class="form-label">วันตัดรอบบัญชี</label><input class="form-input" type="number" id="wf-cycle-day" min="1" max="31" value="${w?.cycleDay||''}"></div></div><div id="wf-invest-fields" style="${['gold','crypto','fcd'].includes(w?.type||'bank')?'':'display:none'}"><div class="form-group"><label class="form-label">Symbol / สกุลเงิน</label><input class="form-input" id="wf-symbol" placeholder="BTC, ETH, USD, XAU" value="${w?.symbol||w?.currency||''}"></div></div><div class="flex-row">${w ? `<button class="btn btn-outline flex-1" onclick="App.deleteWallet('${w.id}')">ลบ</button>` : ''}<button class="btn btn-primary${w?'':' flex-1'}" onclick="App.saveWallet()" style="${w?'flex:2':''}">${w ? 'บันทึก' : 'เพิ่มกระเป๋า'}</button></div>`
     App.openOverlay('overlay-wallet-form')
   },
   _selectWalletType(type) {
@@ -407,77 +853,92 @@ Object.assign(App, {
     document.querySelectorAll('#wf-type-grid .cat-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type))
     document.getElementById('wf-cc-fields').style.display = type === 'credit' ? '' : 'none'
     document.getElementById('wf-invest-fields').style.display = ['gold','crypto','fcd'].includes(type) ? '' : 'none'
-    document.getElementById('wf-balance-label').textContent = type === 'credit' ? 'ยอดค้างชำระ (฿)' : ['gold','crypto','fcd'].includes(type) ? 'มูลค่าปัจจุบัน / ราคาสำรอง (฿)' : 'มูลค่าปัจจุบัน (฿)'
-    const symbol = document.getElementById('wf-symbol')
-    if (symbol && type === 'gold' && !symbol.value) symbol.value = 'บาททอง'
-    if (symbol && type === 'fcd' && !symbol.value) symbol.value = 'USD'
+    document.getElementById('wf-balance-label').textContent = type === 'credit' ? 'ยอดค้างชำระ (฿)' : 'มูลค่าปัจจุบัน (฿)'
   },
   saveWallet() {
-    const name = document.getElementById('wf-name').value.trim()
-    const type = document.getElementById('wf-type').value
-    const color = document.getElementById('wf-color').value
-    const rawBalance = parseFloat(document.getElementById('wf-balance').value) || 0
-    const limit = parseFloat(document.getElementById('wf-limit')?.value) || 50000
-    const dueDay = parseInt(document.getElementById('wf-dueday')?.value) || 5
-    const cycleDay = parseInt(document.getElementById('wf-cycle-day')?.value) || 25
-    const isInvest = ['gold','crypto','fcd'].includes(type)
-    const symbol = document.getElementById('wf-symbol')?.value.trim().toUpperCase() || (type === 'gold' ? 'บาททอง' : type === 'fcd' ? 'USD' : '')
-    const units = isInvest ? (parseFloat(document.getElementById('wf-units')?.value) || 0) : undefined
-    const manualPrice = isInvest ? (parseFloat(document.getElementById('wf-manual-price')?.value) || 0) : undefined
-    const ICONS = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', saving:'🏦', gold:'🥇', crypto:'₿', fcd:'💱' }
+    const name = document.getElementById('wf-name').value.trim(), type = document.getElementById('wf-type').value, color = document.getElementById('wf-color').value
+    const balance = parseFloat(document.getElementById('wf-balance').value) || 0, limit = parseFloat(document.getElementById('wf-limit')?.value) || 50000, dueDay = parseInt(document.getElementById('wf-dueday')?.value) || 5, cycleDay = parseInt(document.getElementById('wf-cycle-day')?.value) || 25
+    const symbol = document.getElementById('wf-symbol')?.value.trim().toUpperCase() || ''
+    const ICONS = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', gold:'🥇', crypto:'₿', fcd:'💱' }
     if (!name) { toast('กรุณากรอกชื่อกระเป๋า', 'error'); return }
-
-    let balance = type === 'credit' ? -Math.abs(rawBalance) : rawBalance
-    const data = {
-      name, type, color, icon: ICONS[type] || '💳', balance,
-      ...(type === 'credit' && { limit, dueDay, cycleDay }),
-      ...(isInvest && { symbol, currency: type === 'fcd' ? (symbol || 'USD') : undefined, units, manualPrice })
-    }
-
-    // Ledger-based recalculation uses openingBalance/openingUnits as the source of truth.
-    // When editing a wallet directly, update the baseline too; otherwise recalculateWalletBalances()
-    // will overwrite the newly typed balance/asset units with the previous baseline.
-    const walletIdForFlow = S.editingWalletId || null
-    const flows = (typeof App._ledgerFlows === 'function') ? App._ledgerFlows() : { cash:{}, units:{} }
-    const round2 = n => Math.round((Number(n) || 0) * 100) / 100
-    const round8 = n => Math.round((Number(n) || 0) * 1e8) / 1e8
-
-    if (isInvest) {
-      const flowUnits = walletIdForFlow ? Number(flows.units?.[walletIdForFlow] || 0) : 0
-      data.openingUnits = round8(units - flowUnits)
-      const price = App._investmentUnitPriceTHB?.(data) || manualPrice || 0
-      if (price && units) data.balance = round2(units * price)
-    } else {
-      const flowCash = walletIdForFlow ? Number(flows.cash?.[walletIdForFlow] || 0) : 0
-      data.openingBalance = round2(balance - flowCash)
-    }
-
-    if (S.editingWalletId) {
-      const idx = S.wallets.findIndex(w => w.id === S.editingWalletId)
-      if (idx >= 0) S.wallets[idx] = { ...S.wallets[idx], ...data }
-    } else {
-      S.wallets.push({ id: Calc.genId(), ...data })
-    }
-    App.recalculateWalletBalances?.({ save:false, recordSnapshot:false })
+    const data = { name, type, color, icon: ICONS[type] || '💳', balance: type === 'credit' ? -balance : balance, ...(type === 'credit' && { limit, dueDay, cycleDay }), ...(['gold','crypto','fcd'].includes(type) && { symbol, currency: type === 'fcd' ? (symbol || 'USD') : undefined }) }
+    if (S.editingWalletId) { const idx = S.wallets.findIndex(w => w.id === S.editingWalletId); if (idx >= 0) S.wallets[idx] = { ...S.wallets[idx], ...data } } else S.wallets.push({ id: Calc.genId(), ...data })
     persist(); App.closeOverlay('overlay-wallet-form'); App.render(); toast(S.editingWalletId ? 'แก้ไขกระเป๋าแล้ว' : 'เพิ่มกระเป๋าแล้ว', 'success')
   },
 
-/* consolidated: removed legacy renderMore from line 869 */
-/* consolidated: removed legacy openBudgetScreen from line 876 *//* consolidated: removed legacy saveBudgets from line 881 */
-/* consolidated: removed legacy openRecurringScreen from line 886 *//* consolidated: removed legacy openRecurringForm from line 887 *//* consolidated: removed legacy saveRecurring from line 888 */  toggleRecurring(id) { const r = S.recurring.find(x => x.id === id); if (r) r.paused = !r.paused; persist(); App.openRecurringScreen() },
-/* consolidated: removed legacy deleteRecurring from line 890 */
-  openCategoryScreen(type='expense', q='') { S.catManageType = type; const cats = (S.categories[type] || []).filter(c => !q || c.label.toLowerCase().includes(q.toLowerCase())); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll"><div class="tab-strip"><button class="tab-btn ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="tab-btn ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${q}" oninput="App.openCategoryScreen('${type}', this.value)"><div class="card mt-12"><div style="padding:0 16px">${cats.map(c => `<div class="list-item"><div class="list-item-icon" style="background:${c.color}20">${c.icon}</div><div class="list-item-info"><div class="list-item-name">${c.label}</div><div class="list-item-sub">${c.color}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openCategoryForm('${c.id}')">✏️</button><button class="icon-btn" onclick="App.deleteCategory('${c.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')}</div></div></div>`) },
-/* consolidated: removed legacy openCategoryForm from line 893 */  saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { toast('กรุณากรอกชื่อหมวดหมู่','error'); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
-/* consolidated: removed legacy deleteCategory from line 895 */
-  openMerchantScreen(q='') { App._ensureV2State(); const usage = Calc.getMerchantUsage(S.transactions); const list = S.merchants.filter(m => !q || m.name.toLowerCase().includes(q.toLowerCase())); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${q}" oninput="App.openMerchantScreen(this.value)"><div class="card mt-12"><div style="padding:0 16px">${list.map(m => `<div class="list-item"><div class="list-item-icon" style="background:${m.color}20">${m.emoji || '🏪'}</div><div class="list-item-info"><div class="list-item-name">${m.name}</div><div class="list-item-sub">ใช้จ่าย ${usage[m.name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${m.id}')">✏️</button><button class="icon-btn" onclick="App.deleteMerchant('${m.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')}</div></div></div>`) },
-/* consolidated: removed legacy openMerchantForm from line 898 */  saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { toast('กรุณากรอกชื่อร้านค้า','error'); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
-/* consolidated: removed legacy deleteMerchant from line 900 */  _registerMerchantFromTx(tx) { App._ensureV2State(); if (!tx.merchant) return; if (!S.merchants.some(m => m.name.toLowerCase() === tx.merchant.toLowerCase())) S.merchants.push({ id:Calc.genId(), name:tx.merchant, emoji:'🏪', color:'#64748B' }) },
+  renderMore() {
+    App._ensureV2State()
+    const ACCENT_COLORS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
+    const budgetCount = S.budgets.filter(b => b.monthlyLimit > 0).length + S.incomeBudgets.filter(b => b.monthlyLimit > 0).length
+    document.getElementById('more-content').innerHTML = `<div style="padding:0 16px"><div style="font-size:20px;font-weight:800;padding:20px 0 4px">เพิ่มเติม</div><div class="sec-title">การเงิน</div><div class="card card-pad"><div class="settings-row" onclick="App.openBudgetScreen()"><div class="s-icon">💰</div><div class="s-label">งบประมาณรายรับ/รายจ่าย</div><div class="s-value">${budgetCount ? budgetCount + ' หมวด' : 'ยังไม่ตั้ง'}</div><div class="s-arrow">›</div></div><div class="settings-row" onclick="App.openRecurringScreen()"><div class="s-icon">🔁</div><div class="s-label">รายการประจำ</div><div class="s-value">${S.recurring.length} รายการ</div><div class="s-arrow">›</div></div><div class="settings-row" onclick="App.openCategoryScreen('expense')"><div class="s-icon">🏷️</div><div class="s-label">จัดการหมวดหมู่</div><div class="s-value">รายรับ/รายจ่าย</div><div class="s-arrow">›</div></div><div class="settings-row" onclick="App.openMerchantScreen()"><div class="s-icon">🏪</div><div class="s-label">ร้านค้า / Platform</div><div class="s-value">${S.merchants.length} ร้าน</div><div class="s-arrow">›</div></div></div><div class="sec-title">การแสดงผล</div><div class="card card-pad"><div class="settings-row" onclick="App.toggleDark()"><div class="s-icon">🌙</div><div class="s-label">โหมดมืด</div><button class="toggle${S.settings.darkMode ? ' on' : ''}" onclick="event.stopPropagation();App.toggleDark()"></button></div><div style="padding:14px 0;border-bottom:1px solid var(--border)"><div style="font-size:15px;font-weight:600;margin-bottom:12px">🎨 สีธีม</div><div class="color-row">${ACCENT_COLORS.map(c => `<div class="color-dot${S.settings.accentColor===c?' selected':''}" style="background:${c}" onclick="App.setAccent('${c}')"></div>`).join('')}</div></div></div><div class="sec-title">ข้อมูล</div><div class="card card-pad"><div class="settings-row" onclick="App.exportData()"><div class="s-icon">📤</div><div class="s-label">ส่งออกข้อมูล (JSON)</div><div class="s-arrow">›</div></div><div class="settings-row" onclick="document.getElementById('import-file').click()"><div class="s-icon">📥</div><div class="s-label">นำเข้าข้อมูล (JSON)</div><div class="s-arrow">›</div></div><input type="file" id="import-file" accept=".json" style="display:none" onchange="App.importData(this)"><div class="settings-row" onclick="App.resetData()"><div class="s-icon">🔄</div><div class="s-label" style="color:var(--expense)">รีเซ็ตข้อมูลทั้งหมด</div><div class="s-arrow" style="color:var(--expense)">›</div></div></div><div style="text-align:center;padding:32px 0 8px"><div style="font-size:40px">💰</div><div style="font-size:16px;font-weight:700;margin-top:8px">Money Tracker</div><div style="font-size:12px;color:var(--muted);margin-top:4px">v2 · Offline-first PWA</div><div style="font-size:12px;color:var(--muted);margin-top:2px">ข้อมูลหลักเก็บในเครื่องของคุณ</div></div></div>`
+  },
 
-/* consolidated: removed legacy openCCDetail from line 903 *//* consolidated: removed legacy openCCBenefitScreen from line 913 *//* consolidated: removed legacy saveCCBenefit from line 914 *//* consolidated: removed legacy _walletTypeLabel from line 915 */})
+  openBudgetScreen() {
+    const rows = kind => S.categories[kind].map(cat => { const list = kind === 'income' ? S.incomeBudgets : S.budgets; const b = list.find(x => x.categoryId === cat.id); const spent = S.transactions.filter(t => t.date.startsWith(THIS_MONTH) && t.type === kind && t.categoryId === cat.id).reduce((s,t) => s+t.amount, 0); return { cat, limit:b?.monthlyLimit || 0, spent, kind } })
+    const html = `<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ตั้งงบประมาณ</h2><button class="btn btn-primary btn-sm" onclick="App.saveBudgets()" style="width:auto;padding:8px 16px">บันทึก</button></div><div class="sub-scroll"><p style="font-size:13px;color:var(--muted);margin-bottom:16px">ตั้งงบรายจ่ายและเป้ารายรับรายเดือน (0 = ไม่กำหนด)</p>${['expense','income'].map(kind => `<div class="sec-title">${kind==='expense'?'รายจ่าย':'รายรับ'}</div>${rows(kind).map(r => `<div style="margin-bottom:16px"><label class="form-label">${r.cat.icon} ${r.cat.label} · ${kind==='expense'?'ใช้':'รับ'}แล้ว ${Calc.fmt(r.spent)}</label><input class="form-input" type="number" id="budget-${kind}-${r.cat.id}" value="${r.limit || ''}" placeholder="0 = ไม่กำหนด"></div>`).join('')}`).join('')}</div>`
+    App.openSubScreen(html)
+  },
+  saveBudgets() {
+    const saveList = kind => { const key = kind === 'income' ? 'incomeBudgets' : 'budgets'; S[key] ||= []; S.categories[kind].forEach(cat => { const val = parseFloat(document.getElementById(`budget-${kind}-${cat.id}`)?.value) || 0; const idx = S[key].findIndex(b => b.categoryId === cat.id); if (val > 0) { if (idx >= 0) S[key][idx].monthlyLimit = val; else S[key].push({ categoryId:cat.id, monthlyLimit:val }) } else if (idx >= 0) S[key].splice(idx,1) }) }
+    saveList('expense'); saveList('income'); persist(); App.closeSubScreen(); toast('บันทึกงบประมาณแล้ว', 'success')
+  },
+
+  openRecurringScreen() { App._ensureV2State(); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.openRecurringForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll"><div class="card"><div style="padding:0 16px">${S.recurring.length ? S.recurring.map(r => `<div class="recurring-item ${r.paused?'paused':''}"><div class="list-item-icon" style="background:${r.color || '#2563EB'}20">${r.icon || '🔁'}</div><div class="list-item-info"><div class="list-item-name">${r.name}</div><div class="list-item-sub">${Calc.fmt(r.amount)} · อีก ${r.everyDays || 30} วัน · ${r.categoryName || ''}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openRecurringForm('${r.id}')">✏️</button><button class="icon-btn" onclick="App.toggleRecurring('${r.id}')">${r.paused?'▶':'⏸'}</button><button class="icon-btn" onclick="App.deleteRecurring('${r.id}')">🗑</button></div></div>`).join('') : App._emptyState('🔁','ยังไม่มีรายการประจำ','เพิ่มค่าใช้จ่าย/รายรับที่เกิดซ้ำ')}</div></div></div>`) },
+  openRecurringForm(id) { const r = id ? S.recurring.find(x => x.id === id) : null; const cats = [...S.categories.expense, ...S.categories.income]; App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openRecurringScreen()">←</button><h2>${r?'แก้ไข':'เพิ่ม'}รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.saveRecurring('${id || ''}')" style="width:auto;padding:8px 14px">บันทึก</button></div><div class="sub-scroll"><div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" id="rec-name" value="${r?.name || ''}"></div><div class="form-group"><label class="form-label">จำนวนเงิน</label><input class="form-input" type="number" id="rec-amount" value="${r?.amount || ''}"></div><div class="form-group"><label class="form-label">อีก X วัน</label><input class="form-input" type="number" id="rec-days" value="${r?.everyDays || 30}"></div><div class="form-group"><label class="form-label">หมวด</label><select class="form-input" id="rec-cat">${cats.map(c => `<option value="${c.id}"${r?.categoryId===c.id?' selected':''}>${c.icon} ${c.label}</option>`).join('')}</select></div></div>`) },
+  saveRecurring(id) { const cat = App._findCat(document.getElementById('rec-cat').value); const data = { name:document.getElementById('rec-name').value.trim(), amount:parseFloat(document.getElementById('rec-amount').value)||0, everyDays:parseInt(document.getElementById('rec-days').value)||30, categoryId:cat?.id, categoryName:cat?.label, icon:cat?.icon, color:cat?.color, paused:false }; if (!data.name || !data.amount) { toast('กรุณากรอกชื่อและจำนวนเงิน', 'error'); return } if (id) { const idx = S.recurring.findIndex(r => r.id === id); if (idx >= 0) S.recurring[idx] = { ...S.recurring[idx], ...data } } else S.recurring.push({ id:Calc.genId(), ...data }); persist(); App.openRecurringScreen(); toast('บันทึกรายการประจำแล้ว', 'success') },
+  toggleRecurring(id) { const r = S.recurring.find(x => x.id === id); if (r) r.paused = !r.paused; persist(); App.openRecurringScreen() },
+  deleteRecurring(id) { if (!confirm('ลบรายการประจำนี้?')) return; S.recurring = S.recurring.filter(r => r.id !== id); persist(); App.openRecurringScreen(); toast('ลบแล้ว', 'success') },
+
+  openCategoryScreen(type='expense', q='') { S.catManageType = type; const cats = (S.categories[type] || []).filter(c => !q || c.label.toLowerCase().includes(q.toLowerCase())); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll"><div class="tab-strip"><button class="tab-btn ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="tab-btn ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${q}" oninput="App.openCategoryScreen('${type}', this.value)"><div class="card mt-12"><div style="padding:0 16px">${cats.map(c => `<div class="list-item"><div class="list-item-icon" style="background:${c.color}20">${c.icon}</div><div class="list-item-info"><div class="list-item-name">${c.label}</div><div class="list-item-sub">${c.color}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openCategoryForm('${c.id}')">✏️</button><button class="icon-btn" onclick="App.deleteCategory('${c.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')}</div></div></div>`) },
+  openCategoryForm(id) { const type = S.catManageType || 'expense'; const c = id ? S.categories[type].find(x => x.id === id) : null; App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCategoryScreen('${type}')">←</button><h2>${c?'แก้ไข':'เพิ่ม'}หมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.saveCategory('${id || ''}')" style="width:auto;padding:8px 14px">บันทึก</button></div><div class="sub-scroll"><div class="form-group"><label class="form-label">ชื่อหมวดหมู่</label><input class="form-input" id="cat-name" value="${c?.label || ''}"></div><div class="form-group"><label class="form-label">อีโมจิ</label><input class="form-input" id="cat-icon" value="${c?.icon || '📦'}"></div><div class="form-group"><label class="form-label">สี</label><input class="form-input" id="cat-color" type="color" value="${c?.color || '#2563EB'}"></div></div>`) },
+  saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { toast('กรุณากรอกชื่อหมวดหมู่','error'); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
+  deleteCategory(id) { const type = S.catManageType || 'expense'; if (!confirm('ลบหมวดหมู่นี้?')) return; S.categories[type] = S.categories[type].filter(c => c.id !== id); persist(); App.openCategoryScreen(type); toast('ลบหมวดหมู่แล้ว','success') },
+
+  openMerchantScreen(q='') { App._ensureV2State(); const usage = Calc.getMerchantUsage(S.transactions); const list = S.merchants.filter(m => !q || m.name.toLowerCase().includes(q.toLowerCase())); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${q}" oninput="App.openMerchantScreen(this.value)"><div class="card mt-12"><div style="padding:0 16px">${list.map(m => `<div class="list-item"><div class="list-item-icon" style="background:${m.color}20">${m.emoji || '🏪'}</div><div class="list-item-info"><div class="list-item-name">${m.name}</div><div class="list-item-sub">ใช้จ่าย ${usage[m.name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${m.id}')">✏️</button><button class="icon-btn" onclick="App.deleteMerchant('${m.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')}</div></div></div>`) },
+  openMerchantForm(id) { const m = id ? S.merchants.find(x => x.id === id) : null; App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openMerchantScreen()">←</button><h2>${m?'แก้ไข':'เพิ่ม'}ร้านค้า</h2><button class="btn btn-primary btn-sm" onclick="App.saveMerchant('${id || ''}')" style="width:auto;padding:8px 14px">บันทึก</button></div><div class="sub-scroll"><div class="form-group"><label class="form-label">ชื่อร้านค้า</label><input class="form-input" id="mer-name" value="${m?.name || ''}"></div><div class="form-group"><label class="form-label">อีโมจิ</label><input class="form-input" id="mer-emoji" value="${m?.emoji || '🏪'}"></div><div class="form-group"><label class="form-label">สี</label><input class="form-input" id="mer-color" type="color" value="${m?.color || '#2563EB'}"></div></div>`) },
+  saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { toast('กรุณากรอกชื่อร้านค้า','error'); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
+  deleteMerchant(id) { if (!confirm('ลบร้านค้านี้?')) return; S.merchants = S.merchants.filter(m => m.id !== id); persist(); App.openMerchantScreen(); toast('ลบร้านค้าแล้ว','success') },
+  _registerMerchantFromTx(tx) { App._ensureV2State(); if (!tx.merchant) return; if (!S.merchants.some(m => m.name.toLowerCase() === tx.merchant.toLowerCase())) S.merchants.push({ id:Calc.genId(), name:tx.merchant, emoji:'🏪', color:'#64748B' }) },
+
+  openCCDetail(cardId) {
+    const card = S.wallets.find(w => w.id === cardId); if (!card) return
+    const benefit = S.ccBenefits?.[cardId] || { enabled:false, points:{bahtPerPoint:25,multiplier:1}, cashback:{percent:0,everyBaht:1} }
+    const period = Calc.getStatementPeriod(card.cycleDay || 25)
+    const txns = S.transactions.filter(t => t.walletId === cardId).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 20)
+    const rewards = Calc.getCardRewards(txns.filter(t => t.type === 'expense' && t.date >= period.start && t.date <= period.end), benefit)
+    const owed = Math.abs(card.balance), usedPct = card.limit ? Math.min((owed / card.limit) * 100, 100) : 0, due = card.dueDay ? Calc.getDueDate(card.dueDay) : null
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${card.icon} ${card.name}</h2><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${cardId}')" style="width:auto;padding:8px 14px">ชำระ</button></div><div class="sub-scroll"><div style="background:linear-gradient(135deg,${card.color},${card.color}BB);border-radius:20px;padding:24px;color:#fff;margin-bottom:16px"><div style="font-size:12px;opacity:.75;margin-bottom:20px">รอบบัญชีตัดวันที่ ${card.cycleDay || 25} · ชำระวันที่ ${card.dueDay || '-'}</div><div style="font-size:13px;opacity:.7;margin-bottom:6px">ยอดค้างชำระ</div><div style="font-size:38px;font-weight:800;letter-spacing:-1px;margin-bottom:20px">${Calc.fmt(owed)}</div>${card.limit ? `<div style="background:rgba(255,255,255,.2);border-radius:4px;height:7px;overflow:hidden;margin-bottom:8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.85)'};border-radius:4px"></div></div><div style="font-size:12px;opacity:.75">ใช้ ${usedPct.toFixed(0)}% ${due ? `· ครบ ${due.dueStr} (${due.daysLeft}ว.)` : ''}</div>` : ''}</div><div class="card card-pad" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:800">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${period.start} ถึง ${period.end}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${cardId}')" style="width:auto">ตั้งค่า</button></div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px"><div class="mini-stat"><div>คะแนน</div><strong>${rewards.points.toLocaleString('en-US')}</strong></div><div class="mini-stat"><div>Cashback</div><strong>${Calc.fmt(rewards.cashback)}</strong></div></div><div style="font-size:12px;color:var(--muted);margin-top:10px">${benefit.enabled ? 'คำนวณจาก logic ที่ตั้งไว้' : 'ยังไม่เปิดใช้สิทธิประโยชน์บัตรนี้'}</div></div><div style="font-size:14px;font-weight:700;margin-bottom:8px">รายการล่าสุด</div><div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState('📋','ยังไม่มีรายการ','')}</div></div></div>`)
+    setTimeout(() => App._bindTxRows('sub-screen'), 0)
+  },
+  openCCBenefitScreen(cardId) { const b = S.ccBenefits?.[cardId] || { enabled:false, points:{}, cashback:{} }, p = b.points || {}, c = b.cashback || {}; const f = (id,l,v) => `<div class="form-group"><label class="form-label">${l}</label><input class="form-input" type="number" step="0.01" id="${id}" value="${v || ''}" placeholder="0"></div>`; App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${cardId}')">←</button><h2>สิทธิประโยชน์บัตร</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefit('${cardId}')" style="width:auto;padding:8px 14px">บันทึก</button></div><div class="sub-scroll"><div class="benefits-section card"><div class="benefits-toggle-row"><div style="font-weight:800">เปิดใช้การคำนวณ</div><button class="toggle${b.enabled?' on':''}" id="ccb-enabled" onclick="this.classList.toggle('on')"></button></div></div><div class="sec-title">คะแนนสะสม</div><div class="card card-pad">${f('ccb-bahtPerPoint','คะแนนสะสม X บาท = 1 คะแนน',p.bahtPerPoint)}${f('ccb-pointEvery','ทุก X บาทได้ 1 คะแนน',p.pointPerBahtEvery)}${f('ccb-multi','คะแนนเพิ่ม X เท่า',p.multiplier || 1)}${f('ccb-maxTxnPoint','สูงสุด/รายการ (คะแนน)',p.maxPerTxn)}${f('ccb-maxCyclePoint','สูงสุด/รอบบัญชี (คะแนน)',p.maxPerCycle)}</div><div class="sec-title">Cashback</div><div class="card card-pad">${f('ccb-cbPercent','รับเงินคืน X%',c.percent)}${f('ccb-cbMin','ขั้นต่ำ (฿)',c.minSpend)}${f('ccb-cbTier','ขั้นบันไดเริ่มที่ (฿)',c.tierThreshold)}${f('ccb-cbEvery','คิดทุกๆ X บาท (floor division)',c.everyBaht || 1)}${f('ccb-cbMaxTxn','สูงสุด/รายการ (฿)',c.maxPerTxn)}${f('ccb-cbMaxCycle','สูงสุด/รอบบัญชี (฿)',c.maxPerCycle)}</div></div>`) },
+  saveCCBenefit(cardId) { const val = id => parseFloat(document.getElementById(id)?.value) || 0; S.ccBenefits[cardId] = { enabled:document.getElementById('ccb-enabled').classList.contains('on'), points:{ bahtPerPoint:val('ccb-bahtPerPoint'), pointPerBahtEvery:val('ccb-pointEvery'), multiplier:val('ccb-multi') || 1, maxPerTxn:val('ccb-maxTxnPoint'), maxPerCycle:val('ccb-maxCyclePoint') }, cashback:{ percent:val('ccb-cbPercent'), minSpend:val('ccb-cbMin'), tierThreshold:val('ccb-cbTier'), everyBaht:val('ccb-cbEvery') || 1, maxPerTxn:val('ccb-cbMaxTxn'), maxPerCycle:val('ccb-cbMaxCycle') } }; persist(); App.openCCDetail(cardId); toast('บันทึกสิทธิประโยชน์แล้ว','success') },
+  _walletTypeLabel(type) { return ({ bank:'บัญชีธนาคาร', cash:'เงินสด', ewallet:'TrueMoney / E-Wallet', credit:'บัตรเครดิต', saving:'ออมทรัพย์', gold:'ทอง', crypto:'Crypto', fcd:'บัญชี FCD' })[type] || type },
+})
 
 
 Object.assign(App, {
-/* consolidated: removed legacy importData from line 920 */})
+  importData(input) {
+    const file = input.files[0]
+    if (!file) return
+    Storage.importJSON(file, data => {
+      if (confirm('นำเข้าข้อมูลจะแทนที่ข้อมูลปัจจุบัน ยืนยัน?')) {
+        S.transactions = data.transactions || []
+        S.wallets = data.wallets || []
+        S.categories = data.categories || S.categories
+        S.budgets = data.budgets || []
+        S.recurring = data.recurring || []
+        S.merchants = data.merchants || []
+        S.ccBenefits = data.ccBenefits || {}
+        S.incomeBudgets = data.incomeBudgets || []
+  S.marketPrices = data.marketPrices || {}
+  S.settings.hideMoney = !!S.settings.hideMoney
+        persist(); App.render()
+        toast('นำเข้าข้อมูลสำเร็จ', 'success')
+      }
+      input.value = ''
+    }, err => { toast('นำเข้าล้มเหลว: ' + err, 'error'); input.value = '' })
+  },
+})
 
 // ── Init ──────────────────────────────────────────────────────
 function init() {
@@ -519,55 +980,32 @@ init()
 const COLORS10=['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#16A34A','#EA580C','#475569'];
 const EMOJIS30=['🍔','🚗','🛍️','💊','🎬','💡','📚','📦','💼','💻','📈','💰','🏠','☕','🍱','✈️','🧾','🎮','🐶','🎁','💄','🏋️','🚌','🛒','📱','💳','🏦','🥇','₿','💱'];
 const oldDash=App.renderDashboard;
-/* consolidated: removed legacy renderDashboard from line 983 */
+App.renderDashboard=function(){ oldDash.call(App); const h=document.querySelector('#dashboard-content .grad-header'); if(h&&!h.querySelector('.privacy-toggle')) h.insertAdjacentHTML('afterbegin',`<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="privacy-toggle" onclick="App.toggleHideMoney()">${S.settings.hideMoney?'🙈 แสดงตัวเลข':'👁️ ซ่อนตัวเลข'}</button></div>`); if(S.settings.hideMoney) document.querySelectorAll('#dashboard-content .grad-s-value,#dashboard-content .nw-value,#dashboard-content strong').forEach(e=>{if(e.textContent.includes('฿'))e.textContent='฿••••'}); };
 const oldDetail=App._renderAddTxDetail;
-/* consolidated: removed legacy _toggleTxFlag from line 985 */
-/* consolidated: removed legacy _renderAddTxDetail from line 986 */
-const oldOpen=App.openAddTx;/* consolidated: removed legacy openAddTx from line 989 */
-const oldEdit=App.openEditTx;/* consolidated: removed legacy openEditTx from line 990 */
-const oldDup=App.openDuplicateTx;/* consolidated: removed legacy openDuplicateTx from line 991 */
-const oldSave=App.saveTx;/* consolidated: removed legacy saveTx from line 992 */
-const oldRow=App._txRow;/* consolidated: removed legacy _txRow from line 993 */
+App._toggleTxFlag=function(k){S.tx[k]=!S.tx[k];App._renderAddTxDetail()};
+App._renderAddTxDetail=function(){ oldDetail.call(App); const body=document.querySelector('#add-tx-content .sheet-body'); if(!body)return; if(S.tx.type==='transfer'){ const merchant=[...body.querySelectorAll('.form-group')].find(x=>x.textContent.includes('ร้านค้า / ที่มา')); if(merchant)merchant.remove(); const labels=[...body.querySelectorAll('.form-label')]; labels.forEach(l=>{if(l.textContent.trim()==='จาก')l.textContent='โอนจาก'; if(l.textContent.trim()==='ไปยัง')l.textContent='โอนไปยัง';}); }
+ if(S.tx.type==='expense'&&!body.querySelector('.tx-flag-grid')){ const note=[...body.querySelectorAll('.form-group')].find(x=>x.textContent.includes('หมายเหตุ')); note?.insertAdjacentHTML('beforebegin',`<div class="form-group"><label class="form-label">รูปแบบรายการ</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring?' active':''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill${S.tx.isInstallment?' active':''}" onclick="App._toggleTxFlag('isInstallment')">🧾 ผ่อน</button></div></div>${S.tx.isInstallment?`<div class="form-group"><label class="form-label">จำนวนงวดทั้งหมด</label><input class="form-input" type="number" value="${S.tx.installmentMonths||''}" oninput="App._txField('installmentMonths',this.value)"></div>`:''}`); }
+};
+const oldOpen=App.openAddTx;App.openAddTx=function(){oldOpen.call(App);Object.assign(S.tx,{isRecurring:false,isInstallment:false,installmentMonths:''});};
+const oldEdit=App.openEditTx;App.openEditTx=function(id){const tx=S.transactions.find(t=>t.id===id);oldEdit.call(App,id);if(tx){Object.assign(S.tx,{isRecurring:!!tx.isRecurring,isInstallment:!!tx.isInstallment,installmentMonths:tx.installmentMonths||''});App._renderAddTxDetail();}};
+const oldDup=App.openDuplicateTx;App.openDuplicateTx=function(id){const tx=S.transactions.find(t=>t.id===id);oldDup.call(App,id);if(tx)Object.assign(S.tx,{isRecurring:!!tx.isRecurring,isInstallment:!!tx.isInstallment,installmentMonths:tx.installmentMonths||''});};
+const oldSave=App.saveTx;App.saveTx=function(){ const before=S.transactions.length; oldSave.call(App); const tx=S.transactions[0]; if(tx&&S.transactions.length>=before){tx.isRecurring=!!S.tx.isRecurring;tx.isInstallment=!!S.tx.isInstallment;tx.installmentMonths=tx.isInstallment?(parseInt(S.tx.installmentMonths)||0):undefined;tx.installmentNo=tx.isInstallment?1:undefined; if(tx.type==='transfer')tx.merchant=''; persist(); }};
+const oldRow=App._txRow;App._txRow=function(tx){ if(tx.type==='transfer'){ const w=S.wallets.find(x=>x.id===tx.walletId),to=S.wallets.find(x=>x.id===tx.toWalletId); tx={...tx,merchant:`${w?.name||'ไม่ระบุ'} → ${to?.name||'ไม่ระบุ'}`,note:tx.note||'โอนเงิน'}; } let html=oldRow.call(App,tx); if(S.settings.hideMoney)html=html.replace(/[-+↔ ]?฿[\d,\.]+/g,'฿••••'); return html; };
 Calc.getCardRewards=function(txns,b){const pe=!!(b?.points?.enabled||b?.enabled),ce=!!(b?.cashback?.enabled||b?.enabled),p=b?.points||{},c=b?.cashback||{};let points=0,cashback=0;(txns||[]).forEach(t=>{if(pe){let pt=0;if(p.bahtPerPoint)pt+=Math.floor(t.amount/p.bahtPerPoint);if(p.pointPerBahtEvery)pt+=Math.floor(t.amount/p.pointPerBahtEvery);pt*=p.multiplier||1;if(p.maxPerTxn)pt=Math.min(pt,p.maxPerTxn);points+=pt}if(ce&&(!c.minSpend||t.amount>=c.minSpend)){let base=c.everyBaht?Math.floor(t.amount/c.everyBaht)*c.everyBaht:t.amount,cb=base*((c.percent||0)/100);if(c.tierThreshold&&t.amount<c.tierThreshold)cb=0;if(c.maxPerTxn)cb=Math.min(cb,c.maxPerTxn);cashback+=cb}});if(p.maxPerCycle)points=Math.min(points,p.maxPerCycle);if(c.maxPerCycle)cashback=Math.min(cashback,c.maxPerCycle);return{points:Math.floor(points),cashback:Math.round(cashback*100)/100}};
 App._benefit=id=>S.ccBenefits?.[id]||{points:{},cashback:{}};App._rewardForTx=tx=>{const card=S.wallets.find(w=>w.id===tx.walletId&&w.type==='credit');return card&&tx.type==='expense'?Calc.getCardRewards([tx],App._benefit(card.id)):{points:0,cashback:0}};
-const oldTxDetail=App._renderTxDetail;/* consolidated: removed legacy _renderTxDetail from line 996 */
-/* consolidated: removed legacy openCCBenefitScreen from line 997 */
+const oldTxDetail=App._renderTxDetail;App._renderTxDetail=function(){oldTxDetail.call(App);const tx=S.transactions.find(t=>t.id===S.selectedTxId),box=document.getElementById('tx-detail-content');if(!tx||!box)return;const r=App._rewardForTx(tx);let extra='';if(tx.isRecurring)extra+='<div class="detail-row"><span class="detail-label">รายการประจำ</span><span class="detail-value">เปิดใช้</span></div>';if(tx.isInstallment)extra+=`<div class="detail-row"><span class="detail-label">ผ่อนชำระ</span><span class="detail-value">งวด ${tx.installmentNo||1}/${tx.installmentMonths||'?'}</span></div>`;if(r.points||r.cashback)extra+=`<div class="detail-row"><span class="detail-label">สิทธิประโยชน์โดยประมาณ</span><span class="detail-value">${r.points?'+'+r.points.toLocaleString('en-US')+' pt':''}${r.points&&r.cashback?' · ':''}${r.cashback?'+'+Calc.fmt(r.cashback):''}</span></div>`;box.innerHTML=box.innerHTML.replace('<div class="detail-row"><span class="detail-label">ประเภท</span>',extra+'<div class="detail-row"><span class="detail-label">ประเภท</span>')};
+App.openCCBenefitScreen=function(id){const b=App._benefit(id),p=b.points||{},c=b.cashback||{},f=(i,l,v)=>`<div class="form-group"><label class="form-label">${l}</label><input class="form-input" type="number" step="0.01" id="${i}" value="${v||''}"></div>`;App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${id}')">←</button><h2>สิทธิประโยชน์บัตร</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefit('${id}')" style="width:auto">บันทึก</button></div><div class="sub-scroll"><div class="sec-title">คะแนนสะสม</div><div class="card card-pad"><div class="benefits-toggle-row"><b>เปิดคะแนนสะสม</b><button class="toggle${(p.enabled||b.enabled)?' on':''}" id="ccb-points-enabled" onclick="this.classList.toggle('on')"></button></div>${f('ccb-bahtPerPoint','คะแนนสะสม X บาท = 1 คะแนน',p.bahtPerPoint)}${f('ccb-pointEvery','ทุก X บาทได้ 1 คะแนน',p.pointPerBahtEvery)}${f('ccb-multi','คะแนนเพิ่ม X เท่า',p.multiplier||1)}${f('ccb-maxTxnPoint','สูงสุด/รายการ (คะแนน)',p.maxPerTxn)}${f('ccb-maxCyclePoint','สูงสุด/รอบบัญชี (คะแนน)',p.maxPerCycle)}</div><div class="sec-title">Cashback</div><div class="card card-pad"><div class="benefits-toggle-row"><b>เปิด Cashback</b><button class="toggle${(c.enabled||b.enabled)?' on':''}" id="ccb-cash-enabled" onclick="this.classList.toggle('on')"></button></div>${f('ccb-cbPercent','รับเงินคืน X%',c.percent)}${f('ccb-cbMin','ขั้นต่ำ (฿)',c.minSpend)}${f('ccb-cbTier','ขั้นบันไดเริ่มที่ (฿)',c.tierThreshold)}${f('ccb-cbEvery','คิดทุกๆ X บาท',c.everyBaht||1)}${f('ccb-cbMaxTxn','สูงสุด/รายการ (฿)',c.maxPerTxn)}${f('ccb-cbMaxCycle','สูงสุด/รอบบัญชี (฿)',c.maxPerCycle)}</div></div>`)};
 App.saveCCBenefit=function(id){const v=i=>parseFloat(document.getElementById(i)?.value)||0;S.ccBenefits[id]={enabled:false,points:{enabled:document.getElementById('ccb-points-enabled').classList.contains('on'),bahtPerPoint:v('ccb-bahtPerPoint'),pointPerBahtEvery:v('ccb-pointEvery'),multiplier:v('ccb-multi')||1,maxPerTxn:v('ccb-maxTxnPoint'),maxPerCycle:v('ccb-maxCyclePoint')},cashback:{enabled:document.getElementById('ccb-cash-enabled').classList.contains('on'),percent:v('ccb-cbPercent'),minSpend:v('ccb-cbMin'),tierThreshold:v('ccb-cbTier'),everyBaht:v('ccb-cbEvery')||1,maxPerTxn:v('ccb-cbMaxTxn'),maxPerCycle:v('ccb-cbMaxCycle')}};persist();App.openCCDetail(id);toast('บันทึกสิทธิประโยชน์แล้ว','success')};
-const oldCC=App.openCCDetail;/* consolidated: removed legacy openCCDetail from line 999 */
-/* consolidated: removed legacy _investmentUnitPriceTHB from line 1000 *//* consolidated: removed legacy _investmentValueTHB from line 1000 */
-
-// Early investment helpers are required before later market-price patches load.
-// The final v45 block below will enhance these helpers, but startup must not crash.
-App._investmentUnitPriceTHB = App._investmentUnitPriceTHB || function earlyInvestmentUnitPriceTHB(w) {
-  if (!w) return 0
-  const p = S.marketPrices || {}
-  if (w.type === 'gold') return Number(p.thaiGold?.jewelryBuy || p.auroraGold?.jewelryBuy || w.manualPrice || 0)
-  if (w.type === 'crypto') {
-    const sym = String(w.symbol || '').trim().toUpperCase()
-    const id = (typeof App._cryptoId === 'function' && App._cryptoId(w)) || sym.toLowerCase()
-    return Number((id && p.crypto?.[id]?.thb) || w.manualPrice || 0)
-  }
-  if (w.type === 'fcd') {
-    const cur = String(w.currency || w.symbol || 'USD').toUpperCase()
-    const thb = p.fx?.rates?.THB
-    return Number((cur === 'THB' ? 1 : cur === 'USD' ? thb : (thb && p.fx?.rates?.[cur] ? thb / p.fx.rates[cur] : 0)) || w.manualPrice || 0)
-  }
-  return Number(w.manualPrice || 0)
-}
-App._investmentValueTHB = App._investmentValueTHB || function earlyInvestmentValueTHB(w) {
-  return ['gold','crypto','fcd'].includes(w?.type)
-    ? ((Number(w.units || 0) * App._investmentUnitPriceTHB(w)) || Number(w.balance || 0))
-    : Number(w?.balance || 0)
-}
-
-const oldWalletCard=App._walletCard;/* consolidated: removed legacy _walletCard from line 1001 */
-/* consolidated: removed legacy openWalletDetail from line 1002 */
-const oldWalletForm=App.openWalletForm;/* consolidated: removed legacy openWalletForm from line 1003 */
-const oldSaveWallet=App.saveWallet;/* consolidated: removed legacy saveWallet from line 1004 */
-const oldReports=App.renderReports;/* consolidated: removed legacy renderReports from line 1005 */
-/* consolidated: removed legacy toggleEmojiPanel from line 1006 */App.pickEmoji=(p,e)=>{document.getElementById(p+'-emoji').value=e;document.getElementById(p+'-emoji-preview').textContent=e;App.toggleEmojiPanel(p)};/* consolidated: removed legacy customEmoji from line 1006 *//* consolidated: removed legacy pickColor from line 1006 */
-const oldCatForm=App.openCategoryForm;/* consolidated: removed legacy openCategoryForm from line 1007 */
-const oldMerForm=App.openMerchantForm;/* consolidated: removed legacy openMerchantForm from line 1008 */
+const oldCC=App.openCCDetail;App.openCCDetail=function(id){oldCC.call(App,id);setTimeout(()=>{const body=document.querySelector('#sub-screen .sub-scroll');if(!body)return;const inst=S.transactions.filter(t=>t.walletId===id&&t.isInstallment);body.insertAdjacentHTML('beforeend',`<div style="font-size:14px;font-weight:700;margin:14px 0 8px">ผ่อนชำระ</div><div class="card"><div style="padding:0 16px">${inst.length?inst.map(t=>{const c=App._findCat(t.categoryId);return`<div class="list-item"><div class="list-item-icon" style="background:${c?.color||'#64748B'}20">🧾</div><div class="list-item-info"><div class="list-item-name">${t.merchant||t.note||c?.label||'ผ่อนชำระ'}</div><div class="list-item-sub">งวด ${t.installmentNo||1}/${t.installmentMonths||'?'} · ${c?.icon||''} ${c?.label||''}</div></div><b>${Calc.fmt(t.amount)}</b></div>`}).join(''):App._emptyState('🧾','ยังไม่มีรายการผ่อน','')}</div></div>`);},0)};
+App._investmentUnitPriceTHB=function(w){const p=S.marketPrices||{};if(w.type==='crypto'){const map={BTC:'bitcoin',ETH:'ethereum',BNB:'binancecoin',USDT:'tether'},id=map[(w.symbol||'').toUpperCase()];return Number((id&&p.crypto?.[id]?.thb)||w.manualPrice||0)}if(w.type==='fcd'){const cur=(w.currency||w.symbol||'USD').toUpperCase(),thb=p.fx?.rates?.THB;return Number((cur==='USD'?thb:(thb&&p.fx?.rates?.[cur]?thb/p.fx.rates[cur]:0))||w.manualPrice||0)}if(w.type==='gold'){const line=(p.goldCsv||'').split('\n')[1],usd=line?parseFloat(line.split(',').at(-2)):0,fx=p.fx?.rates?.THB||35;return Number((usd&&fx?usd*fx:0)||w.manualPrice||0)}return 0};App._investmentValueTHB=w=>['gold','crypto','fcd'].includes(w.type)?((Number(w.units||0)*App._investmentUnitPriceTHB(w))||Number(w.balance||0)):Number(w.balance||0);
+const oldWalletCard=App._walletCard;App._walletCard=function(w){let html=oldWalletCard.call(App,w);if(['gold','crypto','fcd'].includes(w.type))html=html.replace(/onclick="App.openWalletForm\('([^']+)'\)"/,`onclick="App.openWalletDetail('$1')"`).replace('<span class="invest-badge">Market</span>',`<button class="wc-pay-btn" onclick="event.stopPropagation();App.openWalletForm('${w.id}')">แก้ไข</button>`).replace(/<div class="wc-balance">[^<]+<\/div>/,`<div class="wc-balance">${Calc.fmt(App._investmentValueTHB(w))}</div><div class="wc-prog-info" style="margin-top:10px"><span>จำนวน ${Number(w.units||0).toLocaleString('en-US')} ${w.symbol||''}</span><span>${Calc.fmt(App._investmentUnitPriceTHB(w))}/หน่วย</span></div>`);return html};
+App.openWalletDetail=function(id){const w=S.wallets.find(x=>x.id===id),tx=S.transactions.filter(t=>t.walletId===id||t.toWalletId===id).sort((a,b)=>b.date.localeCompare(a.date));if(!w)return;App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${w.icon} ${w.name}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${w.id}')" style="width:auto">แก้ไข</button></div><div class="sub-scroll"><div class="card card-pad nw-card"><div class="nw-label">ยอด / มูลค่าปัจจุบัน</div><div class="nw-value">${Calc.fmt(App._investmentValueTHB(w))}</div></div><div class="chips" style="padding:12px 0"><button class="chip active">ทั้งหมด</button><button class="chip">เดือนนี้</button><button class="chip">3 เดือน</button></div><div class="card"><div style="padding:0 16px">${tx.length?tx.map(t=>App._txRow(t)).join(''):App._emptyState('📋','ไม่พบรายการ','')}</div></div></div>`);setTimeout(()=>App._bindTxRows('sub-screen'),0)};
+const oldWalletForm=App.openWalletForm;App.openWalletForm=function(id){oldWalletForm.call(App,id);const w=id?S.wallets.find(x=>x.id===id):null,inv=document.getElementById('wf-invest-fields');if(inv&&!inv.querySelector('#wf-units'))inv.insertAdjacentHTML('beforeend',`<div class="form-group"><label class="form-label">จำนวน Asset</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${w?.units||''}"></div><div class="form-group"><label class="form-label">ราคาต่อหน่วยสำรอง (บาท)</label><input class="form-input" type="number" id="wf-manual-price" value="${w?.manualPrice||''}"></div>`)};
+const oldSaveWallet=App.saveWallet;App.saveWallet=function(){const id=S.editingWalletId,type=document.getElementById('wf-type')?.value,units=parseFloat(document.getElementById('wf-units')?.value)||0,manualPrice=parseFloat(document.getElementById('wf-manual-price')?.value)||0;oldSaveWallet.call(App);const w=id?S.wallets.find(x=>x.id===id):S.wallets.at(-1);if(w&&['gold','crypto','fcd'].includes(type)){w.units=units;w.manualPrice=manualPrice;w.balance=units*manualPrice;persist();App.render();}};
+const oldReports=App.renderReports;App.renderReports=function(){oldReports.call(App);const stats=Calc.getMonthlyStats(S.transactions,S.rptMonth),prev=Calc.getMonthlyStats(S.transactions,Calc.getMonths(2)[1]),diff=prev.expense?((stats.expense-prev.expense)/prev.expense*100):0,top=Object.entries(stats.byCategory||{}).sort((a,b)=>b[1]-a[1])[0],cat=top&&App._findCat(top[0]);document.getElementById('reports-content')?.insertAdjacentHTML('afterbegin',`<div class="sec-title">Financial Insights</div><div class="card card-pad" style="margin-bottom:12px"><div class="insight-row" style="background:rgba(37,99,235,.08)"><div class="insight-icon">📈</div><div><div class="insight-title">เทียบเดือนก่อน</div><div class="insight-body">รายจ่าย${diff>=0?'เพิ่มขึ้น':'ลดลง'} ${Math.abs(diff).toFixed(0)}%</div></div></div><div class="insight-row" style="background:rgba(5,150,105,.08)"><div class="insight-icon">💡</div><div><div class="insight-title">คำแนะนำ</div><div class="insight-body">${stats.net>=0?'กระแสเงินสดเป็นบวก แนะนำกันเงินส่วนเกินไปออม/ลงทุน':'กระแสเงินสดติดลบ แนะนำลดรายจ่ายไม่จำเป็นและตั้งเพดานรายสัปดาห์'}${top?` · หมวดสูงสุดคือ ${cat?.label||'ไม่ระบุ'}`:''}</div></div></div></div>`)};
+App.toggleEmojiPanel=p=>{const e=document.getElementById(p+'-emoji-panel');if(e)e.style.display=e.style.display==='grid'?'none':'grid'};App.pickEmoji=(p,e)=>{document.getElementById(p+'-emoji').value=e;document.getElementById(p+'-emoji-preview').textContent=e;App.toggleEmojiPanel(p)};App.customEmoji=p=>{const v=prompt('ใส่อีโมจิที่ต้องการ');if(v)App.pickEmoji(p,v.trim())};App.pickColor=(p,c)=>document.getElementById(p+'-color').value=c;
+const oldCatForm=App.openCategoryForm;App.openCategoryForm=function(kind,id){oldCatForm.call(App,kind,id);setTimeout(()=>{const cat=id?S.categories[kind].find(c=>c.id===id):null,scroll=document.querySelector('#sub-screen .sub-scroll');if(!scroll)return;scroll.innerHTML=scroll.innerHTML.replace(/<input class="form-input" id="cat-icon"[^>]*>/,`<button class="emoji-current" onclick="App.toggleEmojiPanel('cat')"><span id="cat-emoji-preview">${cat?.icon||'📦'}</span><small>แตะเพื่อเปลี่ยน</small></button><input type="hidden" id="cat-emoji" value="${cat?.icon||'📦'}"><div class="emoji-grid" id="cat-emoji-panel">${EMOJIS30.map(e=>`<button onclick="App.pickEmoji('cat','${e}')">${e}</button>`).join('')}<button onclick="App.customEmoji('cat')">＋</button></div>`).replace(/<input class="form-input" id="cat-color" type="color"[^>]*>/,`<div class="color-row">${COLORS10.map(c=>`<div class="color-dot" style="background:${c}" onclick="App.pickColor('cat','${c}')"></div>`).join('')}<input class="color-custom" type="color" onchange="App.pickColor('cat',this.value)"></div><input type="hidden" id="cat-color" value="${cat?.color||COLORS10[0]}">`);},0)};
+const oldMerForm=App.openMerchantForm;App.openMerchantForm=function(id){oldMerForm.call(App,id);setTimeout(()=>{const m=id?S.merchants.find(x=>x.id===id):null,scroll=document.querySelector('#sub-screen .sub-scroll');if(!scroll)return;scroll.innerHTML=scroll.innerHTML.replace(/<input class="form-input" id="mer-emoji"[^>]*>/,`<button class="emoji-current" onclick="App.toggleEmojiPanel('mer')"><span id="mer-emoji-preview">${m?.emoji||'🏪'}</span><small>แตะเพื่อเปลี่ยน</small></button><input type="hidden" id="mer-emoji" value="${m?.emoji||'🏪'}"><div class="emoji-grid" id="mer-emoji-panel">${EMOJIS30.map(e=>`<button onclick="App.pickEmoji('mer','${e}')">${e}</button>`).join('')}<button onclick="App.customEmoji('mer')">＋</button></div>`).replace(/<input class="form-input" id="mer-color" type="color"[^>]*>/,`<div class="color-row">${COLORS10.map(c=>`<div class="color-dot" style="background:${c}" onclick="App.pickColor('mer','${c}')"></div>`).join('')}<input class="color-custom" type="color" onchange="App.pickColor('mer',this.value)"></div><input type="hidden" id="mer-color" value="${m?.color||COLORS10[0]}">`);},0)};
 App.render();
 })();
 
@@ -607,7 +1045,34 @@ App.render();
     }
   }
 
-  /* consolidated: removed legacy _walletCard from line 1048 */
+  App._walletCard = function(w) {
+    const isCC = w.type === 'credit'
+    const inv = isInvest(w)
+    const rawValue = App._walletValueTHB(w)
+    const owed = Math.abs(Number(w.balance || 0))
+    const displayValue = isCC ? owed : rawValue
+    const usedPct = isCC && w.limit ? Math.min((owed / w.limit) * 100, 100) : 0
+    const due = isCC && w.dueDay ? Calc.getDueDate(w.dueDay) : null
+    const avail = isCC && w.limit ? w.limit - owed : 0
+    const marketText = inv ? App._marketText(w) : ''
+    const unitPrice = inv ? App._investmentUnitPriceTHB(w) : 0
+    const detailAction = isCC ? `App.openCCDetail('${w.id}')` : `App.openWalletDetail('${w.id}')`
+    const editBtn = `<button class="wc-pay-btn" onclick="event.stopPropagation();App.openWalletForm('${w.id}')">แก้ไข</button>`
+    const payBtn = isCC ? `<button class="wc-pay-btn" onclick="event.stopPropagation();App.openCCPay('${w.id}')">ชำระ</button>` : ''
+
+    return `<div class="wallet-card" style="background:linear-gradient(135deg,${w.color},${w.color}BB)" onclick="${detailAction}">
+      <div class="wc-header">
+        <div>
+          <div class="wc-name">${w.icon} ${w.name}</div>
+          <div class="wc-type">${App._walletTypeLabel(w.type)}${marketText ? ` · ${marketText}` : ''}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">${payBtn}${editBtn}</div>
+      </div>
+      <div class="wc-balance">${isCC ? '-' : ''}${Calc.fmt(displayValue)}</div>
+      ${inv ? `<div class="wc-prog-info" style="margin-top:10px"><span>จำนวน ${Number(w.units || 0).toLocaleString('en-US')} ${w.symbol || ''}</span><span>${Calc.fmt(unitPrice)}/หน่วย</span></div>` : ''}
+      ${isCC && w.limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${usedPct}%;background:${usedPct > 80 ? 'rgba(252,165,165,.9)' : 'rgba(255,255,255,.8)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${usedPct.toFixed(0)}% · คงเหลือ ${Calc.fmt(avail)}</span>${due ? `<span>ครบ ${due.dueStr} (${due.daysLeft}ว.)</span>` : ''}</div></div>` : ''}
+    </div>`
+  }
 
   App._filterWalletTx = function(walletId) {
     const range = S.walletTxRange || 'all'
@@ -635,11 +1100,66 @@ App.render();
     App.openWalletDetail(walletId)
   }
 
-  /* consolidated: removed legacy openWalletDetail from line 1103 */
+  App.openWalletDetail = function(id) {
+    const w = S.wallets.find(x => x.id === id)
+    if (!w) return
+    S.walletDetailId = id
+    S.walletTxRange ||= 'all'
+    const tx = App._filterWalletTx(id)
+    const inv = isInvest(w)
+    const unitPrice = inv ? App._investmentUnitPriceTHB(w) : 0
+    const chips = [['all','ทั้งหมด'],['month','เดือนนี้'],['3m','3 เดือน'],['year','ปีนี้'],['custom','กำหนดเอง']]
+      .map(([k,l]) => `<button class="chip${S.walletTxRange===k?' active':''}" onclick="App.setWalletTxRange('${k}','${id}')">${l}</button>`).join('')
+    const custom = S.walletTxRange === 'custom'
+      ? `<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin:0 0 12px"><input class="form-input" type="date" id="wallet-filter-start" value="${S.walletTxStart || ''}"><input class="form-input" type="date" id="wallet-filter-end" value="${S.walletTxEnd || ''}"><button class="btn btn-primary btn-sm" onclick="App.setWalletTxCustom('${id}')" style="width:auto">ดู</button></div>`
+      : ''
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${w.icon} ${w.name}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${w.id}')" style="width:auto">แก้ไข</button></div>
+      <div class="sub-scroll wallet-detail-screen" data-wallet-id="${id}">
+        <div class="card card-pad nw-card">
+          <div class="nw-label">${inv ? 'มูลค่าสินทรัพย์ตามราคาปัจจุบัน/สำรอง' : 'ยอดคงเหลือ'}</div>
+          <div class="nw-value ${App._walletValueTHB(w) >= 0 ? 'c-income' : 'c-expense'}">${Calc.fmt(Math.abs(App._walletValueTHB(w)))}</div>
+          ${inv ? `<div class="nw-detail"><span class="nw-item">จำนวน <strong>${Number(w.units || 0).toLocaleString('en-US')} ${w.symbol || ''}</strong></span><span class="nw-item">ราคา/หน่วย <strong>${Calc.fmt(unitPrice)}</strong></span></div>` : ''}
+        </div>
+        <div class="chips" style="padding:12px 0">${chips}</div>
+        ${custom}
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px">รายการในกระเป๋านี้</div>
+        <div class="card"><div style="padding:0 16px">${tx.length ? tx.map(t => App._txRow(t)).join('') : App._emptyState('📋','ไม่พบรายการ','ลองเปลี่ยนช่วงเวลา')}</div></div>
+      </div>`)
+    setTimeout(() => App._bindTxRows('sub-screen'), 0)
+  }
 
-  /* consolidated: removed legacy _txDetailRowsHtml from line 1131 */
+  App._txDetailRowsHtml = function(tx) {
+    const cat = App._findCat(tx.categoryId)
+    const wallet = S.wallets.find(w => w.id === tx.walletId)
+    const toWal = S.wallets.find(w => w.id === tx.toWalletId)
+    const r = App._rewardForTx(tx)
+    const amtColor = tx.type === 'income' ? 'var(--income)' : tx.type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
+    const transferLine = tx.type === 'transfer' && wallet && toWal ? `${wallet.icon} ${wallet.name} → ${toWal.icon} ${toWal.name}` : ''
+    return `<div style="text-align:center;margin-bottom:20px"><div style="font-size:48px;font-weight:800;color:${amtColor}">${tx.type==='income'?'+':tx.type==='expense'?'-':''}${Calc.fmt(tx.amount)}</div><div style="font-size:14px;color:var(--muted);margin-top:6px">${Calc.labelDate(tx.date)}</div></div>
+      <div>
+        ${transferLine ? `<div class="detail-row"><span class="detail-label">รายการโอน</span><span class="detail-value">${transferLine}</span></div>` : ''}
+        ${cat ? `<div class="detail-row"><span class="detail-label">หมวดหมู่</span><span class="detail-value">${cat.icon} ${cat.label}</span></div>` : ''}
+        ${wallet ? `<div class="detail-row"><span class="detail-label">กระเป๋าเงิน</span><span class="detail-value">${wallet.icon} ${wallet.name}</span></div>` : ''}
+        ${toWal && tx.type !== 'transfer' ? `<div class="detail-row"><span class="detail-label">ไปยัง</span><span class="detail-value">${toWal.icon} ${toWal.name}</span></div>` : ''}
+        ${tx.merchant ? `<div class="detail-row"><span class="detail-label">ร้านค้า</span><span class="detail-value">${tx.merchant}</span></div>` : ''}
+        ${tx.note ? `<div class="detail-row"><span class="detail-label">หมายเหตุ</span><span class="detail-value">${tx.note}</span></div>` : ''}
+        ${tx.isRecurring ? `<div class="detail-row"><span class="detail-label">รายการประจำ</span><span class="detail-value">เปิดใช้</span></div>` : ''}
+        ${tx.isInstallment ? `<div class="detail-row"><span class="detail-label">ผ่อนชำระ</span><span class="detail-value">งวด ${tx.installmentNo || 1}/${tx.installmentMonths || '?'}</span></div>` : ''}
+        ${(r.points || r.cashback) ? `<div class="detail-row"><span class="detail-label">สิทธิประโยชน์โดยประมาณ</span><span class="detail-value">${r.points ? '+' + r.points.toLocaleString('en-US') + ' pt' : ''}${r.points && r.cashback ? ' · ' : ''}${r.cashback ? '+' + Calc.fmt(r.cashback) : ''}</span></div>` : ''}
+        <div class="detail-row"><span class="detail-label">ประเภท</span><span class="detail-value">${App._txTypeLabel(tx.type)}</span></div>
+      </div>`
+  }
 
-  /* consolidated: removed legacy openTxDetailSub from line 1153 */
+  App.openTxDetailSub = function(id, backType, backId) {
+    const tx = S.transactions.find(t => t.id === id)
+    if (!tx) return
+    const back = backType === 'cc' ? `App.openCCDetail('${backId}')` : backType === 'wallet' ? `App.openWalletDetail('${backId}')` : 'App.closeSubScreen()'
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>รายละเอียดรายการ</h2></div>
+      <div class="sub-scroll tx-detail-sub-screen">
+        ${App._txDetailRowsHtml(tx)}
+        <div class="tx-action-grid"><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openEditTx('${tx.id}')">✏️ แก้ไข</button><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openDuplicateTx('${tx.id}')">⧉ Duplicate</button></div>
+      </div>`)
+  }
 
   App._bindTxRows = function(containerId) {
     const root = document.getElementById(containerId)
@@ -655,13 +1175,62 @@ App.render();
     })
   }
 
-  /* consolidated: removed legacy openCCDetail from line 1178 */
+  App.openCCDetail = function(cardId) {
+    const card = S.wallets.find(w => w.id === cardId)
+    if (!card) return
+    const benefit = App._benefit(cardId)
+    const period = Calc.getStatementPeriod(card.cycleDay || 25)
+    const txns = S.transactions.filter(t => t.walletId === cardId).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 20)
+    const cycleTxns = txns.filter(t => t.type === 'expense' && t.date >= period.start && t.date <= period.end)
+    const rewards = Calc.getCardRewards(cycleTxns, benefit)
+    const installments = S.transactions.filter(t => t.walletId === cardId && t.isInstallment).sort((a,b) => b.date.localeCompare(a.date))
+    const owed = Math.abs(card.balance || 0)
+    const usedPct = card.limit ? Math.min((owed / card.limit) * 100, 100) : 0
+    const due = card.dueDay ? Calc.getDueDate(card.dueDay) : null
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${card.icon} ${card.name}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${cardId}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${cardId}')" style="width:auto">ชำระ</button></div></div>
+      <div class="sub-scroll cc-detail-screen" data-card-id="${cardId}">
+        <div style="background:linear-gradient(135deg,${card.color},${card.color}BB);border-radius:20px;padding:24px;color:#fff;margin-bottom:16px">
+          <div style="font-size:12px;opacity:.75;margin-bottom:20px">รอบบัญชีตัดวันที่ ${card.cycleDay || 25} · ชำระวันที่ ${card.dueDay || '-'}</div>
+          <div style="font-size:13px;opacity:.7;margin-bottom:6px">ยอดค้างชำระ</div>
+          <div style="font-size:38px;font-weight:800;letter-spacing:-1px;margin-bottom:20px">${Calc.fmt(owed)}</div>
+          ${card.limit ? `<div style="background:rgba(255,255,255,.2);border-radius:4px;height:7px;overflow:hidden;margin-bottom:8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.85)'};border-radius:4px"></div></div><div style="font-size:12px;opacity:.75">ใช้ ${usedPct.toFixed(0)}%${due ? ` · ครบ ${due.dueStr} (${due.daysLeft}ว.)` : ''}</div>` : ''}
+        </div>
+        <div class="card card-pad" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:800">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${period.start} ถึง ${period.end}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${cardId}')" style="width:auto">ตั้งค่า</button></div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px"><div class="mini-stat"><div>คะแนน</div><strong>${rewards.points.toLocaleString('en-US')}</strong></div><div class="mini-stat"><div>Cashback</div><strong>${Calc.fmt(rewards.cashback)}</strong></div></div><div style="font-size:12px;color:var(--muted);margin-top:10px">แตะรายการล่าสุดเพื่อดูสิทธิประโยชน์รายรายการ</div></div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px">ผ่อนชำระ</div>
+        <div class="card" style="margin-bottom:14px"><div style="padding:0 16px">${installments.length ? installments.map(t => { const c = App._findCat(t.categoryId); return `<div class="list-item"><div class="list-item-icon" style="background:${c?.color || '#64748B'}20">🧾</div><div class="list-item-info"><div class="list-item-name">${t.merchant || t.note || c?.label || 'ผ่อนชำระ'}</div><div class="list-item-sub">งวด ${t.installmentNo || 1}/${t.installmentMonths || '?'} · ${c?.icon || ''} ${c?.label || ''}</div></div><b>${Calc.fmt(t.amount)}</b></div>` }).join('') : App._emptyState('🧾','ยังไม่มีรายการผ่อน','')}</div></div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px">รายการล่าสุดของบัตรนี้</div>
+        <div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState('📋','ยังไม่มีรายการ','')}</div></div>
+      </div>`)
+    setTimeout(() => App._bindTxRows('sub-screen'), 0)
+  }
 
   const previousOpenWalletForm = App.openWalletForm
-  /* consolidated: removed legacy openWalletForm from line 1208 */
+  App.openWalletForm = function(id) {
+    previousOpenWalletForm.call(App, id)
+    const w = id ? S.wallets.find(x => x.id === id) : null
+    const inv = document.getElementById('wf-invest-fields')
+    if (!inv) return
+    if (!inv.querySelector('#wf-units')) {
+      inv.insertAdjacentHTML('beforeend', `<div class="form-group"><label class="form-label">จำนวน Asset</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${w?.units || ''}" placeholder="เช่น 0.05, 2.5, 1000"></div><div class="form-group"><label class="form-label">ราคาต่อหน่วยสำรอง (บาท)</label><input class="form-input" type="number" step="0.01" id="wf-manual-price" value="${w?.manualPrice || ''}" placeholder="ใช้เมื่อดึงราคาไม่ได้"></div><div style="font-size:12px;color:var(--muted);margin-top:-8px;margin-bottom:12px">ระบบจะใช้ราคาจาก realtime ก่อน ถ้าดึงไม่ได้จะใช้ราคาสำรองนี้</div>`)
+    }
+  }
 
   const previousSaveWallet = App.saveWallet
-  /* consolidated: removed legacy saveWallet from line 1219 */
+  App.saveWallet = function() {
+    const idBefore = S.editingWalletId
+    const type = document.getElementById('wf-type')?.value
+    const units = parseFloat(document.getElementById('wf-units')?.value) || 0
+    const manualPrice = parseFloat(document.getElementById('wf-manual-price')?.value) || 0
+    previousSaveWallet.call(App)
+    const w = idBefore ? S.wallets.find(x => x.id === idBefore) : S.wallets[S.wallets.length - 1]
+    if (w && INVEST_TYPES.includes(type)) {
+      w.units = units
+      w.manualPrice = manualPrice
+      w.balance = units * App._investmentUnitPriceTHB(w)
+      persist()
+      App.render()
+    }
+  }
 
   App.render()
 })();
@@ -697,7 +1266,7 @@ App.render();
   App._esc = esc
   App._fmtMoney = fmt
   App._fmtSignedMoney = signedFmt
-  /* consolidated: removed legacy _walletTypeLabel from line 1269 */
+  App._walletTypeLabel = type => walletTypeLabelMap[type] || type
   App._emptyState = function(icon, title, sub) {
     return `<div class="empty"><div class="empty-icon">${esc(icon)}</div><div class="empty-title">${esc(title)}</div>${sub ? `<div class="empty-sub">${esc(sub)}</div>` : ''}</div>`
   }
@@ -706,13 +1275,154 @@ App.render();
     return `<div class="section-header"><h3>${esc(title)}</h3>${actionLabel ? `<button type="button" onclick="${action}">${esc(actionLabel)}</button>` : ''}</div>`
   }
 
-  /* consolidated: removed legacy renderDashboard from line 1278 */
+  App.renderDashboard = function() {
+    App._ensureV2State?.()
+    const stats = Calc.getMonthlyStats(S.transactions, THIS_MONTH)
+    const nw = Calc.getNetWorth(S.wallets)
+    const expBudgets = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, THIS_MONTH)
+    const incBudgets = Calc.getIncomeBudgetProgress ? Calc.getIncomeBudgetProgress(S.transactions, S.incomeBudgets, S.categories, THIS_MONTH) : []
+    const recent = [...S.transactions].sort((a,b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5)
+    const transfers = S.transactions.filter(t => t.type === 'transfer' && (t.date || '').startsWith(THIS_MONTH)).reduce((s,t) => s + Number(t.amount || 0), 0)
+    const savingsPct = stats.income > 0 ? clampPct(stats.savingsRate) : 0
+    const grad = `linear-gradient(135deg, ${S.settings.accentColor || '#2563EB'}, color-mix(in srgb, ${S.settings.accentColor || '#2563EB'} 74%, #0F172A))`
 
-  /* consolidated: removed legacy _txRow from line 1361 */
+    const alerts = S.wallets
+      .filter(w => w.type === 'credit' && Math.abs(w.balance || 0) > 0 && w.dueDay)
+      .map(w => ({...w, owed: Math.abs(w.balance || 0), ...Calc.getDueDate(w.dueDay)}))
+      .filter(w => w.daysLeft >= 0 && w.daysLeft <= 3)
+      .sort((a,b) => a.daysLeft - b.daysLeft)
 
-  /* consolidated: removed legacy _renderAddTxAmount from line 1393 */
+    const topExpense = Object.entries(stats.byCategory || {}).sort((a,b) => b[1] - a[1])[0]
+    const overBudget = expBudgets.find(b => b.over)
+    const incomeGap = incBudgets.find(b => b.spent < b.monthlyLimit)
+    const insights = []
+    if (topExpense) {
+      const cat = App._findCat(topExpense[0])
+      insights.push({ icon:'📊', title:`ใช้จ่ายสูงสุด: ${cat?.label || 'ไม่ระบุหมวด'}`, body:`${fmt(topExpense[1])} หรือ ${stats.expense ? (topExpense[1] / stats.expense * 100).toFixed(0) : 0}% ของรายจ่ายเดือนนี้`, bg:'var(--primary-soft)' })
+    }
+    if (overBudget) insights.push({ icon:'⚠️', title:`งบ ${overBudget.label} เกินแล้ว`, body:`เกินงบ ${fmt(overBudget.spent - overBudget.monthlyLimit)} แนะนำชะลอรายจ่ายหมวดนี้`, bg:'var(--expense-soft)' })
+    if (incomeGap) insights.push({ icon:'🎯', title:`รายรับ ${incomeGap.label} ยังต่ำกว่าเป้า`, body:`ยังขาด ${fmt(incomeGap.monthlyLimit - incomeGap.spent)} จากเป้ารายเดือน`, bg:'var(--income-soft)' })
+    if (!insights.length) insights.push({ icon:'✅', title:'ภาพรวมยังดูดี', body:'ยังไม่พบหมวดที่เกินงบหรือรายการที่ผิดปกติ', bg:'var(--income-soft)' })
 
-  /* consolidated: removed legacy _renderAddTxDetail from line 1405 */
+    let html = `
+      <div class="home-hero" style="background:${grad}">
+        <div class="home-hero-top">
+          <div>
+            <div class="home-eyebrow">${esc(Calc.monthLabel(THIS_MONTH))}</div>
+            <div class="home-title">${fmt(stats.net)}</div>
+            <div class="home-subtitle">คงเหลือเดือนนี้ · อัตราการออม ${stats.savingsRate.toFixed(1)}%</div>
+          </div>
+          <button class="privacy-toggle" onclick="App.toggleHideMoney()">${S.settings.hideMoney ? '🙈 แสดง' : '👁️ ซ่อน'}</button>
+        </div>
+        <div class="savings-bar"><div class="savings-fill" style="width:${savingsPct}%"></div></div>
+        <div class="summary-grid">
+          <div class="summary-tile"><span>รายรับ</span><strong>${fmt(stats.income)}</strong></div>
+          <div class="summary-tile"><span>รายจ่าย</span><strong>${fmt(stats.expense)}</strong></div>
+          <div class="summary-tile"><span>โอนเงิน</span><strong>${fmt(transfers)}</strong></div>
+        </div>
+      </div>
+      <div class="finance-stat-grid">
+        <div class="finance-stat-card"><div class="label">สินทรัพย์รวม</div><div class="value c-income">${fmt(nw.assets)}</div></div>
+        <div class="finance-stat-card"><div class="label">หนี้สินรวม</div><div class="value c-expense">${fmt(nw.debt)}</div></div>
+      </div>
+      <div class="card card-pad nw-card" style="margin-top:12px;margin-bottom:12px">
+        <div class="nw-label">ความมั่งคั่งสุทธิ</div>
+        <div class="nw-value ${nw.net >= 0 ? 'c-income' : 'c-expense'}">${nw.net < 0 && !S.settings.hideMoney ? '-' : ''}${fmt(Math.abs(nw.net))}</div>
+        <div class="nw-detail"><span class="nw-item">สินทรัพย์ <strong class="c-income">${fmt(nw.assets)}</strong></span><span class="nw-item">หนี้สิน <strong class="c-expense">${fmt(nw.debt)}</strong></span></div>
+      </div>`
+
+    if (alerts.length) {
+      html += App._sectionHeader('แจ้งเตือนบัตรเครดิต')
+      alerts.forEach(a => {
+        html += `<div class="alert-card ${a.daysLeft <= 1 ? 'alert-urgent' : 'alert-warn'}"><div style="display:flex;justify-content:space-between;gap:12px"><div><div style="font-size:14px;font-weight:800">${esc(a.icon)} ${esc(a.name)}</div><div style="font-size:12px;color:var(--muted);margin-top:2px">ครบกำหนด ${esc(a.dueStr)} · ${a.daysLeft === 0 ? 'วันนี้' : `อีก ${a.daysLeft} วัน`}</div></div><div style="font-size:15px;font-weight:800;color:var(--expense)">${fmt(a.owed)}</div></div><button class="btn btn-primary btn-sm mt-12" onclick="App.openCCPay('${esc(a.id)}')">ชำระบัตรนี้</button></div>`
+      })
+    }
+
+    html += App._sectionHeader('Insights & คำแนะนำ')
+    html += `<div class="card card-pad" style="margin-bottom:12px;padding-bottom:10px">${insights.slice(0,3).map(i => `<div class="insight-row" style="background:${i.bg}"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')}</div>`
+
+    if (expBudgets.length || incBudgets.length) {
+      html += App._sectionHeader('งบประมาณเดือนนี้', 'ดูรายงาน', "App.showPage('reports')")
+      html += `<div class="card card-pad" style="margin-bottom:12px">`
+      ;[...expBudgets.slice(0,2), ...incBudgets.slice(0,1)].forEach(b => {
+        const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'
+        html += `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;gap:12px"><span style="font-weight:700">${esc(b.icon)} ${esc(b.label)}</span><span style="color:${b.over ? 'var(--expense)' : 'var(--muted)'}">${fmt(b.spent)} / ${fmt(b.monthlyLimit)}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${clampPct(b.pct)}%;background:${barColor}"></div></div></div>`
+      })
+      html += `</div>`
+    }
+
+    html += App._sectionHeader('รายการล่าสุด', 'ดูทั้งหมด', "App.showPage('transactions')")
+    html += `<div class="card" style="margin-bottom:22px"><div style="padding:0 16px">${recent.length ? recent.map(tx => App._txRow(tx)).join('') : App._emptyState('📋','ยังไม่มีรายการ','แตะ + เพื่อเพิ่มรายการแรก')}</div></div>`
+
+    document.getElementById('dashboard-content').innerHTML = html
+    App._bindTxRows('dashboard-content')
+  }
+
+  App._txRow = function(tx) {
+    const originalTx = tx
+    const cat = App._findCat(tx.categoryId)
+    const wallet = S.wallets.find(w => w.id === tx.walletId)
+    const toWallet = S.wallets.find(w => w.id === tx.toWalletId)
+    const isTransfer = tx.type === 'transfer'
+    const icon = cat?.icon || (tx.type === 'income' ? '💰' : isTransfer ? '↔' : tx.type === 'cc_payment' ? '💳' : '💸')
+    const bgColor = cat?.color ? cat.color + '20' : (isTransfer ? 'var(--transfer-soft)' : 'var(--surface-soft)')
+    const title = isTransfer
+      ? `${wallet?.name || 'ไม่ระบุ'} → ${toWallet?.name || 'ไม่ระบุ'}`
+      : (tx.merchant || tx.note || cat?.label || 'รายการ')
+    const meta = []
+    if (cat?.label) meta.push(cat.label)
+    if (wallet?.name && !isTransfer) meta.push(wallet.name)
+    if (isTransfer && tx.note) meta.push(tx.note)
+    if (tx.isRecurring) meta.push('ประจำ')
+    if (tx.isInstallment) meta.push(`ผ่อน ${tx.installmentNo || 1}/${tx.installmentMonths || '?'}`)
+    const metaHtml = meta.map(x => `<span class="tx-meta-pill">${esc(x)}</span>`).join('')
+
+    return `<div class="tx-row tx-row--${esc(tx.type)}" data-txid="${esc(originalTx.id)}">
+      <div class="tx-icon" style="background:${bgColor}">${esc(icon)}</div>
+      <div class="tx-info">
+        <div class="tx-title">${esc(title)}</div>
+        ${metaHtml ? `<div class="tx-sub">${metaHtml}</div>` : ''}
+      </div>
+      <div class="tx-right">
+        <div class="tx-amount" style="color:${cssAmountColor(tx.type)}">${signedFmt(tx.amount, tx.type)}</div>
+        <div class="tx-date">${esc(Calc.shortDate(tx.date))}</div>
+      </div>
+    </div>`
+  }
+
+  App._renderAddTxAmount = function() {
+    const title = S.txMode === 'edit' ? 'แก้ไขรายการ' : S.txMode === 'duplicate' ? 'ทำซ้ำรายการ' : 'เพิ่มรายการ'
+    const amount = parseFloat(S.tx.amount || 0)
+    const display = amount.toLocaleString('en-US', { minimumFractionDigits: String(S.tx.amount || '').includes('.') ? ((String(S.tx.amount).split('.')[1] || '').length) : 0 })
+    const tabs = [['expense','จ่าย','💸'],['income','รับ','💰'],['transfer','โอน','↔']]
+    document.getElementById('add-tx-content').innerHTML = `<div class="sheet-header" style="border-bottom:none;padding-bottom:0"><h2>${title}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
+      <div class="type-tabs">${tabs.map(([v,l,i]) => `<button class="type-tab${S.tx.type === v ? ' active' : ''}" onclick="App._setTxType('${v}')"><span aria-hidden="true">${i}</span> ${l}</button>`).join('')}</div>
+      <div class="amount-display" style="color:${cssAmountColor(S.tx.type)}">฿${display}</div>
+      <div class="numpad">${['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(k => `<button class="numpad-key${k === '⌫' ? ' del' : ''}" onclick="App._numpad('${k}')">${k}</button>`).join('')}</div>
+      <div style="padding:0 20px 20px"><button class="btn btn-primary" onclick="App._goToDetail()">ถัดไป →</button></div>`
+  }
+
+  App._renderAddTxDetail = function() {
+    const cats = S.tx.type === 'income' ? S.categories.income : S.categories.expense
+    const amount = parseFloat(S.tx.amount || 0)
+    const walletOptions = S.wallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
+    const toWalletOptions = S.wallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
+    const needsCat = S.tx.type !== 'transfer'
+    const isExpense = S.tx.type === 'expense'
+    const title = S.txMode === 'edit' ? 'แก้ไขรายละเอียด' : 'รายละเอียดรายการ'
+
+    document.getElementById('add-tx-content').innerHTML = `<div class="sheet-header"><h2>${title}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
+      <div style="text-align:center;font-size:34px;font-weight:800;color:${cssAmountColor(S.tx.type)};padding:12px 0 16px;letter-spacing:-.05em">${signedFmt(amount, S.tx.type).replace('↔ ', '')}</div>
+      <div class="sheet-body" style="padding-top:0">
+        ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่</label><div class="cat-grid" id="cat-grid">${cats.map(c => `<button type="button" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')">${esc(c.icon)} ${esc(c.label)}</button>`).join('')}</div></div>` : ''}
+        <div class="form-group"><label class="form-label">${S.tx.type === 'transfer' ? 'โอนจาก' : 'กระเป๋าเงิน'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);${S.tx.type === 'transfer' ? 'App._renderAddTxDetail()' : ''}">${walletOptions}</select></div>
+        ${S.tx.type === 'transfer' ? `<div class="form-group"><label class="form-label">โอนไปยัง</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง” ในรายการธุรกรรม</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / ที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Shopee, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value)"></div>`}
+        ${isExpense ? `<div class="form-group"><label class="form-label">รูปแบบรายการ</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">🧾 ผ่อน</button></div></div>${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวดทั้งหมด</label><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="เช่น 10" oninput="App._txField('installmentMonths',this.value)"></div>` : ''}` : ''}
+        <div class="form-group"><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="หมายเหตุ (ถ้ามี)" value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div>
+        <div class="form-group"><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value)"></div>
+        <div class="flex-row mt-8"><button class="btn btn-secondary flex-1" onclick="App._backToAmount()">← แก้ไข</button><button class="btn btn-primary" style="flex:2" onclick="App.saveTx()">${S.txMode === 'edit' ? 'บันทึกการแก้ไข' : 'บันทึก'}</button></div>
+      </div>`
+  }
 
   App._toggleTxFlag = function(key) {
     S.tx[key] = !S.tx[key]
@@ -720,7 +1430,13 @@ App.render();
     App._renderAddTxDetail()
   }
 
-  /* consolidated: removed legacy openAddTx from line 1433 */
+  App.openAddTx = function() {
+    S.txMode = 'add'
+    S.editingTxId = null
+    S.tx = { step:'amount', type:'expense', amount:'0', walletId:S.wallets.find(w => w.type !== 'credit')?.id || S.wallets[0]?.id || '', toWalletId:'', categoryId:'', merchant:'', note:'', date:TODAY, isRecurring:false, isInstallment:false, installmentMonths:'' }
+    App._renderAddTxAmount()
+    App.openOverlay('overlay-add-tx')
+  }
 
   App.openEditTx = function(id) {
     const tx = S.transactions.find(t => t.id === id)
@@ -745,11 +1461,77 @@ App.render();
     toast('คัดลอกรายการแล้ว แก้จำนวนเงินก่อนบันทึกได้', 'info')
   }
 
-  /* consolidated: removed legacy saveTx from line 1464 */
+  App.saveTx = function() {
+    const amt = parseFloat(S.tx.amount)
+    if (!amt || amt <= 0) { toast('กรุณาระบุจำนวนเงิน', 'error'); return }
+    if (!S.tx.walletId) { toast('กรุณาเลือกกระเป๋าเงิน', 'error'); return }
+    if (S.tx.type === 'transfer' && !S.tx.toWalletId) { toast('กรุณาเลือกปลายทาง', 'error'); return }
+    if (S.tx.type === 'transfer' && S.tx.walletId === S.tx.toWalletId) { toast('ต้นทางและปลายทางต้องไม่ซ้ำกัน', 'error'); return }
+    if (S.tx.type !== 'transfer' && !S.tx.categoryId) { toast('กรุณาเลือกหมวดหมู่', 'error'); return }
 
-  /* consolidated: removed legacy renderWallets from line 1509 */
+    const wasEdit = S.txMode === 'edit' && S.editingTxId
+    const tx = {
+      id: wasEdit ? S.editingTxId : Calc.genId(),
+      type: S.tx.type,
+      amount: amt,
+      walletId: S.tx.walletId,
+      toWalletId: S.tx.toWalletId || undefined,
+      categoryId: S.tx.categoryId || undefined,
+      merchant: S.tx.type === 'transfer' ? '' : (S.tx.merchant || ''),
+      note: S.tx.note || '',
+      date: S.tx.date || TODAY,
+      isRecurring: !!S.tx.isRecurring,
+      isInstallment: !!S.tx.isInstallment,
+      installmentMonths: S.tx.isInstallment ? (parseInt(S.tx.installmentMonths) || undefined) : undefined,
+      installmentNo: S.tx.isInstallment ? 1 : undefined,
+    }
 
-  /* consolidated: removed legacy _walletCard from line 1518 */
+    if (wasEdit) {
+      const idx = S.transactions.findIndex(t => t.id === S.editingTxId)
+      if (idx < 0) { toast('ไม่พบรายการที่จะแก้ไข', 'error'); return }
+      App._applyBalance(S.transactions[idx], -1)
+      S.transactions[idx] = tx
+      App._applyBalance(tx, 1)
+    } else {
+      S.transactions.unshift(tx)
+      App._applyBalance(tx, 1)
+    }
+
+    if (tx.merchant) App._registerMerchantFromTx?.(tx)
+    S.txMode = 'add'
+    S.editingTxId = null
+    persist()
+    App.closeOverlay('overlay-add-tx')
+    App.render()
+    toast(wasEdit ? 'แก้ไขรายการแล้ว' : 'บันทึกรายการแล้ว', 'success')
+  }
+
+  App.renderWallets = function() {
+    App._ensureV2State?.()
+    const g = Calc.getWalletGroups(S.wallets)
+    const summary = document.getElementById('wallets-summary')
+    summary.innerHTML = `<div class="wallet-summary-grid" style="width:100%"><div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${fmt(g.assetTotal || g.assets || 0)}</strong></div><div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${fmt(g.liabilityTotal || g.debt || 0)}</strong></div></div>`
+    const section = (title, icon, list, empty) => `<div class="wallet-section-title">${icon} ${esc(title)}</div>${list.length ? list.map(w => App._walletCard(w)).join('') : `<div class="card card-pad" style="font-size:13px;color:var(--muted);margin-bottom:12px">${esc(empty)}</div>`}`
+    document.getElementById('wallets-content').innerHTML = `<div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn btn-secondary btn-sm" onclick="App.refreshMarketPrices()">↻ Refresh ราคา</button><button class="btn btn-primary btn-sm" onclick="App.openWalletForm(null)">+ เพิ่มกระเป๋า</button></div>${section('สินทรัพย์','🏦',g.assets,'ยังไม่มีสินทรัพย์')}${section('หนี้สิน','💳',g.liabilities,'ยังไม่มีบัตรเครดิต')}${section('การลงทุน','📈',g.investments,'เพิ่มทอง / Crypto / FCD เพื่อดูมูลค่าอ้างอิง')}`
+  }
+
+  App._walletCard = function(w) {
+    const isCC = w.type === 'credit'
+    const inv = isInvest(w)
+    const owed = Math.abs(Number(w.balance || 0))
+    const value = isCC ? owed : walletValue(w)
+    const usedPct = isCC && w.limit ? clampPct((owed / w.limit) * 100) : 0
+    const due = isCC && w.dueDay ? Calc.getDueDate(w.dueDay) : null
+    const avail = isCC && w.limit ? Math.max(0, w.limit - owed) : 0
+    const unitPrice = inv ? (App._investmentUnitPriceTHB?.(w) || 0) : 0
+    const bg = `linear-gradient(135deg,${w.color || '#2563EB'},${w.color || '#2563EB'}BB)`
+    return `<div class="wallet-card" style="background:${bg}" onclick="${isCC ? `App.openCCDetail('${esc(w.id)}')` : `App.openWalletDetail('${esc(w.id)}')`}">
+      <div class="wc-header"><div><div class="wc-name">${esc(w.icon)} ${esc(w.name)}</div><div class="wc-type">${esc(App._walletTypeLabel(w.type))}${inv && App._marketText ? ` · ${esc(App._marketText(w))}` : ''}</div></div></div>
+      <div class="wc-balance">${isCC && !S.settings.hideMoney ? '-' : ''}${fmt(value)}</div>
+      ${inv ? `<div class="wc-prog-info" style="margin-top:10px"><span>จำนวน ${Number(w.units || 0).toLocaleString('en-US')} ${esc(w.symbol || '')}</span><span>${fmt(unitPrice)}/หน่วย</span></div>` : ''}
+      ${isCC && w.limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${usedPct}%;background:${usedPct > 80 ? 'rgba(252,165,165,.9)' : 'rgba(255,255,255,.8)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${usedPct.toFixed(0)}% · คงเหลือ ${fmt(avail)}</span>${due ? `<span>ครบ ${esc(due.dueStr)} (${due.daysLeft}ว.)</span>` : ''}</div></div>` : ''}
+    </div>`
+  }
 
   App.openWalletDetail = function(id) {
     const w = S.wallets.find(x => x.id === id)
@@ -804,7 +1586,34 @@ App.render();
     box.innerHTML = `${App._txDetailRowsHtml(tx)}<div class="tx-action-grid"><button class="btn btn-secondary" onclick="App.openEditTx('${esc(tx.id)}')">✏️ แก้ไข</button><button class="btn btn-secondary" onclick="App.openDuplicateTx('${esc(tx.id)}')">⧉ ทำซ้ำ</button></div><div style="margin-top:10px">${S.deleteConfirm ? `<button class="btn btn-danger" onclick="App.confirmDeleteTx()">ยืนยันการลบ</button><button class="btn btn-secondary mt-8" onclick="App._cancelDelete()">ยกเลิก</button>` : `<button class="btn btn-outline" onclick="App.deleteTx()">🗑 ลบรายการ</button>`}</div>`
   }
 
-  /* consolidated: removed legacy openCCDetail from line 1589 */
+  App.openCCDetail = function(cardId) {
+    const card = S.wallets.find(w => w.id === cardId)
+    if (!card) return
+    const benefit = App._benefit(cardId)
+    const period = Calc.getStatementPeriod(card.cycleDay || 25)
+    const txns = S.transactions.filter(t => t.walletId === cardId).sort((a,b) => (b.date || '').localeCompare(a.date || '')).slice(0, 20)
+    const cycleTxns = txns.filter(t => t.type === 'expense' && t.date >= period.start && t.date <= period.end)
+    const rewards = Calc.getCardRewards(cycleTxns, benefit)
+    const installments = S.transactions.filter(t => t.walletId === cardId && t.isInstallment).sort((a,b) => (b.date || '').localeCompare(a.date || ''))
+    const owed = Math.abs(card.balance || 0)
+    const usedPct = card.limit ? clampPct((owed / card.limit) * 100) : 0
+    const due = card.dueDay ? Calc.getDueDate(card.dueDay) : null
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon)} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button></div></div>
+      <div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}">
+        <div class="cc-hero" style="background:linear-gradient(135deg,${card.color || '#DC2626'},${card.color || '#DC2626'}BB);color:#fff;border:0">
+          <div style="font-size:12px;opacity:.75;margin-bottom:18px">รอบบัญชีตัดวันที่ ${card.cycleDay || 25} · ชำระวันที่ ${card.dueDay || '-'}</div>
+          <div style="font-size:13px;opacity:.72;margin-bottom:6px">ยอดค้างชำระ</div>
+          <div class="big">${fmt(owed)}</div>
+          ${card.limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:18px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct > 80 ? '#FCA5A5' : 'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due ? ` · ครบ ${esc(due.dueStr)} (${due.daysLeft}ว.)` : ''}</div>` : ''}
+        </div>
+        <div class="card card-pad" style="margin-bottom:12px"><div class="cc-detail-header"><div><div style="font-size:14px;font-weight:800">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${esc(period.start)} ถึง ${esc(period.end)}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button></div><div class="reward-grid" style="margin-top:12px"><div class="reward-tile"><span>คะแนน</span><strong>${rewards.points.toLocaleString('en-US')}</strong></div><div class="reward-tile"><span>Cashback</span><strong>${fmt(rewards.cashback)}</strong></div></div><div style="font-size:12px;color:var(--muted);margin-top:10px">แตะรายการล่าสุดเพื่อดูสิทธิประโยชน์โดยประมาณรายรายการ</div></div>
+        ${App._sectionHeader('ผ่อนชำระ')}
+        <div class="card" style="margin-bottom:14px"><div style="padding:0 16px">${installments.length ? installments.map(t => { const c = App._findCat(t.categoryId); return `<div class="installment-row"><div class="list-item-icon" style="background:${c?.color || '#64748B'}20">🧾</div><div class="list-item-info"><div class="list-item-name">${esc(t.merchant || t.note || c?.label || 'ผ่อนชำระ')}</div><div class="list-item-sub">งวด ${t.installmentNo || 1}/${t.installmentMonths || '?'} · ${esc(c?.icon || '')} ${esc(c?.label || '')}</div></div><b>${fmt(t.amount)}</b></div>` }).join('') : App._emptyState('🧾','ยังไม่มีรายการผ่อน','')}</div></div>
+        ${App._sectionHeader('รายการล่าสุดของบัตรนี้')}
+        <div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState('📋','ยังไม่มีรายการ','')}</div></div>
+      </div>`)
+    setTimeout(() => App._bindTxRows('sub-screen'), 0)
+  }
 
   App.render()
 })();
@@ -826,36 +1635,141 @@ App.render();
   const primaryWallet = () => S.wallets.find(w => w.type !== 'credit')?.id || S.wallets[0]?.id || ''
   const maybeSectionHeader = (title, actionLabel, action) => App._sectionHeader ? App._sectionHeader(title, actionLabel, action) : `<div class="section-header"><h3>${esc(title)}</h3>${actionLabel ? `<button onclick="${esc(action)}">${esc(actionLabel)}</button>` : ''}</div>`
 
-  const originalShowPage = App.showPage?.bind(App) || function(){}
-  /* consolidated: removed legacy showPage from line 1639 */
+  const originalShowPage = App.showPage.bind(App)
+  App.showPage = function(page) {
+    originalShowPage(page)
+    const fab = document.getElementById('fab')
+    if (fab) fab.classList.toggle('hidden', page !== 'dashboard')
+    document.body.classList.toggle('is-dashboard', page === 'dashboard')
+  }
 
-  /* consolidated: removed legacy renderDashboard from line 1646 */
+  App.renderDashboard = function() {
+    const stats = Calc.getMonthlyStats(S.transactions, THIS_MONTH)
+    const nw = Calc.getNetWorth(S.wallets)
+    const expBudgets = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, THIS_MONTH)
+    const incBudgets = Calc.getIncomeBudgetProgress ? Calc.getIncomeBudgetProgress(S.transactions, S.incomeBudgets || [], S.categories, THIS_MONTH) : []
+    const recent = [...S.transactions].sort((a,b) => (b.date || '').localeCompare(a.date || '')).slice(0,5)
+    const assets = S.wallets.filter(w => w.type !== 'credit')
+    const cc = S.wallets.find(w => w.type === 'credit' && Math.abs(Number(w.balance) || 0) > 0)
+    const ccUsed = Math.abs(Number(cc?.balance) || 0)
+    const ccLimit = Number(cc?.limit) || 0
+    const ccPct = ccLimit ? clampPct((ccUsed / ccLimit) * 100) : 0
+    const ccDue = cc?.dueDay ? Calc.getDueDate(cc.dueDay) : null
+    const transferTotal = S.transactions
+      .filter(t => (t.date || '').startsWith(THIS_MONTH) && t.type === 'transfer')
+      .reduce((s,t) => s + Number(t.amount || 0), 0)
 
-  /* consolidated: removed legacy _txRow from line 1741 */
+    let html = `
+      <div class="mt-topbar">
+        <div>
+          <div class="mt-title">Money Tracker</div>
+          <div class="mt-subtitle">${esc(Calc.monthLabel(THIS_MONTH))}</div>
+        </div>
+        <div class="mt-sync-pill"><span class="mt-sync-dot"></span><span>Local</span></div>
+      </div>
 
-  App._formatDraftAmount = function(value) {
-    const raw = String(value ?? '0').replace(/,/g, '')
-    if (!raw) return '0'
-    if (raw === '.') return '0.'
-    const sign = raw.startsWith('-') ? '-' : ''
-    const body = sign ? raw.slice(1) : raw
-    if (body.includes('.')) {
-      const [intPartRaw, fracRaw = ''] = body.split('.')
-      const intNum = Number(intPartRaw || 0)
-      const intText = Number.isFinite(intNum)
-        ? intNum.toLocaleString('en-US', { maximumFractionDigits: 0 })
-        : (intPartRaw || '0')
-      return sign + intText + '.' + fracRaw.slice(0, 2)
+      <div class="mt-net-card">
+        <div class="mt-net-head">
+          <div>
+            <div class="mt-net-label">เงินสุทธิที่ใช้ได้จริง</div>
+            <div class="mt-net-value">${nw.net < 0 && !S.settings.hideMoney ? '-' : ''}${fmt(Math.abs(nw.net))}</div>
+          </div>
+          <button class="mt-hide-btn" onclick="App.toggleHideMoney()">${S.settings.hideMoney ? '👁 แสดง' : '🙈 ซ่อน'}</button>
+        </div>
+        <div class="mt-net-split">
+          <div class="mt-net-metric"><small>รายรับเดือนนี้</small><strong style="color:#4ADE80">+${fmt(stats.income)}</strong></div>
+          <div class="mt-divider"></div>
+          <div class="mt-net-metric"><small>รายจ่ายเดือนนี้</small><strong style="color:#F87171">-${fmt(stats.expense)}</strong></div>
+        </div>
+      </div>`
+
+    if (cc) {
+      const dueText = ccDue ? `ครบกำหนด ${esc(ccDue.dueStr)} · อีก ${esc(ccDue.daysLeft)} วัน` : `รอบบัญชีตัดวันที่ ${esc(cc.cycleDay || 25)}`
+      html += `
+        <div class="mt-alert-card" onclick="App.openCCDetail('${esc(cc.id)}')">
+          <div>
+            <div class="mt-alert-title">💳 ${esc(cc.name)}</div>
+            <div class="mt-alert-sub">${dueText}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:16px;font-weight:900;color:var(--expense);letter-spacing:-.04em">${fmt(ccUsed)}</div>
+            ${ccLimit ? `<div style="font-size:10px;color:var(--muted);margin-top:1px">จาก ${fmt(ccLimit)}</div>` : ''}
+          </div>
+        </div>`
+      if (ccLimit) {
+        html += `<div class="mt-progress-wrap">
+          <div class="mt-progress-label"><span>วงเงินที่ใช้</span><b style="color:${ccPct > 70 ? 'var(--expense)' : 'var(--text)'}">${ccPct.toFixed(0)}%</b></div>
+          <div class="mt-progress-track"><div class="mt-progress-fill" style="width:${ccPct}%;background:${ccPct > 70 ? 'var(--expense)' : 'var(--primary)'}"></div></div>
+        </div>`
+      }
     }
-    const num = Number(raw || 0)
-    return Number.isFinite(num) ? num.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0'
+
+    if (assets.length) {
+      html += `<div class="mt-wallet-mini-grid">${assets.slice(0,3).map(w => `<div class="mt-wallet-mini" onclick="App.openWalletDetail('${esc(w.id)}')">
+        <div class="icon">${esc(w.icon || '◈')}</div>
+        <div class="value">${fmt(App._investmentValueTHB ? App._investmentValueTHB(w) : (w.balance || 0))}</div>
+        <div class="name">${esc(w.name)}</div>
+      </div>`).join('')}</div>`
+    }
+
+    html += `<div class="mt-stat-row">
+      <div class="mt-stat-card income"><small>รายรับ</small><strong>+${fmt(stats.income)}</strong></div>
+      <div class="mt-stat-card expense"><small>รายจ่าย</small><strong>-${fmt(stats.expense)}</strong></div>
+      <div class="mt-stat-card transfer"><small>โอนเงิน</small><strong>${fmt(transferTotal)}</strong></div>
+      <div class="mt-stat-card saving"><small>คงเหลือเดือนนี้</small><strong>${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${fmt(Math.abs(stats.net))}</strong></div>
+    </div>`
+
+    const budgetRows = [...expBudgets.slice(0,2), ...incBudgets.slice(0,1)]
+    if (budgetRows.length) {
+      html += maybeSectionHeader('งบประมาณเดือนนี้', 'ดูรายงาน', "App.showPage('reports')")
+      html += `<div class="card card-pad">`
+      budgetRows.forEach(b => {
+        const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'
+        html += `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;gap:12px"><span style="font-weight:800">${esc(b.icon)} ${esc(b.label)}</span><span style="color:${b.over ? 'var(--expense)' : 'var(--muted)'}">${fmt(b.spent)} / ${fmt(b.monthlyLimit)}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${clampPct(b.pct)}%;background:${barColor}"></div></div></div>`
+      })
+      html += `</div>`
+    }
+
+    html += maybeSectionHeader('รายการล่าสุด', 'ดูทั้งหมด', "App.showPage('transactions')")
+    html += `<div class="card" style="margin-bottom:22px"><div style="padding:0 16px">${recent.length ? recent.map(t => App._txRow(t)).join('') : App._emptyState('📋','ยังไม่มีรายการ','แตะ + เพื่อเพิ่มรายการแรก')}</div></div>`
+
+    const target = document.getElementById('dashboard-content')
+    if (target) target.innerHTML = html
+    App._bindTxRows?.('dashboard-content')
+  }
+
+  App._txRow = function(tx) {
+    const cat = App._findCat?.(tx.categoryId)
+    const wallet = S.wallets.find(w => w.id === tx.walletId)
+    const toWallet = S.wallets.find(w => w.id === tx.toWalletId)
+    const isTransfer = tx.type === 'transfer'
+    const icon = cat?.icon || (tx.type === 'income' ? '💰' : isTransfer ? '↔' : tx.type === 'cc_payment' ? '💳' : '💸')
+    const title = isTransfer ? `${wallet?.name || 'ไม่ระบุ'} → ${toWallet?.name || 'ไม่ระบุ'}` : (tx.merchant || tx.note || cat?.label || 'รายการ')
+    const meta = []
+    if (cat?.label) meta.push(cat.label)
+    if (wallet?.name && !isTransfer) meta.push(wallet.name)
+    if (isTransfer && tx.note) meta.push(tx.note)
+    if (tx.isRecurring) meta.push('🔁 ประจำ')
+    if (tx.isInstallment) meta.push(`📦 ${tx.installmentNo || 1}/${tx.installmentMonths || '?'}`)
+    const bg = cat?.color ? `${cat.color}18` : isTransfer ? 'var(--transfer-soft)' : 'var(--elevated)'
+    return `<div class="tx-row tx-row--${esc(tx.type)}" data-txid="${esc(tx.id)}">
+      <div class="tx-icon" style="background:${bg}">${esc(icon)}</div>
+      <div class="tx-info">
+        <div class="tx-title">${esc(title)}</div>
+        <div class="tx-sub">${meta.map(x => `<span class="tx-meta-pill">${esc(x)}</span>`).join('')}</div>
+      </div>
+      <div class="tx-right">
+        <div class="tx-amount" style="color:${typeColor(tx.type)}">${signedFmt(tx.amount, tx.type)}</div>
+        <div class="tx-date">${esc(Calc.shortDate(tx.date))}</div>
+      </div>
+    </div>`
   }
 
   App._renderAddTxAmount = function() {
     const title = S.txMode === 'edit' ? 'แก้ไขรายการ' : S.txMode === 'duplicate' ? 'ทำซ้ำรายการ' : 'เพิ่มรายการ'
-    const amount = String(S.tx.amount ?? '0')
+    const amount = String(S.tx.amount || '')
     const num = parseFloat(amount || 0)
-    const display = App._formatDraftAmount ? App._formatDraftAmount(amount) : (Number.isFinite(num) ? num.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0')
+    const display = Number.isFinite(num) ? num.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0'
     const tabs = [
       ['expense','จ่าย','-'],
       ['income','รับ','+'],
@@ -885,7 +1799,30 @@ App.render();
     App._renderAddTxAmount()
   }
 
-  /* consolidated: removed legacy _renderAddTxDetail from line 1802 */
+  App._renderAddTxDetail = function() {
+    const cats = S.tx.type === 'income' ? S.categories.income : S.categories.expense
+    const amount = parseFloat(S.tx.amount || 0)
+    const display = Number.isFinite(amount) ? amount.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0'
+    const walletOptions = S.wallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
+    const toWalletOptions = S.wallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
+    const isExpense = S.tx.type === 'expense'
+    const needsCat = S.tx.type !== 'transfer'
+    const color = typeColor(S.tx.type)
+    const box = document.getElementById('add-tx-content')
+    if (!box) return
+    box.innerHTML = `<div class="sheet-header"><h2>${S.txMode === 'edit' ? 'แก้ไขรายละเอียด' : 'รายละเอียดรายการ'}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
+      <div class="sheet-body">
+        <div class="amount-summary-card ${activeColorClass(S.tx.type)}" onclick="App._backToAmount()">
+          <div><small>${esc(typeLabel(S.tx.type))} · แตะเพื่อแก้ไข</small><strong>${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div>
+        </div>
+        ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่</label><div class="cat-grid">${cats.map(c => `<button type="button" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}</div></div>` : ''}
+        <div class="form-group"><label class="form-label">${S.tx.type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);${S.tx.type === 'transfer' ? 'App._renderAddTxDetail()' : ''}">${walletOptions}</select></div>
+        ${S.tx.type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value)"></div>`}
+        <div style="display:flex;gap:10px;margin-bottom:13px"><div style="flex:1"><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value)"></div><div style="flex:1"><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
+        ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
+        <button class="btn btn-primary" style="background:${color};box-shadow:0 4px 16px ${color}44" onclick="App.saveTx()">${S.txMode === 'edit' ? 'บันทึกการแก้ไข' : `บันทึก ${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}`}</button>
+      </div>`
+  }
 
   App.openAddTx = function() {
     S.txMode = 'add'
@@ -911,11 +1848,18 @@ App.render();
     document.body.classList.toggle('is-dashboard', isDashboard)
   }
 
-  const prevShowPage = App.showPage?.bind(App) || function(){}
-  /* consolidated: removed legacy showPage from line 1852 */
+  const prevShowPage = App.showPage.bind(App)
+  App.showPage = function(page) {
+    prevShowPage(page)
+    syncChrome()
+  }
 
-  const prevRender = App.render?.bind(App) || function(){}
-  /* consolidated: removed legacy render from line 1858 */
+  const prevRender = App.render.bind(App)
+  App.render = function() {
+    const result = prevRender()
+    syncChrome()
+    return result
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', syncChrome, { once: true })
@@ -958,11 +1902,20 @@ App.render();
     }
   }
 
-  const prevShowPage = App.showPage?.bind(App) || function(){}
-  /* consolidated: removed legacy showPage from line 1906 */
+  const prevShowPage = App.showPage.bind(App)
+  App.showPage = function(page) {
+    prevShowPage(page)
+    setAppHeight()
+    syncChrome()
+  }
 
-  const prevRender = App.render?.bind(App) || function(){}
-  /* consolidated: removed legacy render from line 1913 */
+  const prevRender = App.render.bind(App)
+  App.render = function() {
+    const result = prevRender()
+    setAppHeight()
+    syncChrome()
+    return result
+  }
 
   setAppHeight()
   syncChrome()
@@ -996,7 +1949,25 @@ App.render();
   }
 
   // Wallet cards: use CSS variables so final CSS can keep gradient cards visible.
-  /* consolidated: removed legacy _walletCard from line 1952 */
+  App._walletCard = function(w) {
+    const isCC = w.type === 'credit'
+    const inv = isInvest(w)
+    const owed = Math.abs(Number(w.balance || 0))
+    const value = isCC ? owed : walletValue(w)
+    const usedPct = isCC && w.limit ? clampPct((owed / w.limit) * 100) : 0
+    const due = isCC && w.dueDay ? Calc.getDueDate(w.dueDay) : null
+    const avail = isCC && w.limit ? Math.max(0, Number(w.limit || 0) - owed) : 0
+    const unitPrice = inv && App._investmentUnitPriceTHB ? Number(App._investmentUnitPriceTHB(w) || 0) : 0
+    const color = w.color || (isCC ? '#DC2626' : '#2563EB')
+    const detailAction = isCC ? `App.openCCDetail('${esc(w.id)}')` : `App.openWalletDetail('${esc(w.id)}')`
+    const marketText = inv && App._marketText ? App._marketText(w) : ''
+    return `<div class="wallet-card wallet-card-colored" style="--wallet-color:${esc(color)};--wallet-color-2:${esc(color)}BB" onclick="${detailAction}">
+      <div class="wc-header"><div><div class="wc-name">${esc(w.icon)} ${esc(w.name)}</div><div class="wc-type">${esc(App._walletTypeLabel(w.type))}${marketText ? ` · ${esc(marketText)}` : ''}</div></div></div>
+      <div class="wc-balance">${isCC && !S.settings.hideMoney ? '-' : ''}${fmt(value)}</div>
+      ${inv ? `<div class="wc-prog-info" style="margin-top:10px"><span>จำนวน ${numFmt(w.units)} ${esc(w.symbol || '')}</span><span>${fmt(unitPrice)}/หน่วย</span></div>` : ''}
+      ${isCC && w.limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${usedPct}%;background:${usedPct > 80 ? 'rgba(252,165,165,.9)' : 'rgba(255,255,255,.88)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${usedPct.toFixed(0)}% · คงเหลือ ${fmt(avail)}</span>${due ? `<span>ครบ ${esc(due.dueStr)} (${due.daysLeft}ว.)</span>` : ''}</div></div>` : ''}
+    </div>`
+  }
 
   // Budget screen: split into two tabs, preserving existing budget arrays.
   App.openBudgetScreen = function(kind = S.budgetTab || 'expense') {
@@ -1047,13 +2018,33 @@ App.render();
   }
 
   // Category color: add swatches + a larger native picker for reliable mobile tap.
-  /* consolidated: removed legacy setCategoryColor from line 2021 */
+  App.setCategoryColor = function(color) {
+    const input = document.getElementById('cat-color')
+    if (input) input.value = color
+    document.querySelectorAll('.color-swatch').forEach(btn => btn.classList.toggle('active', btn.dataset.color === color))
+  }
 
-  /* consolidated: removed legacy openCategoryForm from line 2027 */
+  App.openCategoryForm = function(id) {
+    const type = S.catManageType || 'expense'
+    const c = id ? (S.categories[type] || []).find(x => x.id === id) : null
+    const color = c?.color || '#2563EB'
+    const palette = ['#2563EB','#16A34A','#DC2626','#F59E0B','#7C3AED','#0891B2','#BE185D','#475569','#0F766E','#EA580C','#4F46E5','#111827']
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCategoryScreen('${type}')">←</button><h2>${c ? 'แก้ไข' : 'เพิ่ม'}หมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.saveCategory('${id || ''}')" style="width:auto;padding:8px 14px">บันทึก</button></div>
+      <div class="sub-scroll">
+        <div class="form-group"><label class="form-label">ชื่อหมวดหมู่</label><input class="form-input" id="cat-name" value="${esc(c?.label || '')}"></div>
+        <div class="form-group"><label class="form-label">อีโมจิ</label><input class="form-input" id="cat-icon" value="${esc(c?.icon || '📦')}"></div>
+        <div class="form-group"><label class="form-label">สี</label><div class="color-picker-row">${palette.map(p => `<button type="button" class="color-swatch${p === color ? ' active' : ''}" data-color="${p}" style="background:${p}" onclick="App.setCategoryColor('${p}')" aria-label="เลือกสี ${p}"></button>`).join('')}</div><input class="form-input color-input-native" id="cat-color" type="color" value="${esc(color)}" oninput="App.setCategoryColor(this.value)"><div class="form-hint">เลือกจากสีด้านบน หรือแตะช่องสีเพื่อเปิดตัวเลือกสีของเครื่อง</div></div>
+      </div>`)
+  }
 
   // Make sure overlay sheets can sit above a currently open sub-screen.
-  const prevOpenOverlay = App.openOverlay?.bind(App) || function(){}
-  /* consolidated: removed legacy openOverlay from line 2042 */
+  const prevOpenOverlay = App.openOverlay.bind(App)
+  App.openOverlay = function(id) {
+    const result = prevOpenOverlay(id)
+    const el = document.getElementById(id)
+    if (el) el.style.zIndex = ['overlay-wallet-form','overlay-cc-pay','overlay-add-tx','overlay-tx-detail'].includes(id) ? '820' : ''
+    return result
+  }
 
   // Re-render current page so patched wallet cards are applied immediately.
   try { App.render() } catch (_) {}
@@ -1150,7 +2141,14 @@ App.render();
     if (!panel) return
     panel.style.display = panel.style.display === 'grid' ? 'none' : 'grid'
   }
-  /* consolidated: removed legacy pickEmoji from line 2144 */
+  App.pickEmoji = function(prefix, emoji) {
+    const target = document.getElementById(prefix === 'cat' ? 'cat-icon' : `${prefix}-emoji`)
+    const preview = document.getElementById(prefix + '-emoji-preview')
+    if (target) target.value = emoji
+    if (preview) preview.textContent = emoji
+    const panel = document.getElementById(prefix + '-emoji-panel')
+    if (panel) panel.style.display = 'none'
+  }
   App.customEmoji = function(prefix) {
     const v = prompt('ใส่อีโมจิที่ต้องการ')
     if (v && v.trim()) App.pickEmoji(prefix, v.trim().slice(0, 4))
@@ -1188,28 +2186,186 @@ App.render();
       </div>`)
   }
 
-  /* consolidated: removed legacy openCCBenefitScreen from line 2189 */
+  App.openCCBenefitScreen = function(cardId, tab = S.ccBenefitTab || 'points') {
+    S.ccBenefitTab = tab === 'cashback' ? 'cashback' : 'points'
+    const b = App._benefit?.(cardId) || S.ccBenefits?.[cardId] || { points:{}, cashback:{} }
+    const p = b.points || {}, c = b.cashback || {}
+    const f = (id, label, value, hint = '') => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="0.01" id="${id}" value="${value || ''}" placeholder="0">${hint ? `<div class="form-hint">${hint}</div>` : ''}</div>`
+    const pointsForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิดคะแนนสะสม</b><button class="toggle${(p.enabled || b.enabled) ? ' on' : ''}" id="ccb-points-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${f('ccb-bahtPerPoint','X บาท = 1 คะแนน',p.bahtPerPoint)}${f('ccb-pointEvery','ทุก X บาทได้ 1 คะแนน',p.pointPerBahtEvery)}${f('ccb-multi','คะแนนเพิ่ม X เท่า',p.multiplier || 1)}${f('ccb-maxTxnPoint','สูงสุด/รายการ',p.maxPerTxn)}${f('ccb-maxCyclePoint','สูงสุด/รอบบัญชี',p.maxPerCycle)}</div></div>`
+    const cashForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิด Cashback</b><button class="toggle${(c.enabled || b.enabled) ? ' on' : ''}" id="ccb-cash-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${f('ccb-cbPercent','รับเงินคืน X%',c.percent)}${f('ccb-cbMin','ขั้นต่ำ (฿)',c.minSpend)}${f('ccb-cbTier','เริ่มขั้นบันไดที่ (฿)',c.tierThreshold)}${f('ccb-cbEvery','คิดทุก ๆ X บาท',c.everyBaht || 1)}${f('ccb-cbMaxTxn','สูงสุด/รายการ (฿)',c.maxPerTxn)}${f('ccb-cbMaxCycle','สูงสุด/รอบบัญชี (฿)',c.maxPerCycle)}</div></div>`
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefit('${esc(cardId)}')" style="width:auto">บันทึก</button></div>
+      <div class="sub-scroll">
+        <div class="benefit-tabs"><button class="benefit-tab ${S.ccBenefitTab === 'points' ? 'active' : ''}" onclick="App.openCCBenefitScreen('${esc(cardId)}','points')">คะแนนสะสม</button><button class="benefit-tab ${S.ccBenefitTab === 'cashback' ? 'active' : ''}" onclick="App.openCCBenefitScreen('${esc(cardId)}','cashback')">Cashback</button></div>
+        ${S.ccBenefitTab === 'points' ? pointsForm : cashForm}
+      </div>`)
+  }
 
-  /* consolidated: removed legacy saveCCBenefit from line 2203 */
+  App.saveCCBenefit = function(cardId) {
+    const prev = App._benefit?.(cardId) || S.ccBenefits?.[cardId] || { points:{}, cashback:{} }
+    const pp = prev.points || {}, pc = prev.cashback || {}
+    const val = (id, fallback = 0) => document.getElementById(id) ? (parseFloat(document.getElementById(id).value) || 0) : (Number(fallback) || 0)
+    const on = (id, fallback = false) => document.getElementById(id) ? document.getElementById(id).classList.contains('on') : !!fallback
+    S.ccBenefits ||= {}
+    S.ccBenefits[cardId] = {
+      enabled: false,
+      points: {
+        enabled: on('ccb-points-enabled', pp.enabled || prev.enabled),
+        bahtPerPoint: val('ccb-bahtPerPoint', pp.bahtPerPoint),
+        pointPerBahtEvery: val('ccb-pointEvery', pp.pointPerBahtEvery),
+        multiplier: val('ccb-multi', pp.multiplier || 1) || 1,
+        maxPerTxn: val('ccb-maxTxnPoint', pp.maxPerTxn),
+        maxPerCycle: val('ccb-maxCyclePoint', pp.maxPerCycle),
+      },
+      cashback: {
+        enabled: on('ccb-cash-enabled', pc.enabled || prev.enabled),
+        percent: val('ccb-cbPercent', pc.percent),
+        minSpend: val('ccb-cbMin', pc.minSpend),
+        tierThreshold: val('ccb-cbTier', pc.tierThreshold),
+        everyBaht: val('ccb-cbEvery', pc.everyBaht || 1) || 1,
+        maxPerTxn: val('ccb-cbMaxTxn', pc.maxPerTxn),
+        maxPerCycle: val('ccb-cbMaxCycle', pc.maxPerCycle),
+      }
+    }
+    persist(); App.openCCDetail(cardId); toast('บันทึกสิทธิประโยชน์แล้ว', 'success')
+  }
 
-  /* consolidated: removed legacy _parseAuroraGold from line 2232 */
+  App._parseAuroraGold = function(html) {
+    const clean = String(html || '')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;|&#160;/g, ' ')
+      .replace(/\s+/g, ' ')
+    const anchor = clean.search(/รับซื้อรูปพรรณออโรร่า|รับซื้อคืน|ทองคำแท่ง/i)
+    const tail = anchor >= 0 ? clean.slice(anchor) : clean
+    const nums = tail.match(/\d{1,3}(?:,\d{3})+(?:\.\d+)?/g) || []
+    const toNumber = s => Number(String(s || '').replace(/,/g, '')) || 0
+    const barBuy = toNumber(nums[0])
+    const barSell = toNumber(nums[1])
+    const jewelryBuy = toNumber(nums[2]) || toNumber(nums.find(n => toNumber(n) > 10000 && toNumber(n) < 200000))
+    return jewelryBuy ? { jewelryBuy, barBuy, barSell, source: 'Aurora', url: AURORA_GOLD_URL, fetchedAt: new Date().toISOString() } : null
+  }
 
-  /* consolidated: removed legacy refreshMarketPrices from line 2249 */
+  App.refreshMarketPrices = async function() {
+    const next = { ...(S.marketPrices || {}) }
+    let ok = false
+    try { const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache:'no-store' }); if (r.ok) { next.crypto = await r.json(); ok = true } } catch {}
+    try { const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' }); if (r.ok) { next.fx = await r.json(); ok = true } } catch {}
+    try {
+      const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(AURORA_GOLD_URL)
+      const r = await fetch(proxy, { cache:'no-store' })
+      if (r.ok) {
+        const data = App._parseAuroraGold(await r.text())
+        if (data?.jewelryBuy) { next.auroraGold = data; ok = true }
+      }
+    } catch {}
+    next.updatedAt = new Date().toISOString()
+    S.marketPrices = next
+    persist(); App.renderWallets?.(); App.render?.()
+    toast(ok ? 'อัปเดตราคาอ้างอิงแล้ว' : 'อัปเดตไม่ได้ ใช้ราคาสำรองในกระเป๋าแทน', ok ? 'success' : 'warn')
+  }
 
-  /* consolidated: removed legacy _investmentUnitPriceTHB from line 2268 */
-  /* consolidated: removed legacy _investmentValueTHB from line 2283 */
-  /* consolidated: removed legacy _marketText from line 2284 */
+  App._investmentUnitPriceTHB = function(w) {
+    const p = S.marketPrices || {}
+    if (w.type === 'gold') return Number(p.auroraGold?.jewelryBuy || w.manualPrice || 0)
+    if (w.type === 'crypto') {
+      const map = { BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether' }
+      const id = map[(w.symbol || '').toUpperCase()]
+      return Number((id && p.crypto?.[id]?.thb) || w.manualPrice || 0)
+    }
+    if (w.type === 'fcd') {
+      const cur = (w.currency || w.symbol || 'USD').toUpperCase()
+      const thb = p.fx?.rates?.THB
+      return Number((cur === 'USD' ? thb : (thb && p.fx?.rates?.[cur] ? thb / p.fx.rates[cur] : 0)) || w.manualPrice || 0)
+    }
+    return 0
+  }
+  App._investmentValueTHB = w => investTypes.has(w?.type) ? ((Number(w.units || 0) * App._investmentUnitPriceTHB(w)) || Number(w.balance || 0)) : Number(w?.balance || 0)
+  App._marketText = function(w) {
+    const p = S.marketPrices || {}
+    if (w.type === 'gold') return p.auroraGold?.jewelryBuy ? `Aurora รับซื้อรูปพรรณ ${fmt(p.auroraGold.jewelryBuy)}/บาททอง` : 'ใช้ราคาสำรอง/บาททอง'
+    if (w.type === 'crypto') { const coin = (w.symbol || w.name || '').toUpperCase(); const map = {BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether'}; const id = map[coin]; const thb = id && p.crypto?.[id]?.thb; return thb ? `${coin} ${fmt(thb)}` : 'CoinGecko' }
+    if (w.type === 'fcd') { const cur = (w.currency || w.symbol || 'USD').toUpperCase(); const rate = cur === 'USD' ? p.fx?.rates?.THB : (p.fx?.rates?.THB && p.fx?.rates?.[cur] ? p.fx.rates.THB / p.fx.rates[cur] : null); return rate ? `${cur}/THB ${rate.toFixed(2)}` : 'FX อ้างอิง' }
+    return ''
+  }
 
-  /* consolidated: removed legacy _walletCard from line 2292 */
+  App._walletCard = function(w) {
+    const isCC = w.type === 'credit'
+    const inv = investTypes.has(w.type)
+    const owed = Math.abs(Number(w.balance || 0))
+    const value = isCC ? owed : (inv ? App._investmentValueTHB(w) : Number(w.balance || 0))
+    const usedPct = isCC && w.limit ? pct((owed / w.limit) * 100) : 0
+    const due = isCC && w.dueDay ? Calc.getDueDate(w.dueDay) : null
+    const avail = isCC && w.limit ? Math.max(0, Number(w.limit || 0) - owed) : 0
+    const color = w.color || (isCC ? '#DC2626' : '#2563EB')
+    const detailAction = isCC ? `App.openCCDetail('${esc(w.id)}')` : `App.openWalletDetail('${esc(w.id)}')`
+    const unitLabel = w.type === 'gold' ? 'บาททอง' : (w.symbol || w.currency || '')
+    const priceText = inv ? App._marketText(w) : ''
+    return `<div class="wallet-card wallet-card-colored${isCC ? ' wallet-card-credit' : ''}${inv ? ' wallet-card-invest' : ''}" style="--wallet-color:${esc(color)};--wallet-color-2:${esc(color)}BB" onclick="${detailAction}">
+      <div class="wc-header"><div><div class="wc-name">${esc(w.icon)} ${esc(w.name)}</div><div class="wc-type">${esc(App._walletTypeLabel(w.type))}${priceText ? ` · ${esc(priceText)}` : ''}</div></div></div>
+      <div class="wc-balance">${isCC && !S.settings.hideMoney ? '-' : ''}${fmt(value)}</div>
+      ${inv ? `<div class="wc-prog-info wc-invest-info"><span>จำนวน ${numFmt(w.units, 4)} ${esc(unitLabel)}</span><span>${fmt(App._investmentUnitPriceTHB(w))}/หน่วย</span></div>` : ''}
+      ${isCC && due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${esc(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}
+      ${isCC && w.limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${usedPct}%;background:${usedPct > 80 ? 'rgba(252,165,165,.9)' : 'rgba(255,255,255,.88)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${usedPct.toFixed(0)}% · คงเหลือ ${fmt(avail)}</span></div></div>` : ''}
+    </div>`
+  }
 
-  /* consolidated: removed legacy renderWallets from line 2313 */
+  App.renderWallets = function() {
+    App._ensureV2State?.()
+    const g = Calc.getWalletGroups ? Calc.getWalletGroups(S.wallets) : { assets:S.wallets.filter(w=>w.type!=='credit'), liabilities:S.wallets.filter(w=>w.type==='credit'), investments:[], assetTotal:0, liabilityTotal:0 }
+    const summary = document.getElementById('wallets-summary')
+    if (summary) summary.innerHTML = `<div class="wallet-summary-grid" style="width:100%"><div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${fmt(g.assetTotal || g.assets || 0)}</strong></div><div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${fmt(g.liabilityTotal || g.debt || 0)}</strong></div></div>`
+    const section = (title, icon, list, empty, grid) => `<div class="wallet-section-title">${icon} ${esc(title)}</div>${list.length ? `<div class="${grid ? 'wallet-grid-2' : 'wallet-list-stack'}">${list.map(w => App._walletCard(w)).join('')}</div>` : `<div class="card card-pad" style="font-size:13px;color:var(--muted);margin-bottom:12px">${esc(empty)}</div>`}`
+    const updated = S.marketPrices?.auroraGold?.fetchedAt ? new Date(S.marketPrices.auroraGold.fetchedAt).toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' }) : ''
+    const goldNote = `<div class="wallet-market-note">ทองคำใช้ราคา <b>รับซื้อรูปพรรณออโรร่า/บาททอง</b>${updated ? ` · อัปเดต ${esc(updated)}` : ''}</div>`
+    document.getElementById('wallets-content').innerHTML = `<div class="wallet-toolbar"><button class="btn btn-secondary btn-sm" onclick="App.refreshMarketPrices()">↻ Refresh ราคา</button><button class="btn btn-primary btn-sm" onclick="App.openWalletForm(null)">+ เพิ่มกระเป๋า</button></div>${goldNote}${section('สินทรัพย์','🏦',g.assets || [],'ยังไม่มีสินทรัพย์',true)}${section('บัตรเครดิต','💳',g.liabilities || [],'ยังไม่มีบัตรเครดิต',false)}${section('การลงทุน','📈',g.investments || [],'เพิ่มทอง / Crypto / FCD เพื่อดูมูลค่าอ้างอิง',true)}`
+  }
 
-  const prevOpenWalletForm = App.openWalletForm?.bind(App) || function(){}
-  /* consolidated: removed legacy openWalletForm from line 2325 */
+  const prevOpenWalletForm = App.openWalletForm.bind(App)
+  App.openWalletForm = function(id) {
+    prevOpenWalletForm(id)
+    const w = id ? S.wallets.find(x => x.id === id) : null
+    const row = document.getElementById('wf-color-row')
+    if (row && !row.querySelector('.color-swatch-custom')) {
+      row.classList.add('compact-colors')
+      row.querySelectorAll('.color-dot').forEach(dot => dot.classList.add('color-swatch'))
+      row.insertAdjacentHTML('beforeend', `<label class="color-swatch color-swatch-custom" style="--picked:${esc(document.getElementById('wf-color')?.value || '#2563EB')}" aria-label="เลือกสีเอง"><input type="color" id="wf-color-native" value="${esc(document.getElementById('wf-color')?.value || '#2563EB')}" oninput="App.pickColor('wf', this.value)"><span>＋</span></label>`)
+    }
+    const type = document.getElementById('wf-type')?.value
+    const symbolInput = document.getElementById('wf-symbol')
+    if (symbolInput && type === 'gold') {
+      symbolInput.value = w?.symbol || 'บาททอง'
+      symbolInput.placeholder = 'บาททอง'
+      const label = symbolInput.closest('.form-group')?.querySelector('.form-label')
+      if (label) label.textContent = 'หน่วยทองคำ'
+    }
+    const units = document.getElementById('wf-units')
+    if (units) {
+      const label = units.closest('.form-group')?.querySelector('.form-label')
+      if (label && type === 'gold') label.textContent = 'จำนวนทองคำ (บาททอง)'
+    }
+    const manual = document.getElementById('wf-manual-price')
+    if (manual) {
+      const label = manual.closest('.form-group')?.querySelector('.form-label')
+      if (label && type === 'gold') label.textContent = 'ราคาสำรองรับซื้อรูปพรรณออโรร่า/บาททอง'
+      manual.value = manual.value ? Number(manual.value).toLocaleString('en-US').replace(/,/g,'') : manual.value
+    }
+  }
   const prevSelectWalletType = App._selectWalletType?.bind(App)
-  /* consolidated: removed legacy _selectWalletType from line 2355 */
-  const prevSaveWallet = App.saveWallet?.bind(App) || function(){}
-  /* consolidated: removed legacy saveWallet from line 2363 */
+  App._selectWalletType = function(type) {
+    prevSelectWalletType?.(type)
+    if (type === 'gold') {
+      const symbol = document.getElementById('wf-symbol')
+      if (symbol && !symbol.value) symbol.value = 'บาททอง'
+    }
+  }
+  const prevSaveWallet = App.saveWallet.bind(App)
+  App.saveWallet = function() {
+    const type = document.getElementById('wf-type')?.value
+    const symbol = document.getElementById('wf-symbol')
+    if (type === 'gold' && symbol) symbol.value = 'บาททอง'
+    prevSaveWallet()
+  }
 
   App._txRow = function(tx) {
     const v = txVisual(tx)
@@ -1221,13 +2377,47 @@ App.render();
     </div>`
   }
 
-  /* consolidated: removed legacy renderTransactions from line 2380 */
+  App.renderTransactions = function() {
+    const months = Calc.getMonths(6)
+    const header = document.querySelector('#page-transactions .page-header')
+    if (header) {
+      header.innerHTML = `<div class="tx-page-top"><div><h1>รายการทั้งหมด</h1><p>${esc(fullMonthLabel(S.txMonth))}</p></div><div class="mt-sync-pill"><span class="mt-sync-dot"></span><span>Synced</span></div></div>
+        <div class="tx-summary-cards"><div class="tx-summary-card income"><span>รายรับ</span><strong id="tx-income-total">${fmt(0)}</strong></div><div class="tx-summary-card expense"><span>รายจ่าย</span><strong id="tx-expense-total">${fmt(0)}</strong></div></div>
+        <div class="tx-search-wrap"><input class="form-input" id="tx-search" placeholder="🔍  ค้นหาร้านค้า หมวด หรือจำนวนเงิน" value="${esc(S.txSearch || '')}"></div>
+        <div class="chips tx-filter-row" id="tx-type-chips">${[['all','ทั้งหมด'],['expense','รายจ่าย'],['income','รายรับ'],['transfer','โอนเงิน']].map(([v,l]) => `<button class="chip${S.txType === v ? ' active' : ''}" onclick="App.setTxType('${v}')">${l}</button>`).join('')}</div>
+        <div class="chips tx-month-row" id="tx-month-chips">${months.map(m => `<button class="chip mini${m === S.txMonth ? ' active' : ''}" onclick="App.setTxMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`).join('')}</div>`
+    }
+    const search = document.getElementById('tx-search')
+    if (search) search.oninput = e => { S.txSearch = e.target.value; App.renderTransactionsList() }
+    App.renderTransactionsList()
+  }
 
-  /* consolidated: removed legacy renderTransactionsList from line 2395 */
+  App.renderTransactionsList = function() {
+    const filtered = filterTransactionsForList()
+    const income = filtered.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
+    const expense = filtered.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
+    const incEl = document.getElementById('tx-income-total'), expEl = document.getElementById('tx-expense-total')
+    if (incEl) incEl.textContent = '+' + fmt(income)
+    if (expEl) expEl.textContent = '-' + fmt(expense)
+    const byDate = {}
+    filtered.forEach(t => { (byDate[t.date] ||= []).push(t) })
+    let html = ''
+    const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a))
+    if (!dates.length) html = App._emptyState('📋', 'ไม่มีรายการ', S.txSearch ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีรายการในช่วงนี้')
+    dates.forEach(date => {
+      const rows = byDate[date]
+      const dayInc = rows.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
+      const dayExp = rows.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
+      html += `<div class="tx-date-header"><span>${esc(groupDateLabel(date))}</span><div>${dayInc ? `<b class="c-income">+${fmt(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense">-${fmt(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
+    })
+    const el = document.getElementById('tx-list-content')
+    if (el) el.innerHTML = html
+    App._bindTxRows?.('tx-list-content')
+  }
 
   const prevSetTxMonth = App.setTxMonth?.bind(App)
-  /* consolidated: removed legacy setTxMonth from line 2419 */
-  /* consolidated: removed legacy setTxType from line 2420 */
+  App.setTxMonth = function(m) { S.txMonth = m; S.txSearch = S.txSearch || ''; App.renderTransactions() }
+  App.setTxType = function(t) { S.txType = t; App.renderTransactions() }
 
   function getFrequentCategories(type) {
     const cats = S.categories[type] || []
@@ -1238,7 +2428,7 @@ App.render();
   App.showAllTxCategories = function() { S.txShowAllCats = true; App._renderAddTxDetail() }
   App.hideAllTxCategories = function() { S.txShowAllCats = false; App._renderAddTxDetail() }
   const prevSetTxType = App._setTxType?.bind(App)
-  /* consolidated: removed legacy _setTxType from line 2431 */
+  App._setTxType = function(type) { S.txShowAllCats = false; prevSetTxType ? prevSetTxType(type) : (S.tx.type = type, S.tx.categoryId = '', App._renderAddTxAmount()) }
   App._selectCat = function(id) { S.tx.categoryId = id; document.querySelectorAll('#cat-grid .cat-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.catid === id)) }
 
   App._renderAddTxDetail = function() {
@@ -1253,7 +2443,6 @@ App.render();
     const color = typeColor(type)
     const walletOptions = S.wallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
     const toWalletOptions = S.wallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
-    const merchantFieldHtml = `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" autocomplete="off" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" onfocus="App._showMerchantDropdown?.(this.value)" oninput="App._txField('merchant',this.value);App._showMerchantDropdown?.(this.value)" onblur="setTimeout(()=>document.getElementById('mt-merchant-dropdown')?.classList.add('hidden'),160)"><div class="form-hint">เลือกจากร้านค้าที่เคยบันทึกไว้ หรือพิมพ์ชื่อใหม่ได้ทันที</div></div>`
     const isExpense = type === 'expense'
     const box = document.getElementById('add-tx-content')
     if (!box) return
@@ -1263,7 +2452,7 @@ App.render();
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div class="cat-grid cat-grid-compact" id="cat-grid">${shownCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}${hasMore ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.showAllTxCategories()"><span class="cat-icon">⋯</span><span>เพิ่มเติม</span></button>` : ''}${S.txShowAllCats && allCats.length > 5 ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.hideAllTxCategories()"><span class="cat-icon">⌃</span><span>ย่อ</span></button>` : ''}</div></div>` : ''}
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);${type === 'transfer' ? 'App._renderAddTxDetail()' : ''}">${walletOptions}</select></div>
-          ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : merchantFieldHtml}
+          ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value)"></div>`}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value)"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
           ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
         </div>
@@ -1291,8 +2480,14 @@ App.render();
     return insights.slice(0, 4)
   }
 
-  const prevRenderReports = App.renderReports?.bind(App) || function(){}
-  /* consolidated: removed legacy renderReports from line 2484 */
+  const prevRenderReports = App.renderReports.bind(App)
+  App.renderReports = function() {
+    prevRenderReports()
+    const box = document.getElementById('reports-content')
+    if (!box || box.querySelector('.ai-advisor-card')) return
+    const insights = App.getFinancialAdvisorInsights(S.rptMonth)
+    box.insertAdjacentHTML('afterbegin', `<div class="sec-title">Financial Insights</div><div class="card card-pad ai-advisor-card"><div class="ai-card-head"><div><strong>AI Financial Coach</strong><span>วิเคราะห์จากพฤติกรรมรายรับ-รายจ่ายในเครื่อง</span></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()">วิเคราะห์ใหม่</button></div>${insights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${i.icon}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')}</div>`)
+  }
 
   try { if (S.page === 'transactions') App.renderTransactions(); else App.render?.() } catch (_) {}
 })();
@@ -1368,11 +2563,65 @@ App.render();
     return null
   }
 
-  /* consolidated: removed legacy refreshMarketPrices from line 2566 */
+  App.refreshMarketPrices = async function() {
+    const next = { ...(S.marketPrices || {}) }
+    let ok = false
+    let goldOk = false
+    try {
+      const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache:'no-store' })
+      if (r.ok) { next.crypto = await r.json(); ok = true }
+    } catch (_) {}
+    try {
+      const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' })
+      if (r.ok) { next.fx = await r.json(); ok = true }
+    } catch (_) {}
 
-  /* consolidated: removed legacy _investmentUnitPriceTHB from line 2602 */
-  /* consolidated: removed legacy _investmentValueTHB from line 2617 */
-  /* consolidated: removed legacy _marketText from line 2618 */
+    const auroraEndpoints = [
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(AURORA_GOLD_URL),
+      'https://corsproxy.io/?' + encodeURIComponent(AURORA_GOLD_URL),
+      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(AURORA_GOLD_URL)
+    ]
+    for (const url of auroraEndpoints) {
+      try {
+        const r = await fetch(url, { cache:'no-store' })
+        if (!r.ok) continue
+        const data = App._parseAuroraGold(await r.text())
+        if (data?.jewelryBuy) { next.auroraGold = data; ok = true; goldOk = true; break }
+      } catch (_) {}
+    }
+
+    next.updatedAt = new Date().toISOString()
+    S.marketPrices = next
+    persist()
+    App.renderWallets?.()
+    App.render?.()
+    if (goldOk) toast('อัปเดตราคาทอง Aurora แล้ว', 'success')
+    else toast(ok ? 'อัปเดตราคาอ้างอิงแล้ว แต่ราคาทองยังไม่ได้ ใช้ราคาสำรองแทน' : 'อัปเดตราคาไม่ได้ ใช้ราคาสำรองในกระเป๋าแทน', ok ? 'warn' : 'error')
+  }
+
+  App._investmentUnitPriceTHB = function(w) {
+    const p = S.marketPrices || {}
+    if (w?.type === 'gold') return Number(p.auroraGold?.jewelryBuy || w.manualPrice || 0)
+    if (w?.type === 'crypto') {
+      const map = { BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether' }
+      const id = map[(w.symbol || '').toUpperCase()]
+      return Number((id && p.crypto?.[id]?.thb) || w.manualPrice || 0)
+    }
+    if (w?.type === 'fcd') {
+      const cur = (w.currency || w.symbol || 'USD').toUpperCase()
+      const thb = p.fx?.rates?.THB
+      return Number((cur === 'USD' ? thb : (thb && p.fx?.rates?.[cur] ? thb / p.fx.rates[cur] : 0)) || w.manualPrice || 0)
+    }
+    return 0
+  }
+  App._investmentValueTHB = w => isInvestType(w?.type) ? ((Number(w.units || 0) * App._investmentUnitPriceTHB(w)) || Number(w.balance || 0)) : Number(w?.balance || 0)
+  App._marketText = function(w) {
+    const p = S.marketPrices || {}
+    if (w?.type === 'gold') return p.auroraGold?.jewelryBuy ? `Aurora รับซื้อรูปพรรณ ${fmt(p.auroraGold.jewelryBuy)}/บาททอง` : 'ยังไม่ sync ราคา Aurora'
+    if (w?.type === 'crypto') { const coin = (w.symbol || w.name || '').toUpperCase(); const map = {BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether'}; const id = map[coin]; const thb = id && p.crypto?.[id]?.thb; return thb ? `${coin} ${fmt(thb)}` : 'CoinGecko' }
+    if (w?.type === 'fcd') { const cur = (w.currency || w.symbol || 'USD').toUpperCase(); const rate = cur === 'USD' ? p.fx?.rates?.THB : (p.fx?.rates?.THB && p.fx?.rates?.[cur] ? p.fx.rates.THB / p.fx.rates[cur] : null); return rate ? `${cur}/THB ${rate.toFixed(2)}` : 'FX อ้างอิง' }
+    return ''
+  }
 
   function syncInvestmentWalletForm(type = document.getElementById('wf-type')?.value) {
     const isInv = isInvestType(type)
@@ -1426,18 +2675,65 @@ App.render();
     priceBox.innerHTML = `<div><strong>ราคาจริง</strong><span>${esc(marketSourceLabel(type))}${unitPrice ? ` · ${fmt(unitPrice)}/${esc(assetUnitLabel(type))}` : ' · ยังไม่ sync'}</span></div><a href="${esc(marketUrlFor(type, w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a>`
   }
 
-  const previousOpenWalletForm = App.openWalletForm?.bind(App) || function(){}
-  /* consolidated: removed legacy openWalletForm from line 2679 */
+  const previousOpenWalletForm = App.openWalletForm.bind(App)
+  App.openWalletForm = function(id) {
+    previousOpenWalletForm(id)
+    setTimeout(() => syncInvestmentWalletForm(), 0)
+  }
   const previousSelectWalletType = App._selectWalletType?.bind(App)
-  /* consolidated: removed legacy _selectWalletType from line 2684 */
-  const previousSaveWallet = App.saveWallet?.bind(App) || function(){}
-  /* consolidated: removed legacy saveWallet from line 2689 */
+  App._selectWalletType = function(type) {
+    previousSelectWalletType?.(type)
+    syncInvestmentWalletForm(type)
+  }
+  const previousSaveWallet = App.saveWallet.bind(App)
+  App.saveWallet = function() {
+    const type = document.getElementById('wf-type')?.value
+    const symbol = document.getElementById('wf-symbol')
+    if (type === 'gold' && symbol) symbol.value = 'บาททอง'
+    previousSaveWallet()
+  }
 
   const previousWalletCard = App._walletCard?.bind(App)
-  /* consolidated: removed legacy _walletCard from line 2697 */
+  App._walletCard = function(w) {
+    if (!isInvestType(w?.type)) return previousWalletCard ? previousWalletCard(w) : ''
+    const color = w.color || '#2563EB'
+    const unitLabel = assetUnitLabel(w)
+    const priceText = App._marketText(w)
+    const unitPrice = App._investmentUnitPriceTHB(w)
+    const detailAction = `App.openWalletDetail('${esc(w.id)}')`
+    return `<div class="wallet-card wallet-card-colored wallet-card-invest wallet-card-invest-asset-only" style="--wallet-color:${esc(color)};--wallet-color-2:${esc(color)}BB" onclick="${detailAction}">
+      <div class="wc-header"><div><div class="wc-name">${esc(w.icon)} ${esc(w.name)}</div><div class="wc-type">${esc(App._walletTypeLabel(w.type))}</div></div></div>
+      <div class="wc-balance wc-balance-asset">${numFmt(w.units, 4)} <span>${esc(unitLabel)}</span></div>
+      <div class="wc-prog-info wc-invest-info"><span>${esc(priceText || 'ยังไม่ sync ราคาจริง')}</span>${unitPrice ? `<span>${fmt(unitPrice)}/หน่วย</span>` : '<span>ใช้ราคาสำรองถ้ามี</span>'}</div>
+      <a class="market-price-link" href="${esc(marketUrlFor(w.type, w))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">ดูราคาจริง ↗</a>
+      <div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();${detailAction}">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${esc(w.id)}')">แก้ไข</button></div>
+    </div>`
+  }
 
   const previousOpenWalletDetail = App.openWalletDetail?.bind(App)
-  /* consolidated: removed legacy openWalletDetail from line 2714 */
+  App.openWalletDetail = function(id) {
+    const w = S.wallets.find(x => x.id === id)
+    if (!w || !isInvestType(w.type)) return previousOpenWalletDetail?.(id)
+    S.walletDetailId = id
+    S.walletTxRange ||= 'all'
+    const tx = App._filterWalletTx ? App._filterWalletTx(id) : S.transactions.filter(t => t.walletId === id || t.toWalletId === id).sort((a,b) => (b.date || '').localeCompare(a.date || ''))
+    const chips = [['all','ทั้งหมด'],['month','เดือนนี้'],['3m','3 เดือน'],['year','ปีนี้'],['custom','กำหนดเอง']].map(([k,l]) => `<button class="chip${S.walletTxRange === k ? ' active' : ''}" onclick="App.setWalletTxRange('${k}','${esc(id)}')">${l}</button>`).join('')
+    const custom = S.walletTxRange === 'custom' ? `<div class="wallet-filter-custom"><input class="form-input" type="date" id="wallet-filter-start" value="${esc(S.walletTxStart || '')}"><input class="form-input" type="date" id="wallet-filter-end" value="${esc(S.walletTxEnd || '')}"><button class="btn btn-primary btn-sm" onclick="App.setWalletTxCustom('${esc(id)}')" style="width:auto">ดู</button></div>` : ''
+    const unitPrice = App._investmentUnitPriceTHB(w)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(w.icon)} ${esc(w.name)}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(w.id)}')" style="width:auto">แก้ไข</button></div>
+      <div class="sub-scroll wallet-detail-screen" data-wallet-id="${esc(id)}">
+        <div class="wallet-detail-hero wallet-detail-invest-only">
+          <div class="nw-label">จำนวน Asset ที่มี</div>
+          <div class="big">${numFmt(w.units, 4)} <span>${esc(assetUnitLabel(w))}</span></div>
+          <div class="nw-detail"><span class="nw-item">ราคาจริง <strong>${unitPrice ? fmt(unitPrice) + '/หน่วย' : 'ยังไม่ sync'}</strong></span><a class="market-price-link" href="${esc(marketUrlFor(w.type, w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a></div>
+        </div>
+        <div class="chips" style="padding:0 0 12px">${chips}</div>
+        ${custom}
+        ${App._sectionHeader('รายการในกระเป๋านี้')}
+        <div class="card"><div style="padding:0 16px">${tx.length ? tx.map(t => App._txRow(t)).join('') : App._emptyState('📋','ไม่พบรายการ','ลองเปลี่ยนช่วงเวลา')}</div></div>
+      </div>`)
+    setTimeout(() => App._bindTxRows('sub-screen'), 0)
+  }
 
   try { App.render?.() } catch (_) {}
 })()
@@ -1509,11 +2805,78 @@ App.render();
     return String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '').trim()
   }
 
-  /* consolidated: removed legacy _fetchAuroraGoldViaProxy from line 2808 */
+  App._fetchAuroraGoldViaProxy = async function(){
+    const customProxy = App._getGoldProxyUrl()
+    if (customProxy) {
+      const payload = await App._fetchJsonp(customProxy)
+      const data = normaliseGoldData(payload)
+      if (data?.jewelryBuy) return data
+      throw new Error('custom gold proxy returned no Aurora jewelry-buy price')
+    }
 
-  /* consolidated: removed legacy refreshMarketPrices from line 2833 */
+    const publicProxyUrls = [
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(AURORA_GOLD_URL),
+      'https://corsproxy.io/?' + encodeURIComponent(AURORA_GOLD_URL),
+      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(AURORA_GOLD_URL)
+    ]
+    for (const url of publicProxyUrls) {
+      try {
+        const r = await fetch(url, { cache:'no-store' })
+        if (!r.ok) continue
+        const data = normaliseGoldData(await r.text())
+        if (data?.jewelryBuy) return { ...data, fetchedVia:'public-proxy' }
+      } catch (_) {}
+    }
+    return null
+  }
 
-  /* consolidated: removed legacy setGoldProxyUrl from line 2873 */
+  App.refreshMarketPrices = async function(){
+    const next = { ...(S.marketPrices || {}) }
+    let anyOk = false
+    let goldOk = false
+
+    try {
+      const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache:'no-store' })
+      if (r.ok) { next.crypto = await r.json(); anyOk = true }
+    } catch (_) {}
+    try {
+      const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' })
+      if (r.ok) { next.fx = await r.json(); anyOk = true }
+    } catch (_) {}
+
+    try {
+      const gold = await App._fetchAuroraGoldViaProxy()
+      if (gold?.jewelryBuy) {
+        next.auroraGold = gold
+        anyOk = true
+        goldOk = true
+      }
+    } catch (err) {
+      console.warn('Aurora gold sync failed:', err)
+    }
+
+    next.updatedAt = new Date().toISOString()
+    S.marketPrices = next
+    persist()
+    App.renderWallets?.()
+    App.render?.()
+
+    if (goldOk) {
+      toastSafe('Sync ราคาทอง Aurora สำเร็จ', 'success')
+    } else if (!App._getGoldProxyUrl()) {
+      toastSafe('ยังไม่ได้ตั้งค่า Gold Proxy จึง sync Aurora ไม่เสถียร', 'warn')
+    } else {
+      toastSafe(anyOk ? 'ราคาอื่นอัปเดตแล้ว แต่ Aurora ยังไม่ตอบกลับ' : 'Sync ราคาไม่ได้ ลองเช็ก Gold Proxy', anyOk ? 'warn' : 'error')
+    }
+  }
+
+  App.setGoldProxyUrl = function(url){
+    const value = String(url || '').trim()
+    if (value) localStorage.setItem('MT_GOLD_PROXY_URL', value)
+    else localStorage.removeItem('MT_GOLD_PROXY_URL')
+    window.MT_GOLD_PROXY_URL = value
+    toastSafe(value ? 'บันทึก Gold Proxy URL แล้ว' : 'ลบ Gold Proxy URL แล้ว', value ? 'success' : 'info')
+  }
 })();
 
 /* ============================================================
@@ -1569,18 +2932,112 @@ App.render();
     }
   }
 
-  /* consolidated: removed legacy _normaliseThaiGoldPayload from line 2935 */
+  App._normaliseThaiGoldPayload = normaliseThaiGoldPayload
 
-  /* consolidated: removed legacy _fetchThaiGoldViaSource from line 2937 */
+  App._fetchThaiGoldViaSource = async function(){
+    const customProxy = String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '').trim()
+    if (customProxy) {
+      const payload = await App._fetchJsonp(customProxy)
+      const data = normaliseThaiGoldPayload(payload)
+      if (data?.jewelryBuy) return { ...data, fetchedVia:'custom-proxy' }
+      throw new Error('custom gold proxy returned no Thai gold price')
+    }
+
+    // Best case: the JSON API allows browser CORS.
+    try {
+      const r = await fetch(THAI_GOLD_API_URL, { cache:'no-store' })
+      if (r.ok) {
+        const data = normaliseThaiGoldPayload(await r.json())
+        if (data?.jewelryBuy) return { ...data, fetchedVia:'direct-api' }
+      }
+    } catch (_) {}
+
+    // Browser-only fallback for GitHub Pages. Not guaranteed, but harmless.
+    const proxyUrls = [
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(THAI_GOLD_API_URL),
+      'https://corsproxy.io/?' + encodeURIComponent(THAI_GOLD_API_URL),
+      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(THAI_GOLD_API_URL)
+    ]
+    for (const url of proxyUrls) {
+      try {
+        const r = await fetch(url, { cache:'no-store' })
+        if (!r.ok) continue
+        const data = normaliseThaiGoldPayload(await r.text())
+        if (data?.jewelryBuy) return { ...data, fetchedVia:'public-proxy' }
+      } catch (_) {}
+    }
+    return null
+  }
 
   // Backward compatibility: older code still calls this method name.
-  /* consolidated: removed legacy _fetchAuroraGoldViaProxy from line 2973 */
+  App._fetchAuroraGoldViaProxy = App._fetchThaiGoldViaSource
 
-  /* consolidated: removed legacy refreshMarketPrices from line 2975 */
+  App.refreshMarketPrices = async function(){
+    const next = { ...(S.marketPrices || {}) }
+    let anyOk = false
+    let goldOk = false
 
-  /* consolidated: removed legacy _investmentUnitPriceTHB from line 3014 */
+    try {
+      const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache:'no-store' })
+      if (r.ok) { next.crypto = await r.json(); anyOk = true }
+    } catch (_) {}
 
-  /* consolidated: removed legacy _marketText from line 3031 */
+    try {
+      const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' })
+      if (r.ok) { next.fx = await r.json(); anyOk = true }
+    } catch (_) {}
+
+    try {
+      const gold = await App._fetchThaiGoldViaSource()
+      if (gold?.jewelryBuy) {
+        next.thaiGold = gold
+        // Keep legacy key so all previous investment renderers still work.
+        next.auroraGold = gold
+        anyOk = true
+        goldOk = true
+      }
+    } catch (err) {
+      console.warn('Thai gold sync failed:', err)
+    }
+
+    next.updatedAt = dateNow()
+    S.marketPrices = next
+    persist()
+    App.renderWallets?.()
+    App.render?.()
+
+    if (goldOk) toastSafe('Sync ราคาทองสมาคมค้าทองคำสำเร็จ', 'success')
+    else if (anyOk) toastSafe('ราคาอื่นอัปเดตแล้ว แต่ราคาทองยังไม่สำเร็จ', 'warn')
+    else toastSafe('Sync ราคาไม่ได้ ลองตั้งค่า Gold Proxy หรือเช็กอินเทอร์เน็ต', 'error')
+  }
+
+  App._investmentUnitPriceTHB = function(w) {
+    if (!w) return 0
+    const p = S.marketPrices || {}
+    if (w.type === 'gold') return Number(p.thaiGold?.jewelryBuy || p.auroraGold?.jewelryBuy || w.manualPrice || 0)
+    if (w.type === 'crypto') {
+      const key = (w.symbol || '').toUpperCase()
+      const map = { BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether' }
+      return Number(p.crypto?.[map[key]]?.thb || w.manualPrice || 0)
+    }
+    if (w.type === 'fcd') {
+      const cc = (w.currency || w.symbol || 'USD').toUpperCase()
+      if (cc === 'THB') return 1
+      return Number(p.fx?.rates?.[cc] ? (1 / p.fx.rates[cc]) * p.fx.rates.THB : w.manualPrice || 0)
+    }
+    return Number(w.manualPrice || 0)
+  }
+
+  App._marketText = function(w) {
+    const p = S.marketPrices || {}
+    if (w?.type === 'gold') {
+      const g = p.thaiGold || p.auroraGold
+      return g?.jewelryBuy ? `สมาคมค้าทองคำ ทองรูปพรรณรับซื้อ ${fmtMoney(g.jewelryBuy)}/บาททอง` : 'ยังไม่ sync ราคาทองสมาคมค้าทองคำ'
+    }
+    if (w?.type === 'crypto') return 'CoinGecko'
+    if (w?.type === 'fcd') return 'Frankfurter FX'
+    return ''
+  }
 
   function isInvestType(type) { return ['gold','crypto','fcd'].includes(type) }
   function assetUnitLabel(w) {
@@ -1596,10 +3053,46 @@ App.render();
   }
 
   const previousWalletCard = App._walletCard?.bind(App)
-  /* consolidated: removed legacy _walletCard from line 3056 */
+  App._walletCard = function(w) {
+    if (!isInvestType(w?.type)) return previousWalletCard ? previousWalletCard(w) : ''
+    const color = w.color || '#2563EB'
+    const unitPrice = App._investmentUnitPriceTHB(w)
+    const priceText = App._marketText(w)
+    const detailAction = `App.openWalletDetail('${esc(w.id)}')`
+    return `<div class="wallet-card wallet-card-colored wallet-card-invest wallet-card-invest-asset-only" style="--wallet-color:${esc(color)};--wallet-color-2:${esc(color)}BB" onclick="${detailAction}">
+      <div class="wc-header"><div><div class="wc-name">${esc(w.icon)} ${esc(w.name)}</div><div class="wc-type">${esc(App._walletTypeLabel(w.type))}</div></div></div>
+      <div class="wc-balance wc-balance-asset">${numFmt(w.units, 4)} <span>${esc(assetUnitLabel(w))}</span></div>
+      <div class="wc-prog-info wc-invest-info"><span>${esc(priceText || 'ยังไม่ sync ราคาจริง')}</span>${unitPrice ? `<span>${fmtMoney(unitPrice)}/หน่วย</span>` : '<span>ใช้ราคาสำรองถ้ามี</span>'}</div>
+      <a class="market-price-link" href="${esc(marketUrlFor(w))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">ดูราคาจริง ↗</a>
+      <div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();${detailAction}">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${esc(w.id)}')">แก้ไข</button></div>
+    </div>`
+  }
 
   const previousOpenWalletDetail = App.openWalletDetail?.bind(App)
-  /* consolidated: removed legacy openWalletDetail from line 3072 */
+  App.openWalletDetail = function(id) {
+    const w = S.wallets.find(x => x.id === id)
+    if (!w || !isInvestType(w.type)) return previousOpenWalletDetail?.(id)
+    S.walletDetailId = id
+    S.walletTxRange ||= 'all'
+    const tx = App._filterWalletTx ? App._filterWalletTx(id) : S.transactions.filter(t => t.walletId === id || t.toWalletId === id).sort((a,b) => (b.date || '').localeCompare(a.date || ''))
+    const chips = [['all','ทั้งหมด'],['month','เดือนนี้'],['3m','3 เดือน'],['year','ปีนี้'],['custom','กำหนดเอง']].map(([k,l]) => `<button class="chip${S.walletTxRange === k ? ' active' : ''}" onclick="App.setWalletTxRange('${k}','${esc(id)}')">${l}</button>`).join('')
+    const custom = S.walletTxRange === 'custom' ? `<div class="wallet-filter-custom"><input class="form-input" type="date" id="wallet-filter-start" value="${esc(S.walletTxStart || '')}"><input class="form-input" type="date" id="wallet-filter-end" value="${esc(S.walletTxEnd || '')}"><button class="btn btn-primary btn-sm" onclick="App.setWalletTxCustom('${esc(id)}')" style="width:auto">ดู</button></div>` : ''
+    const unitPrice = App._investmentUnitPriceTHB(w)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(w.icon)} ${esc(w.name)}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(w.id)}')" style="width:auto">แก้ไข</button></div>
+      <div class="sub-scroll wallet-detail-screen" data-wallet-id="${esc(id)}">
+        <div class="wallet-detail-hero wallet-detail-invest-only">
+          <div class="nw-label">จำนวน Asset ที่มี</div>
+          <div class="big">${numFmt(w.units, 4)} <span>${esc(assetUnitLabel(w))}</span></div>
+          <div class="nw-detail"><span class="nw-item">ราคาจริง <strong>${unitPrice ? fmtMoney(unitPrice) + '/หน่วย' : 'ยังไม่ sync'}</strong></span><a class="market-price-link" href="${esc(marketUrlFor(w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a></div>
+          ${w.type === 'gold' ? `<div class="wallet-market-note compact">อ้างอิง: สมาคมค้าทองคำ / ทองรูปพรรณรับซื้อ</div>` : ''}
+        </div>
+        <div class="chips" style="padding:0 0 12px">${chips}</div>
+        ${custom}
+        ${App._sectionHeader('รายการในกระเป๋านี้')}
+        <div class="card"><div style="padding:0 16px">${tx.length ? tx.map(t => App._txRow(t)).join('') : App._emptyState('📋','ไม่พบรายการ','ลองเปลี่ยนช่วงเวลา')}</div></div>
+      </div>`)
+    setTimeout(() => App._bindTxRows('sub-screen'), 0)
+  }
 
   App.setGoldProxyUrl = function(url){
     const value = String(url || '').trim()
@@ -1629,8 +3122,15 @@ App.render();
   const goldData = () => S.marketPrices?.thaiGold || S.marketPrices?.auroraGold || null;
   App._walletTypeLabel = App._walletTypeLabel || walletTypeLabel;
 
-  /* consolidated: removed legacy _investmentUnitPriceTHB from line 3125 */
-  /* consolidated: removed legacy _investmentValueTHB from line 3133 */
+  App._investmentUnitPriceTHB = function(w){
+    if (!w) return 0;
+    const p = S.marketPrices || {};
+    if (w.type === 'gold') return Number(p.thaiGold?.jewelryBuy || p.auroraGold?.jewelryBuy || w.manualPrice || 0);
+    if (w.type === 'crypto') { const map = { BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether' }; return Number(p.crypto?.[map[String(w.symbol||'').toUpperCase()]]?.thb || w.manualPrice || 0); }
+    if (w.type === 'fcd') { const cur = String(w.currency || w.symbol || 'USD').toUpperCase(); const thb = p.fx?.rates?.THB; return Number(cur === 'THB' ? 1 : (thb && p.fx?.rates?.[cur] ? thb / p.fx.rates[cur] : w.manualPrice || 0)); }
+    return Number(w.manualPrice || 0);
+  };
+  App._investmentValueTHB = w => isInvest(w) ? Number(w.units || 0) * App._investmentUnitPriceTHB(w) : Number(w?.balance || 0);
   App._marketText = function(w){
     if (w?.type === 'gold') { const g = goldData(); return g?.jewelryBuy ? `สมาคมค้าทองคำ · ทองรูปพรรณรับซื้อ ${MONEY(g.jewelryBuy)}/บาททอง` : 'ยังไม่ Sync ราคาทองสมาคมค้าทองคำ'; }
     if (w?.type === 'crypto') return 'CoinGecko';
@@ -1649,12 +3149,39 @@ App.render();
   }
   Calc.getWalletGroups = () => netWorthGroups();
 
-  /* consolidated: removed legacy _walletCard from line 3152 */
+  App._walletCard = function(w){
+    const isCC = w.type === 'credit'; const invest = isInvest(w); const color = w.color || (isCC ? '#DC2626' : invest ? '#D97706' : '#2563EB');
+    const detailAction = isCC ? `App.openCCDetail('${ESC(w.id)}')` : `App.openWalletDetail('${ESC(w.id)}')`;
+    const name = `${w.icon || ''} ${w.name || ''}`.trim();
+    if (invest) {
+      const price = App._investmentUnitPriceTHB(w); const marketText = App._marketText(w);
+      return `<div class="wallet-card wallet-card-colored wallet-card-invest wallet-card-invest-asset-only" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="${detailAction}"><div class="wc-header"><div><div class="wc-name">${ESC(name)}</div><div class="wc-type">${ESC(walletTypeLabel(w.type))}</div></div></div><div class="wc-balance wc-balance-asset">${NUM(w.units,4)} <span>${ESC(unitLabel(w))}</span></div><div class="wc-prog-info wc-invest-info"><span>${ESC(marketText)}</span><span>${price ? MONEY(price) + '/หน่วย' : 'กรอกราคาสำรองได้'}</span></div><a class="market-price-link" href="${ESC(marketUrl(w))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">ดูราคาจริง ↗</a><div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();${detailAction}">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')">แก้ไข</button></div></div>`;
+    }
+    if (isCC) {
+      const owed = Math.abs(Number(w.balance || 0)); const limit = Number(w.limit || 0); const due = w.dueDay ? Calc.getDueDate(w.dueDay) : null; const pct = limit ? Math.min(100, Math.max(0, owed / limit * 100)) : 0; const avail = limit ? Math.max(0, limit - owed) : 0;
+      return `<div class="wallet-card wallet-card-colored wallet-card-credit" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="${detailAction}"><div class="wc-header"><div><div class="wc-name">${ESC(name)}</div><div class="wc-type">บัตรเครดิต${limit ? ` · วงเงิน ${MONEY(limit)}` : ''}</div></div></div><div class="wc-balance">-${MONEY(owed)}</div>${due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${ESC(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : ''}<div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openCCDetail('${ESC(w.id)}')">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openCCPay('${ESC(w.id)}')">ชำระ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')">แก้ไข</button></div></div>`;
+    }
+    return `<div class="wallet-card wallet-card-colored" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="${detailAction}"><div class="wc-header"><div><div class="wc-name">${ESC(name)}</div><div class="wc-type">${ESC(walletTypeLabel(w.type))}</div></div></div><div class="wc-balance">${MONEY(Number(w.balance || 0))}</div><div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();${detailAction}">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')">แก้ไข</button></div></div>`;
+  };
 
-  /* consolidated: removed legacy renderWallets from line 3167 */
+  App.renderWallets = function(){
+    const g = netWorthGroups(); const summary = document.getElementById('wallets-summary'); const content = document.getElementById('wallets-content');
+    if (summary) summary.innerHTML = `<div class="wallet-summary-grid wallet-summary-grid-fixed"><div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${MONEY(g.assetTotal)}</strong></div><div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${MONEY(g.liabilityTotal)}</strong></div></div>`;
+    if (!content) return; content.style.display = 'block'; content.style.visibility = 'visible';
+    const gold = goldData(); const updated = gold?.fetchedAt ? new Date(gold.fetchedAt).toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' }) : '';
+    const goldNote = `<div class="wallet-market-note"><b>ราคาทอง:</b> อ้างอิงสมาคมค้าทองคำ · ทองรูปพรรณรับซื้อ${gold?.jewelryBuy ? ` ${MONEY(gold.jewelryBuy)}/บาททอง` : ' ยังไม่ Sync'}${updated ? ` · อัปเดต ${ESC(updated)}` : ''}</div>`;
+    const empty = txt => `<div class="card card-pad wallet-empty-card">${ESC(txt)}</div>`;
+    const section = (title, icon, list, emptyText, grid) => `<section class="wallet-section-block"><div class="wallet-section-title">${icon} ${ESC(title)}</div>${list.length ? `<div class="${grid ? 'wallet-grid-2' : 'wallet-list-stack'}">${list.map(App._walletCard).join('')}</div>` : empty(emptyText)}</section>`;
+    content.innerHTML = `<div class="wallet-toolbar"><button class="btn btn-secondary btn-sm" onclick="App.refreshMarketPrices()">↻ Refresh ราคา</button><button class="btn btn-primary btn-sm" onclick="App.openWalletForm(null)">+ เพิ่มกระเป๋า</button></div>${goldNote}${section('สินทรัพย์','🏦',g.assets,'ยังไม่มีสินทรัพย์',true)}${section('บัตรเครดิต','💳',g.liabilities,'ยังไม่มีบัตรเครดิต',false)}${section('การลงทุน','📈',g.investments,'เพิ่มทอง / Crypto / FCD เพื่อดูราคาอ้างอิง',true)}`;
+  };
 
   const previousOpenWalletDetail = App.openWalletDetail?.bind(App);
-  /* consolidated: removed legacy openWalletDetail from line 3179 */
+  App.openWalletDetail = function(id){
+    const w = S.wallets.find(x => x.id === id); if (!w || !isInvest(w)) return previousOpenWalletDetail?.(id);
+    const tx = (S.transactions || []).filter(t => t.walletId === id || t.toWalletId === id).sort((a,b)=>(b.date||'').localeCompare(a.date||'')); const price = App._investmentUnitPriceTHB(w);
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${ESC(w.icon)} ${ESC(w.name)}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${ESC(w.id)}')" style="width:auto">แก้ไข</button></div><div class="sub-scroll wallet-detail-screen"><div class="wallet-detail-hero wallet-detail-invest-only"><div class="nw-label">จำนวน Asset ที่มี</div><div class="big">${NUM(w.units,4)} <span>${ESC(unitLabel(w))}</span></div><div class="nw-detail"><span class="nw-item">ราคาจริง <strong>${price ? MONEY(price) + '/หน่วย' : 'ยังไม่ Sync'}</strong></span><a class="market-price-link" href="${ESC(marketUrl(w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a></div>${w.type === 'gold' ? `<div class="wallet-market-note compact">อ้างอิง: สมาคมค้าทองคำ / ทองรูปพรรณรับซื้อ</div>` : ''}</div>${App._sectionHeader ? App._sectionHeader('รายการในกระเป๋านี้') : '<div class="section-title">รายการในกระเป๋านี้</div>'}<div class="card"><div style="padding:0 16px">${tx.length ? tx.map(t => App._txRow(t)).join('') : (App._emptyState ? App._emptyState('📋','ไม่พบรายการ','') : '<div class="empty-state">ไม่พบรายการ</div>')}</div></div></div>`);
+    setTimeout(() => App._bindTxRows?.('sub-screen'), 0);
+  };
 
   function normaliseGoldPayload(raw){
     let json = raw; if (typeof raw === 'string') { const trimmed = raw.trim(); try { json = JSON.parse(trimmed); } catch { const m = trimmed.match(/^[^(]+\((.*)\);?$/s); if (m) json = JSON.parse(m[1]); else return null; } }
@@ -1671,7 +3198,14 @@ App.render();
     return null;
   };
   App._fetchAuroraGoldViaProxy = App._fetchThaiGoldViaSource;
-  /* consolidated: removed legacy refreshMarketPrices from line 3201 */
+  App.refreshMarketPrices = async function(){
+    const next = { ...(S.marketPrices || {}) }; let anyOk = false, goldOk = false;
+    try { const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache:'no-store' }); if (r.ok) { next.crypto = await r.json(); anyOk = true; } } catch (_) {}
+    try { const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' }); if (r.ok) { next.fx = await r.json(); anyOk = true; } } catch (_) {}
+    try { const gold = await App._fetchThaiGoldViaSource(); if (gold?.jewelryBuy) { next.thaiGold = gold; next.auroraGold = gold; anyOk = true; goldOk = true; } } catch (err) { console.warn('Gold sync failed:', err); }
+    next.updatedAt = new Date().toISOString(); S.marketPrices = next; persist(); App.renderWallets?.(); App.render?.();
+    if (goldOk) toast('Sync ราคาทองสมาคมค้าทองคำสำเร็จ', 'success'); else if (anyOk) toast('ราคาอื่นอัปเดตแล้ว แต่ราคาทองยังไม่สำเร็จ', 'warn'); else toast('Sync ราคาไม่ได้ กรุณาเช็ก Gold Proxy/อินเทอร์เน็ต', 'error');
+  };
   try { if (S.page === 'wallets') App.renderWallets(); } catch (err) { console.warn('wallet rollback render failed', err); }
 })();
 
@@ -1685,24 +3219,54 @@ App.render();
   // ── P0: CC Payment — check source wallet has enough balance ──
   // Original saveCCPay deducts from source without any balance check,
   // silently sending it deeply negative.
-  const _origSaveCCPay = App.saveCCPay?.bind(App) || function(){}
-  /* consolidated: removed legacy saveCCPay from line 3223 */
+  const _origSaveCCPay = App.saveCCPay.bind(App)
+  App.saveCCPay = function() {
+    const walletId = document.getElementById('cc-pay-wallet')?.value
+    const amount   = parseFloat(document.getElementById('cc-pay-amount')?.value) || 0
+    if (walletId && amount > 0) {
+      const src = S.wallets.find(w => w.id === walletId)
+      if (src && src.balance < amount) {
+        toast(`ยอดใน "${src.name}" ไม่เพียงพอ (มี ${Calc.fmt(src.balance)})`, 'error')
+        return
+      }
+    }
+    _origSaveCCPay()
+  }
 
   // ── P1: Search debounce — 250ms to prevent re-render on every keystroke ──
   // The V2.2 renderTransactions sets oninput without debounce.
   // We re-attach with debounce each time the transactions page renders.
   let _txSearchTimer = null
-  const _origRenderTx = App.renderTransactions?.bind(App) || function(){}
-  /* consolidated: removed legacy renderTransactions from line 3241 */
+  const _origRenderTx = App.renderTransactions.bind(App)
+  App.renderTransactions = function() {
+    _origRenderTx()
+    const el = document.getElementById('tx-search')
+    if (!el) return
+    el.oninput = function(e) {
+      clearTimeout(_txSearchTimer)
+      const val = e.target.value
+      _txSearchTimer = setTimeout(() => {
+        S.txSearch = val
+        App.renderTransactionsList?.()
+      }, 250)
+    }
+  }
 
   // ── P1: FAB visible on Transactions tab ──
   // V2.2.2 final guard hides FAB on all non-dashboard pages.
   // We wrap showPage (outer-most) so our change runs after syncChrome.
-  const _origShowPage = App.showPage?.bind(App) || function(){}
-  /* consolidated: removed legacy showPage from line 3259 */
+  const _origShowPage = App.showPage.bind(App)
+  App.showPage = function(page) {
+    _origShowPage(page)
+    _syncFab(page)
+  }
 
-  const _origRender = App.render?.bind(App) || function(){}
-  /* consolidated: removed legacy render from line 3265 */
+  const _origRender = App.render.bind(App)
+  App.render = function() {
+    const result = _origRender()
+    _syncFab(S.page)
+    return result
+  }
 
   function _syncFab(page) {
     const fab = document.getElementById('fab')
@@ -1719,8 +3283,11 @@ App.render();
   // ── P1: Merchant autocomplete (datalist) in add-tx form ──
   // After each _renderAddTxDetail call, inject a <datalist> pointing at
   // the user's saved merchants so the browser shows suggestions.
-  const _origDetailRender = App._renderAddTxDetail?.bind(App) || function(){}
-  /* consolidated: removed legacy _renderAddTxDetail from line 3287 */
+  const _origDetailRender = App._renderAddTxDetail.bind(App)
+  App._renderAddTxDetail = function() {
+    _origDetailRender()
+    _injectMerchantDatalist()
+  }
 
   function _injectMerchantDatalist() {
     const input = document.getElementById('tx-merchant')
@@ -1820,7 +3387,10 @@ App.render();
   }
 
   const _prevEnsureV2State = App._ensureV2State?.bind(App)
-  /* consolidated: removed legacy _ensureV2State from line 3390 */
+  App._ensureV2State = function() {
+    _prevEnsureV2State?.()
+    ensureMinimumWallet()
+  }
 
   // ── 1. Inline confirm dialog — replaces all 6 browser confirm() calls ──
   App.showConfirm = function({ title = 'ยืนยัน', body = '', confirmLabel = 'ยืนยัน', danger = false, onConfirm, onCancel } = {}) {
@@ -1843,7 +3413,32 @@ App.render();
     el.addEventListener('click', e => { if (e.target === el) { el.remove(); onCancel?.() } })
   }
 
-  /* consolidated: removed legacy importData from line 3416 */
+  App.importData = function(input) {
+    const file = input?.files?.[0]
+    if (!file) return
+    Storage.importJSON(file, data => {
+      App.showConfirm({
+        title: 'นำเข้าข้อมูล',
+        body: 'จะแทนที่ข้อมูลปัจจุบันทั้งหมด ยืนยัน?',
+        confirmLabel: 'นำเข้า', danger: true,
+        onConfirm() {
+          S.transactions  = data.transactions || []
+          S.wallets       = data.wallets      || []
+          S.categories    = data.categories   || S.categories
+          S.budgets       = data.budgets      || []
+          S.recurring     = data.recurring    || []
+          S.merchants     = data.merchants    || []
+          S.ccBenefits    = data.ccBenefits   || {}
+          S.incomeBudgets = data.incomeBudgets || []
+          S.marketPrices  = data.marketPrices || {}
+          ensureMinimumWallet()
+          persist(); App.render()
+          toast('นำเข้าข้อมูลสำเร็จ', 'success')
+        },
+        onCancel() { if (input) input.value = '' }
+      })
+    }, err => { toast('นำเข้าล้มเหลว: ' + err, 'error'); if (input) input.value = '' })
+  }
 
   App.resetData = function() {
     App.showConfirm({
@@ -1859,7 +3454,27 @@ App.render();
     })
   }
 
-  /* consolidated: removed legacy deleteWallet from line 3457 */
+  App.deleteWallet = function(id) {
+    if ((S.wallets || []).length <= 1) {
+      toast('ต้องมีกระเป๋าอย่างน้อย 1 อัน', 'warn')
+      return
+    }
+    App.showConfirm({
+      title: 'ลบกระเป๋าเงิน',
+      body: 'รายการที่เกี่ยวข้องจะยังคงอยู่',
+      confirmLabel: 'ลบ', danger: true,
+      onConfirm() {
+        if ((S.wallets || []).length <= 1) {
+          toast('ต้องมีกระเป๋าอย่างน้อย 1 อัน', 'warn')
+          return
+        }
+        S.wallets = S.wallets.filter(w => w.id !== id)
+        ensureMinimumWallet()
+        persist(); App.closeOverlay('overlay-wallet-form'); App.render()
+        toast('ลบกระเป๋าแล้ว', 'success')
+      }
+    })
+  }
 
   App.deleteRecurring = function(id) {
     App.showConfirm({
@@ -1872,9 +3487,28 @@ App.render();
     })
   }
 
-  /* consolidated: removed legacy deleteCategory from line 3490 */
+  App.deleteCategory = function(id) {
+    App.showConfirm({
+      title: 'ลบหมวดหมู่',
+      confirmLabel: 'ลบ', danger: true,
+      onConfirm() {
+        const type = S.catManageType || 'expense'
+        S.categories[type] = S.categories[type].filter(c => c.id !== id)
+        persist(); App.openCategoryScreen(type); toast('ลบหมวดหมู่แล้ว', 'success')
+      }
+    })
+  }
 
-  /* consolidated: removed legacy deleteMerchant from line 3502 */
+  App.deleteMerchant = function(id) {
+    App.showConfirm({
+      title: 'ลบร้านค้า',
+      confirmLabel: 'ลบ', danger: true,
+      onConfirm() {
+        S.merchants = S.merchants.filter(m => m.id !== id)
+        persist(); App.openMerchantScreen(); toast('ลบร้านค้าแล้ว', 'success')
+      }
+    })
+  }
 
   // ── 2. Export CSV ────────────────────────────────────────────
   App.exportCSV = function() {
@@ -1924,7 +3558,32 @@ App.render();
     })
   }
 
-  /* consolidated: removed legacy postRecurringNow from line 3561 */
+  App.postRecurringNow = function(id) {
+    const r = S.recurring.find(x => x.id === id)
+    if (!r) return
+    const expCatIds = new Set((S.categories.expense || []).map(c => c.id))
+    const txType = r.categoryId && !expCatIds.has(r.categoryId) ? 'income' : 'expense'
+    const wallet = S.wallets.find(w => w.type !== 'credit') || S.wallets[0]
+    if (wallet) {
+      S.transactions.push({
+        id: Calc.genId(),
+        type: txType,
+        amount: Number(r.amount) || 0,
+        walletId: wallet.id,
+        categoryId: r.categoryId || '',
+        merchant: r.name,
+        note: '🔁 รายการประจำ',
+        date: getTODAY(),
+        isRecurring: true
+      })
+      const delta = Number(r.amount) || 0
+      wallet.balance = (Number(wallet.balance) || 0) + (txType === 'expense' ? -delta : delta)
+    }
+    r.lastPostedAt = getTODAY()
+    persist()
+    App.renderDashboard()
+    toast(`บันทึก "${r.name}" แล้ว`, 'success')
+  }
 
   App.skipRecurringNow = function(id) {
     const r = S.recurring.find(x => x.id === id)
@@ -2108,8 +3767,46 @@ App.render();
   }
 
   // ── 5. More page: CSV export row + Thai gold proxy setting ──
-  const _prevRenderMore = App.renderMore?.bind(App) || function(){}
-  /* consolidated: removed legacy renderMore from line 3771 */
+  const _prevRenderMore = App.renderMore.bind(App)
+  App.renderMore = function() {
+    _prevRenderMore()
+    const content = document.getElementById('more-content')
+    if (!content) return
+
+    // Insert CSV export row before the resetData row
+    if (!content.querySelector('[data-v23-csv]')) {
+      const resetRow = content.querySelector('[onclick*="resetData"]')?.closest('.settings-row')
+      if (resetRow) {
+        resetRow.insertAdjacentHTML('beforebegin', `
+          <div class="settings-row" onclick="App.exportCSV()" data-v23-csv="1">
+            <div class="s-icon">📊</div>
+            <div class="s-label">ส่งออก CSV</div>
+            <div class="s-arrow">›</div>
+          </div>`)
+      }
+    }
+
+    // Insert Gold proxy setting section before the footer
+    if (!content.querySelector('[data-v23-gold-proxy]')) {
+      const currentProxy = String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '')
+      const footer = content.querySelector('[style*="text-align:center"]')
+      if (footer) {
+        footer.insertAdjacentHTML('beforebegin', `
+          <div class="sec-title">Thai Gold API (Proxy)</div>
+          <div class="card card-pad" data-v23-gold-proxy="1" style="margin-bottom:16px">
+            <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
+              ใส่ URL Google Apps Script Proxy เพื่อ sync ราคาทองสมาคมค้าทองคำ
+            </div>
+            <input class="form-input" id="gold-proxy-input"
+              placeholder="https://script.google.com/macros/s/.../exec"
+              value="${ESC(currentProxy)}"
+              style="margin-bottom:10px">
+            <button class="btn btn-primary" onclick="App.saveGoldProxyUrl()">บันทึก Proxy URL</button>
+            ${currentProxy ? `<div style="font-size:11px;color:var(--income);margin-top:8px">✓ ตั้งค่าแล้ว: ${ESC(currentProxy.length > 60 ? currentProxy.slice(0,60) + '…' : currentProxy)}</div>` : ''}
+          </div>`)
+      }
+    }
+  }
 
   App.saveGoldProxyUrl = function() {
     const url = (document.getElementById('gold-proxy-input')?.value || '').trim()
@@ -2182,7 +3879,7 @@ App.render();
           <div class="wc-card-actions">${payBtn}${editBtn}</div>
         </div>
         <div class="wc-balance">-${MONEY(owed)}</div>
-        ${due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em><strong>${ESC(due.dueStr)}</strong></div>` : ''}
+        ${due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${ESC(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}
         ${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : ''}
       </div>`
     }
@@ -2198,12 +3895,46 @@ App.render();
   }
 
   // ── Strip wallet-market-note after render ────────────────────
-  const _prevRenderWallets = App.renderWallets?.bind(App) || function(){}
-  /* consolidated: removed legacy renderWallets from line 3899 */
+  const _prevRenderWallets = App.renderWallets.bind(App)
+  App.renderWallets = function() {
+    _prevRenderWallets()
+    document.querySelectorAll('#wallets-content .wallet-market-note').forEach(el => el.remove())
+  }
 
   // ── Reports: single AI insights + "analyzing" toast ──────────
-  const _prevRenderReports = App.renderReports?.bind(App) || function(){}
-  /* consolidated: removed legacy renderReports from line 3906 */
+  const _prevRenderReports = App.renderReports.bind(App)
+  App.renderReports = function() {
+    toast('🧠 AI กำลังวิเคราะห์...', 'info')
+    _prevRenderReports()
+    const box = document.getElementById('reports-content')
+    if (!box) return
+
+    // Remove all insight sections injected by earlier wrappers
+    box.querySelectorAll('.sec-title').forEach(el => {
+      if (/Financial Insights/i.test(el.textContent)) {
+        el.nextElementSibling?.remove()
+        el.remove()
+      }
+    })
+    box.querySelectorAll('.ai-advisor-card').forEach(el => el.remove())
+
+    // Insert one fresh AI insights card at top
+    if (!App.getFinancialAdvisorInsights) return
+    const insights = App.getFinancialAdvisorInsights(S.rptMonth)
+    if (!insights?.length) return
+    box.insertAdjacentHTML('afterbegin', `
+      <div class="sec-title">Financial Insights</div>
+      <div class="card card-pad ai-advisor-card" style="margin-bottom:12px">
+        <div class="ai-card-head">
+          <div><strong>AI Financial Coach</strong><span>วิเคราะห์จากพฤติกรรมรายรับ-รายจ่ายในเครื่อง</span></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.renderReports()">วิเคราะห์ใหม่</button>
+        </div>
+        ${insights.map(i => `<div class="insight-row ai-insight">
+          <div class="insight-icon">${i.icon}</div>
+          <div><div class="insight-title">${ESC(i.title)}</div><div class="insight-body">${ESC(i.body)}</div></div>
+        </div>`).join('')}
+      </div>`)
+  }
 
   // Apply immediately
   try { if (S.page === 'wallets') App.renderWallets() } catch (_) {}
@@ -2262,7 +3993,10 @@ App.render();
 
   const _renderWallets = App.renderWallets?.bind(App)
   if (_renderWallets) {
-    /* consolidated: removed legacy renderWallets from line 3996 */
+    App.renderWallets = function() {
+      _renderWallets()
+      ensureCreditPayPlacement()
+    }
   }
 
   try { if (S.page === 'wallets') ensureCreditPayPlacement() } catch (_) {}
@@ -2388,12 +4122,72 @@ App.render();
   }
 
   const previousUnitPrice = App._investmentUnitPriceTHB?.bind(App);
-  /* consolidated: removed legacy _investmentUnitPriceTHB from line 4125 */
+  App._investmentUnitPriceTHB = function(w) {
+    if (w?.type === 'fcd') {
+      const cur = cleanCurrency(w.currency || w.symbol || 'USD');
+      return fcdRateTHB(cur) || Number(w.manualPrice || 0);
+    }
+    return previousUnitPrice ? previousUnitPrice(w) : Number(w?.manualPrice || 0);
+  };
 
   const previousMarketText = App._marketText?.bind(App);
-  /* consolidated: removed legacy _marketText from line 4134 */
+  App._marketText = function(w) {
+    if (w?.type === 'fcd') {
+      const cur = cleanCurrency(w.currency || w.symbol || 'USD');
+      const rate = fcdRateTHB(cur);
+      return rate ? `Frankfurter FX · ${cur}/THB ${rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : `ยังไม่ Sync อัตราแลกเปลี่ยน ${cur}/THB`;
+    }
+    return previousMarketText ? previousMarketText(w) : '';
+  };
 
-  /* consolidated: removed legacy refreshMarketPrices from line 4143 */
+  App.refreshMarketPrices = async function() {
+    const next = { ...(S.marketPrices || {}) };
+    let cryptoOk = false;
+    let fxOk = false;
+    let goldOk = false;
+
+    try {
+      const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,tether&vs_currencies=thb,usd', { cache: 'no-store' });
+      if (r.ok) { next.crypto = await r.json(); cryptoOk = true; }
+    } catch (_) {}
+
+    try {
+      const fx = await fetchFcdFx();
+      if (fx?.fcdRatesTHB?.USD) {
+        next.fx = fx;
+        next.fcdRatesTHB = fx.fcdRatesTHB;
+        fxOk = true;
+      }
+    } catch (_) {}
+
+    try {
+      if (typeof App._fetchThaiGoldViaSource === 'function') {
+        const gold = await App._fetchThaiGoldViaSource();
+        if (gold?.jewelryBuy) {
+          next.thaiGold = gold;
+          next.auroraGold = gold;
+          goldOk = true;
+        }
+      }
+    } catch (err) {
+      console.warn('Gold sync failed:', err);
+    }
+
+    next.updatedAt = new Date().toISOString();
+    S.marketPrices = next;
+    revalueInvestmentWallets();
+    persist();
+    App.renderWallets?.();
+    App.render?.();
+
+    const okParts = [];
+    if (fxOk) okParts.push('FCD FX');
+    if (cryptoOk) okParts.push('Crypto');
+    if (goldOk) okParts.push('ทอง');
+
+    if (okParts.length) notify(`Sync ราคาอ้างอิงสำเร็จ: ${okParts.join(', ')}`, goldOk || fxOk ? 'success' : 'info');
+    else notify('Sync ราคาไม่ได้ กรุณาเช็กอินเทอร์เน็ตหรือ Gold Proxy', 'error');
+  };
 
   try { if (S.page === 'wallets') App.renderWallets?.(); } catch (_) {}
 })();
@@ -2429,11 +4223,52 @@ App.render();
 
   // ── 2. Merchant datalist autocomplete ────────────────────────
   const _prevRenderAddTxDetail = App._renderAddTxDetail?.bind(App)
-  /* consolidated: removed legacy _renderAddTxDetail from line 4226 */
+  App._renderAddTxDetail = function() {
+    _prevRenderAddTxDetail?.()
+    let dl = document.getElementById('mt-merchant-list')
+    if (!dl) {
+      dl = document.createElement('datalist')
+      dl.id = 'mt-merchant-list'
+      document.body.appendChild(dl)
+    }
+    dl.innerHTML = (S.merchants || []).map(m => `<option value="${esc(m.name)}">`).join('')
+    const inp = document.getElementById('tx-merchant')
+    if (inp) inp.setAttribute('list', 'mt-merchant-list')
+  }
 
   // ── 6. Wallet monthly spend summary ──────────────────────────
   const _prevOpenWalletDetail = App.openWalletDetail?.bind(App)
-  /* consolidated: removed legacy openWalletDetail from line 4241 */
+  App.openWalletDetail = function(id) {
+    _prevOpenWalletDetail?.(id)
+    setTimeout(() => {
+      const hero = document.querySelector('#sub-screen .wallet-detail-hero')
+      if (!hero || hero.dataset.summaryInjected) return
+      hero.dataset.summaryInjected = '1'
+
+      const w = S.wallets.find(x => x.id === id)
+      if (!w || ['gold', 'crypto', 'fcd'].includes(w.type)) return
+
+      const txList = App._filterWalletTx ? App._filterWalletTx(id)
+        : S.transactions.filter(t => t.walletId === id || t.toWalletId === id)
+      const inflow  = txList.filter(t =>
+        (t.type === 'income' && t.walletId === id) ||
+        (t.type === 'transfer' && t.toWalletId === id)
+      ).reduce((s,t) => s + Number(t.amount || 0), 0)
+      const outflow = txList.filter(t =>
+        (t.type === 'expense' && t.walletId === id) ||
+        (t.type === 'transfer' && t.walletId === id) ||
+        (t.type === 'cc_payment' && t.walletId === id)
+      ).reduce((s,t) => s + Number(t.amount || 0), 0)
+      const net = inflow - outflow
+
+      hero.insertAdjacentHTML('afterend', `
+        <div class="wallet-spend-summary">
+          <div class="wss-item"><span>รายรับ</span><strong class="c-income">+${fmt(inflow)}</strong></div>
+          <div class="wss-item"><span>รายจ่าย</span><strong class="c-expense">-${fmt(outflow)}</strong></div>
+          <div class="wss-item"><span>สุทธิ</span><strong class="${net >= 0 ? 'c-income' : 'c-expense'}">${net < 0 ? '-' : '+'}${fmt(Math.abs(net))}</strong></div>
+        </div>`)
+    }, 0)
+  }
 
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
 })();
@@ -2540,7 +4375,7 @@ App.render();
           <div style="flex:1">
             <div style="font-weight:700;margin-bottom:4px">${esc(r.w.icon || '')} ${esc(r.w.name)}</div>
             <div style="font-size:12px;color:var(--muted)">ยอดปัจจุบัน: <b>${fmt(r.current)}</b></div>
-            ${r.expected !== null ? `<div style="font-size:12px;color:var(--muted)">คำนวณจาก transactions: <b>${fmt(r.expected)}</b></div>` : ''}
+            ${r.expected !== null ? `<div style="font-size:12px;color:var(--muted)">คำนวณจาก tx: <b>${fmt(r.expected)}</b></div>` : ''}
             <div style="font-size:12px;font-weight:600;margin-top:4px;color:${r.gap > 0.01 ? 'var(--expense)' : 'var(--income)'}">
               ${r.gap > 0.01 ? `⚠️ ต่างกัน ${fmt(r.gap)}` : '✓ ถูกต้อง'}
             </div>
@@ -2595,7 +4430,31 @@ App.render();
 
   // ── Override _renderAddTxDetail to clean up datalist/dropdown leftovers ──
   const _prevDetail32 = App._renderAddTxDetail?.bind(App)
-  /* consolidated: removed legacy _renderAddTxDetail from line 4433 */
+  App._renderAddTxDetail = function() {
+    _prevDetail32?.()
+
+    // Remove any lingering datalist references injected by earlier IIFEs
+    ;['mt-merchant-list', 'tx-merchant-suggestions'].forEach(id => {
+      const el = document.getElementById(id)
+      if (el) el.remove()
+    })
+
+    const inp = document.getElementById('tx-merchant')
+    if (!inp) return
+
+    // Remove old datalist binding
+    inp.removeAttribute('list')
+
+    // Detach from previous wrapper if re-rendering (dropdown already exists)
+    const existingDd = getDropdown()
+    if (existingDd) existingDd.remove()
+    if (inp.parentNode?.classList?.contains('mt-merchant-wrap')) {
+      const wrap = inp.parentNode
+      wrap.parentNode.insertBefore(inp, wrap)
+      wrap.remove()
+    }
+    // v41 handles all event binding (onfocus/oninput/onblur) — no addEventListener here.
+  }
 
   // Re-apply to current render if add-tx sheet is open
   try {
@@ -2750,7 +4609,10 @@ App.render();
   App.recalculateWalletBalances({ save:false, recordSnapshot:true })
 
   const baseRender = App.render?.bind(App)
-  /* consolidated: removed legacy render from line 4612 */
+  App.render = function v40Render() {
+    try { App.recalculateWalletBalances({ save:false, recordSnapshot:false }) } catch (_) {}
+    return baseRender?.()
+  }
 
   // ── Phase 1: validation / import/export / backup status ───────────────────
   App.validateTransactionDraft = function(tx, { isEdit = false } = {}) {
@@ -3142,13 +5004,27 @@ App.render();
   }
 
   const prevOpenWalletDetailV4 = App.openWalletDetail?.bind(App)
-  /* consolidated: removed legacy openWalletDetail from line 5007 */
+  App.openWalletDetail = function v40WalletDetail(id) {
+    prevOpenWalletDetailV4?.(id)
+    setTimeout(() => {
+      const w = walletById(id)
+      if (!w || !isInvestWallet(w)) return
+      const root = document.querySelector('#sub-screen .sub-scroll')
+      if (!root || root.querySelector('[data-v40-invest-actions]')) return
+      root.insertAdjacentHTML('afterbegin', `<div class="phase-card" data-v40-invest-actions="1"><b>Investment Actions</b><p>${esc(App._marketText?.(w) || 'ใช้ราคาสำรองถ้าไม่มีราคาตลาด')}</p><div class="phase-action-row"><button class="btn btn-primary btn-sm" onclick="App.openInvestmentTxForm('${esc(id)}','buy')">ซื้อ</button><button class="btn btn-secondary btn-sm" onclick="App.openInvestmentTxForm('${esc(id)}','sell')">ขาย</button><button class="btn btn-secondary btn-sm" onclick="App.openInvestmentTxForm('${esc(id)}','adjust')">ปรับจำนวน</button></div></div>`)
+    }, 0)
+  }
 
   // Make transaction rows readable for new types.
   const prevTxTypeLabelV4 = App._txTypeLabel?.bind(App)
-  /* consolidated: removed legacy _txTypeLabel from line 5020 */
+  App._txTypeLabel = function(type) { return ({ investment_buy:'ซื้อสินทรัพย์', investment_sell:'ขายสินทรัพย์', investment_adjust:'ปรับจำนวนสินทรัพย์' })[type] || prevTxTypeLabelV4?.(type) || type }
   const prevTxRowV4 = App._txRow?.bind(App)
-  /* consolidated: removed legacy _txRow from line 5022 */
+  App._txRow = function(tx) {
+    if (!String(tx.type || '').startsWith('investment_')) return prevTxRowV4 ? prevTxRowV4(tx) : ''
+    const w = walletById(tx.walletId), cash = walletById(tx.cashWalletId)
+    const title = tx.type === 'investment_buy' ? `ซื้อ ${w?.name || 'Asset'}` : tx.type === 'investment_sell' ? `ขาย ${w?.name || 'Asset'}` : `ปรับจำนวน ${w?.name || 'Asset'}`
+    return `<div class="tx-row tx-row--investment" data-txid="${esc(tx.id)}"><div class="tx-icon">📈</div><div class="tx-info"><div class="tx-title">${esc(title)}</div><div class="tx-sub"><span class="tx-meta-pill">${number(tx.units || tx.unitsDelta,4)} หน่วย</span>${cash ? `<span class="tx-meta-pill">${esc(cash.name)}</span>` : ''}</div></div><div class="tx-right"><div class="tx-amount">${money(tx.amount || 0)}</div><div class="tx-date">${esc(Calc.shortDate(tx.date))}</div></div></div>`
+  }
 
   // Delete/archive protection: block hard delete referenced masters.
   App.deleteWallet = function(id) {
@@ -3231,7 +5107,26 @@ App.render();
   }
 
   // ── 2/3. Credit-card detail order + compact statement + Thai reward ledger ──
-  /* consolidated: removed legacy markCashbackReceived from line 5110 */
+  App.markCashbackReceived = function v41MarkCashbackReceived(cardId) {
+    const st = App.getCardStatement?.(cardId)
+    if (!st || !st.reward?.cashback) { toast('ไม่มี Cashback ให้บันทึก', 'warn'); return }
+    if (statementReceived(st)) { toast('รอบบัญชีนี้บันทึก Cashback แล้ว', 'info'); return }
+    const card = walletById(cardId)
+    App.showConfirm({
+      title:'ยืนยันรับ Cashback',
+      body:`บันทึก Cashback ที่ได้รับจริง ${money(st.reward.cashback)} สำหรับบัตร ${card?.name || ''}?`,
+      confirmLabel:'ยืนยันรับ',
+      onConfirm(){
+        const ledgerId = Calc.genId()
+        const tx = { id:Calc.genId(), type:'income', amount:st.reward.cashback, walletId:cardId, categoryId:undefined, merchant:'Cashback', note:`รับ Cashback ${card?.name || ''}`, date:today(), isRewardReceived:true, statementId:st.id, rewardLedgerId:ledgerId }
+        S.transactions.unshift(tx)
+        S.rewardLedger ||= []
+        S.rewardLedger.push({ id:ledgerId, type:'cashback_received', cardId, statementId:st.id, amount:st.reward.cashback, date:today(), txId:tx.id })
+        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+        persist(); App.openRewardLedgerScreen(cardId); toast('บันทึก Cashback ที่ได้รับแล้ว', 'success')
+      }
+    })
+  }
 
   // Add delete action into transaction details opened from a credit-card detail screen.
   App.deleteTxFromSub = function(id, backType = '', backId = '') {
@@ -3247,7 +5142,11 @@ App.render();
   }
 
   const prevConfirmDeleteTx41 = App.confirmDeleteTx?.bind(App)
-  /* consolidated: removed legacy confirmDeleteTx from line 5145 */
+  App.confirmDeleteTx = function v41ConfirmDeleteTx() {
+    const tx = (S.transactions || []).find(t => t.id === S.selectedTxId)
+    if (tx?.isRewardReceived) cleanupRewardReceivedForTx(tx)
+    prevConfirmDeleteTx41 ? prevConfirmDeleteTx41() : undefined
+  }
 
   // ── 4. Reports rollback: restore previous report structure ─────────────────
   App.renderReports = function v41ReportsRollback() {
@@ -3256,17 +5155,11 @@ App.render();
     const monthEl = document.getElementById('report-month-chips')
     const viewEl = document.getElementById('report-view-chips')
     if (monthEl) monthEl.innerHTML = months.map(m => `<button class="chip${m === S.rptMonth ? ' active' : ''}" onclick="App.setRptMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`).join('')
-    const viewChipsHtml = `<div class="chips report-view-chips-inline" style="padding:0 0 12px;margin-top:4px">${[['expense','รายจ่าย'],['income','รายรับ'],['budget','งบประมาณ']].map(([v,l]) => `<button class="chip${S.rptView === v ? ' active' : ''}" onclick="App.setRptView('${v}')">${l}</button>`).join('')}</div>`
-    if (viewEl) { viewEl.innerHTML = ''; viewEl.style.display = 'none' }
+    if (viewEl) viewEl.innerHTML = [['expense','รายจ่าย'],['income','รายรับ'],['budget','งบประมาณ']].map(([v,l]) => `<button class="chip${S.rptView === v ? ' active' : ''}" onclick="App.setRptView('${v}')">${l}</button>`).join('')
     const stats  = Calc.getMonthlyStats(S.transactions, S.rptMonth)
     const nw     = Calc.getNetWorth(S.wallets)
     const budget = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, S.rptMonth)
-    let html = ''
-    const advisorInsights = (typeof App.getFinancialAdvisorInsights === 'function') ? App.getFinancialAdvisorInsights(S.rptMonth) : []
-    if (advisorInsights.length) {
-      html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><div><strong>AI Financial Coach</strong><span>วิเคราะห์จากรายรับ รายจ่าย และงบประมาณในเครื่อง</span></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${advisorInsights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')}</div>`
-    }
-    html += `<div class="card card-pad nw-card" style="margin-bottom:16px"><div class="nw-label">ความมั่งคั่งสุทธิ</div><div class="nw-value ${nw.net>=0?'c-income':'c-expense'}">${nw.net<0?'-':''}${money(Math.abs(nw.net))}</div><div class="nw-detail"><span class="nw-item">สินทรัพย์ <strong class="c-income">${money(nw.assets)}</strong></span><span class="nw-item">หนี้ <strong class="c-expense">${money(nw.debt)}</strong></span></div></div><div class="report-summary-grid">${[['รายรับ', stats.income, 'var(--income)'], ['รายจ่าย', stats.expense, 'var(--expense)'], ['สุทธิ', stats.net, stats.net >= 0 ? 'var(--income)' : 'var(--expense)']].map(([l,v,c]) => `<div class="card report-summary-card"><div class="report-summary-label">${l}</div><div class="report-summary-value" style="color:${c}">${money(Math.abs(v))}</div></div>`).join('')}</div>${viewChipsHtml}`
+    let html = `<div class="report-summary-grid">${[['รายรับ', stats.income, 'var(--income)'], ['รายจ่าย', stats.expense, 'var(--expense)'], ['สุทธิ', stats.net, stats.net >= 0 ? 'var(--income)' : 'var(--expense)']].map(([l,v,c]) => `<div class="card report-summary-card"><div class="report-summary-label">${l}</div><div class="report-summary-value" style="color:${c}">${money(Math.abs(v))}</div></div>`).join('')}</div><div class="card card-pad nw-card" style="margin-bottom:16px"><div class="nw-label">ความมั่งคั่งสุทธิ</div><div class="nw-value ${nw.net>=0?'c-income':'c-expense'}">${nw.net<0?'-':''}${money(Math.abs(nw.net))}</div><div class="nw-detail"><span class="nw-item">สินทรัพย์ <strong class="c-income">${money(nw.assets)}</strong></span><span class="nw-item">หนี้ <strong class="c-expense">${money(nw.debt)}</strong></span></div></div>`
     if (S.rptView === 'budget') {
       html += `<div class="card card-pad">`
       if (!budget.length) html += App._emptyState('💰', 'ยังไม่ได้ตั้งงบประมาณ', 'ไปที่ เพิ่มเติม → งบประมาณ')
@@ -3320,10 +5213,8 @@ App.render();
     const dd = ensureMerchantWrap(inp)
     if (!inp || !dd) return
     const norm = String(q || '').trim().toLowerCase()
-    const usage = Calc.getMerchantUsage ? Calc.getMerchantUsage(S.transactions || []) : {}
-    const merchants = [...(S.merchants || [])].sort((a, b) => (usage[b.name] || 0) - (usage[a.name] || 0) || String(a.name || '').localeCompare(String(b.name || '')))
-    const matches = merchants.filter(m => !norm || String(m.name || '').toLowerCase().includes(norm)).slice(0, 8)
-    const exact = merchants.some(m => String(m.name || '').toLowerCase() === norm)
+    const matches = (S.merchants || []).filter(m => !norm || String(m.name || '').toLowerCase().includes(norm)).slice(0, 8)
+    const exact = (S.merchants || []).some(m => String(m.name || '').toLowerCase() === norm)
     const createRow = norm && !exact ? `<div class="mt-merchant-item create" data-merchant-name="${esc(q)}"><span class="mmi-emoji">＋</span><span class="mmi-name">ใช้ “${esc(q)}” เป็นร้านใหม่</span></div>` : ''
     dd.innerHTML = matches.map(m => `<div class="mt-merchant-item" data-merchant-name="${esc(m.name)}"><span class="mmi-emoji">${esc(m.emoji || '🏪')}</span><span class="mmi-name">${esc(m.name)}</span></div>`).join('') + createRow
     dd.classList.toggle('hidden', !matches.length && !createRow)
@@ -3335,11 +5226,56 @@ App.render();
     document.getElementById('mt-merchant-dropdown')?.classList.add('hidden')
   }
   const prevRenderDetail41 = App._renderAddTxDetail?.bind(App)
-  /* consolidated: removed legacy _renderAddTxDetail from line 5229 */
+  App._renderAddTxDetail = function v41RenderAddTxDetail() {
+    prevRenderDetail41?.()
+    const inp = document.getElementById('tx-merchant')
+    if (inp) {
+      inp.removeAttribute('list')
+      inp.setAttribute('autocomplete','off')
+      inp.onfocus = () => App._showMerchantDropdown(inp.value)
+      inp.oninput = () => { App._txField('merchant', inp.value); App._showMerchantDropdown(inp.value) }
+      inp.onblur = () => setTimeout(() => document.getElementById('mt-merchant-dropdown')?.classList.add('hidden'), 160)
+    }
+    // Recurring fields inside transaction flow when user taps “ประจำ”.
+    if (S.tx?.isRecurring && !document.getElementById('tx-recurring-options')) {
+      const flagGroup = document.querySelector('.tx-flag-grid')?.closest('.form-group')
+      if (flagGroup) {
+        S.tx.recurringEveryDays ||= '30'
+        S.tx.recurringNextDueDate ||= addDays(S.tx.date || today(), Number(S.tx.recurringEveryDays || 30))
+        flagGroup.insertAdjacentHTML('afterend', `<div class="recurring-inline-options" id="tx-recurring-options"><div class="form-hint" style="margin-bottom:8px">แนะนำ: ถ้าเลือก “ประจำ” ควรกำหนดรอบและวันครบกำหนดถัดไป เพื่อให้ระบบสร้างรายการเตือนในเมนูรายการประจำได้ถูกต้อง</div><div class="tx-filter-grid"><div><label class="form-label">เกิดซ้ำทุกกี่วัน</label><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.recurringEveryDays)}" oninput="App._txField('recurringEveryDays',this.value)"></div><div><label class="form-label">ครบกำหนดถัดไป</label><input class="form-input" type="date" value="${esc(S.tx.recurringNextDueDate)}" onchange="App._txField('recurringNextDueDate',this.value)"></div></div></div>`)
+      }
+    }
+  }
   const prevToggleTxFlag41 = App._toggleTxFlag?.bind(App)
-  /* consolidated: removed legacy _toggleTxFlag from line 5250 */
+  App._toggleTxFlag = function v41ToggleFlag(key) {
+    const wasOn = !!S.tx?.[key]
+    prevToggleTxFlag41?.(key)
+    if (key === 'isRecurring' && !wasOn && S.tx?.isRecurring) {
+      S.tx.recurringEveryDays ||= '30'
+      S.tx.recurringNextDueDate ||= addDays(S.tx.date || today(), 30)
+      App._renderAddTxDetail()
+    }
+  }
   const prevSaveTx41 = App.saveTx?.bind(App)
-  /* consolidated: removed legacy saveTx from line 5260 */
+  App.saveTx = function v41SaveTx() {
+    const snapshot = { ...S.tx }
+    const wasAdd = S.txMode !== 'edit'
+    const before = (S.transactions || []).length
+    prevSaveTx41?.()
+    const saved = (S.transactions || [])[0]
+    if (wasAdd && snapshot.isRecurring && saved && (S.transactions || []).length > before) {
+      S.recurring ||= []
+      const everyDays = Math.max(1, parseInt(snapshot.recurringEveryDays || 30))
+      const nextDueDate = snapshot.recurringNextDueDate || addDays(saved.date || today(), everyDays)
+      const name = snapshot.merchant || snapshot.note || 'รายการประจำ'
+      const exists = S.recurring.some(r => r.name === name && r.walletId === snapshot.walletId && r.categoryId === snapshot.categoryId && Number(r.amount) === Number(snapshot.amount))
+      if (!exists) {
+        const c = catById(snapshot.categoryId)
+        S.recurring.push({ id:Calc.genId(), name, type:snapshot.type || 'expense', amount:Number(snapshot.amount || 0), everyDays, nextDueDate, categoryId:snapshot.categoryId, categoryName:c?.label, icon:c?.icon, color:c?.color, walletId:snapshot.walletId, paused:false })
+        persist()
+      }
+    }
+  }
 
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
   try { if (S.page === 'reports') App.renderReports() } catch (_) {}
@@ -3437,7 +5373,7 @@ App.render();
       const dayInc = rows.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
       const dayExp = rows.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
       const label = Calc.labelDate ? Calc.labelDate(date) : date
-      html += `<div class="tx-date-header"><span>${esc(label)}</span><div>${dayInc ? `<b class="c-income2">+${money(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense2">-${money(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
+      html += `<div class="tx-date-header"><span>${esc(label)}</span><div>${dayInc ? `<b class="c-income">+${money(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense">-${money(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
     })
     const el = document.getElementById('tx-list-content')
     if (el) el.innerHTML = html
@@ -3484,7 +5420,7 @@ App.render();
         <div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color || '#DC2626')},${esc(card.color || '#DC2626')}BB);color:#fff;border:0">
           <div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${card.cycleDay || 25} · ชำระวันที่ ${card.dueDay || '-'}</div>
           <div style="font-size:13px;opacity:.72;margin-bottom:4px">ยอดค้างชำระ</div><div class="big">${money(owed)}</div>
-          ${card.limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct > 80 ? '#FCA5A5' : 'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due ? ` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)` : ''}</div>` : ''}
+          ${card.limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct > 80 ? '#FCA5A5' : 'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due ? ` · ครบ ${esc(due.dueStr)} (${due.daysLeft}ว.)` : ''}</div>` : ''}
         </div>
         ${statementHtml(cardId, st)}
         <div class="card card-pad" style="margin-bottom:12px"><div class="cc-detail-header"><div><div style="font-size:14px;font-weight:800">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${thaiDateShort(period.start)} ถึง ${thaiDateShort(period.end)}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button></div><div class="reward-grid" style="margin-top:10px"><div class="reward-tile"><span>คะแนน</span><strong>${number(rewards.points,0)}</strong></div><div class="reward-tile"><span>เงินคืน</span><strong>${money(rewards.cashback)}</strong></div></div></div>
@@ -3497,7 +5433,24 @@ App.render();
   }
 
   const prevRewardScreenV42 = App.openRewardLedgerScreen?.bind(App)
-  /* consolidated: removed legacy openRewardLedgerScreen from line 5436 */
+  App.openRewardLedgerScreen = function v42RewardLedger(cardId = '') {
+    const cards = (S.wallets || []).filter(w => w.type === 'credit')
+    const selected = cardId || cards[0]?.id || ''
+    const st = selected ? App.getCardStatement?.(selected) : null
+    const receivedAlready = !!(st && (S.rewardLedger || []).some(r => r.type === 'cashback_received' && r.statementId === st.id))
+    const rows = st?.purchases || []
+    const received = (S.rewardLedger || []).filter(r => !selected || r.cardId === selected)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>สมุดสิทธิประโยชน์</h2>${st?.reward?.cashback && !receivedAlready ? `<button class="btn btn-primary btn-sm" onclick="App.markCashbackReceived('${esc(selected)}')" style="width:auto">รับเงินคืน</button>` : ''}</div>
+      <div class="sub-scroll">
+        <div class="form-group"><label class="form-label">เลือกบัตร</label><select class="form-input" onchange="App.openRewardLedgerScreen(this.value)">${cards.map(c => `<option value="${esc(c.id)}"${c.id===selected?' selected':''}>${esc(c.icon || '')} ${esc(c.name)}</option>`).join('')}</select></div>
+        ${st ? `<div class="reward-summary-compact"><div><b>รอบ ${thaiDateShort(st.start)} – ${thaiDateShort(st.end)}</b><span>${receivedAlready ? 'รับเงินคืนแล้ว' : 'ยังไม่รับเงินคืน'}</span><span>วันกำหนดชำระ ${thaiDateShort(st.dueDate)}</span></div><div><strong>${number(st.reward.points,0)}</strong><span>คะแนน</span></div><div><strong>${money(st.reward.cashback)}</strong><span>เงินคืน</span></div></div>` : App._emptyState('💳','ยังไม่มีบัตรเครดิต','')}
+        <div class="sec-title">รายการที่นำไปคำนวณ</div>
+        <div class="card"><div style="padding:0 16px">${rows.length ? rows.map(t => App._txRow(t)).join('') : App._emptyState('🎁','ยังไม่มีรายการในรอบนี้','')}</div></div>
+        <div class="sec-title">รับสิทธิ์แล้ว</div>
+        <div class="card card-pad">${received.length ? received.map(r => `<div class="detail-row"><span>${r.type === 'cashback_received' ? 'รับเงินคืน' : esc(r.type)} · ${thaiDateShort(r.date || '')}</span><b>${money(r.amount || 0)}</b></div>`).join('') : '<div style="font-size:13px;color:var(--muted)">ยังไม่มีรายการรับจริง</div>'}</div>
+      </div>`)
+    setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
+  }
 
   App.openRecurringScreen = function v42RecurringScreen() {
     const rows = (S.recurring || []).slice().sort((a,b) => String(a.nextDueDate || '').localeCompare(String(b.nextDueDate || '')))
@@ -3506,7 +5459,14 @@ App.render();
 
   // 6) Restore AI financial advisor card on the rolled-back Reports screen.
   const prevReportsV42 = App.renderReports?.bind(App)
-  /* consolidated: removed legacy renderReports from line 5462 */
+  App.renderReports = function v42ReportsWithAdvisor() {
+    prevReportsV42?.()
+    const box = document.getElementById('reports-content')
+    if (!box || box.querySelector('.ai-advisor-card')) return
+    const insights = App.getFinancialAdvisorInsights ? App.getFinancialAdvisorInsights(S.rptMonth) : []
+    if (!insights.length) return
+    box.insertAdjacentHTML('afterbegin', `<div class="sec-title">คำแนะนำทางการเงิน</div><div class="card card-pad ai-advisor-card"><div class="ai-card-head"><div><strong>AI Financial Coach</strong><span>วิเคราะห์จากรายรับ รายจ่าย และงบประมาณในเครื่อง</span></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()">วิเคราะห์ใหม่</button></div>${insights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')}</div>`)
+  }
 
   // 8) Installment group edit flow.
   function installmentGroups() { return App.getInstallmentGroups?.() || [] }
@@ -3665,8 +5625,8 @@ App.render();
           ${settingRow({ icon:'🧯', label:'กู้คืน Backup ก่อน Import', onclick:'App.restorePreImportBackup()' })}
           <div class="settings-row">
             <div class="s-icon">💾</div>
-            <div class="s-label">สถานะข้อมูล <br><div class="s-value">Local only · Saved: ${esc(lastSaved)} · Export: ${esc(lastExport)}</div></div>
-            
+            <div class="s-label">สถานะข้อมูล</div>
+            <div class="s-value">Local only · Saved: ${esc(lastSaved)} · Export: ${esc(lastExport)}</div>
           </div>
         </div>
 
@@ -3734,8 +5694,8 @@ App.render();
     const statementCard = `<div class="card card-pad" style="margin-bottom:12px">
       <div style="font-size:14px;font-weight:700;margin-bottom:12px">&#x1F4C5; รอบบัญชีบัตร</div>
       <div class="benefit-form-grid">
-        ${f('ccb-cycleDay','วันตัดรอบ', w.cycleDay)}
-        ${f('ccb-dueDay','วันครบกำหนดชำระ', w.dueDay)}
+        ${f('ccb-cycleDay','วันตัดรอบ (1&#x2013;31)', w.cycleDay, 'วันในทุกเดือนที่ระบบตัดรอบบัญชี')}
+        ${f('ccb-dueDay','วันครบกำหนดชำระ (1&#x2013;31)', w.dueDay, 'วันในทุกเดือนที่ต้องชำระยอด')}
       </div>
     </div>`
     const pointsForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิดคะแนนสะสม</b><button class="toggle${p.enabled ? ' on' : ''}" id="ccb-points-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${fDec('ccb-bahtPerPoint','X บาท = 1 คะแนน',p.bahtPerPoint)}${fDec('ccb-pointEvery','ทุก X บาทได้ 1 คะแนน',p.pointPerBahtEvery)}${fDec('ccb-multi','คะแนนเพิ่ม X เท่า',p.multiplier||1)}${fDec('ccb-maxTxnPoint','สูงสุด/รายการ',p.maxPerTxn)}${fDec('ccb-maxCyclePoint','สูงสุด/รอบบัญชี',p.maxPerCycle)}</div></div>`
@@ -3748,7 +5708,43 @@ App.render();
       </div>`)
   }
 
-  /* consolidated: removed legacy saveCCBenefit from line 5711 */
+  App.saveCCBenefit = function v45SaveCCBenefit(cardId) {
+    const cycleDay = parseInt(document.getElementById('ccb-cycleDay')?.value) || 0
+    const dueDay   = parseInt(document.getElementById('ccb-dueDay')?.value)   || 0
+    if (cycleDay || dueDay) {
+      const idx = (S.wallets || []).findIndex(w => w.id === cardId)
+      if (idx >= 0) {
+        if (cycleDay) S.wallets[idx].cycleDay = cycleDay
+        if (dueDay)   S.wallets[idx].dueDay   = dueDay
+      }
+    }
+    const on  = (id, fb=false) => document.getElementById(id)?.classList.contains('on') ?? !!fb
+    const val = (id, fb=0)     => parseFloat(document.getElementById(id)?.value) || Number(fb) || 0
+    const prev = S.ccBenefits?.[cardId] || { points:{}, cashback:{} }
+    const pp = prev.points || {}, pc = prev.cashback || {}
+    S.ccBenefits ||= {}
+    S.ccBenefits[cardId] = {
+      enabled: false,
+      points: {
+        enabled: on('ccb-points-enabled', pp.enabled),
+        bahtPerPoint: val('ccb-bahtPerPoint', pp.bahtPerPoint),
+        pointPerBahtEvery: val('ccb-pointEvery', pp.pointPerBahtEvery),
+        multiplier: val('ccb-multi', pp.multiplier||1) || 1,
+        maxPerTxn: val('ccb-maxTxnPoint', pp.maxPerTxn),
+        maxPerCycle: val('ccb-maxCyclePoint', pp.maxPerCycle),
+      },
+      cashback: {
+        enabled: on('ccb-cash-enabled', pc.enabled),
+        percent: val('ccb-cbPercent', pc.percent),
+        minSpend: val('ccb-cbMin', pc.minSpend),
+        tierThreshold: val('ccb-cbTier', pc.tierThreshold),
+        everyBaht: val('ccb-cbEvery', pc.everyBaht||1) || 1,
+        maxPerTxn: val('ccb-cbMaxTxn', pc.maxPerTxn),
+        maxPerCycle: val('ccb-cbMaxCycle', pc.maxPerCycle),
+      },
+    }
+    persist(); App.openCCDetail(cardId); App.showToast?.('บันทึกสิทธิประโยชน์แล้ว', 'success')
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // FIX 2: Crypto — expanded symbol map, dynamic refresh, unit save
@@ -3800,7 +5796,15 @@ App.render();
   }
 
   const prev_marketText45 = App._marketText?.bind(App)
-  /* consolidated: removed legacy _marketText from line 5799 */
+  App._marketText = function v45MarketText(w) {
+    if (w?.type === 'crypto') {
+      const id  = App._cryptoId(w)
+      const thb = id && (S.marketPrices?.crypto || {})[id]?.thb
+      const sym = String(w.symbol || '').toUpperCase() || 'CRYPTO'
+      return thb ? `${sym} ฿${fmt(thb)}/หน่วย (CoinGecko)` : 'CoinGecko (ยังไม่ sync)'
+    }
+    return prev_marketText45?.(w) || ''
+  }
 
   App.refreshMarketPrices = async function v45RefreshMarket() {
     const next = { ...(S.marketPrices || {}) }
@@ -3831,8 +5835,24 @@ App.render();
     else App.showToast?.('Sync ราคาไม่ได้ ใช้ราคาสำรองแทน', 'error')
   }
 
-  const prevSaveWalletV45 = App.saveWallet?.bind(App) || function(){}
-  /* consolidated: removed legacy saveWallet from line 5839 */
+  const prevSaveWalletV45 = App.saveWallet.bind(App)
+  App.saveWallet = function v45SaveWallet() {
+    const type        = document.getElementById('wf-type')?.value
+    const isInv       = isInvestType(type)
+    const editingId   = S.editingWalletId
+    const units       = isInv ? (parseFloat(document.getElementById('wf-units')?.value) || 0) : null
+    const manualPrice = isInv ? (parseFloat(document.getElementById('wf-manual-price')?.value) || 0) : null
+    prevSaveWalletV45()
+    if (!isInv) return
+    const w = editingId ? S.wallets.find(x => x.id === editingId) : S.wallets[S.wallets.length - 1]
+    if (!w) return
+    w.units = units || 0
+    if (manualPrice) w.manualPrice = manualPrice
+    const usePrice = App._investmentUnitPriceTHB(w) || w.manualPrice || 0
+    if (usePrice) w.balance = w.units * usePrice
+    App.recalculateWalletBalances?.({ save:false, recordSnapshot:false })
+    persist(); App.renderWallets?.()
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // FIX 3: markCashbackReceived — editable confirmation dialog
@@ -3942,7 +5962,30 @@ App.render();
   // FIX 4: CC wallet card — "ครบกำหนดชำระ" left + date below, chip right
   // ═══════════════════════════════════════════════════════════════════
   const prevWalletCardV45 = App._walletCard?.bind(App)
-  /* consolidated: removed legacy _walletCard from line 5965 */
+  App._walletCard = function v45WalletCard(w) {
+    if (w.type !== 'credit') return prevWalletCardV45?.(w) || ''
+    const color  = w.color || '#DC2626'
+    const name   = `${w.icon || ''} ${w.name || ''}`.trim()
+    const owed   = Math.abs(Number(w.balance || 0))
+    const limit  = Number(w.limit || 0)
+    const due    = w.dueDay ? Calc.getDueDate(w.dueDay) : null
+    const pct    = limit ? Math.min(100, Math.max(0, owed / limit * 100)) : 0
+    const avail  = limit ? Math.max(0, limit - owed) : 0
+    const MONEY  = n => Number(n||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})
+    const ESC2   = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+    const dueStrip = due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}">
+      <div class="cc-due-left"><span>ครบกำหนดชำระ</span><strong>${ESC2(due.dueStr)}</strong></div>
+      <em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em>
+    </div>` : ''
+    const limitBar = limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct>80?'rgba(252,165,165,.95)':'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ไป ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : ''
+    return `<div class="wallet-card wallet-card-colored wallet-card-credit" style="--wallet-color:${ESC2(color)};--wallet-color-2:${ESC2(color)}BB" onclick="App.openCCDetail('${ESC2(w.id)}')">
+      <div class="wc-header"><div><div class="wc-name">${ESC2(name)}</div><div class="wc-type">บัตรเครดิต${limit?` · วงเงิน ${MONEY(limit)}`:''}</div></div></div>
+      <div class="wc-balance">-${MONEY(owed)}</div>
+      ${dueStrip}${limitBar}
+      <div class="wc-action-row"><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openCCDetail('${ESC2(w.id)}')">ดูรายการ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openCCPay('${ESC2(w.id)}')">ชำระ</button><button class="wallet-chip-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC2(w.id)}')">แก้ไข</button></div>
+    </div>`
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // FIX 5: Wallet page — refresh in "การลงทุน" header, + in page header
   // ═══════════════════════════════════════════════════════════════════
@@ -3986,10 +6029,10 @@ App.render();
 
     const gold    = (S.marketPrices||{}).thaiGold || (S.marketPrices||{}).auroraGold
     const updated = gold?.fetchedAt ? new Date(gold.fetchedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'}) : ''
-    const goldNote = `<div class="wallet-market-note"><b>ราคาทอง:</b><br>ทองรูปพรรณรับซื้อ${gold?.jewelryBuy?` ${fmt(gold.jewelryBuy)}/บาททอง`:' ยังไม่ Sync'}${updated?` · อัปเดต ${esc(updated)}`:''}</div>`
+    const goldNote = `<div class="wallet-market-note"><b>ราคาทอง:</b> สมาคมค้าทองคำ · ทองรูปพรรณรับซื้อ${gold?.jewelryBuy?` ${fmt(gold.jewelryBuy)}/บาททอง`:' ยังไม่ Sync'}${updated?` · อัปเดต ${esc(updated)}`:''}</div>`
 
     const empty = txt => `<div class="card card-pad wallet-empty-card">${esc(txt)}</div>`
-    const refreshBtn = `<button class="btn btn-secondary btn-sm wallet-section-refresh-btn" onclick="event.stopPropagation();App.refreshMarketPrices()">↻ Refresh</button>`
+    const refreshBtn = `<button class="btn btn-secondary btn-sm wallet-section-refresh-btn" onclick="event.stopPropagation();App.refreshMarketPrices()">↻ Refresh ราคา</button>`
     const section = (title, icon, list, emptyTxt, grid, extra='') =>
       `<section class="wallet-section-block">
         <div class="wallet-section-title wallet-section-title-row"><span>${icon} ${esc(title)}</span>${extra}</div>

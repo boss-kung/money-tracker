@@ -243,8 +243,11 @@ select.form-input  { appearance: none; cursor: pointer; }
 
 
 .c-income   { color: var(--income); }
-.c-expense  { color: var(--expense); }
-.c-primary  { color: var(--primary); }
+.c-expense  { color: var(--expense);}
+.c-primary  { color: var(--primary);}
+.c-income2   { color: var(--income); font-weight: 400; font-size: 12px; opacity: 0.6; }
+.c-expense2  { color: var(--expense); font-weight: 400; font-size: 12px; opacity: 0.6;}
+.c-primary2  { color: var(--primary); font-weight: 400; font-size: 12px; opacity: 0.6; }
 .c-amber    { color: var(--amber); }
 .c-muted    { color: var(--muted); }
 
@@ -1833,6 +1836,7 @@ body { font-feature-settings: "tnum" 1; }
   background: rgba(255,255,255,.18) !important;
   border: 1px solid rgba(255,255,255,.28) !important;
   min-height: 36px !important;
+  min-width:48px !important;
 }
 .wallet-card.wallet-card-colored .wc-prog-bar { background: rgba(255,255,255,.24) !important; }
 .wallet-card.wallet-card-colored .wc-prog-fill { background: rgba(255,255,255,.9) !important; }
@@ -2083,7 +2087,6 @@ body.is-dashboard #dashboard-content {
   border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-sm) !important;
 }
-.card + .card { margin-top: 10px !important; }
 .card-pad { padding: 14px !important; }
 .form-group { margin-bottom: 10px !important; }
 .chips,
@@ -2118,7 +2121,6 @@ body.is-dashboard #dashboard-content {
 }
 .mt-net-split { gap: 14px !important; margin-top: 10px !important; }
 .mt-net-metric strong { font-size: 15px !important; margin-top: 1px !important; }
-.mt-alert-card { padding: 10px 12px !important; gap: 10px !important; }
 .mt-wallet-mini { padding: 9px 10px !important; border-radius: 16px !important; }
 .mt-stat-card { padding: 10px 12px !important; border-radius: 16px !important; }
 .mini-stat { padding: 10px !important; border-radius: 14px !important; }
@@ -2195,7 +2197,6 @@ textarea.form-input { min-height: 72px !important; }
   padding: 10px 8px !important;
   border-radius: 16px !important;
   gap: 3px !important;
-  font-size: 12.5px !important;
 }
 .cat-btn .cat-icon { font-size: 20px !important; }
 .numpad { gap: 7px !important; padding: 0 14px !important; }
@@ -2581,7 +2582,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 }
 .wallet-toolbar .btn { width:auto !important; flex:1; }
 .wallet-market-note {
-  font-size:12px;
+  font-size:11px;
   color:var(--muted);
   background:var(--elevated);
   border:1px solid var(--border);
