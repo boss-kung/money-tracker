@@ -2690,7 +2690,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   gap:10px;
   margin-bottom:10px;
 }
-@media (max-width: 360px) { .form-split-row { grid-template-columns:1fr; gap:8px; } }
+
 
 /* AI advisor */
 .ai-advisor-card { margin-bottom:12px !important; }
@@ -3265,7 +3265,7 @@ body {
 .tx-summary-cards-compact .tx-summary-card strong{font-size:17px!important;letter-spacing:-.04em!important;overflow:hidden;text-overflow:ellipsis}
 #page-transactions .page-header{padding-bottom:7px!important}
 
-@media (max-width: 430px){
+@media (max-width: 480px){
   .form-split-row{grid-template-columns:1fr!important;gap:10px!important}
   input.form-input, select.form-input, textarea.form-input{font-size:16px!important}
 }
