@@ -973,6 +973,16 @@ body {
 .mt-net-label { font-size: 12px; font-weight: 700; color: var(--slate-on-dark); margin-bottom: 6px; }
 .mt-net-value { font-size: 34px; font-weight: 900; line-height: 1.05; letter-spacing: -1px; }
 .mt-hide-btn {
+    border: 1.5px solid var(--border);
+    background: var(--elevated);
+    color: var(--text);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm)
+}
+html.dark .mt-hide-btn {
   border: 1px solid rgba(255,255,255,.18);
   background: rgba(255,255,255,.08);
   color: #fff;
@@ -3292,3 +3302,400 @@ body {
 
 /* Fix 5: h1 row in wallet page header */
 .wallets-h1-row{display:flex;justify-content:space-between;align-items:center}
+
+/* ============================================================
+   V4.7 Reports category card UI
+   Purpose: match the modern horizontal progress-card style shown
+   in the reference screenshot for "รายจ่าย/รายรับตามหมวด".
+   ============================================================ */
+#reports-content .report-category-card{
+  padding:26px 28px 22px !important;
+  border-radius:28px !important;
+  background:var(--surface) !important;
+  border:1px solid rgba(226,232,240,.72) !important;
+  box-shadow:0 18px 42px rgba(15,23,42,.08) !important;
+  overflow:hidden !important;
+}
+
+.report-category-title{
+  font-size:20px !important;
+  font-weight:950 !important;
+  line-height:1.25 !important;
+  letter-spacing:-.03em !important;
+  color:var(--text) !important;
+  margin:0 0 20px !important;
+}
+
+.report-category-list{
+  display:flex !important;
+  flex-direction:column !important;
+  gap:20px !important;
+}
+
+.report-cat-row{
+  display:flex !important;
+  flex-direction:column !important;
+  gap:8px !important;
+  min-width:0 !important;
+}
+
+.report-cat-top{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto !important;
+  align-items:center !important;
+  gap:12px !important;
+}
+
+.report-cat-name{
+  min-width:0 !important;
+  display:flex !important;
+  align-items:center !important;
+  gap:10px !important;
+  color:var(--text) !important;
+  font-size:18px !important;
+  font-weight:950 !important;
+  line-height:1.2 !important;
+  letter-spacing:-.02em !important;
+}
+
+.report-cat-icon{
+  flex:0 0 auto !important;
+  width:30px !important;
+  height:30px !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  font-size:22px !important;
+  line-height:1 !important;
+}
+
+.report-cat-value{
+  display:flex !important;
+  align-items:baseline !important;
+  justify-content:flex-end !important;
+  gap:9px !important;
+  min-width:112px !important;
+  white-space:nowrap !important;
+  font-variant-numeric:tabular-nums !important;
+}
+
+.report-cat-value strong{
+  color:var(--text) !important;
+  font-size:20px !important;
+  font-weight:950 !important;
+  line-height:1 !important;
+  letter-spacing:-.055em !important;
+}
+
+.report-cat-value span{
+  color:var(--muted) !important;
+  font-size:15px !important;
+  line-height:1 !important;
+}
+
+.report-cat-bar{
+  width:100% !important;
+  height:10px !important;
+  border-radius:999px !important;
+  background:#F1F5F9 !important;
+  overflow:hidden !important;
+}
+
+.report-cat-fill{
+  height:100% !important;
+  min-width:4px !important;
+  border-radius:999px !important;
+  transition:width .28s ease !important;
+}
+
+html.dark #reports-content .report-category-card{
+  background:var(--surface) !important;
+  border-color:rgba(51,65,85,.9) !important;
+  box-shadow:0 18px 42px rgba(0,0,0,.26) !important;
+}
+
+html.dark .report-cat-bar{
+  background:#243349 !important;
+}
+
+@media (max-width:430px){
+  #reports-content .report-category-card{
+    padding:22px 26px 20px !important;
+    border-radius:28px !important;
+  }
+
+  .report-category-title{
+    font-size:19px !important;
+    margin-bottom:18px !important;
+  }
+
+  .report-category-list{
+    gap:19px !important;
+  }
+
+  .report-cat-name{
+    gap:9px !important;
+    font-size:17px !important;
+  }
+
+  .report-cat-icon{
+    width:28px !important;
+    height:28px !important;
+    font-size:21px !important;
+  }
+
+  .report-cat-value{
+    min-width:102px !important;
+    gap:8px !important;
+  }
+
+  .report-cat-value strong{
+    font-size:19px !important;
+  }
+
+  .report-cat-value span{
+    font-size:14px !important;
+  }
+
+  .report-cat-bar{
+    height:10px !important;
+  }
+}
+
+@media (max-width:360px){
+  #reports-content .report-category-card{
+    padding:20px 22px 18px !important;
+  }
+
+  .report-cat-name{
+    font-size:16px !important;
+  }
+
+  .report-cat-value{
+    min-width:94px !important;
+  }
+
+  .report-cat-value strong{
+    font-size:17px !important;
+  }
+
+  .report-cat-value span{
+    font-size:13px !important;
+  }
+}
+
+/* ============================================================
+   V4.8 Confirm modal card UI fix
+   Purpose: make v23-confirm-overlay readable by giving the
+   alertdialog a real modal card surface, clear hierarchy,
+   safe-area padding, dark-mode support, and better actions.
+   ============================================================ */
+
+.v23-confirm-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding:
+    max(18px, calc(var(--safe-t, 0px) + 14px))
+    max(18px, calc(var(--safe-r, 0px) + 14px))
+    max(18px, calc(var(--safe-b, 0px) + 14px))
+    max(18px, calc(var(--safe-l, 0px) + 14px)) !important;
+  background: rgba(15, 23, 42, .58) !important;
+  backdrop-filter: blur(14px) saturate(1.15) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.15) !important;
+}
+
+.v23-confirm-sheet {
+  width: min(100%, 390px) !important;
+  max-width: 390px !important;
+  margin: 0 !important;
+  padding: 20px 18px 16px !important;
+  border-radius: 26px !important;
+  background: var(--surface, #FFFFFF) !important;
+  color: var(--text, #0F172A) !important;
+  border: 1px solid rgba(226, 232, 240, .92) !important;
+  box-shadow:
+    0 26px 70px rgba(15, 23, 42, .30),
+    0 1px 0 rgba(255, 255, 255, .78) inset !important;
+  overflow: hidden !important;
+  animation: v23ConfirmIn .18s cubic-bezier(.2, .82, .2, 1) both !important;
+}
+
+.v23-confirm-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 11px !important;
+  margin: 0 0 9px !important;
+  color: var(--text, #0F172A) !important;
+  font-size: 18px !important;
+  line-height: 1.28 !important;
+  font-weight: 950 !important;
+  letter-spacing: -.025em !important;
+}
+
+.v23-confirm-title::before {
+  content: '!';
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--amber-soft, #FFFBEB);
+  color: var(--amber, #F59E0B);
+  font-size: 18px;
+  font-weight: 950;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, .16) inset;
+}
+
+.v23-confirm-body {
+  margin: 0 0 18px !important;
+  padding-left: 45px !important;
+  color: var(--muted, #64748B) !important;
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+  font-weight: 650 !important;
+}
+
+.v23-confirm-actions {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+  margin-top: 16px !important;
+}
+
+.v23-confirm-actions .btn {
+  width: 100% !important;
+  min-height: 44px !important;
+  margin: 0 !important;
+  border-radius: 16px !important;
+  padding: 10px 12px !important;
+  font-size: 14px !important;
+  font-weight: 900 !important;
+  line-height: 1.25 !important;
+  box-shadow: none !important;
+}
+
+.v23-confirm-actions .v23-cancel-btn,
+.v23-confirm-actions .btn-secondary {
+  background: var(--surface-soft, #F8FAFC) !important;
+  color: var(--text, #0F172A) !important;
+  border: 1px solid var(--border, #E2E8F0) !important;
+}
+
+.v23-confirm-actions .v23-ok-btn:not(.v23-btn-danger),
+.v23-confirm-actions .btn-primary {
+  background: var(--primary, #2563EB) !important;
+  color: #fff !important;
+  border: 1px solid var(--primary, #2563EB) !important;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, .22) !important;
+}
+
+.v23-confirm-actions .v23-btn-danger {
+  background: var(--expense, #DC2626) !important;
+  color: #fff !important;
+  border: 1px solid var(--expense, #DC2626) !important;
+  box-shadow: 0 10px 22px rgba(220, 38, 38, .22) !important;
+}
+
+.v23-confirm-actions .btn:active {
+  transform: scale(.975) !important;
+}
+
+html.dark .v23-confirm-overlay {
+  background: rgba(2, 6, 23, .72) !important;
+}
+
+html.dark .v23-confirm-sheet {
+  background: var(--surface, #172033) !important;
+  color: var(--text, #F8FAFC) !important;
+  border-color: rgba(51, 65, 85, .92) !important;
+  box-shadow:
+    0 28px 74px rgba(0, 0, 0, .54),
+    0 1px 0 rgba(255, 255, 255, .06) inset !important;
+}
+
+html.dark .v23-confirm-title {
+  color: var(--text, #F8FAFC) !important;
+}
+
+html.dark .v23-confirm-title::before {
+  background: rgba(245, 158, 11, .16);
+  color: #FBBF24;
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, .18) inset;
+}
+
+html.dark .v23-confirm-body {
+  color: var(--muted, #A5B4C7) !important;
+}
+
+html.dark .v23-confirm-actions .v23-cancel-btn,
+html.dark .v23-confirm-actions .btn-secondary {
+  background: var(--elevated, #202C42) !important;
+  color: var(--text, #F8FAFC) !important;
+  border-color: var(--border, #2B3A52) !important;
+}
+
+@keyframes v23ConfirmIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 430px) {
+  .v23-confirm-overlay {
+    align-items: flex-end !important;
+    padding:
+      16px
+      14px
+      max(14px, calc(var(--safe-b, 0px) + 10px))
+      14px !important;
+  }
+
+  .v23-confirm-sheet {
+    width: 100% !important;
+    max-width: none !important;
+    border-radius: 24px !important;
+    padding: 18px 16px 14px !important;
+  }
+
+  .v23-confirm-title {
+    font-size: 17px !important;
+    gap: 10px !important;
+  }
+
+  .v23-confirm-title::before {
+    flex-basis: 32px;
+    width: 32px;
+    height: 32px;
+    font-size: 17px;
+  }
+
+  .v23-confirm-body {
+    padding-left: 42px !important;
+    font-size: 13.5px !important;
+  }
+
+  .v23-confirm-actions {
+    gap: 8px !important;
+  }
+}
+
+@media (max-width: 340px) {
+  .v23-confirm-actions {
+    grid-template-columns: 1fr !important;
+  }
+
+  .v23-confirm-body {
+    padding-left: 0 !important;
+  }
+}

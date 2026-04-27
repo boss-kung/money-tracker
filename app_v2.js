@@ -44,7 +44,7 @@ let S = {
 
 // ── Persist ──────────────────────────────────────────────────
 function persist() { Storage.saveAll(S) }
-function moneyFmt(n) { return S.settings?.hideMoney ? '฿••••' : Calc.fmt(n || 0) }
+function moneyFmt(n) { return S.settings?.hideMoney ? '฿*****' : Calc.fmt(n || 0) }
 
 // ── Apply theme ───────────────────────────────────────────────
 function applyTheme() {
@@ -180,12 +180,10 @@ const App = {
   _setTxType(type) { S.tx.type = type; S.tx.categoryId = ''; App._renderAddTxAmount() },
 
   _numpad(key) {
-    let v = String(S.tx.amount ?? '0')
-    if (key === '⌫') {
-      v = v.length > 1 ? v.slice(0, -1) : '0'
-    } else if (key === '.') {
-      if (!v.includes('.')) v += '.'
-    } else {
+    let v = S.tx.amount
+    if (key === '⌫') { v = v.length > 1 ? v.slice(0, -1) : '0' }
+    else if (key === '.') { if (!v.includes('.')) v += '.' }
+    else {
       if (v === '0') v = key
       else {
         const parts = (v + key).split('.')
@@ -679,10 +677,10 @@ App.render();
   const fmt = n => moneyFmt(Number(n) || 0)
   const signedFmt = (n, type) => {
     if (S.settings?.hideMoney) {
-      if (type === 'income') return '+฿••••'
-      if (type === 'expense') return '-฿••••'
-      if (type === 'transfer' || type === 'cc_payment') return '↔ ฿••••'
-      return '฿••••'
+      if (type === 'income') return '+฿*****'
+      if (type === 'expense') return '-฿*****'
+      if (type === 'transfer' || type === 'cc_payment') return '↔ ฿*****'
+      return '฿*****'
     }
     if (type === 'income') return '+' + Calc.fmt(n)
     if (type === 'expense') return '-' + Calc.fmt(n)
@@ -833,29 +831,11 @@ App.render();
 
   /* consolidated: removed legacy _txRow from line 1741 */
 
-  App._formatDraftAmount = function(value) {
-    const raw = String(value ?? '0').replace(/,/g, '')
-    if (!raw) return '0'
-    if (raw === '.') return '0.'
-    const sign = raw.startsWith('-') ? '-' : ''
-    const body = sign ? raw.slice(1) : raw
-    if (body.includes('.')) {
-      const [intPartRaw, fracRaw = ''] = body.split('.')
-      const intNum = Number(intPartRaw || 0)
-      const intText = Number.isFinite(intNum)
-        ? intNum.toLocaleString('en-US', { maximumFractionDigits: 0 })
-        : (intPartRaw || '0')
-      return sign + intText + '.' + fracRaw.slice(0, 2)
-    }
-    const num = Number(raw || 0)
-    return Number.isFinite(num) ? num.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0'
-  }
-
   App._renderAddTxAmount = function() {
     const title = S.txMode === 'edit' ? 'แก้ไขรายการ' : S.txMode === 'duplicate' ? 'ทำซ้ำรายการ' : 'เพิ่มรายการ'
-    const amount = String(S.tx.amount ?? '0')
+    const amount = String(S.tx.amount || '')
     const num = parseFloat(amount || 0)
-    const display = App._formatDraftAmount ? App._formatDraftAmount(amount) : (Number.isFinite(num) ? num.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0')
+    const display = Number.isFinite(num) ? num.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '0'
     const tabs = [
       ['expense','จ่าย','-'],
       ['income','รับ','+'],
@@ -1082,7 +1062,7 @@ App.render();
   }
 
   function signedAmount(tx) {
-    if (S.settings?.hideMoney) return '฿••••'
+    if (S.settings?.hideMoney) return '฿*****'
     if (tx.type === 'income') return '+' + fmt(tx.amount)
     if (tx.type === 'expense' || tx.type === 'cc_payment') return '-' + fmt(tx.amount)
     return fmt(tx.amount)
@@ -1253,7 +1233,6 @@ App.render();
     const color = typeColor(type)
     const walletOptions = S.wallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
     const toWalletOptions = S.wallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
-    const merchantFieldHtml = `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" autocomplete="off" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" onfocus="App._showMerchantDropdown?.(this.value)" oninput="App._txField('merchant',this.value);App._showMerchantDropdown?.(this.value)" onblur="setTimeout(()=>document.getElementById('mt-merchant-dropdown')?.classList.add('hidden'),160)"><div class="form-hint">เลือกจากร้านค้าที่เคยบันทึกไว้ หรือพิมพ์ชื่อใหม่ได้ทันที</div></div>`
     const isExpense = type === 'expense'
     const box = document.getElementById('add-tx-content')
     if (!box) return
@@ -1263,7 +1242,7 @@ App.render();
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div class="cat-grid cat-grid-compact" id="cat-grid">${shownCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}${hasMore ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.showAllTxCategories()"><span class="cat-icon">⋯</span><span>เพิ่มเติม</span></button>` : ''}${S.txShowAllCats && allCats.length > 5 ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.hideAllTxCategories()"><span class="cat-icon">⌃</span><span>ย่อ</span></button>` : ''}</div></div>` : ''}
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);${type === 'transfer' ? 'App._renderAddTxDetail()' : ''}">${walletOptions}</select></div>
-          ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : merchantFieldHtml}
+          ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value)"></div>`}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value)"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
           ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
         </div>
@@ -1991,7 +1970,7 @@ App.render();
           <div class="mt-title">Money Tracker</div>
           <div class="mt-subtitle">${ESC(Calc.monthLabel(dm))}</div>
         </div>
-        <div class="mt-sync-pill"><span class="mt-sync-dot"></span><span>Local</span></div>
+          <button class="mt-hide-btn" onclick="App.toggleHideMoney()">${S.settings.hideMoney ? '👁 แสดงตัวเลข' : '🙈 ซ่อนตัวเลข'}</button>
       </div>
       <div class="dash-month-nav">${months.map(m =>
         `<button class="chip${m === dm ? ' active' : ''}" onclick="App.setDashMonth('${ESC(m)}')">${ESC(mlabel(m))}</button>`
@@ -2027,7 +2006,6 @@ App.render();
             <div class="mt-net-label">เงินสุทธิที่ใช้ได้จริง</div>
             <div class="mt-net-value">${nw.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(nw.net))}</div>
           </div>
-          <button class="mt-hide-btn" onclick="App.toggleHideMoney()">${S.settings.hideMoney ? '👁 แสดง' : '🙈 ซ่อน'}</button>
         </div>
         <div class="mt-net-split">
           <div class="mt-net-metric"><small>รายรับเดือนนี้</small><strong style="color:#4ADE80">+${FMT(stats.income)}</strong></div>
@@ -3256,17 +3234,16 @@ App.render();
     const monthEl = document.getElementById('report-month-chips')
     const viewEl = document.getElementById('report-view-chips')
     if (monthEl) monthEl.innerHTML = months.map(m => `<button class="chip${m === S.rptMonth ? ' active' : ''}" onclick="App.setRptMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`).join('')
-    const viewChipsHtml = `<div class="chips report-view-chips-inline" style="padding:0 0 12px;margin-top:4px">${[['expense','รายจ่าย'],['income','รายรับ'],['budget','งบประมาณ']].map(([v,l]) => `<button class="chip${S.rptView === v ? ' active' : ''}" onclick="App.setRptView('${v}')">${l}</button>`).join('')}</div>`
-    if (viewEl) { viewEl.innerHTML = ''; viewEl.style.display = 'none' }
+    if (viewEl) viewEl.innerHTML = [['expense','รายจ่าย'],['income','รายรับ'],['budget','งบประมาณ']].map(([v,l]) => `<button class="chip${S.rptView === v ? ' active' : ''}" onclick="App.setRptView('${v}')">${l}</button>`).join('')
     const stats  = Calc.getMonthlyStats(S.transactions, S.rptMonth)
     const nw     = Calc.getNetWorth(S.wallets)
     const budget = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, S.rptMonth)
     let html = ''
     const advisorInsights = (typeof App.getFinancialAdvisorInsights === 'function') ? App.getFinancialAdvisorInsights(S.rptMonth) : []
     if (advisorInsights.length) {
-      html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><div><strong>AI Financial Coach</strong><span>วิเคราะห์จากรายรับ รายจ่าย และงบประมาณในเครื่อง</span></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${advisorInsights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')}</div>`
+      html += `<div class="sec-title">คำแนะนำทางการเงินโดย AI</div><div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><div><strong>AI Financial Coach</strong><span>วิเคราะห์จากรายรับ รายจ่าย และงบประมาณในเครื่อง</span></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${advisorInsights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')}</div>`
     }
-    html += `<div class="card card-pad nw-card" style="margin-bottom:16px"><div class="nw-label">ความมั่งคั่งสุทธิ</div><div class="nw-value ${nw.net>=0?'c-income':'c-expense'}">${nw.net<0?'-':''}${money(Math.abs(nw.net))}</div><div class="nw-detail"><span class="nw-item">สินทรัพย์ <strong class="c-income">${money(nw.assets)}</strong></span><span class="nw-item">หนี้ <strong class="c-expense">${money(nw.debt)}</strong></span></div></div><div class="report-summary-grid">${[['รายรับ', stats.income, 'var(--income)'], ['รายจ่าย', stats.expense, 'var(--expense)'], ['สุทธิ', stats.net, stats.net >= 0 ? 'var(--income)' : 'var(--expense)']].map(([l,v,c]) => `<div class="card report-summary-card"><div class="report-summary-label">${l}</div><div class="report-summary-value" style="color:${c}">${money(Math.abs(v))}</div></div>`).join('')}</div>${viewChipsHtml}`
+    html += `<div class="report-summary-grid">${[['รายรับ', stats.income, 'var(--income)'], ['รายจ่าย', stats.expense, 'var(--expense)'], ['สุทธิ', stats.net, stats.net >= 0 ? 'var(--income)' : 'var(--expense)']].map(([l,v,c]) => `<div class="card report-summary-card"><div class="report-summary-label">${l}</div><div class="report-summary-value" style="color:${c}">${money(Math.abs(v))}</div></div>`).join('')}</div><div class="card card-pad nw-card" style="margin-bottom:16px"><div class="nw-label">ความมั่งคั่งสุทธิ</div><div class="nw-value ${nw.net>=0?'c-income':'c-expense'}">${nw.net<0?'-':''}${money(Math.abs(nw.net))}</div><div class="nw-detail"><span class="nw-item">สินทรัพย์ <strong class="c-income">${money(nw.assets)}</strong></span><span class="nw-item">หนี้ <strong class="c-expense">${money(nw.debt)}</strong></span></div></div>`
     if (S.rptView === 'budget') {
       html += `<div class="card card-pad">`
       if (!budget.length) html += App._emptyState('💰', 'ยังไม่ได้ตั้งงบประมาณ', 'ไปที่ เพิ่มเติม → งบประมาณ')
@@ -3278,10 +3255,21 @@ App.render();
       const total = data.reduce((s,d) => s + d.value, 0); const max = Math.max(...data.map(d => d.value), 1)
       if (!data.length) html += App._emptyState('📊','ไม่มีข้อมูล','ยังไม่มีรายการในช่วงเวลานี้')
       else {
-        html += `<div class="card card-pad" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:16px">${S.rptView==='income'?'รายรับ':'รายจ่าย'}แยกหมวดหมู่</div><div class="bar-chart">`
-        data.slice(0, 8).forEach(d => { const h = Math.max(4, (d.value / max) * 100); html += `<div class="bar-col"><div class="bar-fill" style="height:${h}%;background:${esc(d.color)}"></div><div class="bar-lbl">${esc(d.label)}</div></div>` })
-        html += `</div></div><div class="card"><div style="padding:0 20px">`
-        data.forEach(d => { const pct = total > 0 ? (d.value / total * 100) : 0; html += `<div class="detail-row"><div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0"><div style="width:36px;height:36px;border-radius:10px;background:${esc(d.color)}20;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${esc(d.label)}</div><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600">${esc(d.name)}</div><div style="height:4px;border-radius:2px;background:var(--border);margin-top:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${esc(d.color)};border-radius:2px"></div></div></div></div><div style="text-align:right;flex-shrink:0;padding-left:12px"><div style="font-size:14px;font-weight:700">${money(d.value)}</div><div style="font-size:11px;color:var(--muted)">${pct.toFixed(1)}%</div></div></div>` })
+        const title = S.rptView === 'income' ? 'รายรับตามหมวด' : 'รายจ่ายตามหมวด'
+        html += `<div class="card card-pad report-category-card">`
+        html += `<div class="report-category-title">${title}</div>`
+        html += `<div class="report-category-list">`
+        data.forEach(d => {
+          const pct = total > 0 ? (d.value / total * 100) : 0
+          const pctLabel = pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)
+          html += `<div class="report-cat-row">
+            <div class="report-cat-top">
+              <div class="report-cat-name"><span class="report-cat-icon">${esc(d.label)}</span><span>${esc(d.name)}</span></div>
+              <div class="report-cat-value"><strong>${money(d.value)}</strong><span style="font-weight: 400;">${pctLabel}%</span></div>
+            </div>
+            <div class="report-cat-bar"><div class="report-cat-fill" style="width:${Math.min(100, Math.max(0, pct))}%;background:${esc(d.color)}"></div></div>
+          </div>`
+        })
         html += `</div></div>`
       }
     }
@@ -3320,10 +3308,8 @@ App.render();
     const dd = ensureMerchantWrap(inp)
     if (!inp || !dd) return
     const norm = String(q || '').trim().toLowerCase()
-    const usage = Calc.getMerchantUsage ? Calc.getMerchantUsage(S.transactions || []) : {}
-    const merchants = [...(S.merchants || [])].sort((a, b) => (usage[b.name] || 0) - (usage[a.name] || 0) || String(a.name || '').localeCompare(String(b.name || '')))
-    const matches = merchants.filter(m => !norm || String(m.name || '').toLowerCase().includes(norm)).slice(0, 8)
-    const exact = merchants.some(m => String(m.name || '').toLowerCase() === norm)
+    const matches = (S.merchants || []).filter(m => !norm || String(m.name || '').toLowerCase().includes(norm)).slice(0, 8)
+    const exact = (S.merchants || []).some(m => String(m.name || '').toLowerCase() === norm)
     const createRow = norm && !exact ? `<div class="mt-merchant-item create" data-merchant-name="${esc(q)}"><span class="mmi-emoji">＋</span><span class="mmi-name">ใช้ “${esc(q)}” เป็นร้านใหม่</span></div>` : ''
     dd.innerHTML = matches.map(m => `<div class="mt-merchant-item" data-merchant-name="${esc(m.name)}"><span class="mmi-emoji">${esc(m.emoji || '🏪')}</span><span class="mmi-name">${esc(m.name)}</span></div>`).join('') + createRow
     dd.classList.toggle('hidden', !matches.length && !createRow)
@@ -3437,7 +3423,7 @@ App.render();
       const dayInc = rows.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
       const dayExp = rows.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
       const label = Calc.labelDate ? Calc.labelDate(date) : date
-      html += `<div class="tx-date-header"><span>${esc(label)}</span><div>${dayInc ? `<b class="c-income2">+${money(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense2">-${money(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
+      html += `<div class="tx-date-header"><span>${esc(label)}</span><div>${dayInc ? `<b class="c-income">+${money(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense">-${money(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
     })
     const el = document.getElementById('tx-list-content')
     if (el) el.innerHTML = html
@@ -3665,8 +3651,8 @@ App.render();
           ${settingRow({ icon:'🧯', label:'กู้คืน Backup ก่อน Import', onclick:'App.restorePreImportBackup()' })}
           <div class="settings-row">
             <div class="s-icon">💾</div>
-            <div class="s-label">สถานะข้อมูล <br><div class="s-value">Local only · Saved: ${esc(lastSaved)} · Export: ${esc(lastExport)}</div></div>
-            
+            <div class="s-label">สถานะข้อมูล<br>
+            <div class="s-value" style="font-weight: 400;">บันทึกเมื่อ: ${esc(lastSaved)}<br>Export ข้อมูล: ${esc(lastExport)}</div></div>
           </div>
         </div>
 
@@ -3696,8 +3682,8 @@ App.render();
         <div style="text-align:center;padding:32px 0 8px">
           <div style="font-size:40px">💰</div>
           <div style="font-size:16px;font-weight:700;margin-top:8px">Money Tracker</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px">v4.3 · Offline-first PWA</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px">ข้อมูลหลักเก็บในเครื่องนี้ ไม่ใช่ Cloud Sync</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">v4.3</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">ข้อมูลหลักเก็บในเครื่องนี้</div>
         </div>
       </div>`
   }
@@ -3734,8 +3720,8 @@ App.render();
     const statementCard = `<div class="card card-pad" style="margin-bottom:12px">
       <div style="font-size:14px;font-weight:700;margin-bottom:12px">&#x1F4C5; รอบบัญชีบัตร</div>
       <div class="benefit-form-grid">
-        ${f('ccb-cycleDay','วันตัดรอบ', w.cycleDay)}
-        ${f('ccb-dueDay','วันครบกำหนดชำระ', w.dueDay)}
+        ${f('ccb-cycleDay','วันตัดรอบ (1&#x2013;31)', w.cycleDay, 'วันในทุกเดือนที่ระบบตัดรอบบัญชี')}
+        ${f('ccb-dueDay','วันครบกำหนดชำระ (1&#x2013;31)', w.dueDay, 'วันในทุกเดือนที่ต้องชำระยอด')}
       </div>
     </div>`
     const pointsForm = `<div class="card card-pad benefit-pane"><div class="benefits-toggle-row"><b>เปิดคะแนนสะสม</b><button class="toggle${p.enabled ? ' on' : ''}" id="ccb-points-enabled" onclick="this.classList.toggle('on')"></button></div><div class="benefit-form-grid">${fDec('ccb-bahtPerPoint','X บาท = 1 คะแนน',p.bahtPerPoint)}${fDec('ccb-pointEvery','ทุก X บาทได้ 1 คะแนน',p.pointPerBahtEvery)}${fDec('ccb-multi','คะแนนเพิ่ม X เท่า',p.multiplier||1)}${fDec('ccb-maxTxnPoint','สูงสุด/รายการ',p.maxPerTxn)}${fDec('ccb-maxCyclePoint','สูงสุด/รอบบัญชี',p.maxPerCycle)}</div></div>`
