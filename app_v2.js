@@ -4232,28 +4232,6 @@ App.render();
     return base
   }
 
-  // ── 1. Fix postRecurringNow double-mutation ───────────────────
-  App.postRecurringNow = function(id) {
-    const r = S.recurring.find(x => x.id === id)
-    if (!r) return
-    const expCatIds = new Set((S.categories.expense || []).map(c => c.id))
-    const txType = r.categoryId && !expCatIds.has(r.categoryId) ? 'income' : 'expense'
-    const wallet = S.wallets.find(w => w.type !== 'credit') || S.wallets[0]
-    if (wallet) {
-      const tx = {
-        id: Calc.genId(), type: txType, amount: Number(r.amount) || 0,
-        walletId: wallet.id, categoryId: r.categoryId || '',
-        merchant: r.name, note: '🔁 รายการประจำ', date: getTODAY(), isRecurring: true
-      }
-      S.transactions.push(tx)
-      App._applyBalance(tx, 1)
-    }
-    r.lastPostedAt = getTODAY()
-    persist()
-    App.renderDashboard()
-    toast(`บันทึก "${r.name}" แล้ว`, 'success')
-  }
-
   // ── 2. Merchant datalist autocomplete ────────────────────────
   const _prevRenderAddTxDetail = App._renderAddTxDetail?.bind(App)
   App._renderAddTxDetail = function() {
@@ -4267,175 +4245,6 @@ App.render();
     dl.innerHTML = (S.merchants || []).map(m => `<option value="${esc(m.name)}">`).join('')
     const inp = document.getElementById('tx-merchant')
     if (inp) inp.setAttribute('list', 'mt-merchant-list')
-  }
-
-  // ── 3. "ทุกเดือน" chip + amount range filter ─────────────────
-  const _prevRenderTx = App.renderTransactions?.bind(App)
-  App.renderTransactions = function() {
-    _prevRenderTx?.()
-    // Inject "ทุกเดือน" chip (guard against double-inject on fast re-renders)
-    const monthChips = document.getElementById('tx-month-chips')
-    if (monthChips && !monthChips.querySelector('[data-all-months]')) {
-      const btn = document.createElement('button')
-      btn.className = 'chip mini' + (S.txMonth === 'all' ? ' active' : '')
-      btn.dataset.allMonths = '1'
-      btn.textContent = 'ทุกเดือน'
-      btn.onclick = () => App.setTxMonth('all')
-      monthChips.insertBefore(btn, monthChips.firstChild)
-    }
-    // Amount range row (re-insert each time since header is rebuilt)
-    const header = document.querySelector('#page-transactions .page-header')
-    if (header && !document.getElementById('tx-amount-filter')) {
-      header.insertAdjacentHTML('beforeend', `<div id="tx-amount-filter" style="display:flex;gap:8px;padding:4px 0 2px">
-        <input class="form-input" type="number" id="tx-amt-min" placeholder="฿ ต่ำสุด" inputmode="numeric" value="${esc(S.txAmtMin || '')}" oninput="S.txAmtMin=this.value;App.renderTransactionsList()" style="flex:1;padding:8px 10px;font-size:13px">
-        <input class="form-input" type="number" id="tx-amt-max" placeholder="฿ สูงสุด" inputmode="numeric" value="${esc(S.txAmtMax || '')}" oninput="S.txAmtMax=this.value;App.renderTransactionsList()" style="flex:1;padding:8px 10px;font-size:13px">
-      </div>`)
-    }
-  }
-
-  // Override renderTransactionsList to support all-months + amount range
-  const _prevRenderTxList = App.renderTransactionsList?.bind(App)
-  App.renderTransactionsList = function() {
-    const amtMin = S.txAmtMin ? parseFloat(S.txAmtMin) : null
-    const amtMax = S.txAmtMax ? parseFloat(S.txAmtMax) : null
-    // Fast path: no extra filters active, delegate to original
-    if (S.txMonth !== 'all' && amtMin === null && amtMax === null) {
-      _prevRenderTxList?.()
-      return
-    }
-    const q = (S.txSearch || '').toLowerCase()
-    const filtered = S.transactions.filter(t => {
-      if (S.txMonth !== 'all' && !String(t.date || '').startsWith(S.txMonth)) return false
-      if (S.txType !== 'all' && t.type !== S.txType) return false
-      if (amtMin !== null && Number(t.amount || 0) < amtMin) return false
-      if (amtMax !== null && Number(t.amount || 0) > amtMax) return false
-      if (!q) return true
-      const cat = App._findCat?.(t.categoryId)
-      const wallet = S.wallets.find(w => w.id === t.walletId)
-      const toWallet = S.wallets.find(w => w.id === t.toWalletId)
-      return [t.merchant, t.note, cat?.label, wallet?.name, toWallet?.name]
-        .some(v => String(v || '').toLowerCase().includes(q))
-    }).sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
-
-    const income  = filtered.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
-    const expense = filtered.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
-    const incEl = document.getElementById('tx-income-total')
-    const expEl = document.getElementById('tx-expense-total')
-    if (incEl) incEl.textContent = '+' + fmt(income)
-    if (expEl) expEl.textContent = '-' + fmt(expense)
-
-    const byDate = {}
-    filtered.forEach(t => { (byDate[t.date] ||= []).push(t) })
-    const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a))
-    let html = ''
-    if (!dates.length) {
-      html = App._emptyState?.('📋', 'ไม่มีรายการ', q ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีรายการในช่วงนี้')
-        || '<div style="padding:32px;text-align:center;color:var(--muted)">ไม่มีรายการ</div>'
-    }
-    dates.forEach(date => {
-      const rows = byDate[date]
-      const dayInc = rows.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
-      const dayExp = rows.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
-      html += `<div class="tx-date-header"><span>${esc(txDateLabel(date))}</span><div>${dayInc ? `<b class="c-income">+${fmt(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense">-${fmt(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
-    })
-    const el = document.getElementById('tx-list-content')
-    if (el) el.innerHTML = html
-    App._bindTxRows?.('tx-list-content')
-  }
-
-  // ── 4. Installment auto-generation ───────────────────────────
-  const _prevSaveTx = App.saveTx?.bind(App)
-  App.saveTx = function() {
-    const n = parseInt(S.tx.installmentMonths || 0)
-    if (S.txMode !== 'edit' && S.tx.isInstallment && n >= 2) {
-      const amt = parseFloat(S.tx.amount)
-      if (!amt || amt <= 0)    { toast('กรุณาระบุจำนวนเงิน', 'error'); return }
-      if (!S.tx.walletId)      { toast('กรุณาเลือกกระเป๋าเงิน', 'error'); return }
-      if (!S.tx.categoryId)    { toast('กรุณาเลือกหมวดหมู่', 'error'); return }
-      const perMonth = Math.round((amt / n) * 100) / 100
-      const baseDate = S.tx.date || getTODAY()
-      for (let i = 0; i < n; i++) {
-        const tx = {
-          id: Calc.genId(), type: S.tx.type, amount: perMonth,
-          walletId: S.tx.walletId, categoryId: S.tx.categoryId,
-          merchant: S.tx.merchant, note: S.tx.note,
-          date: addMonths(baseDate, i),
-          isInstallment: true, installmentNo: i + 1, installmentMonths: n
-        }
-        S.transactions.unshift(tx)
-        App._applyBalance(tx, 1)
-      }
-      App._registerMerchantFromTx?.({ ...S.tx })
-      S.txMode = 'add'; S.editingTxId = null
-      persist(); App.closeOverlay('overlay-add-tx'); App.render()
-      toast(`สร้าง ${n} งวด ฿${perMonth.toLocaleString('en-US')} ต่อเดือน`, 'success')
-      return
-    }
-
-    // For cashback: capture pre-call state
-    const wasNew      = S.txMode !== 'edit'
-    const preType     = S.tx.type
-    const preWalletId = S.tx.walletId
-    const preAmt      = parseFloat(S.tx.amount || 0)
-    const preTxCount  = S.transactions.length
-
-    _prevSaveTx?.()
-
-    // Auto-post cashback when a new CC expense was actually saved
-    if (wasNew && preType === 'expense' && preAmt > 0 && S.transactions.length > preTxCount) {
-      const card = S.wallets.find(w => w.id === preWalletId && w.type === 'credit')
-      if (card) {
-        const benefit = App._benefit?.(card.id) || {}
-        const cb = benefit.cashback || {}
-        const cbEnabled = !!(cb.enabled || benefit.enabled)
-        if (cbEnabled && (cb.percent || 0) > 0) {
-          const base = cb.everyBaht ? Math.floor(preAmt / cb.everyBaht) * cb.everyBaht : preAmt
-          let cashback = base * ((cb.percent || 0) / 100)
-          if (cb.tierThreshold && preAmt < cb.tierThreshold) cashback = 0
-          if (cb.maxPerTxn) cashback = Math.min(cashback, cb.maxPerTxn)
-          cashback = Math.round(cashback * 100) / 100
-          if (cashback > 0) {
-            const cbTx = {
-              id: Calc.genId(), type: 'income', amount: cashback,
-              walletId: card.id, note: `Cashback ${card.name}`, date: getTODAY()
-            }
-            S.transactions.unshift(cbTx)
-            App._applyBalance(cbTx, 1)
-            persist(); App.render?.()
-            toast(`Cashback +${fmt(cashback)} บันทึกแล้ว`, 'success')
-          }
-        }
-      }
-    }
-  }
-
-  // ── 5. Restore S.settings on import ──────────────────────────
-  App.importData = function(input) {
-    const file = input?.files?.[0]
-    if (!file) return
-    Storage.importJSON(file, data => {
-      App.showConfirm({
-        title: 'นำเข้าข้อมูล',
-        body: 'จะแทนที่ข้อมูลปัจจุบันทั้งหมด ยืนยัน?',
-        confirmLabel: 'นำเข้า', danger: true,
-        onConfirm() {
-          S.transactions  = data.transactions  || []
-          S.wallets       = data.wallets       || []
-          S.categories    = data.categories    || S.categories
-          S.budgets       = data.budgets       || []
-          S.recurring     = data.recurring     || []
-          S.merchants     = data.merchants     || []
-          S.ccBenefits    = data.ccBenefits    || {}
-          S.incomeBudgets = data.incomeBudgets || []
-          S.marketPrices  = data.marketPrices  || {}
-          if (data.settings) S.settings = { ...S.settings, ...data.settings }
-          App._ensureV2State?.()
-          persist(); App.render()
-          toast('นำเข้าข้อมูลสำเร็จ', 'success')
-        },
-        onCancel() { if (input) input.value = '' }
-      })
-    }, err => { toast('นำเข้าล้มเหลว: ' + err, 'error'); if (input) input.value = '' })
   }
 
   // ── 6. Wallet monthly spend summary ──────────────────────────
@@ -4477,18 +4286,9 @@ App.render();
 
 /* ============================================================
    V3.1 Financial Safety
-   1. Balance reconciliation + repair tool
-   2. Export includes settings; better filename
-   3. Import: validate transactions + auto-backup
-   4. CC payment filter chip
-   5. Transfer-to-CC block
-   6. Insufficient balance + credit limit validation
-   7. saveCCPay source-balance check
-   8. Recurring: assigned wallet & type
-   9. Delete protection for referenced data
-  10. Enhanced search (type, date, amount)
-  11. CC reward calculation uses all cycle transactions
-  ============================================================ */
+   1. Balance reconciliation + repair tool (openBalanceRepairScreen)
+   2. deleteMerchant with showConfirm (replaces base confirm())
+   ============================================================ */
 ;(function v31FinancialSafety() {
   const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
@@ -4609,271 +4409,6 @@ App.render();
       </div>`)
   }
 
-  // ── 2. Export with settings + local-date filename ────────────
-
-  App.exportData = function() {
-    const localDate = getTODAY()
-    const data = {
-      exportedAt: new Date().toISOString(),
-      appVersion: '3.1',
-      transactions:  S.transactions,
-      wallets:       S.wallets,
-      categories:    S.categories,
-      budgets:       S.budgets,
-      recurring:     S.recurring,
-      merchants:     S.merchants,
-      ccBenefits:    S.ccBenefits,
-      incomeBudgets: S.incomeBudgets,
-      marketPrices:  S.marketPrices  || {},
-      settings:      S.settings,
-    }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
-    a.download = `money-tracker-backup-${localDate}.json`
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    toast('ส่งออกข้อมูลสำเร็จ', 'success')
-  }
-
-  // ── 3. Import: validate + auto-backup ───────────────────────
-
-  App.importData = function(input) {
-    const file = input?.files?.[0]
-    if (!file) return
-    Storage.importJSON(file, data => {
-      // Validate structure
-      if (!Array.isArray(data.transactions) || !Array.isArray(data.wallets)) {
-        toast('ไฟล์ไม่ถูกต้อง: ขาด transactions หรือ wallets', 'error')
-        if (input) input.value = ''; return
-      }
-      // Validate and filter transactions
-      const validTypes = new Set(['income', 'expense', 'transfer', 'cc_payment'])
-      const walletIds  = new Set(data.wallets.map(w => w.id))
-      const before = data.transactions.length
-      data.transactions = data.transactions.filter(t => {
-        if (!validTypes.has(t.type))                        return false
-        if (!(Number(t.amount) > 0))                        return false
-        if (!t.date || !/^\d{4}-\d{2}-\d{2}$/.test(String(t.date))) return false
-        if (t.walletId && !walletIds.has(t.walletId))       return false
-        return true
-      })
-      const skipped = before - data.transactions.length
-
-      App.showConfirm({
-        title: 'นำเข้าข้อมูล', danger: true,
-        body: `จะแทนที่ข้อมูลปัจจุบันทั้งหมด${skipped ? ` (กรองรายการไม่ถูกต้อง ${skipped} รายการออก)` : ''} ยืนยัน?`,
-        confirmLabel: 'นำเข้า',
-        onConfirm() {
-          // Auto-backup current state
-          try {
-            localStorage.setItem('mt_pre_import_backup', JSON.stringify({
-              backedUpAt: new Date().toISOString(),
-              transactions: S.transactions, wallets: S.wallets,
-              categories: S.categories, budgets: S.budgets,
-              recurring: S.recurring, merchants: S.merchants,
-              ccBenefits: S.ccBenefits, incomeBudgets: S.incomeBudgets,
-              marketPrices: S.marketPrices || {}, settings: S.settings,
-            }))
-          } catch (_) {}
-          // Apply
-          S.transactions  = data.transactions  || []
-          S.wallets       = data.wallets       || []
-          S.categories    = data.categories    || S.categories
-          S.budgets       = data.budgets       || []
-          S.recurring     = data.recurring     || []
-          S.merchants     = data.merchants     || []
-          S.ccBenefits    = data.ccBenefits    || {}
-          S.incomeBudgets = data.incomeBudgets || []
-          S.marketPrices  = data.marketPrices  || {}
-          if (data.settings) S.settings = { ...S.settings, ...data.settings }
-          App._ensureV2State?.()
-          persist(); App.render()
-          toast(`นำเข้าสำเร็จ${skipped ? ` (ข้าม ${skipped} รายการ)` : ''}`, 'success')
-        },
-        onCancel() { if (input) input.value = '' }
-      })
-    }, err => { toast('นำเข้าล้มเหลว: ' + err, 'error'); if (input) input.value = '' })
-  }
-
-  // ── 4. CC payment filter chip ────────────────────────────────
-
-  const _prevRenderTx31 = App.renderTransactions?.bind(App)
-  App.renderTransactions = function() {
-    _prevRenderTx31?.()
-    const typeChips = document.getElementById('tx-type-chips')
-    if (typeChips && !typeChips.querySelector('[data-cc-pay-chip]')) {
-      const btn = document.createElement('button')
-      btn.className = 'chip' + (S.txType === 'cc_payment' ? ' active' : '')
-      btn.dataset.ccPayChip = '1'
-      btn.textContent = 'ชำระบัตร'
-      btn.onclick = () => App.setTxType('cc_payment')
-      typeChips.appendChild(btn)
-    }
-  }
-
-  // ── 5-6. Central validation wrapper for saveTx ───────────────
-
-  App._validateTx = function(tx, isEdit) {
-    const amt = Number(tx.amount) || 0
-    if (!amt || amt <= 0)  return 'กรุณาระบุจำนวนเงิน'
-    if (!tx.walletId)      return 'กรุณาเลือกกระเป๋าเงิน'
-
-    if (tx.type === 'transfer') {
-      if (!tx.toWalletId)               return 'กรุณาเลือกปลายทาง'
-      if (tx.toWalletId === tx.walletId) return 'กระเป๋าต้นทางและปลายทางต้องไม่เหมือนกัน'
-      const fromW = S.wallets.find(w => w.id === tx.walletId)
-      const toW   = S.wallets.find(w => w.id === tx.toWalletId)
-      if (fromW?.type === 'credit' || toW?.type === 'credit')
-        return 'โอนเงินจาก/ไปบัตรเครดิตต้องใช้เมนูชำระบัตร'
-      if (!isEdit && fromW && fromW.type !== 'credit' && Number(fromW.balance) < amt)
-        return 'ยอดเงินในกระเป๋าไม่เพียงพอ'
-    }
-
-    if (tx.type === 'expense') {
-      if (!tx.categoryId) return 'กรุณาเลือกหมวดหมู่'
-      const w = S.wallets.find(x => x.id === tx.walletId)
-      if (!isEdit && w && w.type !== 'credit' && Number(w.balance) < amt)
-        return 'ยอดเงินในกระเป๋าไม่เพียงพอ'
-      if (!isEdit && w?.type === 'credit' && (w.limit || 0) > 0) {
-        const avail = w.limit - Math.abs(Number(w.balance) || 0)
-        if (amt > avail) return `วงเงินคงเหลือ ${fmt(Math.max(0, avail))} ไม่พอ`
-      }
-    }
-
-    return null
-  }
-
-  const _prevSaveTx31 = App.saveTx?.bind(App)
-  App.saveTx = function() {
-    const isEdit = S.txMode === 'edit'
-    const err = App._validateTx(S.tx, isEdit)
-    if (err) { toast(err, 'error'); return }
-    _prevSaveTx31?.()
-  }
-
-  // ── 7. saveCCPay: source wallet balance check ────────────────
-
-  const _prevSaveCCPay31 = App.saveCCPay?.bind(App)
-  App.saveCCPay = function() {
-    const walletId = document.getElementById('cc-pay-wallet')?.value
-    const amount   = parseFloat(document.getElementById('cc-pay-amount')?.value) || 0
-    if (walletId && amount > 0) {
-      const src = S.wallets.find(w => w.id === walletId)
-      if (src && src.type !== 'credit' && Number(src.balance) < amount) {
-        toast('ยอดเงินในกระเป๋าต้นทางไม่เพียงพอ', 'error'); return
-      }
-    }
-    _prevSaveCCPay31?.()
-  }
-
-  // ── 8. Recurring: wallet + type per recurring item ───────────
-
-  App.openRecurringForm = function(id) {
-    const r = id ? S.recurring.find(x => x.id === id) : null
-    const cats = [...(S.categories.expense || []), ...(S.categories.income || [])]
-    const walletOpts = (S.wallets || []).filter(w => w.type !== 'credit')
-      .map(w => `<option value="${esc(w.id)}"${r?.walletId === w.id ? ' selected' : ''}>${esc(w.icon || '')} ${esc(w.name)}</option>`).join('')
-    App.openSubScreen(`
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App.openRecurringScreen()">←</button>
-        <h2>${r ? 'แก้ไข' : 'เพิ่ม'}รายการประจำ</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.saveRecurring('${esc(id || '')}')" style="width:auto;padding:8px 14px">บันทึก</button>
-      </div>
-      <div class="sub-scroll">
-        <div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" id="rec-name" value="${esc(r?.name || '')}"></div>
-        <div class="form-group"><label class="form-label">จำนวนเงิน (฿)</label><input class="form-input" type="number" id="rec-amount" value="${esc(r?.amount || '')}"></div>
-        <div class="form-group"><label class="form-label">ทุกกี่วัน</label><input class="form-input" type="number" id="rec-days" value="${esc(r?.everyDays || 30)}"></div>
-        <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="rec-cat">${cats.map(c => `<option value="${esc(c.id)}"${r?.categoryId === c.id ? ' selected' : ''}>${esc(c.icon || '')} ${esc(c.label)}</option>`).join('')}</select></div>
-        <div class="form-group"><label class="form-label">กระเป๋าเงิน</label><select class="form-input" id="rec-wallet"><option value="">-- กระเป๋าเริ่มต้น --</option>${walletOpts}</select></div>
-      </div>`)
-  }
-
-  App.saveRecurring = function(id) {
-    const name      = document.getElementById('rec-name')?.value?.trim() || ''
-    const amount    = parseFloat(document.getElementById('rec-amount')?.value) || 0
-    const everyDays = parseInt(document.getElementById('rec-days')?.value) || 30
-    const catId     = document.getElementById('rec-cat')?.value || ''
-    const walletId  = document.getElementById('rec-wallet')?.value || undefined
-    const cat       = App._findCat?.(catId)
-    if (!name || !amount) { toast('กรุณากรอกชื่อและจำนวนเงิน', 'error'); return }
-    const data = {
-      name, amount, everyDays, paused: false,
-      categoryId: cat?.id, categoryName: cat?.label, icon: cat?.icon, color: cat?.color,
-      walletId,
-    }
-    if (id) {
-      const idx = S.recurring.findIndex(r => r.id === id)
-      if (idx >= 0) S.recurring[idx] = { ...S.recurring[idx], ...data }
-    } else {
-      S.recurring.push({ id: Calc.genId(), ...data })
-    }
-    persist(); App.openRecurringScreen(); toast('บันทึกรายการประจำแล้ว', 'success')
-  }
-
-  App.postRecurringNow = function(id) {
-    const r = S.recurring.find(x => x.id === id)
-    if (!r) return
-    const expCatIds = new Set((S.categories.expense || []).map(c => c.id))
-    const txType = r.type || (r.categoryId && !expCatIds.has(r.categoryId) ? 'income' : 'expense')
-    const wallet = (r.walletId && S.wallets.find(w => w.id === r.walletId && w.type !== 'credit'))
-      || S.wallets.find(w => w.type !== 'credit')
-      || S.wallets[0]
-    if (!wallet) { toast('ไม่พบกระเป๋าเงิน', 'error'); return }
-    const tx = {
-      id: Calc.genId(), type: txType, amount: Number(r.amount) || 0,
-      walletId: wallet.id, categoryId: r.categoryId || '',
-      merchant: r.name, note: '🔁 รายการประจำ', date: getTODAY(), isRecurring: true
-    }
-    S.transactions.push(tx)
-    App._applyBalance(tx, 1)
-    r.lastPostedAt = getTODAY()
-    persist(); App.renderDashboard()
-    toast(`บันทึก "${r.name}" แล้ว`, 'success')
-  }
-
-  // ── 9. Delete protection for referenced data ─────────────────
-
-  App.deleteWallet = function(id) {
-    if ((S.wallets || []).length <= 1) { toast('ต้องมีกระเป๋าอย่างน้อย 1 อัน', 'warn'); return }
-    const txCount  = (S.transactions || []).filter(t => t.walletId === id || t.toWalletId === id).length
-    const recCount = (S.recurring    || []).filter(r => r.walletId === id).length
-    const extraMsg = txCount || recCount
-      ? ` มีรายการ ${txCount} รายการ${recCount ? ` และประจำ ${recCount} รายการ` : ''} อ้างอิงกระเป๋านี้`
-      : ''
-    App.showConfirm({
-      title: 'ลบกระเป๋าเงิน', danger: true,
-      body: `ยืนยันลบกระเป๋านี้?${extraMsg} รายการที่อ้างอิงจะยังอยู่`,
-      confirmLabel: 'ลบ',
-      onConfirm() {
-        if ((S.wallets || []).length <= 1) { toast('ต้องมีกระเป๋าอย่างน้อย 1 อัน', 'warn'); return }
-        S.wallets = S.wallets.filter(w => w.id !== id)
-        App._ensureV2State?.()
-        persist(); App.closeOverlay('overlay-wallet-form'); App.render()
-        toast('ลบกระเป๋าแล้ว', 'success')
-      }
-    })
-  }
-
-  App.deleteCategory = function(id) {
-    const type = S.catManageType || 'expense'
-    const txCount  = (S.transactions || []).filter(t => t.categoryId === id).length
-    const recCount = (S.recurring    || []).filter(r => r.categoryId === id).length
-    const extraMsg = txCount || recCount
-      ? ` หมวดนี้ใช้ใน ${txCount} รายการ${recCount ? ` และประจำ ${recCount} รายการ` : ''}`
-      : ''
-    App.showConfirm({
-      title: 'ลบหมวดหมู่', danger: true,
-      body: `ยืนยันลบหมวดหมู่นี้?${extraMsg}`,
-      confirmLabel: 'ลบ',
-      onConfirm() {
-        S.categories[type] = (S.categories[type] || []).filter(c => c.id !== id)
-        persist(); App.openCategoryScreen(type); toast('ลบหมวดหมู่แล้ว', 'success')
-      }
-    })
-  }
-
   App.deleteMerchant = function(id) {
     const m = (S.merchants || []).find(x => x.id === id)
     const txCount = m ? (S.transactions || []).filter(t => t.merchant === m.name).length : 0
@@ -4887,110 +4422,6 @@ App.render();
         persist(); App.openMerchantScreen(); toast('ลบร้านค้าแล้ว', 'success')
       }
     })
-  }
-
-  // ── 10. Enhanced renderTransactionsList ──────────────────────
-  // Full replacement: all-months, amount range, extended search
-
-  App.renderTransactionsList = function() {
-    const amtMin = S.txAmtMin ? parseFloat(S.txAmtMin) : null
-    const amtMax = S.txAmtMax ? parseFloat(S.txAmtMax) : null
-    const q = (S.txSearch || '').toLowerCase()
-
-    const filtered = S.transactions.filter(t => {
-      if (S.txMonth !== 'all' && !String(t.date || '').startsWith(S.txMonth)) return false
-      if (S.txType !== 'all' && t.type !== S.txType) return false
-      if (amtMin !== null && Number(t.amount || 0) < amtMin) return false
-      if (amtMax !== null && Number(t.amount || 0) > amtMax) return false
-      if (!q) return true
-      const cat      = App._findCat?.(t.categoryId)
-      const wallet   = S.wallets.find(w => w.id === t.walletId)
-      const toWallet = S.wallets.find(w => w.id === t.toWalletId)
-      return [
-        t.merchant, t.note, cat?.label, wallet?.name, toWallet?.name,
-        TX_TYPE_LABELS[t.type] || t.type,
-        t.date || '',
-        String(t.amount || '')
-      ].some(v => String(v || '').toLowerCase().includes(q))
-    }).sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
-
-    const income  = filtered.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
-    const expense = filtered.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
-    const incEl = document.getElementById('tx-income-total')
-    const expEl = document.getElementById('tx-expense-total')
-    if (incEl) incEl.textContent = '+' + fmt(income)
-    if (expEl) expEl.textContent = '-' + fmt(expense)
-
-    const today = getTODAY()
-    const d = new Date(); d.setDate(d.getDate() - 1)
-    const yest = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-    const dateLabel = dateStr => {
-      if (!dateStr) return ''
-      const base = Calc.shortDate(dateStr)
-      if (dateStr === today) return `วันนี้ ${base}`
-      if (dateStr === yest)  return `เมื่อวาน ${base}`
-      return base
-    }
-
-    const byDate = {}
-    filtered.forEach(t => { (byDate[t.date] ||= []).push(t) })
-    const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a))
-    let html = ''
-    if (!dates.length) {
-      html = App._emptyState?.('📋', 'ไม่มีรายการ', q ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีรายการในช่วงนี้')
-           || '<div style="padding:32px;text-align:center;color:var(--muted)">ไม่มีรายการ</div>'
-    }
-    dates.forEach(date => {
-      const rows   = byDate[date]
-      const dayInc = rows.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
-      const dayExp = rows.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
-      html += `<div class="tx-date-header"><span>${esc(dateLabel(date))}</span><div>${dayInc ? `<b class="c-income">+${fmt(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense">-${fmt(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
-    })
-    const el = document.getElementById('tx-list-content')
-    if (el) el.innerHTML = html
-    App._bindTxRows?.('tx-list-content')
-  }
-
-  // ── 11. CC reward: use ALL cycle transactions, not just 20 ───
-
-  const _prevOpenCCDetail31 = App.openCCDetail?.bind(App)
-  App.openCCDetail = function(cardId) {
-    _prevOpenCCDetail31?.(cardId)
-    setTimeout(() => {
-      const card = S.wallets.find(w => w.id === cardId)
-      if (!card) return
-      const benefit = App._benefit?.(cardId) || {}
-      const period = Calc.getStatementPeriod(card.cycleDay || 25)
-      const allCycleTxns = S.transactions.filter(t =>
-        t.walletId === cardId && t.type === 'expense' &&
-        t.date >= period.start && t.date <= period.end
-      )
-      const rewards = Calc.getCardRewards(allCycleTxns, benefit)
-      // Patch reward tiles rendered by the inner openCCDetail
-      const tiles = document.querySelectorAll('#sub-screen .reward-tile strong, #sub-screen .mini-stat strong')
-      if (tiles.length >= 2) {
-        tiles[0].textContent = rewards.points.toLocaleString('en-US')
-        tiles[1].textContent = fmt(rewards.cashback)
-      }
-    }, 0)
-  }
-
-  // ── Inject Balance Repair tool into More page ────────────────
-
-  const _prevRenderMore31 = App.renderMore?.bind(App)
-  App.renderMore = function() {
-    _prevRenderMore31?.()
-    const content = document.getElementById('more-content')
-    if (!content || content.querySelector('[data-v31-repair]')) return
-    const resetRow = content.querySelector('[onclick*="resetData"]')?.closest('.settings-row')
-    if (resetRow) {
-      resetRow.insertAdjacentHTML('beforebegin', `
-        <div class="settings-row" onclick="App.openBalanceRepairScreen()" data-v31-repair="1">
-          <div class="s-icon">🔧</div>
-          <div class="s-label">ตรวจสอบยอดคงเหลือ</div>
-          <div class="s-arrow">›</div>
-        </div>`)
-    }
   }
 
   try { if (S.page === 'more')         App.renderMore()         } catch (_) {}
@@ -5008,56 +4439,7 @@ App.render();
 
   function getDropdown() { return document.getElementById('mt-merchant-dropdown') }
 
-  // Build/rebuild the dropdown list filtered by query q
-  App._showMerchantDropdown = function(q) {
-    const inp = document.getElementById('tx-merchant')
-    if (!inp) return
-    const merchants = S.merchants || []
-    const norm = (q || '').trim().toLowerCase()
-    const matches = norm
-      ? merchants.filter(m => m.name.toLowerCase().includes(norm))
-      : merchants.slice()
-
-    let dd = getDropdown()
-    if (!dd) {
-      // Create wrapper + dropdown; wrap the input
-      const wrap = document.createElement('div')
-      wrap.className = 'mt-merchant-wrap'
-      inp.parentNode.insertBefore(wrap, inp)
-      wrap.appendChild(inp)
-
-      dd = document.createElement('div')
-      dd.id = 'mt-merchant-dropdown'
-      dd.className = 'hidden'
-      wrap.appendChild(dd)
-    }
-
-    if (!matches.length) {
-      dd.classList.add('hidden')
-      return
-    }
-
-    dd.innerHTML = matches.map(m => `
-      <div class="mt-merchant-item" ontouchstart="" onmousedown="event.preventDefault();App._pickMerchant(${JSON.stringify(m.name)})">
-        <span class="mmi-emoji">${esc32(m.emoji || '🏪')}</span>
-        <span class="mmi-name">${esc32(m.name)}</span>
-      </div>`).join('')
-    dd.classList.remove('hidden')
-  }
-
-  App._hideMerchantDropdown = function() {
-    const dd = getDropdown()
-    if (dd) dd.classList.add('hidden')
-  }
-
-  App._pickMerchant = function(name) {
-    App._txField('merchant', name)
-    const inp = document.getElementById('tx-merchant')
-    if (inp) inp.value = name
-    App._hideMerchantDropdown()
-  }
-
-  // ── Override _renderAddTxDetail to wire up the custom dropdown ──
+  // ── Override _renderAddTxDetail to clean up datalist/dropdown leftovers ──
   const _prevDetail32 = App._renderAddTxDetail?.bind(App)
   App._renderAddTxDetail = function() {
     _prevDetail32?.()
@@ -5082,25 +4464,7 @@ App.render();
       wrap.parentNode.insertBefore(inp, wrap)
       wrap.remove()
     }
-
-    // Set up event handlers
-    inp.setAttribute('autocomplete', 'off')
-    inp.addEventListener('focus', function() {
-      App._showMerchantDropdown(this.value)
-    })
-    inp.addEventListener('input', function() {
-      App._txField('merchant', this.value)
-      App._showMerchantDropdown(this.value)
-    })
-    inp.addEventListener('blur', function() {
-      // Delay so onmousedown/ontouchstart on items fires first
-      setTimeout(App._hideMerchantDropdown, 180)
-    })
-
-    // Show dropdown immediately if already focused (re-render case)
-    if (document.activeElement === inp) {
-      App._showMerchantDropdown(inp.value)
-    }
+    // v41 handles all event binding (onfocus/oninput/onblur) — no addEventListener here.
   }
 
   // Re-apply to current render if add-tx sheet is open
@@ -5538,48 +4902,6 @@ App.render();
     persist(); App.closeOverlay('overlay-cc-pay'); App.render(); toast(`ชำระ ${money(amount)} สำเร็จ`, 'success')
   }
 
-  App.markCashbackReceived = function(cardId) {
-    const st = App.getCardStatement(cardId)
-    if (!st || !st.reward?.cashback) { toast('ไม่มี cashback ให้บันทึก', 'warn'); return }
-    if ((S.rewardLedger || []).some(r => r.type === 'cashback_received' && r.statementId === st.id)) { toast('Statement นี้บันทึก cashback แล้ว', 'info'); return }
-    const card = walletById(cardId)
-    const tx = { id:Calc.genId(), type:'income', amount:st.reward.cashback, walletId:cardId, categoryId:undefined, merchant:'Cashback', note:`รับ Cashback ${card?.name || ''}`, date:today(), isRewardReceived:true, statementId:st.id }
-    S.transactions.unshift(tx)
-    S.rewardLedger.push({ id:Calc.genId(), type:'cashback_received', cardId, statementId:st.id, amount:st.reward.cashback, date:today() })
-    App.recalculateWalletBalances({ save:false, recordSnapshot:true })
-    persist(); App.openRewardLedgerScreen(cardId); toast('บันทึก cashback ที่ได้รับแล้ว', 'success')
-  }
-
-  App.openRewardLedgerScreen = function(cardId = '') {
-    const cards = (S.wallets || []).filter(w => w.type === 'credit')
-    const selected = cardId || cards[0]?.id
-    const st = selected ? App.getCardStatement(selected) : null
-    const rows = st?.purchases || []
-    const received = (S.rewardLedger || []).filter(r => !selected || r.cardId === selected)
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>Reward Ledger</h2>${st?.reward?.cashback ? `<button class="btn btn-primary btn-sm" onclick="App.markCashbackReceived('${esc(selected)}')" style="width:auto">รับ Cashback</button>` : ''}</div>
-      <div class="sub-scroll">
-        <div class="form-group"><label class="form-label">เลือกบัตร</label><select class="form-input" onchange="App.openRewardLedgerScreen(this.value)">${cards.map(c => `<option value="${esc(c.id)}"${c.id===selected?' selected':''}>${esc(c.icon || '')} ${esc(c.name)}</option>`).join('')}</select></div>
-        ${st ? `<div class="phase-card"><b>รอบ ${esc(st.start)} → ${esc(st.end)}</b><div class="phase-metric-grid"><div><span>คะแนนคาดการณ์</span><strong>${number(st.reward.points,0)}</strong></div><div><span>Cashback คาดการณ์</span><strong>${money(st.reward.cashback)}</strong></div></div><p>ระบบจะไม่ลง cashback เป็นรายรับอัตโนมัติ จนกว่าจะกด “รับ Cashback”</p></div>` : App._emptyState('💳','ยังไม่มีบัตรเครดิต','')}
-        <div class="sec-title">รายการที่คำนวณสิทธิ์</div>
-        <div class="card"><div style="padding:0 16px">${rows.length ? rows.map(t => App._txRow(t)).join('') : App._emptyState('🎁','ยังไม่มีรายการในรอบนี้','')}</div></div>
-        <div class="sec-title">รับสิทธิ์แล้ว</div>
-        <div class="card card-pad">${received.length ? received.map(r => `<div class="detail-row"><span>${esc(r.type)}</span><b>${money(r.amount || 0)}</b></div>`).join('') : '<div style="font-size:13px;color:var(--muted)">ยังไม่มีรายการรับจริง</div>'}</div>
-      </div>`)
-    setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
-  }
-
-  const previousOpenCCDetail = App.openCCDetail?.bind(App)
-  App.openCCDetail = function v40OpenCCDetail(cardId) {
-    previousOpenCCDetail?.(cardId)
-    setTimeout(() => {
-      const root = document.querySelector('#sub-screen .cc-detail-screen') || document.querySelector('#sub-screen .sub-scroll')
-      if (!root || root.querySelector('[data-v40-statement]')) return
-      const st = App.getCardStatement(cardId)
-      if (!st) return
-      root.insertAdjacentHTML('afterbegin', `<div class="phase-card" data-v40-statement="1"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><b>Statement Center</b><p>รอบ ${esc(st.start)} → ${esc(st.end)} · Due ${esc(st.dueDate)}</p></div><span class="status-pill ${st.paid ? 'ok' : 'warn'}">${st.paid ? 'Paid' : 'Unpaid'}</span></div><div class="phase-metric-grid"><div><span>ยอดรูดในรอบ</span><strong>${money(st.purchaseTotal)}</strong></div><div><span>ชำระแล้ว</span><strong>${money(st.paidTotal)}</strong></div><div><span>คงเหลือตาม statement</span><strong>${money(st.balanceDue)}</strong></div></div><button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen('${esc(cardId)}')" style="width:auto;margin-top:10px">ดู Reward Ledger</button></div>`)
-    }, 0)
-  }
-
   // ── Phase 3: Installment center + recurring due schedule ──────────────────
   App.getInstallmentGroups = function() {
     const map = {}
@@ -5600,11 +4922,6 @@ App.render();
     const g = App.getInstallmentGroups().find(x => x.id === groupId)
     if (!g) return
     App.showConfirm({ title:'ลบชุดผ่อน', danger:true, body:`ลบรายการผ่อน “${g.merchant}” ทั้ง ${g.rows.length} งวด?`, confirmLabel:'ลบทั้งชุด', onConfirm(){ S.transactions = S.transactions.filter(t => t.installmentGroupId !== groupId); App.recalculateWalletBalances({ save:false, recordSnapshot:true }); persist(); App.openInstallmentCenter(); toast('ลบชุดผ่อนแล้ว', 'success') } })
-  }
-
-  App.openInstallmentCenter = function() {
-    const groups = App.getInstallmentGroups()
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>Installments</h2></div><div class="sub-scroll">${groups.length ? groups.map(g => { const cat = catById(g.categoryId); const w = walletById(g.walletId); return `<div class="phase-card"><div style="display:flex;justify-content:space-between;gap:10px"><div><b>${esc(g.merchant)}</b><p>${esc(w?.name || '')} · ${esc(cat?.label || '')}</p></div><button class="btn btn-secondary btn-sm" onclick="App.deleteInstallmentGroup('${esc(g.id)}')" style="width:auto">ลบทั้งชุด</button></div><div class="phase-metric-grid"><div><span>ทั้งหมด</span><strong>${money(g.total || g.paid + g.remaining)}</strong></div><div><span>จ่ายแล้ว/ถึงวันนี้</span><strong>${money(g.paid)}</strong></div><div><span>คงเหลืออนาคต</span><strong>${money(g.remaining)}</strong></div></div><p>งวดถัดไป: ${g.next ? `${esc(g.next.date)} · งวด ${g.next.installmentNo}/${g.next.installmentMonths}` : 'ครบแล้ว'}</p></div>` }).join('') : App._emptyState('🧾','ยังไม่มีรายการผ่อน','เพิ่มรายการจ่ายแล้วเลือก “ผ่อนชำระ”')}</div>`)
   }
 
   App._nextDueForRecurring = function(r, fromDate = today()) {
@@ -5654,11 +4971,6 @@ App.render();
   App.snoozeRecurring = function(id, days = 7) { const r = S.recurring.find(x => x.id === id); if (!r) return; r.nextDueDate = addDays(r.nextDueDate || today(), days); persist(); App.openRecurringScreen(); toast(`เลื่อน ${days} วันแล้ว`, 'info') }
   App.skipRecurring = function(id) { const r = S.recurring.find(x => x.id === id); if (!r) return; r.nextDueDate = addDays(r.nextDueDate || today(), Number(r.everyDays || 30)); persist(); App.openRecurringScreen(); toast('ข้ามรอบนี้แล้ว', 'info') }
 
-  App.openRecurringScreen = function() {
-    const rows = (S.recurring || []).slice().sort((a,b) => String(a.nextDueDate || '').localeCompare(String(b.nextDueDate || '')))
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.openRecurringForm()" style="width:auto">+ เพิ่ม</button></div><div class="sub-scroll">${rows.length ? rows.map(r => { const due = r.nextDueDate || today(); const dueNow = due <= today(); return `<div class="recurring-item ${r.paused?'paused':''}"><div class="list-item-icon" style="background:${esc(r.color || '#2563EB')}20">${esc(r.icon || '🔁')}</div><div class="list-item-info"><div class="list-item-name">${esc(r.name)}</div><div class="list-item-sub">${money(r.amount)} · ${r.type === 'income' ? 'รายรับ' : 'รายจ่าย'} · Due ${esc(due)}${dueNow ? ' · ถึงกำหนด' : ''}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.postRecurringNow('${esc(r.id)}')">✓</button><button class="icon-btn" onclick="App.snoozeRecurring('${esc(r.id)}',7)">+7</button><button class="icon-btn" onclick="App.skipRecurring('${esc(r.id)}')">ข้าม</button><button class="icon-btn" onclick="App.openRecurringForm('${esc(r.id)}')">✏️</button><button class="icon-btn" onclick="App.deleteRecurring('${esc(r.id)}')">🗑</button></div></div>` }).join('') : App._emptyState('🔁','ยังไม่มีรายการประจำ','')}</div>`)
-  }
-
   // ── Phase 4: Reports split ────────────────────────────────────────────────
   function statsFor(month, mode = 'spending') {
     const txs = (S.transactions || []).filter(t => String(t.date || '').startsWith(month))
@@ -5672,30 +4984,6 @@ App.render();
     })
     const cashOut = expense + (mode === 'cashflow' ? ccPay : 0)
     return { income, expense, transferOut, ccPay, cashOut, net: income - cashOut, byCategory }
-  }
-
-  App.renderReports = function v40Reports() {
-    if (!['spending','cashflow','budget','networth'].includes(S.rptView)) S.rptView = 'spending'
-    const months = Calc.getMonths(6)
-    document.getElementById('report-month-chips').innerHTML = months.map(m => `<button class="chip${m===S.rptMonth?' active':''}" onclick="App.setRptMonth('${m}')">${Calc.monthLabel(m)}</button>`).join('')
-    document.getElementById('report-view-chips').innerHTML = [['spending','Spending'],['cashflow','Cash-flow'],['budget','Budget'],['networth','Net worth']].map(([v,l]) => `<button class="chip${S.rptView===v?' active':''}" onclick="App.setRptView('${v}')">${l}</button>`).join('')
-    const spending = statsFor(S.rptMonth, 'spending')
-    const cashflow = statsFor(S.rptMonth, 'cashflow')
-    const nw = Calc.getNetWorth(S.wallets || [])
-    let html = `<div class="phase-card"><b>Report Logic</b><p>Spending = รายจ่ายจริง ไม่รวมโอน/ชำระบัตร · Cash-flow = เงินสดเข้าออก รวมชำระบัตร</p><div class="phase-metric-grid"><div><span>Spending net</span><strong>${money(spending.income - spending.expense)}</strong></div><div><span>Cash-flow net</span><strong>${money(cashflow.net)}</strong></div><div><span>Net worth</span><strong>${money(nw.net)}</strong></div></div></div>`
-    if (S.rptView === 'cashflow') {
-      html += `<div class="report-summary-grid"><div class="card report-summary-card"><div class="report-summary-label">รายรับ</div><div class="report-summary-value c-income">${money(cashflow.income)}</div></div><div class="card report-summary-card"><div class="report-summary-label">รายจ่าย</div><div class="report-summary-value c-expense">${money(cashflow.expense)}</div></div><div class="card report-summary-card"><div class="report-summary-label">ชำระบัตร</div><div class="report-summary-value c-expense">${money(cashflow.ccPay)}</div></div></div>`
-    } else if (S.rptView === 'budget') {
-      const budget = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, S.rptMonth)
-      html += `<div class="card card-pad">${budget.length ? budget.map(b => `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>${esc(b.icon)} ${esc(b.label)}</b><span>${money(b.spent)} / ${money(b.monthlyLimit)}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,b.pct)}%;background:${b.over?'var(--expense)':'var(--income)'}"></div></div></div>`).join('') : App._emptyState('💰','ยังไม่ได้ตั้งงบประมาณ','')}</div>`
-    } else if (S.rptView === 'networth') {
-      const snaps = (S.netWorthSnapshots || []).slice(-12)
-      html += `<div class="card card-pad"><div style="font-weight:800;margin-bottom:12px">Net worth snapshots</div>${snaps.length ? snaps.map(s => `<div class="detail-row"><span>${esc(s.date)}</span><b class="${s.net>=0?'c-income':'c-expense'}">${money(s.net)}</b></div>`).join('') : '<div style="font-size:13px;color:var(--muted)">ยังไม่มี snapshot</div>'}</div>`
-    } else {
-      const data = Object.entries(spending.byCategory || {}).map(([id,value]) => ({ cat:catById(id), value })).sort((a,b) => b.value - a.value)
-      html += `<div class="report-summary-grid"><div class="card report-summary-card"><div class="report-summary-label">รายรับ</div><div class="report-summary-value c-income">${money(spending.income)}</div></div><div class="card report-summary-card"><div class="report-summary-label">รายจ่ายจริง</div><div class="report-summary-value c-expense">${money(spending.expense)}</div></div><div class="card report-summary-card"><div class="report-summary-label">สุทธิ</div><div class="report-summary-value ${spending.net>=0?'c-income':'c-expense'}">${money(spending.net)}</div></div></div><div class="card"><div style="padding:0 20px">${data.length ? data.map(d => `<div class="detail-row"><span>${esc(d.cat?.icon || '📦')} ${esc(d.cat?.label || 'ไม่ระบุ')}</span><b>${money(d.value)}</b></div>`).join('') : App._emptyState('📊','ไม่มีข้อมูล','')}</div></div>`
-    }
-    document.getElementById('reports-content').innerHTML = html
   }
 
   // ── Phase 5: investment transactions ──────────────────────────────────────
@@ -5736,56 +5024,6 @@ App.render();
       if (!root || root.querySelector('[data-v40-invest-actions]')) return
       root.insertAdjacentHTML('afterbegin', `<div class="phase-card" data-v40-invest-actions="1"><b>Investment Actions</b><p>${esc(App._marketText?.(w) || 'ใช้ราคาสำรองถ้าไม่มีราคาตลาด')}</p><div class="phase-action-row"><button class="btn btn-primary btn-sm" onclick="App.openInvestmentTxForm('${esc(id)}','buy')">ซื้อ</button><button class="btn btn-secondary btn-sm" onclick="App.openInvestmentTxForm('${esc(id)}','sell')">ขาย</button><button class="btn btn-secondary btn-sm" onclick="App.openInvestmentTxForm('${esc(id)}','adjust')">ปรับจำนวน</button></div></div>`)
     }, 0)
-  }
-
-  // ── Navigation surfaces in More + transaction filters ─────────────────────
-  const prevRenderMoreV4 = App.renderMore?.bind(App)
-  App.renderMore = function v40More() {
-    prevRenderMoreV4?.()
-    const content = document.getElementById('more-content')
-    if (!content || content.querySelector('[data-v40-more]')) return
-    const meta = S.settings?.storageMeta || {}
-    const lastSaved = meta.lastSavedAt ? new Date(meta.lastSavedAt).toLocaleString('th-TH') : 'ยังไม่บันทึก'
-    const lastExport = meta.lastExportedAt ? new Date(meta.lastExportedAt).toLocaleString('th-TH') : 'ยังไม่เคย export'
-    const dataCard = [...content.querySelectorAll('.sec-title')].find(x => x.textContent.includes('ข้อมูล'))?.nextElementSibling
-    const html = `<div data-v40-more="1"><div class="settings-row" onclick="App.restorePreImportBackup()"><div class="s-icon">🧯</div><div class="s-label">กู้คืน Backup ก่อน Import</div><div class="s-arrow">›</div></div><div class="settings-row" onclick="App.openRewardLedgerScreen()"><div class="s-icon">🎁</div><div class="s-label">Reward Ledger</div><div class="s-arrow">›</div></div><div class="settings-row" onclick="App.openInstallmentCenter()"><div class="s-icon">🧾</div><div class="s-label">Installment Center</div><div class="s-arrow">›</div></div></div>`
-    if (dataCard) dataCard.insertAdjacentHTML('afterbegin', html)
-    content.insertAdjacentHTML('afterbegin', `<div class="phase-card"><b>Storage status: Local only</b><p>ข้อมูลหลักอยู่ในเครื่องนี้ ไม่ใช่ cloud sync · Saved: ${esc(lastSaved)} · Export: ${esc(lastExport)}</p></div>`)
-  }
-
-  const prevRenderTxV4 = App.renderTransactions?.bind(App)
-  App.renderTransactions = function v40Transactions() {
-    prevRenderTxV4?.()
-    const header = document.querySelector('#page-transactions .page-header')
-    if (!header || document.getElementById('tx-advanced-filters')) return
-    const walletOpts = `<option value="">ทุกกระเป๋า</option>` + (S.wallets || []).map(w => `<option value="${esc(w.id)}"${S.txWalletFilter===w.id?' selected':''}>${esc(w.icon || '')} ${esc(w.name)}</option>`).join('')
-    const catOpts = `<option value="">ทุกหมวด</option>` + [...(S.categories.expense || []), ...(S.categories.income || [])].map(c => `<option value="${esc(c.id)}"${S.txCategoryFilter===c.id?' selected':''}>${esc(c.icon || '')} ${esc(c.label)}</option>`).join('')
-    header.insertAdjacentHTML('beforeend', `<div id="tx-advanced-filters" class="phase-filter-row"><select class="form-input" onchange="S.txWalletFilter=this.value;App.renderTransactionsList()">${walletOpts}</select><select class="form-input" onchange="S.txCategoryFilter=this.value;App.renderTransactionsList()">${catOpts}</select><button class="btn btn-secondary btn-sm" onclick="S.txWalletFilter='';S.txCategoryFilter='';S.txAmtMin='';S.txAmtMax='';S.txSearch='';App.renderTransactions()" style="width:auto">Reset</button></div>`)
-  }
-
-  const prevRenderTxListV4 = App.renderTransactionsList?.bind(App)
-  App.renderTransactionsList = function v40TxList() {
-    prevRenderTxListV4?.()
-    if (!S.txWalletFilter && !S.txCategoryFilter) return
-    const q = (S.txSearch || '').toLowerCase()
-    const amtMin = S.txAmtMin ? Number(S.txAmtMin) : null
-    const amtMax = S.txAmtMax ? Number(S.txAmtMax) : null
-    const filtered = (S.transactions || []).filter(t => {
-      if (S.txMonth !== 'all' && !String(t.date || '').startsWith(S.txMonth)) return false
-      if (S.txType !== 'all' && t.type !== S.txType) return false
-      if (S.txWalletFilter && t.walletId !== S.txWalletFilter && t.toWalletId !== S.txWalletFilter && t.cashWalletId !== S.txWalletFilter) return false
-      if (S.txCategoryFilter && t.categoryId !== S.txCategoryFilter) return false
-      if (amtMin !== null && Number(t.amount || 0) < amtMin) return false
-      if (amtMax !== null && Number(t.amount || 0) > amtMax) return false
-      if (!q) return true
-      const c = catById(t.categoryId), w = walletById(t.walletId), to = walletById(t.toWalletId)
-      return [t.merchant,t.note,c?.label,w?.name,to?.name,t.date,String(t.amount||'')].some(v => String(v||'').toLowerCase().includes(q))
-    }).sort((a,b) => String(b.date||'').localeCompare(String(a.date||'')))
-    const byDate = {}; filtered.forEach(t => { (byDate[t.date] ||= []).push(t) })
-    const dates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a))
-    const html = dates.length ? dates.map(date => `<div class="tx-date-header"><span>${esc(Calc.labelDate(date))}</span></div><div class="tx-group-card">${byDate[date].map(t => App._txRow(t)).join('')}</div>`).join('') : App._emptyState('📋','ไม่พบรายการ','ลองล้าง filter')
-    const el = document.getElementById('tx-list-content'); if (el) el.innerHTML = html
-    App._bindTxRows?.('tx-list-content')
   }
 
   // Make transaction rows readable for new types.
@@ -5873,74 +5111,11 @@ App.render();
   }
 
   // ── 1. Compact transaction search/filter header ───────────────────────────
-  function currentTxFiltered() {
-    const q = String(S.txSearch || '').toLowerCase()
-    const amtMin = S.txAmtMin ? Number(S.txAmtMin) : null
-    const amtMax = S.txAmtMax ? Number(S.txAmtMax) : null
-    return (S.transactions || []).filter(t => {
-      if (S.txMonth !== 'all' && !String(t.date || '').startsWith(S.txMonth)) return false
-      if (S.txType !== 'all' && t.type !== S.txType) return false
-      if (S.txWalletFilter && t.walletId !== S.txWalletFilter && t.toWalletId !== S.txWalletFilter && t.cashWalletId !== S.txWalletFilter) return false
-      if (S.txCategoryFilter && t.categoryId !== S.txCategoryFilter) return false
-      if (amtMin !== null && Number(t.amount || 0) < amtMin) return false
-      if (amtMax !== null && Number(t.amount || 0) > amtMax) return false
-      if (!q) return true
-      const c = catById(t.categoryId), w = walletById(t.walletId), to = walletById(t.toWalletId)
-      return [t.merchant,t.note,c?.label,w?.name,to?.name,t.date,String(t.amount||''), App._txTypeLabel?.(t.type)].some(v => String(v||'').toLowerCase().includes(q))
-    }).sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
-  }
-
   App.toggleTxFilterPanel = function() { S.txFilterOpen = !S.txFilterOpen; App.renderTransactions() }
   App.clearTxFilters = function() {
     S.txType = 'all'; S.txWalletFilter = ''; S.txCategoryFilter = ''; S.txAmtMin = ''; S.txAmtMax = ''; S.txSearch = ''; S.txFilterOpen = false
     App.renderTransactions()
   }
-
-  App.renderTransactions = function v41RenderTransactions() {
-    const months = Calc.getMonths(6)
-    const header = document.querySelector('#page-transactions .page-header')
-    if (!header) return
-    const walletOpts = `<option value="">ทุกกระเป๋า</option>` + (S.wallets || []).map(w => `<option value="${esc(w.id)}"${S.txWalletFilter===w.id?' selected':''}>${esc(w.icon || '')} ${esc(w.name)}</option>`).join('')
-    const catOpts = `<option value="">ทุกหมวด</option>` + [...(S.categories.expense || []), ...(S.categories.income || [])].map(c => `<option value="${esc(c.id)}"${S.txCategoryFilter===c.id?' selected':''}>${esc(c.icon || '')} ${esc(c.label)}</option>`).join('')
-    const typeChips = [['all','ทั้งหมด'],['expense','จ่าย'],['income','รับ'],['transfer','โอน'],['cc_payment','ชำระบัตร']].map(([v,l]) => `<button class="chip mini${S.txType===v?' active':''}" onclick="App.setTxType('${v}')">${l}</button>`).join('')
-    const monthChips = [[ 'all','ทุกเดือน' ], ...months.map(m => [m, Calc.monthLabel(m)])].map(([m,l]) => `<button class="chip mini${S.txMonth===m?' active':''}" onclick="App.setTxMonth('${m}')">${esc(l)}</button>`).join('')
-    const activeCount = [S.txType && S.txType !== 'all', S.txWalletFilter, S.txCategoryFilter, S.txAmtMin, S.txAmtMax].filter(Boolean).length
-    header.innerHTML = `<div class="tx-compact-top"><div><h1>รายการ</h1><p id="tx-compact-summary">กำลังคำนวณ...</p></div><button class="btn btn-secondary btn-sm tx-filter-toggle" onclick="App.toggleTxFilterPanel()">ตัวกรอง${activeCount ? ` (${activeCount})` : ''}</button></div>
-      <div class="tx-compact-search"><input class="form-input" id="tx-search" placeholder="🔍 ค้นหารายการ ร้านค้า หมวด จำนวนเงิน" value="${esc(S.txSearch || '')}"></div>
-      <div class="chips tx-month-row tx-month-row-compact" id="tx-month-chips">${monthChips}</div>
-      <div id="tx-filter-panel" class="tx-filter-panel${S.txFilterOpen ? ' open' : ''}">
-        <div class="chips tx-filter-row" id="tx-type-chips">${typeChips}</div>
-        <div class="tx-filter-grid"><select class="form-input" onchange="S.txWalletFilter=this.value;App.renderTransactionsList()">${walletOpts}</select><select class="form-input" onchange="S.txCategoryFilter=this.value;App.renderTransactionsList()">${catOpts}</select></div>
-        <div class="tx-filter-grid"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ ต่ำสุด" value="${esc(S.txAmtMin || '')}" oninput="S.txAmtMin=this.value;App.renderTransactionsList()"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ สูงสุด" value="${esc(S.txAmtMax || '')}" oninput="S.txAmtMax=this.value;App.renderTransactionsList()"></div>
-        <button class="btn btn-secondary btn-sm" onclick="App.clearTxFilters()">ล้างตัวกรอง</button>
-      </div>`
-    const search = document.getElementById('tx-search')
-    if (search) search.oninput = e => { S.txSearch = e.target.value; App.renderTransactionsList() }
-    App.renderTransactionsList()
-  }
-
-  App.renderTransactionsList = function v41RenderTransactionsList() {
-    const filtered = currentTxFiltered()
-    const income = filtered.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
-    const expense = filtered.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
-    const summary = document.getElementById('tx-compact-summary')
-    if (summary) summary.innerHTML = `<span class="c-income">รับ ${money(income)}</span> · <span class="c-expense">จ่าย ${money(expense)}</span> · <span class="c-muted">${filtered.length} รายการ</span>`
-    const byDate = {}; filtered.forEach(t => { (byDate[t.date] ||= []).push(t) })
-    const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a))
-    let html = dates.length ? '' : App._emptyState('📋','ไม่มีรายการ', S.txSearch ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีรายการในช่วงนี้')
-    dates.forEach(date => {
-      const rows = byDate[date]
-      const dayInc = rows.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
-      const dayExp = rows.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
-      const label = Calc.labelDate ? Calc.labelDate(date) : date
-      html += `<div class="tx-date-header"><span>${esc(label)}</span><div>${dayInc ? `<b class="c-income">+${money(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense">-${money(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
-    })
-    const el = document.getElementById('tx-list-content')
-    if (el) el.innerHTML = html
-    App._bindTxRows?.('tx-list-content')
-  }
-  App.setTxMonth = function(m) { S.txMonth = m; App.renderTransactions() }
-  App.setTxType = function(t) { S.txType = t; App.renderTransactionsList(); App.renderTransactions() }
 
   // ── 2/3. Credit-card detail order + compact statement + Thai reward ledger ──
   App.markCashbackReceived = function v41MarkCashbackReceived(cardId) {
@@ -5962,55 +5137,6 @@ App.render();
         persist(); App.openRewardLedgerScreen(cardId); toast('บันทึก Cashback ที่ได้รับแล้ว', 'success')
       }
     })
-  }
-
-  App.openRewardLedgerScreen = function v41RewardLedger(cardId = '') {
-    const cards = (S.wallets || []).filter(w => w.type === 'credit')
-    const selected = cardId || cards[0]?.id || ''
-    const st = selected ? App.getCardStatement?.(selected) : null
-    const receivedAlready = statementReceived(st)
-    const rows = st?.purchases || []
-    const received = (S.rewardLedger || []).filter(r => !selected || r.cardId === selected)
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>สมุดสิทธิประโยชน์</h2>${st?.reward?.cashback && !receivedAlready ? `<button class="btn btn-primary btn-sm" onclick="App.markCashbackReceived('${esc(selected)}')" style="width:auto">รับ Cashback</button>` : ''}</div>
-      <div class="sub-scroll">
-        <div class="form-group"><label class="form-label">เลือกบัตร</label><select class="form-input" onchange="App.openRewardLedgerScreen(this.value)">${cards.map(c => `<option value="${esc(c.id)}"${c.id===selected?' selected':''}>${esc(c.icon || '')} ${esc(c.name)}</option>`).join('')}</select></div>
-        ${st ? `<div class="reward-summary-compact"><div><b>รอบ ${esc(st.start)} → ${esc(st.end)}</b><span>${receivedAlready ? 'รับ Cashback แล้ว' : 'ยังไม่รับ Cashback'}</span></div><div><strong>${number(st.reward.points,0)}</strong><span>คะแนน</span></div><div><strong>${money(st.reward.cashback)}</strong><span>Cashback</span></div></div>` : App._emptyState('💳','ยังไม่มีบัตรเครดิต','')}
-        <div class="sec-title">รายการที่นำไปคำนวณ</div>
-        <div class="card"><div style="padding:0 16px">${rows.length ? rows.map(t => App._txRow(t)).join('') : App._emptyState('🎁','ยังไม่มีรายการในรอบนี้','')}</div></div>
-        <div class="sec-title">รับสิทธิ์แล้ว</div>
-        <div class="card card-pad">${received.length ? received.map(r => `<div class="detail-row"><span>${r.type === 'cashback_received' ? 'รับ Cashback' : esc(r.type)} · ${esc(r.date || '')}</span><b>${money(r.amount || 0)}</b></div>`).join('') : '<div style="font-size:13px;color:var(--muted)">ยังไม่มีรายการรับจริง</div>'}</div>
-      </div>`)
-    setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
-  }
-
-  App.openCCDetail = function v41OpenCCDetail(cardId) {
-    const card = walletById(cardId)
-    if (!card) return
-    const benefit = App._benefit?.(cardId) || {}
-    const period = Calc.getStatementPeriod(card.cycleDay || 25)
-    const txns = (S.transactions || []).filter(t => t.walletId === cardId).sort((a,b) => String(b.date||'').localeCompare(String(a.date||''))).slice(0, 20)
-    const allCycleTxns = (S.transactions || []).filter(t => t.walletId === cardId && t.type === 'expense' && t.date >= period.start && t.date <= period.end)
-    const rewards = Calc.getCardRewards(allCycleTxns, benefit)
-    const st = App.getCardStatement?.(cardId)
-    const owed = Math.abs(Number(card.balance || 0))
-    const usedPct = card.limit ? Math.min((owed / Number(card.limit || 1)) * 100, 100) : 0
-    const due = card.dueDay ? Calc.getDueDate(card.dueDay) : null
-    const installments = (App.getInstallmentGroups?.() || []).filter(g => g.walletId === cardId).slice(0, 3)
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon || '')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button></div></div>
-      <div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}">
-        <div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color || '#DC2626')},${esc(card.color || '#DC2626')}BB);color:#fff;border:0">
-          <div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${card.cycleDay || 25} · ชำระวันที่ ${card.dueDay || '-'}</div>
-          <div style="font-size:13px;opacity:.72;margin-bottom:4px">ยอดค้างชำระ</div><div class="big">${money(owed)}</div>
-          ${card.limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct > 80 ? '#FCA5A5' : 'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due ? ` · ครบ ${esc(due.dueStr)} (${due.daysLeft}ว.)` : ''}</div>` : ''}
-        </div>
-        ${st ? `<div class="statement-compact"><div class="statement-main"><div><b>Statement Center</b><span>รอบ ${esc(st.start)} → ${esc(st.end)} · Due ${esc(st.dueDate)}</span></div><em class="status-pill ${st.paid ? 'ok':'warn'}">${st.paid ? 'Paid':'Unpaid'}</em></div><div class="statement-metrics"><div><span>รูด</span><strong>${money(st.purchaseTotal)}</strong></div><div><span>ชำระ</span><strong>${money(st.paidTotal)}</strong></div><div><span>คงเหลือ</span><strong>${money(st.balanceDue)}</strong></div></div><button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen('${esc(cardId)}')">สมุดสิทธิประโยชน์</button></div>` : ''}
-        <div class="card card-pad" style="margin-bottom:12px"><div class="cc-detail-header"><div><div style="font-size:14px;font-weight:800">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${esc(period.start)} ถึง ${esc(period.end)}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button></div><div class="reward-grid" style="margin-top:10px"><div class="reward-tile"><span>คะแนน</span><strong>${number(rewards.points,0)}</strong></div><div class="reward-tile"><span>Cashback</span><strong>${money(rewards.cashback)}</strong></div></div></div>
-        ${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : '<div class="sec-title">ผ่อนชำระ</div>'}
-        <div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next ? `งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${esc(g.next.date)}` : 'ครบแล้ว'}</span></div><strong>${money(g.remaining || 0)}</strong></div>`).join('') : App._emptyState('🧾','ยังไม่มีรายการผ่อน','')}</div></div>
-        ${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : '<div class="sec-title">รายการล่าสุดของบัตรนี้</div>'}
-        <div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState('📋','ยังไม่มีรายการ','')}</div></div>
-      </div>`)
-    setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
   }
 
   // Add delete action into transaction details opened from a credit-card detail screen.
@@ -6068,26 +5194,6 @@ App.render();
   }
   App.setRptView = function(v) { S.rptView = v; App.renderReports() }
   App.setRptMonth = function(m) { S.rptMonth = m; App.renderReports() }
-
-  // ── 5. More page re-grouping ───────────────────────────────────────────────
-  const prevRenderMore41 = App.renderMore?.bind(App)
-  App.renderMore = function v41More() {
-    prevRenderMore41?.()
-    const content = document.getElementById('more-content')
-    if (!content) return
-    content.querySelector('[data-v40-more]')?.remove()
-    content.querySelector('[data-v41-more-primary]')?.remove()
-    ;[...content.querySelectorAll('.phase-card')].forEach(card => { if (card.textContent.includes('Storage status')) card.remove() })
-    const meta = S.settings?.storageMeta || {}
-    const lastSaved = meta.lastSavedAt ? new Date(meta.lastSavedAt).toLocaleString('th-TH') : 'ยังไม่บันทึก'
-    const lastExport = meta.lastExportedAt ? new Date(meta.lastExportedAt).toLocaleString('th-TH') : 'ยังไม่เคย Export'
-    const title = content.querySelector('div[style*="font-size:20px"]')
-    const quick = `<div data-v41-more-primary><div class="sec-title">เครื่องมือหลัก</div><div class="card card-pad"><div class="settings-row" onclick="App.openRewardLedgerScreen()"><div class="s-icon">🎁</div><div class="s-label">สมุดสิทธิประโยชน์</div><div class="s-arrow">›</div></div><div class="settings-row" onclick="App.openInstallmentCenter()"><div class="s-icon">🧾</div><div class="s-label">ศูนย์ผ่อนชำระ</div><div class="s-arrow">›</div></div><div class="settings-row" onclick="App.openRecurringScreen()"><div class="s-icon">🔁</div><div class="s-label">รายการประจำ</div><div class="s-value">${(S.recurring || []).length} รายการ</div><div class="s-arrow">›</div></div></div><div class="sec-title">สถานะข้อมูล</div><div class="card card-pad"><div class="settings-row" onclick="App.restorePreImportBackup()"><div class="s-icon">🧯</div><div class="s-label">กู้คืน Backup ก่อน Import</div><div class="s-arrow">›</div></div><div class="settings-row"><div class="s-icon">💾</div><div class="s-label">Local only</div><div class="s-value">Saved: ${esc(lastSaved)} · Export: ${esc(lastExport)}</div></div></div></div>`
-    if (title) title.insertAdjacentHTML('afterend', quick)
-    // Remove old duplicate recurring row from lower finance section to keep menu short.
-    const duplicateRecurring = [...content.querySelectorAll('.settings-row')].filter(r => r.textContent.includes('รายการประจำ')).slice(1)
-    duplicateRecurring.forEach(r => r.remove())
-  }
 
   // ── 6. Robust merchant dropdown: pick existing or type a new merchant ──────
   function ensureMerchantWrap(inp) {
@@ -6180,12 +5286,6 @@ App.render();
         persist()
       }
     }
-  }
-
-  // ── 7. Compact installment center ─────────────────────────────────────────
-  App.openInstallmentCenter = function v41InstallmentCenter(cardId = '') {
-    const groups = (App.getInstallmentGroups?.() || []).filter(g => !cardId || g.walletId === cardId)
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${cardId ? `App.openCCDetail('${esc(cardId)}')` : 'App.closeSubScreen()'}">←</button><h2>ศูนย์ผ่อนชำระ</h2></div><div class="sub-scroll installment-compact-screen">${groups.length ? `<div class="compact-card-list">${groups.map(g => { const w = walletById(g.walletId); const next = g.next; return `<div class="installment-compact-row"><div class="icr-main"><b>${esc(g.merchant)}</b><span>${esc(w?.name || '')}${next ? ` · งวด ${next.installmentNo}/${next.installmentMonths} · ${esc(next.date)}` : ' · ครบแล้ว'}</span></div><div class="icr-amount"><strong>${money(g.remaining || 0)}</strong><span>เหลือ</span></div><button class="icon-btn" onclick="App.deleteInstallmentGroup('${esc(g.id)}')">🗑</button></div>` }).join('')}</div>` : App._emptyState('🧾','ยังไม่มีรายการผ่อน','เพิ่มรายการจ่ายแล้วเลือก “ผ่อนชำระ”')}</div>`)
   }
 
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
