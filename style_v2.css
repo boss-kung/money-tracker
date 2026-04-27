@@ -1003,15 +1003,40 @@ html.dark .mt-hide-btn {
   border-radius: 16px;
   padding: 12px 16px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 0;
 }
 html.dark .mt-alert-card { border-color: rgba(245,158,11,.28); }
-.mt-alert-title { font-size: 12px; font-weight: 800; color: #92400E; }
+.mt-alert-title { font-size: 14px; font-weight: 700; color: #d50000; margin-bottom: 6px;   display:grid;
+  grid-template-columns:1fr auto;
+  gap:3px 8px;
+  align-items:center;
+  border-radius:14px;
+  padding:0px 4px;
+}
+.mt-alert-title em { grid-column:2; font-size:12px; font-style:normal; font-weight:800; background:#d50000; color: white; padding:3px 7px; border-radius:999px; }
+
 .mt-alert-sub { font-size: 11px; color: #B45309; margin-top: 2px; }
 html.dark .mt-alert-title { color: #FDE68A; }
 html.dark .mt-alert-sub { color: #F59E0B; }
+.mt-alert-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+.mt-alert-row:active { background: rgba(0,0,0,.06); }
+.mt-alert-row-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mt-alert-row-name { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mt-alert-row-meta { font-size: 11px; color: #B45309; }
+.mt-alert-row-amt { font-size: 16px; font-weight: 900; color: var(--expense); letter-spacing: -.04em; flex-shrink: 0; }
+html.dark .mt-alert-row-name { color: var(--text); }
+html.dark .mt-alert-row-meta { color: #F59E0B; }
 .mt-progress-wrap { margin: 10px 0 0; }
 .mt-progress-label { display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px; color:var(--muted); }
 .mt-progress-label b { color:var(--text); }
@@ -1031,10 +1056,10 @@ html.dark .mt-alert-sub { color: #F59E0B; }
 .mt-wallet-mini .name { font-size: 10px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mt-stat-row { margin-top: 12px; display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:10px; }
 .mt-stat-card { border-radius: 16px; padding: 11px 14px; box-shadow: none; border: 0; }
-.mt-stat-card.income { background: var(--income-soft); color: var(--income); }
-.mt-stat-card.expense { background: var(--expense-soft); color: var(--expense); }
-.mt-stat-card.transfer { background: var(--transfer-soft); color: var(--primary); }
-.mt-stat-card.saving { background: var(--purple-soft); color: var(--purple); }
+.mt-stat-card.income { background: var(--income-soft); color: var(--income); border: 1px solid rgb(4, 120, 87,0.2); }
+.mt-stat-card.expense { background: var(--expense-soft); color: var(--expense); border: 1px solid rgb(185, 28, 28,0.2); }
+.mt-stat-card.transfer { background: var(--transfer-soft); color: var(--primary); border: 1px solid rgb(37, 99, 235,0.2); }
+.mt-stat-card.saving { background: var(--purple-soft); color: var(--purple); border: 1px solid rgb(126, 34, 206,0.2); }
 .mt-stat-card small { display:block; font-size:11px; font-weight:700; }
 .mt-stat-card strong { display:block; font-size:16px; font-weight:900; margin-top:2px; letter-spacing:-.05em; }
 .section-header { margin: 18px 0 6px; }
@@ -3270,7 +3295,7 @@ body {
   input.form-input, select.form-input, textarea.form-input{font-size:16px!important}
 }
 
-@media (max-width: 768px){
+/* @media (max-width: 768px){
   body.keyboard-open #bottom-nav,
   body.keyboard-open #fab{
     transform:translateY(calc(100% + var(--safe-b) + 28px))!important;
@@ -3280,7 +3305,7 @@ body {
   }
   body.keyboard-open .page-scroll{padding-bottom:24px!important}
   body.keyboard-open .sheet{max-height:calc(var(--app-height) - 6px)!important}
-}
+} */
 
 .statement-compact-th .statement-main span + span{margin-top:1px!important}
 .statement-compact-th .status-pill{font-style:normal;white-space:nowrap}
@@ -3754,11 +3779,6 @@ html.dark .v23-confirm-actions .btn-secondary {
   margin-top: 2px;
 }
 
-/* ── Limit summary card in CC detail ─────────────────────────── */
-.v5-limit-summary {
-  /* inherits .card .card-pad — just extra overrides */
-}
-
 .v5-ls-header {
   display: flex;
   align-items: flex-start;
@@ -4076,3 +4096,76 @@ html.dark .icon-btn {
   border-color: var(--border);
 }
 
+/* ── V6: per-tx CC reward section ──────────────────────────── */
+.tx-cc-reward-section {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0 0 16px;
+}
+.tx-reward-toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* ── V6: recurring form hint ───────────────────────────────── */
+.rec-preview-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+  padding: 6px 10px;
+  background: var(--elevated);
+  border-radius: 8px;
+}
+
+/* ── V6: keyboard open — compact add-detail-actions ───────── */
+/* body.keyboard-open .add-detail-actions {
+  position: static;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+} */
+
+
+/* ============================================================
+   V6.1 Mobile zoom lock
+   Purpose: prevent accidental page zoom on mobile while keeping
+   vertical scrolling, sheets, dropdowns, and form focus usable.
+   ============================================================ */
+@media (max-width: 768px) {
+  html,
+  body,
+  #app {
+    touch-action: pan-x pan-y !important;
+    -ms-touch-action: pan-x pan-y !important;
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  button,
+  a,
+  .btn,
+  .chip,
+  .nav-btn,
+  .cat-btn,
+  .type-tab,
+  .flag-pill,
+  .wallet-chip-btn,
+  .wc-pay-btn,
+  .wc-card-pay-btn,
+  .numpad-key,
+  .icon-btn,
+  .btn-icon {
+    touch-action: manipulation !important;
+  }
+}
