@@ -4244,3 +4244,298 @@ body.keyboard-open .add-detail-actions {
     padding-bottom: calc(12px + var(--safe-b)) !important;
   }
 }
+
+/* ============================================================
+   V6.4 Add transaction recurring fields + decimal hotfix UI
+   ============================================================ */
+.v64-recurring-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 12px !important;
+}
+.v64-recurring-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.v64-recurring-head b {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--text);
+}
+.v64-recurring-head span {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: right;
+}
+.v64-recurring-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--elevated);
+}
+.v64-rec-tab {
+  min-height: 36px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 900;
+}
+.v64-rec-tab.active {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: var(--shadow-xs);
+}
+html.dark .v64-rec-tab.active {
+  background: var(--surface-soft);
+}
+
+
+/* ============================================================
+   V6.5 Recurring delete-choice modal
+   ============================================================ */
+.v65-rec-delete-body span {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--muted, #64748B);
+  font-weight: 750;
+}
+.v65-rec-delete-actions {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 8px !important;
+  margin-top: 14px !important;
+}
+.v65-rec-delete-actions .btn {
+  width: 100% !important;
+  min-height: 44px !important;
+  border-radius: 16px !important;
+  font-size: 14px !important;
+  font-weight: 900 !important;
+}
+.v65-rec-delete-actions .v65-rec-cancel {
+  margin-top: 2px !important;
+}
+@media (min-width: 431px) {
+  .v65-rec-delete-actions {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .v65-rec-delete-actions .v23-btn-danger,
+  .v65-rec-delete-actions .v65-rec-cancel {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ============================================================
+   V6.6 Centralized Crypto Portfolio
+   ============================================================ */
+.crypto-portfolio-card {
+  margin-bottom: 12px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 16px 34px rgba(217, 119, 6, 0.22) !important;
+}
+.crypto-portfolio-glow {
+  position: absolute;
+  inset: auto -40px -40px auto;
+  width: 150px;
+  height: 150px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255,255,255,.28) 0%, rgba(255,255,255,0) 72%);
+  pointer-events: none;
+}
+.crypto-portfolio-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.crypto-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.crypto-summary-item {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+}
+.crypto-summary-item span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.crypto-summary-item strong {
+  display: block;
+  font-size: 15px;
+  line-height: 1.3;
+}
+.crypto-holding-row {
+  margin-top: 10px;
+  min-height: 0;
+}
+.crypto-holdings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.crypto-coin-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.crypto-row-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.crypto-row-metric {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.crypto-row-metric span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.crypto-row-metric strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.25;
+}
+.wallet-pill {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.crypto-price-badge {
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.crypto-price-badge.fresh {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--income);
+}
+.crypto-price-badge.stale {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--amber);
+}
+.crypto-price-badge.manual {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary);
+}
+.crypto-price-badge.error {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--expense);
+}
+.crypto-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+.crypto-form-tabs {
+  margin-bottom: 14px;
+}
+.crypto-search-results {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.crypto-selected-asset-card {
+  margin-bottom: 10px;
+}
+.crypto-search-result {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 16px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}
+.crypto-search-result.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+.csr-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.csr-main > span:last-child {
+  min-width: 0;
+}
+.crypto-empty-state {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.crypto-report-card {
+  margin-top: 16px;
+}
+.crypto-portfolio-meta {
+  margin-top: 8px;
+}
+ .crypto-portfolio-pill {
+  background: rgba(255,255,255,.14);
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 14px;
+  padding: 10px 12px;
+  backdrop-filter: blur(4px);
+}
+.crypto-portfolio-pill span {
+  display: block;
+  font-size: 11px;
+  opacity: .8;
+  margin-bottom: 4px;
+}
+.crypto-portfolio-pill strong {
+  display: block;
+  font-size: 14px;
+}
+html.dark .crypto-portfolio-card .wallet-chip-btn {
+  color: #fff !important;
+}
+html.dark .crypto-summary-item {
+  background: rgba(15, 23, 42, 0.55);
+}
+@media (max-width: 430px) {
+  .crypto-holding-actions .btn {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
