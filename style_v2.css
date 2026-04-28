@@ -815,7 +815,7 @@ body {
   align-items: flex-start;
   gap: 14px;
 }
-.mt-title { font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.15; letter-spacing: -.055em; }
+.mt-title { font-size: 22px; font-weight: 900; color: var(--text); line-height: 1.15; letter-spacing: -.055em; }
 .mt-subtitle { font-size: 12px; color: var(--muted); margin-top: 1px; }
 .mt-net-card {
   margin-top: 8px;
@@ -839,7 +839,7 @@ body {
 }
 .mt-net-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; position:relative; z-index:1; }
 .mt-net-label { font-size: 12px; font-weight: 700; color: var(--slate-on-dark); margin-bottom: 6px; }
-.mt-net-value { font-size: 34px; font-weight: 800; line-height: 1.05; letter-spacing: -1px; }
+.mt-net-value { font-size: 34px; font-weight: 900; line-height: 1.05; letter-spacing: -1px; }
 .mt-hide-btn {
     border: 1.5px solid var(--border);
     background: var(--elevated);
@@ -899,7 +899,7 @@ html.dark .mt-alert-title { color: #FDE68A; }
 .mt-alert-row:active { background: rgba(0,0,0,.06); }
 .mt-alert-row-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .mt-alert-row-name { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mt-alert-row-amt { font-size: 16px; font-weight: 800; color: var(--expense); letter-spacing: -.04em; flex-shrink: 0; }
+.mt-alert-row-amt { font-size: 16px; font-weight: 900; color: var(--expense); letter-spacing: -.04em; flex-shrink: 0; }
 html.dark .mt-alert-row-name { color: var(--text); }
 .mt-wallet-mini-grid { margin-top: 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .mt-wallet-mini {
@@ -920,9 +920,9 @@ html.dark .mt-alert-row-name { color: var(--text); }
 .mt-stat-card.transfer { background: var(--transfer-soft); color: var(--primary); border: 1px solid rgb(37, 99, 235,0.2); }
 .mt-stat-card.saving { background: var(--purple-soft); color: var(--purple); border: 1px solid rgb(126, 34, 206,0.2); }
 .mt-stat-card small { display:block; font-size:11px; font-weight:700; }
-.mt-stat-card strong { display:block; font-size:16px; font-weight:900; margin-top:2px; letter-spacing:-.05em; }
+.mt-stat-card strong { display:block; font-size:16px; font-weight: 800; margin-top:2px; letter-spacing:-.05em; }
 .section-header { margin: 18px 0 6px; }
-.section-header h3 { font-size: 15px; font-weight: 800; letter-spacing: -.03em; }
+.section-header h3 { font-size: 15px; font-weight: 900; letter-spacing: -.03em; }
 .section-header button { color: var(--primary); font-weight: 800; }
 
 /* Transaction list rows */
@@ -950,7 +950,7 @@ html.dark .mt-alert-row-name { color: var(--text); }
 }
 .sheet-handle { width:40px; height:4px; margin:12px auto 10px; background:var(--border); border-radius:99px; }
 .sheet-header { padding: 0 20px 10px; border-bottom:0; background:var(--surface); }
-.sheet-header h2 { font-size:18px; font-weight:900; letter-spacing:-.04em; }
+.sheet-header h2 { font-size:18px; font-weight: 800; letter-spacing:-.04em; }
 
 .type-tabs { display:flex; gap:8px; margin:0; padding:0 20px 14px; background:transparent; border:0; }
 .type-tab {
@@ -974,7 +974,7 @@ html.dark .mt-alert-row-name { color: var(--text); }
   justify-content:center;
   align-items:center;
   font-size: clamp(38px, 13vw, 52px);
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: -1px;
   padding: 20px 20px 12px;
   font-variant-numeric: tabular-nums;
@@ -1005,7 +1005,7 @@ html.dark .mt-alert-row-name { color: var(--text); }
   cursor:pointer;
 }
 .amount-summary-card small { display:block; font-size:11px; font-weight:800; color:var(--primary); }
-.amount-summary-card strong { display:block; font-size:24px; font-weight:900; margin-top:2px; color:var(--primary); }
+.amount-summary-card strong { display:block; font-size:24px; font-weight: 800; margin-top:2px; color:var(--primary); }
 .amount-summary-card.expense { background:var(--expense-soft); border-color:var(--expense); }
 .amount-summary-card.expense small,.amount-summary-card.expense strong { color:var(--expense); }
 .amount-summary-card.income { background:var(--income-soft); border-color:var(--income); }
@@ -1057,13 +1057,13 @@ html.dark .mt-alert-row-name { color: var(--text); }
 
 /* Wallet / credit / investment polish */
 .wallet-card { border-radius:24px; padding:18px; box-shadow:0 12px 30px rgba(15,23,42,.14); }
-.wc-balance { font-size:30px; font-weight:900; letter-spacing:-.06em; }
-.wallet-chip-btn { border-radius:999px; font-size:12px; font-weight:900; }
+.wc-balance { font-size:30px; font-weight: 800; letter-spacing:-.06em; }
+.wallet-chip-btn { border-radius:999px; font-size:12px; font-weight: 800; }
 .wallet-detail-hero,.cc-hero { border-radius:24px; padding:20px; box-shadow:var(--shadow-sm); }
-.wallet-detail-hero .big,.cc-hero .big { font-size:34px; font-weight:900; letter-spacing:-.06em; }
+.wallet-detail-hero .big,.cc-hero .big { font-size:34px; font-weight: 800; letter-spacing:-.06em; }
 .reward-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
 .reward-tile { background:var(--surface-soft); border-color:var(--border); border-radius:16px; }
-.reward-tile strong { font-size:20px; font-weight:900; color:var(--primary); }
+.reward-tile strong { font-size:20px; font-weight: 800; color:var(--primary); }
 
 /* Toast: app-like but quiet */
 
@@ -1072,7 +1072,7 @@ html.dark .mt-alert-row-name { color: var(--text); }
 
 
 .empty-icon { font-size:42px; opacity:.75; }
-.empty-title { color:var(--text); font-weight:900; }
+.empty-title { color:var(--text); font-weight: 800; }
 
 @media (max-width: 360px) {
   .page-scroll { padding-left:16px; padding-right:16px; }
@@ -1146,6 +1146,11 @@ body.is-transactions #fab:not(.hidden) {
     bottom: calc(var(--nav-h) + var(--safe-b) + 14px) !important;
   }
   
+}
+
+body.ios-standalone {
+  --safe-b: 0px !important;
+  --safe-t: max(env(safe-area-inset-top, 0px), 14px) !important;
 }
 
 /* ============================================================
@@ -1723,7 +1728,7 @@ body { font-feature-settings: "tnum" 1; }
 .wallet-card.wallet-card-colored .wc-prog-fill { background: rgba(255,255,255,.9) !important; }
 
 .wallet-summary-grid { gap: 10px !important; }
-.wallet-section-title { font-size: 15px !important; font-weight: 800 !important; color: var(--text) !important; margin: 16px 0 10px !important; }
+.wallet-section-title { font-size: 15px !important; font-weight: 900 !important; color: var(--text) !important; margin: 16px 0 10px !important; }
 
 /* Budget tabs */
 .budget-tabs {
@@ -1742,7 +1747,7 @@ body { font-feature-settings: "tnum" 1; }
   border-radius: 14px;
   background: transparent;
   color: var(--muted);
-  font-weight: 800;
+  font-weight: 900;
 }
 .budget-tab.active {
   color: #fff;
@@ -2022,7 +2027,6 @@ textarea.form-input {
   min-height: var(--touch-h) !important;
   border-radius: 14px !important;
   padding: 10px 12px !important;
-  font-size: 15px !important;
 }
 textarea.form-input { min-height: 72px !important; }
 .btn {
@@ -2188,7 +2192,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 .tx-summary-card span {
   display:block;
   font-size:13px;
-  font-weight:900;
+  font-weight: 800;
   margin-bottom:6px;
 }
 .tx-summary-card strong {
@@ -2207,7 +2211,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   flex:0 0 auto;
   min-width:72px;
   border-radius:18px !important;
-  font-weight:900 !important;
+  font-weight: 800 !important;
 }
 .tx-month-row {
   padding:0 !important;
@@ -2230,7 +2234,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   margin:12px 0 2px;
   color:var(--muted);
   font-size:13.5px;
-  font-weight:900;
+  font-weight: 800;
 }
 .tx-date-header div { display:flex; gap:10px; align-items:center; font-size:13px; font-weight:950; }
 .tx-group-card {
@@ -2254,7 +2258,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 .tx-row-modern .tx-title {
   font-size:16px !important;
   line-height:1.16 !important;
-  font-weight:900 !important;
+  font-weight: 800 !important;
   letter-spacing:-.025em !important;
 }
 .tx-row-modern .tx-amount {
@@ -3011,10 +3015,12 @@ body {
 .tx-summary-cards-compact .tx-summary-card span{font-size:11.5px!important;margin-bottom:4px!important}
 .tx-summary-cards-compact .tx-summary-card strong{font-size:17px!important;letter-spacing:-.04em!important;overflow:hidden;text-overflow:ellipsis}
 #page-transactions .page-header{padding-bottom:7px!important}
+#page-transactions .tx-date-header .c-income,
+#page-transactions .tx-date-header .c-expense{font-weight:400!important}
 
 @media (max-width: 480px){
   .form-split-row{grid-template-columns:1fr!important;gap:10px!important}
-  input.form-input, select.form-input, textarea.form-input{font-size:16px!important}
+  input.form-input, select.form-input, textarea.form-input{font-size:16px}
   #tx-date.form-input{
     font-size:15px!important;
   }
@@ -3323,7 +3329,7 @@ html.dark .report-cat-bar{
   border-radius: 16px !important;
   padding: 10px 12px !important;
   font-size: 14px !important;
-  font-weight: 800 !important;
+  font-weight: 900 !important;
   line-height: 1.25 !important;
   box-shadow: none !important;
 }
@@ -3695,7 +3701,7 @@ html.dark .v5-already-recorded-banner {
 
 .v5-acct-pts {
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 900;
   color: var(--primary);
   letter-spacing: -.025em;
 }
@@ -3974,7 +3980,7 @@ body.keyboard-open .add-detail-actions {
 }
 .v64-recurring-head b {
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 900;
   color: var(--text);
 }
 .v64-recurring-head span {
@@ -3999,7 +4005,7 @@ body.keyboard-open .add-detail-actions {
   background: transparent;
   color: var(--muted);
   font-size: 12.5px;
-  font-weight: 800;
+  font-weight: 900;
 }
 .v64-rec-tab.active {
   background: var(--surface);
@@ -4031,7 +4037,7 @@ html.dark .v64-rec-tab.active {
   min-height: 44px !important;
   border-radius: 16px !important;
   font-size: 14px !important;
-  font-weight: 800 !important;
+  font-weight: 900 !important;
 }
 .v65-rec-delete-actions .v65-rec-cancel {
   margin-top: 2px !important;
@@ -4097,6 +4103,9 @@ html.dark .v64-rec-tab.active {
   margin-top: 10px;
   min-height: 0;
 }
+.crypto-holding-row.crypto-holding-row-nested {
+  margin-top: 8px;
+}
 .crypto-holdings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4112,7 +4121,6 @@ html.dark .v64-rec-tab.active {
 .crypto-row-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
 }
 .crypto-row-metric {
   border-top: 1px solid var(--line);
