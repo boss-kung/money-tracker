@@ -7261,7 +7261,11 @@ Calc.getUsableMoney = function(wallets) {
   const walletById = id => (S.wallets || []).find(w => w.id === id) || null
   const genId = () => (typeof Calc?.genId === 'function' ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2)))
   const TH_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
-  let stableViewportHeight = Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 0)
+  const isStandaloneMode = () => !!(
+    window.navigator?.standalone === true ||
+    window.matchMedia?.('(display-mode: standalone)')?.matches
+  )
+  let stableViewportHeight = Math.round(window.innerHeight || document.documentElement.clientHeight || window.visualViewport?.height || 0)
 
   function clampCycleDay(day) {
     return Math.max(1, Math.min(31, Number(day) || 25))
@@ -7891,9 +7895,13 @@ Calc.getUsableMoney = function(wallets) {
     const vv = window.visualViewport
     const visualHeight = Math.round(vv?.height || window.innerHeight || document.documentElement.clientHeight || stableViewportHeight || 0)
     const layoutHeight = Math.round(window.innerHeight || document.documentElement.clientHeight || visualHeight || stableViewportHeight || 0)
+    const standalone = isStandaloneMode()
     const keyboardOpen = document.body?.classList.contains('keyboard-open') || (layoutHeight - visualHeight > 120)
-    if (!keyboardOpen && visualHeight > 0) stableViewportHeight = visualHeight
-    const nextHeight = keyboardOpen ? Math.max(stableViewportHeight, layoutHeight) : visualHeight
+    const restingHeight = standalone ? Math.max(layoutHeight, visualHeight) : visualHeight
+    if (!keyboardOpen && restingHeight > 0) stableViewportHeight = restingHeight
+    const nextHeight = keyboardOpen
+      ? Math.max(stableViewportHeight, layoutHeight)
+      : (standalone ? Math.max(layoutHeight, stableViewportHeight) : restingHeight)
     if (nextHeight > 0) document.documentElement.style.setProperty('--app-height', `${nextHeight}px`)
   }
 
