@@ -1150,7 +1150,14 @@ body.is-transactions #fab:not(.hidden) {
 
 body.ios-standalone {
   --safe-b: 0px !important;
-  --safe-t: max(env(safe-area-inset-top, 0px), 14px) !important;
+  --safe-t: max(env(safe-area-inset-top, 0px), 18px) !important;
+}
+
+body.ios-standalone,
+body.ios-standalone #app,
+body.ios-standalone #sub-screen {
+  height: 100lvh !important;
+  min-height: 100lvh !important;
 }
 
 body.ios-standalone #page-transactions .page-header,

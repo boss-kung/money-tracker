@@ -1044,10 +1044,19 @@ App.render();
    ============================================================ */
 ;(function v222FinalMobileChrome(){
   const root = document.documentElement
+  const isStandaloneMode = () => !!(
+    window.navigator?.standalone === true ||
+    window.matchMedia?.('(display-mode: standalone)')?.matches
+  )
+  const getStandaloneHeight = () => {
+    const layoutH = Math.round(window.innerHeight || document.documentElement.clientHeight || 0)
+    const screenH = Math.round(window.screen?.height || 0)
+    return Math.max(layoutH, screenH)
+  }
   // Keep the app height stable when the iOS keyboard opens.
   // visualViewport.height shrinks above the keyboard; using it for --app-height
   // makes bottom/sticky controls jump into the middle of the screen.
-  let stableAppHeight = Math.round(window.innerHeight || document.documentElement.clientHeight || 0)
+  let stableAppHeight = Math.round(isStandaloneMode() ? getStandaloneHeight() : (window.innerHeight || document.documentElement.clientHeight || 0))
   const isFormControl = el => !!el && el.matches?.('input, textarea, select, [contenteditable="true"]')
   const isKeyboardLikelyOpen = () => {
     const vv = window.visualViewport
@@ -1056,7 +1065,7 @@ App.render();
     return isFormControl(document.activeElement) || (layoutH - viewportH > 120) || document.body?.classList.contains('keyboard-open')
   }
   const setAppHeight = () => {
-    const layoutH = Math.round(window.innerHeight || document.documentElement.clientHeight || stableAppHeight || 0)
+    const layoutH = Math.round(isStandaloneMode() ? getStandaloneHeight() : (window.innerHeight || document.documentElement.clientHeight || stableAppHeight || 0))
     if (!isKeyboardLikelyOpen() && layoutH > 0) stableAppHeight = layoutH
     const h = isKeyboardLikelyOpen() ? stableAppHeight : layoutH
     if (h > 0) root.style.setProperty('--app-height', `${h}px`)
@@ -3595,7 +3604,18 @@ Calc.getUsableMoney = function(wallets) {
   // Keep --app-height stable after keyboard class changes. This prevents
   // form action bars/sheets from being laid out against the shrunken visual viewport.
   const reassertStableAppHeight = () => {
-    const h = Math.round(window.innerHeight || document.documentElement.clientHeight || 0)
+    const standalone = !!(
+      window.navigator?.standalone === true ||
+      window.matchMedia?.('(display-mode: standalone)')?.matches
+    )
+    const h = Math.round(
+      standalone
+        ? Math.max(
+            Math.round(window.innerHeight || document.documentElement.clientHeight || 0),
+            Math.round(window.screen?.height || 0)
+          )
+        : (window.innerHeight || document.documentElement.clientHeight || 0)
+    )
     if (h > 0) document.documentElement.style.setProperty('--app-height', `${h}px`)
   }
   document.addEventListener('focusin', ev => {
@@ -7895,13 +7915,14 @@ Calc.getUsableMoney = function(wallets) {
     const vv = window.visualViewport
     const visualHeight = Math.round(vv?.height || window.innerHeight || document.documentElement.clientHeight || stableViewportHeight || 0)
     const layoutHeight = Math.round(window.innerHeight || document.documentElement.clientHeight || visualHeight || stableViewportHeight || 0)
+    const screenHeight = Math.round(window.screen?.height || 0)
     const standalone = isStandaloneMode()
     const keyboardOpen = document.body?.classList.contains('keyboard-open') || (layoutHeight - visualHeight > 120)
-    const restingHeight = standalone ? Math.max(layoutHeight, visualHeight) : visualHeight
+    const restingHeight = standalone ? Math.max(layoutHeight, visualHeight, screenHeight) : visualHeight
     if (!keyboardOpen && restingHeight > 0) stableViewportHeight = restingHeight
     const nextHeight = keyboardOpen
       ? Math.max(stableViewportHeight, layoutHeight)
-      : (standalone ? Math.max(layoutHeight, stableViewportHeight) : restingHeight)
+      : (standalone ? Math.max(layoutHeight, stableViewportHeight, screenHeight) : restingHeight)
     if (nextHeight > 0) document.documentElement.style.setProperty('--app-height', `${nextHeight}px`)
   }
 
