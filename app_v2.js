@@ -7511,6 +7511,7 @@ let due = new Date(
         return due ? { ...w, used, due } : null
       })
       .filter(Boolean)
+      .filter(card => Number(card.due?.daysLeft) >= 0)
       .sort((a, b) => Number(a.due?.daysLeft || 9999) - Number(b.due?.daysLeft || 9999))
     const minDaysLeft = alertCards.length ? Number(alertCards[0].due.daysLeft || 0) : null
     const nearDueCards = minDaysLeft === null ? [] : alertCards.filter(card => Number(card.due?.daysLeft || 0) === minDaysLeft)
@@ -8018,10 +8019,26 @@ let due = new Date(
 
   App.getCreditCardDueInfo = function(card, refDate = today()) {
     if (!card) return null
-    const statement = App.getCardStatement?.(card.id, refDate)
-    if (statement?.dueDate) return Calc.getDaysUntilDate(statement.dueDate)
-    const fallback = Calc.getCreditCardDueDate(refDate, clampDueAfter(card.dueAfterCycleDays || 10))
-    return fallback ? Calc.getDaysUntilDate(fallback) : null
+    const cycleDay = clampCycleDay(card.cycleDay || 25)
+    const dueAfterCycleDays = clampDueAfter(
+      card.dueAfterCycleDays || deriveDueAfterCycleDays(cycleDay, card.dueDay || 5, refDate)
+    )
+    const [ry, rm] = String(refDate || today()).split('-').map(Number)
+    const baseYear = ry || new Date().getFullYear()
+    const baseMonthIndex = (rm || 1) - 1
+    const buildEndStr = (year, monthIndex) => {
+      const day = Calc.clampDay(year, monthIndex, cycleDay)
+      return `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+    }
+    let dueDate = Calc.getCreditCardDueDate(buildEndStr(baseYear, baseMonthIndex), dueAfterCycleDays)
+    if (String(dueDate || '') < String(refDate || today())) {
+      const nextBase = new Date(baseYear, baseMonthIndex + 1, 1)
+      dueDate = Calc.getCreditCardDueDate(
+        buildEndStr(nextBase.getFullYear(), nextBase.getMonth()),
+        dueAfterCycleDays
+      )
+    }
+    return dueDate ? Calc.getDaysUntilDate(dueDate, refDate) : null
   }
 
   App.getCardStatement = function(cardId, refDate = today()) {
@@ -8217,5 +8234,9 @@ let due = new Date(
   setTimeout(() => {
     try { App.maybeAutoSyncCryptoPrices?.('startup') } catch (_) {}
   }, 1200)
+  try {
+    if (S.page === 'dashboard') App.renderDashboard?.()
+    else if (S.page === 'wallets') App.renderWallets?.()
+  } catch (_) {}
   persist()
 })()
