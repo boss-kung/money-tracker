@@ -2182,21 +2182,6 @@ Calc.getUsableMoney = function(wallets) {
         </div>
       </div>`
 
-    if (nearDueCards.length) {
-      const firstDue = nearDueCards[0].due
-      html += `
-        <div class="mt-alert-card">
-          <div class="mt-alert-title">ครบกำหนดชำระ ${ESC(firstDue.dueStr)} <em>อีก ${firstDue.daysLeft} วัน</em></div>
-          ${nearDueCards.map(c => `
-            <div class="mt-alert-row" onclick="App.openCCDetail('${ESC(c.id)}')">
-              <div class="mt-alert-row-info">
-                <span class="mt-alert-row-name">${ESC(c.icon||'💳')} ${ESC(c.name)}</span>
-              </div>
-              <div class="mt-alert-row-amt">${FMT(c.used)}</div>
-            </div>`).join('')}
-        </div>`
-    }
-
     if (assets.length) {
       html += `<div class="mt-wallet-mini-grid">${assets.slice(0,3).map(w => `
         <div class="mt-wallet-mini" onclick="App.openWalletDetail('${ESC(w.id)}')">
@@ -7518,6 +7503,36 @@ let due = new Date(
     prevRenderDashboard?.()
     const content = document.getElementById('dashboard-content')
     if (!content) return
+    const alertCards = visibleWallets()
+      .filter(w => w.type === 'credit' && Math.abs(Number(w.balance || 0)) > 0)
+      .map(w => {
+        const used = Math.abs(Number(w.balance || 0))
+        const due = App.getCreditCardDueInfo ? App.getCreditCardDueInfo(w) : null
+        return due ? { ...w, used, due } : null
+      })
+      .filter(Boolean)
+      .sort((a, b) => Number(a.due?.daysLeft || 9999) - Number(b.due?.daysLeft || 9999))
+    const minDaysLeft = alertCards.length ? Number(alertCards[0].due.daysLeft || 0) : null
+    const nearDueCards = minDaysLeft === null ? [] : alertCards.filter(card => Number(card.due?.daysLeft || 0) === minDaysLeft)
+    const alertHtml = nearDueCards.length
+      ? `<div class="mt-alert-card">
+          <div class="mt-alert-title">ครบกำหนดชำระ ${esc(nearDueCards[0].due.dueStr)} <em>อีก ${nearDueCards[0].due.daysLeft} วัน</em></div>
+          ${nearDueCards.map(card => `
+            <div class="mt-alert-row" onclick="App.openCCDetail('${esc(card.id)}')">
+              <div class="mt-alert-row-info">
+                <span class="mt-alert-row-name">${esc(card.icon || '💳')} ${esc(card.name)}</span>
+              </div>
+              <div class="mt-alert-row-amt">${S.settings?.hideMoney ? '฿*****' : plainMoney(card.used)}</div>
+            </div>`).join('')}
+        </div>`
+      : ''
+    const existingAlert = content.querySelector('.mt-alert-card')
+    if (existingAlert) {
+      if (alertHtml) existingAlert.outerHTML = alertHtml
+      else existingAlert.remove()
+    } else if (alertHtml) {
+      content.querySelector('.mt-net-card')?.insertAdjacentHTML('afterend', alertHtml)
+    }
     const visibleAssets = visibleWallets().filter(w => w.type !== 'credit')
     const cryptoSummary = App.getCryptoPortfolioSummary()
     const cards = visibleAssets.slice(0, 2).map(w => `<div class="mt-wallet-mini" onclick="App.openWalletDetail('${esc(w.id)}')">
@@ -7534,8 +7549,12 @@ let due = new Date(
     }
     const html = cards.length ? `<div class="mt-wallet-mini-grid">${cards.join('')}</div>` : ''
     const existing = content.querySelector('.mt-wallet-mini-grid')
-    if (existing) existing.outerHTML = html
-    else if (html) content.querySelector('.mt-stat-row')?.insertAdjacentHTML('beforebegin', html)
+    if (existing) {
+      if (html) existing.outerHTML = html
+      else existing.remove()
+    } else if (html) {
+      content.querySelector('.mt-stat-row')?.insertAdjacentHTML('beforebegin', html)
+    }
   }
 
   App.saveWallet = function() {
