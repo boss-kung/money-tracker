@@ -1150,7 +1150,7 @@ body.is-transactions #fab:not(.hidden) {
 
 body.ios-standalone {
   --safe-b: 0px !important;
-  --safe-t: max(env(safe-area-inset-top, 0px), 18px) !important;
+  --safe-t: max(env(safe-area-inset-top, 0px), 14px) !important;
 }
 
 body.ios-standalone #page-transactions .page-header,
@@ -1175,12 +1175,21 @@ body.ios-standalone #bottom-nav {
   bottom: 0 !important;
   width: 100% !important;
   margin: 0 !important;
-  height: calc(var(--nav-h) + var(--safe-b)) !important;
-  padding-top: 6px !important;
+  height: var(--nav-h) !important;
+  padding-top: 2px !important;
   padding-bottom: 0 !important;
   padding-left: max(8px, var(--safe-l)) !important;
   padding-right: max(8px, var(--safe-r)) !important;
   margin-bottom: 0 !important;
+}
+
+body.ios-standalone #bottom-nav .nav-btn {
+  min-height: calc(var(--nav-h) - 2px) !important;
+  height: calc(var(--nav-h) - 2px) !important;
+  padding-top: 6px !important;
+  padding-bottom: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 body.ios-standalone .v23-confirm-overlay,
