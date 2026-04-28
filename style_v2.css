@@ -2497,8 +2497,31 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   min-width: 0;
 }
 .form-split-row input[type="date"] {
+  display: block;
   width: 100%;
   min-width: 0;
+  max-width: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+#tx-date.form-input {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+}
+#tx-date::-webkit-date-and-time-value {
+  min-width: 0;
+}
+#tx-date::-webkit-datetime-edit {
+  min-width: 0;
+  padding: 0;
+}
+#tx-date::-webkit-calendar-picker-indicator {
+  margin-left: 6px;
 }
 
 
@@ -2992,6 +3015,9 @@ body {
 @media (max-width: 480px){
   .form-split-row{grid-template-columns:1fr!important;gap:10px!important}
   input.form-input, select.form-input, textarea.form-input{font-size:16px!important}
+  #tx-date.form-input{
+    font-size:15px!important;
+  }
 }
 
 @media (max-width: 768px){
