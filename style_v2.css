@@ -1153,6 +1153,20 @@ body.ios-standalone {
   --safe-t: max(env(safe-area-inset-top, 0px), 14px) !important;
 }
 
+body.ios-standalone #page-transactions .page-header {
+  padding-top: max(10px, calc(var(--safe-t) + 8px)) !important;
+}
+
+body.ios-standalone #more-content {
+  padding-top: max(10px, calc(var(--safe-t) + 8px)) !important;
+}
+
+body.ios-standalone #bottom-nav {
+  bottom: 0 !important;
+  height: var(--nav-h) !important;
+  padding-bottom: 0 !important;
+}
+
 /* ============================================================
    V2.2.2 iOS Mobile App Refinement Layer
    Purpose: keep v2-2 logic, fix mobile viewport/nav/FAB, switch to
