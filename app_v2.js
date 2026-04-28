@@ -1441,7 +1441,7 @@ App.render();
               const _selectedNames = _rules.filter(rule => S.tx.rewardRuleIds.includes(rule.id)).map(rule => rule.name)
               const _rows = _rules.map(rule => {
                 const _selected = S.tx.rewardRuleIds.includes(rule.id)
-                const _typeText = rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : rule.type === 'discount' ? 'ส่วนลดทันที' : rule.type === 'note' ? 'บันทึกเตือน' : 'ข้อยกเว้น'
+                const _typeText = rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : 'ส่วนลดทันที'
                 const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.allowStacking ? '' : 'ไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
                 return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}" onclick="App._toggleTxRewardRule('${esc(rule.id)}')" aria-pressed="${_selected ? 'true' : 'false'}">
                   <span class="csr-main">
@@ -3157,6 +3157,7 @@ Calc.getUsableMoney = function(wallets) {
     const typeOpts = ['expense','income'].map(t =>
       `<option value="${t}"${(r?.type||'expense')===t?' selected':''}>${t==='expense'?'รายจ่าย':'รายรับ'}</option>`
     ).join('')
+    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openRecurringScreen()">←</button>
@@ -3164,26 +3165,30 @@ Calc.getUsableMoney = function(wallets) {
         <button class="btn btn-primary btn-sm" onclick="App.saveRecurring('${esc(id||'')}')" style="width:auto">บันทึก</button>
       </div>
       <div class="sub-scroll">
-        <div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" id="rec-name" value="${esc(r?.name||'')}"></div>
-        <div class="form-group"><label class="form-label">ประเภท</label><select class="form-input" id="rec-type">${typeOpts}</select></div>
-        <div class="form-group"><label class="form-label">จำนวนเงิน</label><input class="form-input" type="number" inputmode="decimal" id="rec-amount" value="${esc(r?.amount||'')}"></div>
-        <div class="form-group">
-          <label class="form-label">ความถี่</label>
-          <select class="form-input" id="rec-rectype" onchange="(function(){var m=this.value==='monthly';document.getElementById('rec-monthly-fields').style.display=m?'':'none';document.getElementById('rec-days-field').style.display=m?'none':''}).call(this)">
-            <option value="days"${!isMonthly?' selected':''}>ทุกกี่วัน</option>
-            <option value="monthly"${isMonthly?' selected':''}>รายเดือน (วันที่กำหนด)</option>
-          </select>
-        </div>
-        <div id="rec-days-field" style="display:${isMonthly?'none':''}">
-          <div class="form-group"><label class="form-label">ทุกกี่วัน</label><input class="form-input" type="number" inputmode="numeric" id="rec-days" value="${esc(r?.everyDays||30)}"></div>
-        </div>
-        <div id="rec-monthly-fields" style="display:${isMonthly?'':'none'}">
-          <div class="form-group"><label class="form-label">วันที่ของเดือน (1–31)</label><input class="form-input" type="number" inputmode="numeric" id="rec-day-of-month" min="1" max="31" value="${esc(r?.recurringDayOfMonth||1)}"><div class="form-hint">ระบบจะปรับให้อัตโนมัติหากเดือนนั้นไม่มีวันดังกล่าว</div></div>
-          <div class="form-group"><label class="form-label">จำนวนเดือน (ว่างไว้ = ไม่สิ้นสุด)</label><input class="form-input" type="number" inputmode="numeric" id="rec-duration-months" min="1" value="${esc(r?.durationMonths||'')}" placeholder="ไม่จำกัด"></div>
-        </div>
-        <div class="form-group"><label class="form-label">เริ่ม / ครบกำหนดถัดไป</label><input class="form-input" type="date" id="rec-next" value="${esc(r?.nextDueDate||r?.startDate||today())}"></div>
-        <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="rec-cat">${cats.map(c=>`<option value="${esc(c.id)}"${r?.categoryId===c.id?' selected':''}>${esc(c.icon||'')} ${esc(c.label)}</option>`).join('')}</select></div>
-        <div class="form-group"><label class="form-label">กระเป๋าเงิน</label><select class="form-input" id="rec-wallet">${walletOpts}</select></div>
+        ${accordion('rec-basic-acc', 'ข้อมูลหลัก', `
+          <div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" id="rec-name" value="${esc(r?.name||'')}"></div>
+          <div class="form-group"><label class="form-label">ประเภท</label><select class="form-input" id="rec-type">${typeOpts}</select></div>
+          <div class="form-group"><label class="form-label">จำนวนเงิน</label><input class="form-input" type="number" inputmode="decimal" id="rec-amount" value="${esc(r?.amount||'')}"></div>
+          <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="rec-cat">${cats.map(c=>`<option value="${esc(c.id)}"${r?.categoryId===c.id?' selected':''}>${esc(c.icon||'')} ${esc(c.label)}</option>`).join('')}</select></div>
+          <div class="form-group"><label class="form-label">กระเป๋าเงิน</label><select class="form-input" id="rec-wallet">${walletOpts}</select></div>
+        `, true)}
+        ${accordion('rec-advanced-acc', 'ความถี่และช่วงเวลา', `
+          <div class="form-group">
+            <label class="form-label">ความถี่</label>
+            <select class="form-input" id="rec-rectype" onchange="(function(){var m=this.value==='monthly';document.getElementById('rec-monthly-fields').style.display=m?'':'none';document.getElementById('rec-days-field').style.display=m?'none':''}).call(this)">
+              <option value="days"${!isMonthly?' selected':''}>ทุกกี่วัน</option>
+              <option value="monthly"${isMonthly?' selected':''}>รายเดือน (วันที่กำหนด)</option>
+            </select>
+          </div>
+          <div id="rec-days-field" style="display:${isMonthly?'none':''}">
+            <div class="form-group"><label class="form-label">ทุกกี่วัน</label><input class="form-input" type="number" inputmode="numeric" id="rec-days" value="${esc(r?.everyDays||30)}"></div>
+          </div>
+          <div id="rec-monthly-fields" style="display:${isMonthly?'':'none'}">
+            <div class="form-group"><label class="form-label">วันที่ของเดือน (1–31)</label><input class="form-input" type="number" inputmode="numeric" id="rec-day-of-month" min="1" max="31" value="${esc(r?.recurringDayOfMonth||1)}"><div class="form-hint">ระบบจะปรับให้อัตโนมัติหากเดือนนั้นไม่มีวันดังกล่าว</div></div>
+            <div class="form-group"><label class="form-label">จำนวนเดือน (ว่างไว้ = ไม่สิ้นสุด)</label><input class="form-input" type="number" inputmode="numeric" id="rec-duration-months" min="1" value="${esc(r?.durationMonths||'')}" placeholder="ไม่จำกัด"></div>
+          </div>
+          <div class="form-group"><label class="form-label">เริ่ม / ครบกำหนดถัดไป</label><input class="form-input" type="date" id="rec-next" value="${esc(r?.nextDueDate||r?.startDate||today())}"></div>
+        `, false)}
       </div>`)
   }
 
@@ -3739,15 +3744,6 @@ Calc.getUsableMoney = function(wallets) {
     const w = walletById(cardId) || {}
     const f = (id, label, value, hint='') => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="1" min="1" max="31" id="${id}" value="${value || ''}" placeholder="1–31">${hint ? `<div class="form-hint">${hint}</div>` : ''}</div>`
     const rules = App.getCreditCardBenefitRules(cardId)
-    const templateBtns = [
-      ['base_cashback', 'เงินคืนพื้นฐาน'],
-      ['base_points', 'คะแนนพื้นฐาน'],
-      ['cashback_targeted', 'Cashback ตามหมวด/ร้าน'],
-      ['points_targeted', 'Points xN ตามหมวด/ร้าน'],
-      ['instant_discount', 'ส่วนลดอัตโนมัติทันที'],
-      ['note', 'บันทึกเตือน'],
-      ['exclusion', 'ไม่เข้าร่วมสิทธิ์'],
-    ].map(([template, label]) => `<button type="button" class="chip mini" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','','${esc(template)}')">${esc(label)}</button>`).join('')
     const statementCard = `<div class="card card-pad" style="margin-bottom:12px">
       <div style="font-size:14px;font-weight:700;margin-bottom:12px">📅 รอบบัญชีบัตร</div>
       <div class="benefit-form-grid">
@@ -3761,7 +3757,7 @@ Calc.getUsableMoney = function(wallets) {
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
             <div style="min-width:0">
               <div class="list-item-name">${esc(rule.name)}</div>
-              <div class="list-item-sub">${esc(rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : rule.type === 'discount' ? 'ส่วนลดทันที' : rule.type === 'note' ? 'บันทึกเตือน' : 'ไม่เข้าร่วมสิทธิ์')}${rule.isBaseRule ? ' · สิทธิ์พื้นฐาน' : ''}${rule.active ? '' : ' · ปิดใช้งาน'}</div>
+              <div class="list-item-sub">${esc(rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : 'ส่วนลดทันที')}${rule.isBaseRule ? ' · สิทธิ์พื้นฐาน' : ''}${rule.active ? '' : ' · ปิดใช้งาน'}</div>
               ${rule.description ? `<div class="list-item-sub">${esc(rule.description)}</div>` : ''}
             </div>
             <button class="toggle${rule.active ? ' on' : ''}" onclick="event.stopPropagation();App.toggleCCBenefitRule('${esc(rule.id)}')"></button>
@@ -3781,8 +3777,6 @@ Calc.getUsableMoney = function(wallets) {
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div>
       <div class="sub-scroll">
         ${statementCard}
-        <div class="sec-title">Template</div>
-        <div class="card card-pad" style="margin-bottom:12px"><div class="chip-row">${templateBtns}</div></div>
         <div class="sec-title">กฎของบัตรใบนี้</div>
         ${rulesHtml}
       </div>`)
@@ -3794,9 +3788,37 @@ Calc.getUsableMoney = function(wallets) {
     if (template === 'cashback_targeted') return { ...base, name: 'เงินคืนตามหมวด', type: 'cashback', cashback: { mode: 'percent', rate: 10 }, allowStacking: false }
     if (template === 'points_targeted') return { ...base, name: 'คะแนนพิเศษ', type: 'points', points: { bahtPerPoint: 25, multiplier: 5, multiplierMode: 'total' }, allowStacking: true }
     if (template === 'instant_discount') return { ...base, name: 'ส่วนลดอัตโนมัติทันที', type: 'discount', description: 'ลดทันทีตั้งแต่ตอนตัดบัตร', discount: { mode: 'percent', rate: 5, fixedAmount: null }, allowStacking: false }
-    if (template === 'note') return { ...base, name: 'บันทึกเตือน', type: 'note', description: 'บันทึกเตือนเงื่อนไขสิทธิ์' }
-    if (template === 'exclusion') return { ...base, name: 'ไม่เข้าร่วมสิทธิ์', type: 'exclusion', description: 'รายการนี้ไม่นับสิทธิ์' }
     return { ...base, name: 'เงินคืนพื้นฐาน', type: 'cashback', description: 'สิทธิ์พื้นฐานของบัตร', cashback: { mode: 'percent', rate: 1 }, allowStacking: false, isBaseRule: true, priority: 10 }
+  }
+
+  App._syncCCBenefitRuleFormSections = function() {
+    const type = String(document.getElementById('ccbr-type')?.value || 'cashback')
+    const validityMode = String(document.getElementById('ccbr-validity-mode')?.value || 'always')
+    const cashbackMode = String(document.getElementById('ccbr-cb-mode')?.value || 'percent')
+    const discountMode = String(document.getElementById('ccbr-discount-mode')?.value || 'percent')
+    const showCashback = type === 'cashback' || type === 'both'
+    const showPoints = type === 'points' || type === 'both'
+    const showDiscount = type === 'discount'
+    const toggleAccordion = (id, visible, forceOpen = false) => {
+      const el = document.getElementById(id)
+      if (!el) return
+      el.style.display = visible ? '' : 'none'
+      if (!visible) el.open = false
+      else if (forceOpen) el.open = true
+    }
+    const toggleField = (id, visible) => {
+      const el = document.getElementById(id)
+      if (!el) return
+      el.style.display = visible ? '' : 'none'
+    }
+    toggleAccordion('ccbr-cashback-acc', showCashback, showCashback)
+    toggleAccordion('ccbr-points-acc', showPoints, showPoints)
+    toggleAccordion('ccbr-discount-acc', showDiscount, showDiscount)
+    toggleField('ccbr-validity-dates', validityMode === 'range')
+    toggleField('ccbr-cb-rate-row', showCashback && cashbackMode === 'percent')
+    toggleField('ccbr-cb-fixed-row', showCashback && cashbackMode === 'fixed')
+    toggleField('ccbr-discount-rate-row', showDiscount && discountMode === 'percent')
+    toggleField('ccbr-discount-fixed-row', showDiscount && discountMode === 'fixed')
   }
 
   App.openCCBenefitRuleForm = function(cardId, ruleId = '', template = 'base_cashback') {
@@ -3806,66 +3828,65 @@ Calc.getUsableMoney = function(wallets) {
     const categoryOptions = (S.categories?.expense || []).map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('')
     const merchantOptions = (S.merchants || []).map(m => `<option value="${esc(m.name)}">`).join('')
     const v = n => n ?? ''
+    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCBenefitScreen('${esc(cardId)}')">←</button><h2>${ruleId ? 'แก้ไขกติกาสิทธิประโยชน์' : 'เพิ่มกติกาสิทธิประโยชน์'}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefitRule('${esc(cardId)}','${esc(ruleId)}')" style="width:auto">บันทึก</button></div>
       <div class="sub-scroll">
-        <div class="form-group"><label class="form-label">รูปแบบตั้งต้น</label><select class="form-input" id="ccbr-template" onchange="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}',this.value)"><option value="base_cashback"${template==='base_cashback'?' selected':''}>สิทธิ์พื้นฐานแบบเงินคืน</option><option value="base_points"${template==='base_points'?' selected':''}>สิทธิ์พื้นฐานแบบคะแนน</option><option value="cashback_targeted"${template==='cashback_targeted'?' selected':''}>เงินคืนตามหมวด / ร้าน / ช่องทาง</option><option value="points_targeted"${template==='points_targeted'?' selected':''}>คะแนนพิเศษตามหมวด / ร้าน / ช่องทาง</option><option value="instant_discount"${template==='instant_discount'?' selected':''}>ส่วนลดอัตโนมัติทันที</option><option value="note"${template==='note'?' selected':''}>บันทึกเตือน / ข้อความกำกับ</option><option value="exclusion"${template==='exclusion'?' selected':''}>รายการที่ไม่เข้าร่วมสิทธิ์</option></select></div>
-        <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input class="form-input" id="ccbr-name" value="${esc(rule.name)}" placeholder="เช่น Shopee 10%, คะแนนพื้นฐาน, Online 5X"></div>
-        <div class="tx-reward-toggle-row"><span>เปิดใช้งาน</span><button type="button" id="ccbr-active" class="toggle${rule.active ? ' on' : ''}" onclick="this.classList.toggle('on')"></button></div>
-        <div class="form-group"><label class="form-label">ประเภทสิทธิ์</label><select class="form-input" id="ccbr-type"><option value="cashback"${rule.type==='cashback'?' selected':''}>เงินคืน</option><option value="points"${rule.type==='points'?' selected':''}>คะแนน</option><option value="both"${rule.type==='both'?' selected':''}>ทั้งเงินคืนและคะแนน</option><option value="discount"${rule.type==='discount'?' selected':''}>ส่วนลดอัตโนมัติทันที</option><option value="note"${rule.type==='note'?' selected':''}>บันทึกเตือน</option><option value="exclusion"${rule.type==='exclusion'?' selected':''}>ไม่เข้าร่วมสิทธิ์</option></select></div>
-        <div class="form-group"><label class="form-label">คำอธิบาย / หมายเหตุเงื่อนไข</label><input class="form-input" id="ccbr-description" value="${esc(rule.description || '')}" placeholder="เช่น ใช้เฉพาะแคมเปญ 1.1 / ต้องลงทะเบียนก่อน"></div>
-        <div class="sec-title">ระยะเวลาของกฎ</div>
-        <div class="card card-pad" style="margin-bottom:12px">
-          <div class="form-hint" style="margin-bottom:8px">เลือกได้ว่าจะใช้ตลอดเวลา หรือใช้เฉพาะช่วงวันเริ่ม - สิ้นสุด</div>
-          <div class="form-group"><label class="form-label">ช่วงเวลาใช้งาน</label><select class="form-input" id="ccbr-validity-mode"><option value="always"${(rule.validity?.mode || 'always') === 'always' ? ' selected' : ''}>ไม่จำกัดเวลา</option><option value="range"${rule.validity?.mode === 'range' ? ' selected' : ''}>กำหนดวันเริ่ม - สิ้นสุด</option></select></div>
-          <div class="benefit-form-grid">
+        <div class="form-hint" style="margin-bottom:10px">เลือกประเภทสิทธิ์ก่อน แล้วระบบจะแสดงเฉพาะส่วนที่เกี่ยวข้องให้</div>
+        ${accordion('ccbr-basic-acc', 'ข้อมูลพื้นฐาน', `
+          <div class="form-group"><label class="form-label">รูปแบบตั้งต้น</label><div class="chip-row"><button type="button" class="chip mini${template==='base_cashback' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','base_cashback')">เงินคืนพื้นฐาน</button><button type="button" class="chip mini${template==='base_points' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','base_points')">คะแนนพื้นฐาน</button><button type="button" class="chip mini${template==='cashback_targeted' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','cashback_targeted')">เงินคืนตามเงื่อนไข</button><button type="button" class="chip mini${template==='points_targeted' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','points_targeted')">คะแนนพิเศษ</button><button type="button" class="chip mini${template==='instant_discount' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','instant_discount')">ส่วนลดทันที</button></div></div>
+          <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input class="form-input" id="ccbr-name" value="${esc(rule.name)}" placeholder="เช่น Shopee 10%, คะแนนพื้นฐาน, Online 5X"></div>
+          <div class="tx-reward-toggle-row"><span>เปิดใช้งาน</span><button type="button" id="ccbr-active" class="toggle${rule.active ? ' on' : ''}" onclick="this.classList.toggle('on')"></button></div>
+          <div class="form-group"><label class="form-label">ประเภทสิทธิ์</label><select class="form-input" id="ccbr-type" onchange="App._syncCCBenefitRuleFormSections()"><option value="cashback"${rule.type==='cashback'?' selected':''}>เงินคืน</option><option value="points"${rule.type==='points'?' selected':''}>คะแนน</option><option value="both"${rule.type==='both'?' selected':''}>ทั้งเงินคืนและคะแนน</option><option value="discount"${rule.type==='discount'?' selected':''}>ส่วนลดอัตโนมัติทันที</option></select></div>
+          <div class="form-group"><label class="form-label">คำอธิบาย / หมายเหตุเงื่อนไข</label><input class="form-input" id="ccbr-description" value="${esc(rule.description || '')}" placeholder="เช่น ใช้เฉพาะแคมเปญ 1.1 / ต้องลงทะเบียนก่อน"></div>
+        `, true)}
+        ${accordion('ccbr-validity-acc', 'ช่วงเวลาใช้งาน', `
+          <div class="form-hint" style="margin-bottom:8px">ใช้ตลอดเวลา หรือกำหนดวันเริ่ม - สิ้นสุดก็ได้</div>
+          <div class="form-group"><label class="form-label">ช่วงเวลาใช้งาน</label><select class="form-input" id="ccbr-validity-mode" onchange="App._syncCCBenefitRuleFormSections()"><option value="always"${(rule.validity?.mode || 'always') === 'always' ? ' selected' : ''}>ไม่จำกัดเวลา</option><option value="range"${rule.validity?.mode === 'range' ? ' selected' : ''}>กำหนดวันเริ่ม - สิ้นสุด</option></select></div>
+          <div class="benefit-form-grid" id="ccbr-validity-dates">
             <div class="form-group"><label class="form-label">วันเริ่มใช้</label><input class="form-input" type="date" id="ccbr-validity-start" value="${esc(rule.validity?.startDate || '')}"></div>
             <div class="form-group"><label class="form-label">วันสิ้นสุด</label><input class="form-input" type="date" id="ccbr-validity-end" value="${esc(rule.validity?.endDate || '')}"></div>
           </div>
-        </div>
-        <div class="sec-title">เงื่อนไขสำหรับแนะนำสิทธิ์</div>
-        <div class="card card-pad" style="margin-bottom:12px">
-          <div class="form-hint" style="margin-bottom:8px">ส่วนนี้ใช้เพื่อ “แนะนำ” สิทธิ์บนหน้าบันทึกรายการเท่านั้น ผู้ใช้ยังต้องกดเลือกเอง</div>
+        `)}
+        ${accordion('ccbr-suggest-acc', 'เงื่อนไขสำหรับแนะนำสิทธิ์', `
+          <div class="form-hint" style="margin-bottom:8px">ส่วนนี้มีไว้ช่วยจัดลำดับคำแนะนำตอนบันทึกรายการ ผู้ใช้ยังต้องกดเลือกเอง</div>
           <div class="form-group"><label class="form-label">หมวดหมู่ (คั่นด้วย comma)</label><input class="form-input" id="ccbr-categories" list="ccbr-categories-list" value="${esc((rule.suggestedConditions.categories || []).join(', '))}" placeholder="เช่น shopping, food"><datalist id="ccbr-categories-list">${categoryOptions}</datalist></div>
           <div class="form-group"><label class="form-label">ร้านค้า (คั่นด้วย comma)</label><input class="form-input" id="ccbr-merchants" list="ccbr-merchants-list" value="${esc((rule.suggestedConditions.merchants || []).join(', '))}" placeholder="เช่น Shopee, Grab"><datalist id="ccbr-merchants-list">${merchantOptions}</datalist></div>
           <div class="form-group"><label class="form-label">ช่องทาง</label><select class="form-input" id="ccbr-channel"><option value="">ทุกช่องทาง</option><option value="online"${(rule.suggestedConditions.channels || []).includes('online') ? ' selected' : ''}>ออนไลน์</option><option value="offline"${(rule.suggestedConditions.channels || []).includes('offline') ? ' selected' : ''}>หน้าร้าน / ออฟไลน์</option></select></div>
           <div class="form-group"><label class="form-label">ขั้นต่ำต่อรายการ</label><input class="form-input" type="number" step="0.01" id="ccbr-minSpend" value="${esc(v(rule.suggestedConditions.minSpend))}"></div>
-        </div>
-        <div class="sec-title">การคำนวณเงินคืน</div>
-        <div class="card card-pad" style="margin-bottom:12px">
-          <div class="form-hint" style="margin-bottom:8px">เลือกว่าจะคิดเป็นเปอร์เซ็นต์ของยอดที่เข้าเงื่อนไข หรือให้เงินคืนคงที่</div>
-          <div class="form-group"><label class="form-label">วิธีคิดเงินคืน</label><select class="form-input" id="ccbr-cb-mode"><option value="percent"${rule.cashback.mode==='percent'?' selected':''}>คิดเป็นเปอร์เซ็นต์</option><option value="fixed"${rule.cashback.mode==='fixed'?' selected':''}>ให้จำนวนคงที่</option></select></div>
-          <div class="form-group"><label class="form-label">อัตราเงินคืน (%)</label><input class="form-input" type="number" step="0.01" id="ccbr-cb-rate" value="${esc(v(rule.cashback.rate))}"></div>
-          <div class="form-group"><label class="form-label">เงินคืนคงที่ (บาท)</label><input class="form-input" type="number" step="0.01" id="ccbr-cb-fixed" value="${esc(v(rule.cashback.fixedAmount))}"></div>
-        </div>
-        <div class="sec-title">ส่วนลดอัตโนมัติทันที</div>
-        <div class="card card-pad" style="margin-bottom:12px">
-          <div class="form-hint" style="margin-bottom:8px">ใช้กับบัตรที่มียอดส่วนลดลดทันทีตั้งแต่ตอนตัดบัตร โดยจะเก็บเป็นยอดส่วนลดประมาณการของรายการนี้</div>
-          <div class="form-group"><label class="form-label">วิธีคิดส่วนลด</label><select class="form-input" id="ccbr-discount-mode"><option value="percent"${(rule.discount?.mode || 'percent')==='percent'?' selected':''}>คิดเป็นเปอร์เซ็นต์</option><option value="fixed"${rule.discount?.mode==='fixed'?' selected':''}>ให้จำนวนคงที่</option></select></div>
-          <div class="form-group"><label class="form-label">อัตราส่วนลด (%)</label><input class="form-input" type="number" step="0.01" id="ccbr-discount-rate" value="${esc(v(rule.discount?.rate))}"></div>
-          <div class="form-group"><label class="form-label">ส่วนลดคงที่ (บาท)</label><input class="form-input" type="number" step="0.01" id="ccbr-discount-fixed" value="${esc(v(rule.discount?.fixedAmount))}"></div>
-        </div>
-        <div class="sec-title">การคำนวณคะแนน</div>
-        <div class="card card-pad" style="margin-bottom:12px">
+        `)}
+        ${accordion('ccbr-cashback-acc', 'การคำนวณเงินคืน', `
+          <div class="form-hint" style="margin-bottom:8px">คิดเป็นเปอร์เซ็นต์ของยอดที่เข้าเงื่อนไข หรือให้จำนวนคงที่</div>
+          <div class="form-group"><label class="form-label">วิธีคิดเงินคืน</label><select class="form-input" id="ccbr-cb-mode" onchange="App._syncCCBenefitRuleFormSections()"><option value="percent"${rule.cashback.mode==='percent'?' selected':''}>คิดเป็นเปอร์เซ็นต์</option><option value="fixed"${rule.cashback.mode==='fixed'?' selected':''}>ให้จำนวนคงที่</option></select></div>
+          <div class="form-group" id="ccbr-cb-rate-row"><label class="form-label">อัตราเงินคืน (%)</label><input class="form-input" type="number" step="0.01" id="ccbr-cb-rate" value="${esc(v(rule.cashback.rate))}"></div>
+          <div class="form-group" id="ccbr-cb-fixed-row"><label class="form-label">เงินคืนคงที่ (บาท)</label><input class="form-input" type="number" step="0.01" id="ccbr-cb-fixed" value="${esc(v(rule.cashback.fixedAmount))}"></div>
+        `, rule.type === 'cashback' || rule.type === 'both')}
+        ${accordion('ccbr-discount-acc', 'ส่วนลดอัตโนมัติทันที', `
+          <div class="form-hint" style="margin-bottom:8px">ใช้กับบัตรที่มียอดส่วนลดลดทันทีตั้งแต่ตอนตัดบัตร</div>
+          <div class="form-group"><label class="form-label">วิธีคิดส่วนลด</label><select class="form-input" id="ccbr-discount-mode" onchange="App._syncCCBenefitRuleFormSections()"><option value="percent"${(rule.discount?.mode || 'percent')==='percent'?' selected':''}>คิดเป็นเปอร์เซ็นต์</option><option value="fixed"${rule.discount?.mode==='fixed'?' selected':''}>ให้จำนวนคงที่</option></select></div>
+          <div class="form-group" id="ccbr-discount-rate-row"><label class="form-label">อัตราส่วนลด (%)</label><input class="form-input" type="number" step="0.01" id="ccbr-discount-rate" value="${esc(v(rule.discount?.rate))}"></div>
+          <div class="form-group" id="ccbr-discount-fixed-row"><label class="form-label">ส่วนลดคงที่ (บาท)</label><input class="form-input" type="number" step="0.01" id="ccbr-discount-fixed" value="${esc(v(rule.discount?.fixedAmount))}"></div>
+        `, rule.type === 'discount')}
+        ${accordion('ccbr-points-acc', 'การคำนวณคะแนน', `
           <div class="form-hint" style="margin-bottom:8px">ตัวอย่าง: ทุก 25 บาท = 1 คะแนน, ตัวคูณ 5 เท่า</div>
           <div class="form-group"><label class="form-label">ใช้จ่ายกี่บาท = 1 คะแนน</label><input class="form-input" type="number" step="0.01" id="ccbr-p-baht" value="${esc(v(rule.points.bahtPerPoint))}"></div>
           <div class="form-group"><label class="form-label">ตัวคูณคะแนน</label><input class="form-input" type="number" step="1" id="ccbr-p-multi" value="${esc(v(rule.points.multiplier || 1))}"></div>
           <div class="form-group"><label class="form-label">วิธีใช้ตัวคูณ</label><select class="form-input" id="ccbr-p-mode"><option value="total"${rule.points.multiplierMode==='total'?' selected':''}>คูณกับคะแนนรวมของรายการ</option></select></div>
-        </div>
-        <div class="sec-title">เพดาน / ข้อจำกัด</div>
-        <div class="card card-pad" style="margin-bottom:12px">
-          <div class="form-hint" style="margin-bottom:8px">เพดานยอดใช้จ่าย จะตัด “ยอดที่นำมาคำนวณ” ก่อน ส่วนเพดานเงินคืน/คะแนน/ส่วนลด จะตัด “ผลลัพธ์หลังคำนวณ” อีกที</div>
+        `, rule.type === 'points' || rule.type === 'both')}
+        ${accordion('ccbr-limits-acc', 'เพดาน / ข้อจำกัด', `
+          <div class="form-hint" style="margin-bottom:8px">เพดานยอดใช้จ่ายจะตัดยอดก่อนคำนวณ ส่วนเพดานเงินคืน/คะแนน/ส่วนลดจะตัดผลลัพธ์หลังคำนวณ</div>
           <div class="form-group"><label class="form-label">ยอดใช้จ่ายสูงสุดที่นำมาคำนวณ / รายการ</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-eligible-tx" value="${esc(v(rule.limits.maxEligibleSpendPerTx))}"></div>
           <div class="form-group"><label class="form-label">ยอดใช้จ่ายสูงสุดที่นำมาคำนวณ / รอบบิล</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-eligible-cycle" value="${esc(v(rule.limits.maxEligibleSpendPerCycle))}"></div>
           <div class="form-group"><label class="form-label">เงินคืน / คะแนน / ส่วนลด สูงสุด / รายการ</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-reward-tx" value="${esc(v(rule.limits.maxRewardAmountPerTx))}"></div>
           <div class="form-group"><label class="form-label">เงินคืน / คะแนน / ส่วนลด สูงสุด / รอบบิล</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-reward-cycle" value="${esc(v(rule.limits.maxRewardAmountPerCycle))}"></div>
-        </div>
-        <div class="card card-pad">
-          <div class="form-hint" style="margin-bottom:8px">ใช้กำหนดพฤติกรรมเวลาแสดงผลและเตือนผู้ใช้</div>
+        `)}
+        ${accordion('ccbr-advanced-acc', 'การใช้ร่วมกัน / ขั้นสูง', `
+          <div class="form-hint" style="margin-bottom:8px">ไว้ใช้กำหนดการเตือนและการจัดลำดับเวลาแสดงผล</div>
           <div class="tx-reward-toggle-row"><span>อนุญาตให้ใช้ร่วมกับสิทธิ์อื่น</span><button type="button" id="ccbr-stacking" class="toggle${rule.allowStacking ? ' on' : ''}" onclick="this.classList.toggle('on')"></button></div>
           <div class="tx-reward-toggle-row"><span>เป็นสิทธิ์พื้นฐานของบัตร</span><button type="button" id="ccbr-base" class="toggle${rule.isBaseRule ? ' on' : ''}" onclick="this.classList.toggle('on')"></button></div>
           <div class="form-group" style="margin-top:12px"><label class="form-label">ลำดับความสำคัญ</label><input class="form-input" type="number" step="1" id="ccbr-priority" value="${esc(v(rule.priority || 0))}"></div>
-        </div>
+        `)}
       </div>`)
+    setTimeout(() => App._syncCCBenefitRuleFormSections?.(), 0)
   }
 
   App.saveCCBenefitRule = function(cardId, ruleId = '') {
@@ -4331,6 +4352,7 @@ Calc.getUsableMoney = function(wallets) {
     const type   = w?.type || 'bank'
     const isCC   = type === 'credit'
     const isInv  = ['gold','crypto','fcd'].includes(type)
+    const accordion = (id, title, body, open = false, extraStyle = '') => `<details id="${id}" class="card card-pad" style="margin-bottom:12px;${extraStyle}"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
 
     const creditLimitMode = w?.creditLimitMode || 'individual'
     const issuer          = w?.issuer || ''
@@ -4367,86 +4389,97 @@ Calc.getUsableMoney = function(wallets) {
 
     const ccExtraHtml = `
       <div id="wf-cc-extra">
-        <div class="form-group">
-          <label class="form-label">ผู้ออกบัตร / ธนาคาร</label>
-          <input class="form-input" id="wf-issuer" list="wf-issuer-list" value="${esc(issuer)}" placeholder="เช่น KTC, SCB, KBank" oninput="App._onWfIssuerChange()">
-          <datalist id="wf-issuer-list">${KNOWN_ISSUERS.map(i=>`<option value="${i}">`).join('')}</datalist>
-          <div id="wf-issuer-hint">${issuerSuggestion}</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">ประเภทวงเงิน</label>
-          <div class="v5-limit-mode-tabs">
-            <button type="button" class="v5-lm-tab${creditLimitMode==='individual'?' active':''}" onclick="App._selectCreditLimitMode('individual')">วงเงินแยกเฉพาะบัตรนี้</button>
-            <button type="button" class="v5-lm-tab${creditLimitMode==='shared'?' active':''}" onclick="App._selectCreditLimitMode('shared')">ใช้วงเงินร่วม</button>
-          </div>
-          <input type="hidden" id="wf-credit-limit-mode" value="${creditLimitMode}">
-        </div>
-        <div id="wf-shared-group-section" style="${creditLimitMode==='shared'?'':'display:none'}">
+        ${accordion('wf-cc-billing-acc', 'วงเงินและรอบบิล', `
           <div class="form-group">
-            <label class="form-label">กลุ่มวงเงินร่วม</label>
-            <select class="form-input" id="wf-shared-group-select" onchange="App._onCreditLimitGroupChange()">
-              <option value="">— เลือกกลุ่ม —</option>
-              ${groupOpts}
+            <label class="form-label">ผู้ออกบัตร / ธนาคาร</label>
+            <input class="form-input" id="wf-issuer" list="wf-issuer-list" value="${esc(issuer)}" placeholder="เช่น KTC, SCB, KBank" oninput="App._onWfIssuerChange()">
+            <datalist id="wf-issuer-list">${KNOWN_ISSUERS.map(i=>`<option value="${i}">`).join('')}</datalist>
+            <div id="wf-issuer-hint">${issuerSuggestion}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">ประเภทวงเงิน</label>
+            <div class="v5-limit-mode-tabs">
+              <button type="button" class="v5-lm-tab${creditLimitMode==='individual'?' active':''}" onclick="App._selectCreditLimitMode('individual')">วงเงินแยกเฉพาะบัตรนี้</button>
+              <button type="button" class="v5-lm-tab${creditLimitMode==='shared'?' active':''}" onclick="App._selectCreditLimitMode('shared')">ใช้วงเงินร่วม</button>
+            </div>
+            <input type="hidden" id="wf-credit-limit-mode" value="${creditLimitMode}">
+          </div>
+          <div id="wf-limit-individual" style="${creditLimitMode==='shared'?'display:none':''}">
+            <div class="form-group"><label class="form-label">วงเงิน (฿)</label><input class="form-input" type="number" id="wf-limit" value="${w?.limit||''}"></div>
+          </div>
+          <div id="wf-shared-group-section" style="${creditLimitMode==='shared'?'':'display:none'}">
+            <div class="form-group">
+              <label class="form-label">กลุ่มวงเงินร่วม</label>
+              <select class="form-input" id="wf-shared-group-select" onchange="App._onCreditLimitGroupChange()">
+                <option value="">— เลือกกลุ่ม —</option>
+                ${groupOpts}
+              </select>
+            </div>
+            <div id="wf-new-group-fields" style="${selectedGroupId==='new'?'':'display:none'}">
+              <div class="form-group">
+                <label class="form-label">ชื่อกลุ่มวงเงินร่วม</label>
+                <input class="form-input" id="wf-new-group-name" placeholder="เช่น KTC วงเงินรวม">
+              </div>
+              <div class="form-group">
+                <label class="form-label">วงเงินรวมของกลุ่ม (฿)</label>
+                <input class="form-input" type="number" min="0" id="wf-new-group-limit" placeholder="100000">
+              </div>
+            </div>
+          </div>
+          <div class="benefit-form-grid">
+            <div class="form-group"><label class="form-label">ชำระหลังวันตัดยอดกี่วัน</label><input class="form-input" type="number" id="wf-due-after-cycle-days" min="1" max="30" value="${w?.dueAfterCycleDays||''}"></div>
+            <div class="form-group"><label class="form-label">วันตัดรอบบัญชี</label><input class="form-input" type="number" id="wf-cycle-day" min="1" max="31" value="${w?.cycleDay||''}"></div>
+          </div>
+        `, true)}
+        ${accordion('wf-cc-reward-acc', 'บัญชีคะแนนและสิทธิประโยชน์', `
+          <div class="form-group">
+            <label class="form-label">บัญชีคะแนนสะสม</label>
+            <select class="form-input" id="wf-reward-account-select" onchange="App._onRewardAccountChange()">
+              ${acctOpts}
             </select>
           </div>
-          <div id="wf-new-group-fields" style="${selectedGroupId==='new'?'':'display:none'}">
-            <div class="form-group">
-              <label class="form-label">ชื่อกลุ่มวงเงินร่วม</label>
-              <input class="form-input" id="wf-new-group-name" placeholder="เช่น KTC วงเงินรวม">
-            </div>
-            <div class="form-group">
-              <label class="form-label">วงเงินรวมของกลุ่ม (฿)</label>
-              <input class="form-input" type="number" min="0" id="wf-new-group-limit" placeholder="100000">
-            </div>
+          <div id="wf-new-account-fields" style="display:none">
+            <div class="form-group"><label class="form-label">ชื่อบัญชีคะแนน</label><input class="form-input" id="wf-new-account-name" placeholder="เช่น KTC Forever Points"></div>
+            <div class="form-group"><label class="form-label">คะแนนเริ่มต้น / ยอดปัจจุบัน</label><input class="form-input" type="number" min="0" id="wf-new-account-opening" value="0" placeholder="0"></div>
           </div>
-        </div>
-        <div id="wf-limit-individual" style="${creditLimitMode==='shared'?'display:none':''}">
-          <div class="form-group"><label class="form-label">วงเงิน (฿)</label><input class="form-input" type="number" id="wf-limit" value="${w?.limit||''}"></div>
-        </div>
-        <div class="form-group"><label class="form-label">ชำระหลังวันตัดยอดกี่วัน</label><input class="form-input" type="number" id="wf-due-after-cycle-days" min="1" max="30" value="${w?.dueAfterCycleDays||''}"></div>
-        <div class="form-group"><label class="form-label">วันตัดรอบบัญชี</label><input class="form-input" type="number" id="wf-cycle-day" min="1" max="31" value="${w?.cycleDay||''}"></div>
-        <div class="form-group">
-          <label class="form-label">บัญชีคะแนนสะสม</label>
-          <select class="form-input" id="wf-reward-account-select" onchange="App._onRewardAccountChange()">
-            ${acctOpts}
-          </select>
-        </div>
-        <div id="wf-new-account-fields" style="display:none">
-          <div class="form-group"><label class="form-label">ชื่อบัญชีคะแนน</label><input class="form-input" id="wf-new-account-name" placeholder="เช่น KTC Forever Points"></div>
-          <div class="form-group"><label class="form-label">คะแนนเริ่มต้น / ยอดปัจจุบัน</label><input class="form-input" type="number" min="0" id="wf-new-account-opening" value="0" placeholder="0"></div>
-        </div>
+        `, false)}
       </div>`
 
     const investHtml = `
-      <div id="wf-invest-fields" style="${isInv?'':'display:none'}">
-        <div class="form-group"><label class="form-label">Symbol / สกุลเงิน</label><input class="form-input" id="wf-symbol" placeholder="BTC, ETH, USD, บาททอง" value="${w?.symbol||w?.currency||''}"></div>
-        <div class="form-group"><label class="form-label">จำนวน Asset</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${w?.units||''}" placeholder="เช่น 0.05, 2.5, 1000"></div>
-        <div class="form-group"><label class="form-label">ราคาต่อหน่วยสำรอง (บาท)</label><input class="form-input" type="number" step="0.01" id="wf-manual-price" value="${w?.manualPrice||''}"></div>
-        <div id="wf-market-price-link" class="market-price-box"></div>
+      <div id="wf-invest-acc" class="card card-pad" style="margin-bottom:12px;${isInv ? '' : 'display:none;'}">
+        <div style="font-size:14px;font-weight:800;margin-bottom:12px">ข้อมูลสินทรัพย์</div>
+        <div id="wf-invest-fields" style="${isInv?'':'display:none'}">
+          <div class="form-group"><label class="form-label">Symbol / สกุลเงิน</label><input class="form-input" id="wf-symbol" placeholder="BTC, ETH, USD, บาททอง" value="${w?.symbol||w?.currency||''}"></div>
+          <div class="form-group"><label class="form-label">จำนวน Asset</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${w?.units||''}" placeholder="เช่น 0.05, 2.5, 1000"></div>
+          <div class="form-group"><label class="form-label">ราคาต่อหน่วยสำรอง (บาท)</label><input class="form-input" type="number" step="0.01" id="wf-manual-price" value="${w?.manualPrice||''}"></div>
+          <div id="wf-market-price-link" class="market-price-box"></div>
+        </div>
       </div>`
 
     document.getElementById('wallet-form-title').textContent = w ? 'แก้ไขกระเป๋า' : 'เพิ่มกระเป๋าเงิน'
     document.getElementById('wallet-form-content').innerHTML = `
-      <div class="form-group"><label class="form-label">ชื่อกระเป๋า</label><input class="form-input" id="wf-name" value="${esc(w?.name||'')}"></div>
-      <div class="form-group">
-        <label class="form-label">ประเภท</label>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px" id="wf-type-grid">
-          ${TYPES.map(([v,icon,lbl]) => `<button class="cat-btn${type===v?' active':''}" onclick="App._selectWalletType('${v}')" data-type="${v}">${icon}<br><small>${lbl}</small></button>`).join('')}
+      ${accordion('wf-basic-acc', 'ข้อมูลพื้นฐาน', `
+        <div class="form-group"><label class="form-label">ชื่อกระเป๋า</label><input class="form-input" id="wf-name" value="${esc(w?.name||'')}"></div>
+        <div class="form-group">
+          <label class="form-label">ประเภท</label>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px" id="wf-type-grid">
+            ${TYPES.map(([v,icon,lbl]) => `<button class="cat-btn${type===v?' active':''}" onclick="App._selectWalletType('${v}')" data-type="${v}">${icon}<br><small>${lbl}</small></button>`).join('')}
+          </div>
+          <input type="hidden" id="wf-type" value="${type}">
         </div>
-        <input type="hidden" id="wf-type" value="${type}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">สี</label>
-        ${App.renderEditorColor?.('wf', w?.color || '#2563EB', 'wf-color') || ''}
-      </div>
-      <div class="form-group" id="wf-balance-group" style="${isCC?'display:none':''}">
-        <label class="form-label" id="wf-balance-label">${isInv?'มูลค่าปัจจุบัน / ราคาสำรอง (฿)':'มูลค่าปัจจุบัน (฿)'}</label>
-        <input class="form-input" type="number" id="wf-balance" value="${w && !isCC ? Math.abs(w.balance) : ''}">
-      </div>
-      ${isCC ? `<div class="form-group" id="wf-cc-balance-group">
-        <label class="form-label">ยอดค้างชำระ (฿)</label>
-        <input class="form-input" type="number" id="wf-cc-balance" value="${w ? Math.abs(w.balance||0) : ''}">
-      </div>` : ''}
+        <div class="form-group">
+          <label class="form-label">สี</label>
+          ${App.renderEditorColor?.('wf', w?.color || '#2563EB', 'wf-color') || ''}
+        </div>
+        <div class="form-group" id="wf-balance-group" style="${isCC?'display:none':''}">
+          <label class="form-label" id="wf-balance-label">${isInv?'มูลค่าปัจจุบัน / ราคาสำรอง (฿)':'มูลค่าปัจจุบัน (฿)'}</label>
+          <input class="form-input" type="number" id="wf-balance" value="${w && !isCC ? Math.abs(w.balance) : ''}">
+        </div>
+        ${isCC ? `<div class="form-group" id="wf-cc-balance-group">
+          <label class="form-label">ยอดค้างชำระ (฿)</label>
+          <input class="form-input" type="number" id="wf-cc-balance" value="${w ? Math.abs(w.balance||0) : ''}">
+        </div>` : ''}
+      `, true)}
       <div id="wf-cc-fields" style="${isCC?'':'display:none'}">${ccExtraHtml}</div>
       ${investHtml}
       <div class="flex-row" style="margin-top:12px">
@@ -4454,7 +4487,32 @@ Calc.getUsableMoney = function(wallets) {
         <button class="btn btn-primary${w?'':' flex-1'}" onclick="App.saveWallet()" style="${w?'flex:2':''}">${w ? 'บันทึก' : 'เพิ่มกระเป๋า'}</button>
       </div>`
     App.openOverlay('overlay-wallet-form')
+    App._syncWalletFormSections?.()
     if (isInv) try { syncInvestmentWalletForm?.(type) } catch (_) {}
+  }
+
+  App._syncWalletFormSections = function() {
+    const type = document.getElementById('wf-type')?.value || 'bank'
+    const isCC = type === 'credit'
+    const isInv = ['gold','crypto','fcd'].includes(type)
+    const limitMode = document.getElementById('wf-credit-limit-mode')?.value || 'individual'
+    const rewardAccountMode = document.getElementById('wf-reward-account-select')?.value || ''
+    const groupMode = document.getElementById('wf-shared-group-select')?.value || ''
+    const setVisible = (id, visible) => {
+      const el = document.getElementById(id)
+      if (!el) return
+      el.style.display = visible ? '' : 'none'
+      if (el.tagName === 'DETAILS' && !visible) el.open = false
+    }
+    setVisible('wf-cc-fields', isCC)
+    setVisible('wf-invest-acc', isInv)
+    setVisible('wf-invest-fields', isInv)
+    setVisible('wf-balance-group', !isCC)
+    setVisible('wf-cc-balance-group', isCC)
+    setVisible('wf-shared-group-section', isCC && limitMode === 'shared')
+    setVisible('wf-limit-individual', isCC && limitMode !== 'shared')
+    setVisible('wf-new-group-fields', isCC && limitMode === 'shared' && groupMode === 'new')
+    setVisible('wf-new-account-fields', isCC && rewardAccountMode === 'new')
   }
 
   // ── Credit limit mode toggle ────────────────────────────────
@@ -4462,16 +4520,12 @@ Calc.getUsableMoney = function(wallets) {
     const hidden = document.getElementById('wf-credit-limit-mode')
     if (hidden) hidden.value = mode
     document.querySelectorAll('.v5-lm-tab').forEach(btn => btn.classList.toggle('active', btn.textContent.includes(mode === 'individual' ? 'แยก' : 'ร่วม')))
-    const sharedSec = document.getElementById('wf-shared-group-section')
-    const indivSec  = document.getElementById('wf-limit-individual')
-    if (sharedSec) sharedSec.style.display = mode === 'shared' ? '' : 'none'
-    if (indivSec)  indivSec.style.display  = mode === 'shared' ? 'none' : ''
+    App._syncWalletFormSections?.()
   }
 
   App._onCreditLimitGroupChange = function() {
     const sel = document.getElementById('wf-shared-group-select')?.value
-    const newFields = document.getElementById('wf-new-group-fields')
-    if (newFields) newFields.style.display = sel === 'new' ? '' : 'none'
+    App._syncWalletFormSections?.()
     // Auto-fill new group limit from card's own limit
     if (sel === 'new') {
       const limitInput = document.getElementById('wf-new-group-limit')
@@ -4481,9 +4535,7 @@ Calc.getUsableMoney = function(wallets) {
   }
 
   App._onRewardAccountChange = function() {
-    const sel = document.getElementById('wf-reward-account-select')?.value
-    const newFields = document.getElementById('wf-new-account-fields')
-    if (newFields) newFields.style.display = sel === 'new' ? '' : 'none'
+    App._syncWalletFormSections?.()
   }
 
   App._onWfIssuerChange = function() {
@@ -4507,19 +4559,12 @@ Calc.getUsableMoney = function(wallets) {
     document.querySelectorAll('#wf-type-grid .cat-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type))
     const isCC  = type === 'credit'
     const isInv = ['gold','crypto','fcd'].includes(type)
-    const ccFields = document.getElementById('wf-cc-fields')
-    if (ccFields) ccFields.style.display = isCC ? '' : 'none'
-    const investFields = document.getElementById('wf-invest-fields')
-    if (investFields) investFields.style.display = isInv ? '' : 'none'
-    const balGroup   = document.getElementById('wf-balance-group')
-    const ccBalGroup = document.getElementById('wf-cc-balance-group')
-    if (balGroup)   balGroup.style.display   = isCC ? 'none' : ''
-    if (ccBalGroup) ccBalGroup.style.display = isCC ? ''     : 'none'
     const balLabel = document.getElementById('wf-balance-label')
     if (balLabel) balLabel.textContent = isInv ? 'มูลค่าปัจจุบัน / ราคาสำรอง (฿)' : 'มูลค่าปัจจุบัน (฿)'
     const sym = document.getElementById('wf-symbol')
     if (sym && type === 'gold' && !sym.value) { sym.value = 'บาททอง'; sym.readOnly = true }
     else if (sym) sym.readOnly = false
+    App._syncWalletFormSections?.()
     try { syncInvestmentWalletForm?.(type) } catch (_) {}
   }
 
@@ -4888,6 +4933,7 @@ Calc.getUsableMoney = function(wallets) {
 
     const filterOpts = `<option value="">ทุกบัตร</option>` + cards.map(c => `<option value="${esc(c.id)}"${c.id===selected?' selected':''}>${esc(c.icon||'')} ${esc(c.name)}</option>`).join('')
 
+    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
@@ -4903,11 +4949,12 @@ Calc.getUsableMoney = function(wallets) {
           ${pendingHtml || '<div style="font-size:13px;color:var(--muted)">ไม่มีสิทธิประโยชน์รอรับในขณะนี้</div>'}
         </div>
 
-        <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center">
-          <span>ประวัติรับสิทธิ์</span>
-          <select style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border);background:var(--elevated);color:var(--text)" onchange="App.openRewardLedgerScreen(this.value)">${filterOpts}</select>
-        </div>
-        <div class="card card-pad">${histHtml}</div>
+        ${accordion('reward-history-acc', `ประวัติรับสิทธิ์ <span style="font-size:12px;color:var(--muted);font-weight:600;margin-left:6px">${histRows.length} รายการ</span>`, `
+          <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+            <select style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border);background:var(--elevated);color:var(--text)" onchange="App.openRewardLedgerScreen(this.value)">${filterOpts}</select>
+          </div>
+          ${histHtml}
+        `, false)}
       </div>`)
     setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
   }
@@ -7074,6 +7121,7 @@ Calc.getUsableMoney = function(wallets) {
           </div>`
         }).join('')
       : App._emptyState?.('🪙', 'ยังไม่มี Crypto Holding', 'กด + เพิ่มเหรียญ เพื่อเริ่มต้น') || ''
+    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>Crypto Portfolio</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.refreshCryptoPrices()" style="width:auto">Sync ราคา</button><button class="btn btn-primary btn-sm" onclick="App.openCryptoHoldingForm()" style="width:auto">+ เพิ่มเหรียญ</button></div></div>
       <div class="sub-scroll">
         <div class="card card-pad crypto-portfolio-card" style="margin-bottom:12px">
@@ -7089,27 +7137,24 @@ Calc.getUsableMoney = function(wallets) {
         ${actionButtons}
         <div class="sec-title" style="display:flex;justify-content:space-between;gap:10px;align-items:center">Holdings<select class="form-input" style="width:auto;min-width:180px;padding:8px 12px;font-size:13px" onchange="App.setCryptoPortfolioSort(this.value)">${sortOptions}</select></div>
         ${holdingsHtml}
-        <div class="sec-title" style="margin-top:16px">ประวัติรายการ Crypto</div>
-        <div class="card">
-          <div style="padding:0 16px">
-            ${txRows.length ? txRows.map(tx => {
-              const txHolding = (S.cryptoHoldings || []).find(h => h.id === tx.holdingId)
-              const txAsset = App.getCryptoAsset(tx.assetId || txHolding?.assetId)
-              const realized = Number(tx.realizedGainTHB || 0)
-              const priceText = tx.type === 'adjust' ? 'ปรับจำนวน' : `${plainMoney(tx.priceTHB)} / เหรียญ`
-              return `<div class="list-item">
-                <div class="list-item-info">
-                  <div class="list-item-name">${esc(tx.type.toUpperCase())} · ${esc(txAsset?.symbol || '')}</div>
-                  <div class="list-item-sub">${unitFmt(tx.units, txAsset?.decimals || 8)} · ${esc(priceText)} · ${esc(Calc.shortDate ? Calc.shortDate(tx.date) : tx.date)}</div>
-                  ${tx.note ? `<div class="list-item-sub">${esc(tx.note)}</div>` : ''}
-                </div>
-                <div style="text-align:right">
-                  ${tx.type === 'sell' ? `<div class="${realized >= 0 ? 'c-income' : 'c-expense'}">${S.settings?.hideMoney ? '฿*****' : `${realized < 0 ? '-' : ''}${plainMoney(Math.abs(realized))}`}</div><div class="list-item-sub">Realized</div>` : `<div class="list-item-sub">${tx.feeTHB ? `Fee ${plainMoney(tx.feeTHB)}` : ''}</div>`}
-                </div>
-              </div>`
-            }).join('') : App._emptyState?.('🧾', 'ยังไม่มีรายการ Crypto', '') || ''}
-          </div>
-        </div>
+        ${accordion('crypto-history-acc', `ประวัติรายการ Crypto <span style="font-size:12px;color:var(--muted);font-weight:600;margin-left:6px">${txRows.length} รายการล่าสุด</span>`, `
+          ${txRows.length ? txRows.map(tx => {
+            const txHolding = (S.cryptoHoldings || []).find(h => h.id === tx.holdingId)
+            const txAsset = App.getCryptoAsset(tx.assetId || txHolding?.assetId)
+            const realized = Number(tx.realizedGainTHB || 0)
+            const priceText = tx.type === 'adjust' ? 'ปรับจำนวน' : `${plainMoney(tx.priceTHB)} / เหรียญ`
+            return `<div class="list-item">
+              <div class="list-item-info">
+                <div class="list-item-name">${esc(tx.type.toUpperCase())} · ${esc(txAsset?.symbol || '')}</div>
+                <div class="list-item-sub">${unitFmt(tx.units, txAsset?.decimals || 8)} · ${esc(priceText)} · ${esc(Calc.shortDate ? Calc.shortDate(tx.date) : tx.date)}</div>
+                ${tx.note ? `<div class="list-item-sub">${esc(tx.note)}</div>` : ''}
+              </div>
+              <div style="text-align:right">
+                ${tx.type === 'sell' ? `<div class="${realized >= 0 ? 'c-income' : 'c-expense'}">${S.settings?.hideMoney ? '฿*****' : `${realized < 0 ? '-' : ''}${plainMoney(Math.abs(realized))}`}</div><div class="list-item-sub">Realized</div>` : `<div class="list-item-sub">${tx.feeTHB ? `Fee ${plainMoney(tx.feeTHB)}` : ''}</div>`}
+              </div>
+            </div>`
+          }).join('') : App._emptyState?.('🧾', 'ยังไม่มีรายการ Crypto', '') || ''}
+        `, false)}
       </div>`)
   }
 
@@ -7294,7 +7339,7 @@ Calc.getUsableMoney = function(wallets) {
       cardId: String(rule.cardId || cardId || ''),
       name: String(rule.name || 'New rule').trim(),
       active: rule.active !== false,
-      type: ['cashback', 'points', 'both', 'discount', 'note', 'exclusion'].includes(rule.type) ? rule.type : 'cashback',
+      type: ['cashback', 'points', 'both', 'discount'].includes(rule.type) ? rule.type : 'cashback',
       description: String(rule.description || '').trim(),
       suggestedConditions: {
         categories: Array.isArray(suggestedConditions.categories) ? suggestedConditions.categories.filter(Boolean) : [],
@@ -7398,6 +7443,7 @@ Calc.getUsableMoney = function(wallets) {
     const next = []
     const existingByCard = {}
     ;(S.ccBenefitRules || []).forEach(rule => {
+      if (rule?.type === 'note' || rule?.type === 'exclusion') return
       const normalized = normalizeBenefitRule(rule, rule.cardId || '')
       next.push(normalized)
       if (normalized.cardId) existingByCard[normalized.cardId] = true
@@ -7590,10 +7636,6 @@ Calc.getUsableMoney = function(wallets) {
         capReasons.push('maxRewardAmountPerCycle')
       }
     }
-    if (rule.type === 'note') warnings.push('กฎนี้เป็นบันทึกเตือน ไม่มีการคำนวณรางวัล')
-    if (rule.type === 'exclusion') warnings.push('กฎนี้เป็น exclusion โปรดตรวจสอบว่ารายการนี้ควรได้สิทธิ์หรือไม่')
-    if (rule.type === 'note' || rule.type === 'exclusion') { cashback = 0; discount = 0; points = 0 }
-
     const capReason = [...new Set(capReasons)].join(', ')
     return {
       ruleId: rule.id,

@@ -1153,18 +1153,23 @@ body.ios-standalone {
   --safe-t: max(env(safe-area-inset-top, 0px), 14px) !important;
 }
 
-body.ios-standalone #page-transactions .page-header {
-  padding-top: max(10px, calc(var(--safe-t) + 8px)) !important;
-}
-
+body.ios-standalone #page-transactions .page-header,
 body.ios-standalone #more-content {
   padding-top: max(10px, calc(var(--safe-t) + 8px)) !important;
 }
 
 body.ios-standalone #bottom-nav {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
   bottom: 0 !important;
-  height: var(--nav-h) !important;
+  width: 100% !important;
+  margin: 0 !important;
+  height: calc(var(--nav-h) + var(--safe-b)) !important;
+  padding-top: 6px !important;
   padding-bottom: 0 !important;
+  padding-left: max(8px, var(--safe-l)) !important;
+  padding-right: max(8px, var(--safe-r)) !important;
 }
 
 /* ============================================================
