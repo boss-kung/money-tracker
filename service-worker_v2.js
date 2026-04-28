@@ -1,4 +1,4 @@
-const CACHE_NAME = 'money-tracker-new-version'
+const CACHE_NAME = 'money-tracker-new-version-v1.1'
 
 // Core app files: always network-first so code updates land immediately
 const NETWORK_FIRST = new Set([

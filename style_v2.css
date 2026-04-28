@@ -1955,7 +1955,7 @@ body.is-dashboard #dashboard-content {
   border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-sm) !important;
 }
-.card-pad { padding: 8px !important; }
+.card-pad { padding: 8px; }
 .form-group { margin-bottom: 10px !important; }
 .chips,
 .wallet-summary-grid,
@@ -2492,6 +2492,13 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   grid-template-columns:1fr 1fr;
   gap:10px;
   margin-bottom:10px;
+}
+.form-split-row > div {
+  min-width: 0;
+}
+.form-split-row input[type="date"] {
+  width: 100%;
+  min-width: 0;
 }
 
 
@@ -4151,21 +4158,30 @@ html.dark .v64-rec-tab.active {
 }
 .crypto-search-result {
   width: 100%;
-  border: 1px solid var(--line);
-  background: var(--card);
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  background: color-mix(in srgb, var(--card) 88%, var(--bg));
   border-radius: 16px;
-  padding: 12px;
+  padding: 12px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   text-align: left;
   cursor: pointer;
   appearance: none;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, transform .16s ease;
 }
 .crypto-search-result.selected {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 14%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 72%, #ffffff 28%);
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 30%, transparent);
+}
+.crypto-search-result:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+  background: color-mix(in srgb, var(--card) 78%, var(--bg));
+}
+.crypto-search-result:active {
+  transform: scale(.995);
 }
 .csr-main {
   display: flex;
@@ -4175,6 +4191,82 @@ html.dark .v64-rec-tab.active {
 }
 .csr-main > span:last-child {
   min-width: 0;
+}
+.reward-rule-results {
+  gap: 10px;
+}
+.reward-rule-result {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  background: color-mix(in srgb, var(--card) 90%, var(--bg));
+  border-radius: 16px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.reward-rule-result.selected {
+  border-color: color-mix(in srgb, var(--primary) 72%, #ffffff 28%);
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 30%, transparent);
+}
+.reward-rule-result:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+  background: color-mix(in srgb, var(--card) 78%, var(--bg));
+}
+.reward-rule-result:active {
+  transform: scale(.995);
+}
+.reward-rule-result .list-item-name {
+  display: block;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+.reward-rule-result .list-item-sub {
+  display: block;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.reward-rule-result.selected .list-item-name {
+  color: color-mix(in srgb, var(--text) 88%, #fff 12%);
+}
+.reward-rule-result.selected .list-item-sub {
+  color: color-mix(in srgb, var(--muted) 82%, #fff 18%);
+}
+.reward-rule-toggle {
+  display: inline-block;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--border);
+  position: relative;
+  flex-shrink: 0;
+  transition: background .16s ease, border-color .16s ease;
+}
+.reward-rule-toggle.on {
+  background: color-mix(in srgb, var(--primary) 78%, #ffffff 22%);
+  border-color: color-mix(in srgb, var(--primary) 70%, #ffffff 30%);
+}
+.reward-rule-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.22);
+  transition: transform .16s ease;
+}
+.reward-rule-toggle.on .reward-rule-toggle-knob {
+  transform: translateX(18px);
 }
 .crypto-empty-state {
   margin-top: 12px;
