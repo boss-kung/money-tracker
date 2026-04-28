@@ -815,7 +815,7 @@ body {
   align-items: flex-start;
   gap: 14px;
 }
-.mt-title { font-size: 22px; font-weight: 900; color: var(--text); line-height: 1.15; letter-spacing: -.055em; }
+.mt-title { font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.15; letter-spacing: -.055em; }
 .mt-subtitle { font-size: 12px; color: var(--muted); margin-top: 1px; }
 .mt-net-card {
   margin-top: 8px;
@@ -839,7 +839,7 @@ body {
 }
 .mt-net-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; position:relative; z-index:1; }
 .mt-net-label { font-size: 12px; font-weight: 700; color: var(--slate-on-dark); margin-bottom: 6px; }
-.mt-net-value { font-size: 34px; font-weight: 900; line-height: 1.05; letter-spacing: -1px; }
+.mt-net-value { font-size: 34px; font-weight: 800; line-height: 1.05; letter-spacing: -1px; }
 .mt-hide-btn {
     border: 1.5px solid var(--border);
     background: var(--elevated);
@@ -899,7 +899,7 @@ html.dark .mt-alert-title { color: #FDE68A; }
 .mt-alert-row:active { background: rgba(0,0,0,.06); }
 .mt-alert-row-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .mt-alert-row-name { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mt-alert-row-amt { font-size: 16px; font-weight: 900; color: var(--expense); letter-spacing: -.04em; flex-shrink: 0; }
+.mt-alert-row-amt { font-size: 16px; font-weight: 800; color: var(--expense); letter-spacing: -.04em; flex-shrink: 0; }
 html.dark .mt-alert-row-name { color: var(--text); }
 .mt-wallet-mini-grid { margin-top: 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .mt-wallet-mini {
@@ -922,7 +922,7 @@ html.dark .mt-alert-row-name { color: var(--text); }
 .mt-stat-card small { display:block; font-size:11px; font-weight:700; }
 .mt-stat-card strong { display:block; font-size:16px; font-weight:900; margin-top:2px; letter-spacing:-.05em; }
 .section-header { margin: 18px 0 6px; }
-.section-header h3 { font-size: 15px; font-weight: 900; letter-spacing: -.03em; }
+.section-header h3 { font-size: 15px; font-weight: 800; letter-spacing: -.03em; }
 .section-header button { color: var(--primary); font-weight: 800; }
 
 /* Transaction list rows */
@@ -974,7 +974,7 @@ html.dark .mt-alert-row-name { color: var(--text); }
   justify-content:center;
   align-items:center;
   font-size: clamp(38px, 13vw, 52px);
-  font-weight: 900;
+  font-weight: 800;
   letter-spacing: -1px;
   padding: 20px 20px 12px;
   font-variant-numeric: tabular-nums;
@@ -1723,7 +1723,7 @@ body { font-feature-settings: "tnum" 1; }
 .wallet-card.wallet-card-colored .wc-prog-fill { background: rgba(255,255,255,.9) !important; }
 
 .wallet-summary-grid { gap: 10px !important; }
-.wallet-section-title { font-size: 15px !important; font-weight: 900 !important; color: var(--text) !important; margin: 16px 0 10px !important; }
+.wallet-section-title { font-size: 15px !important; font-weight: 800 !important; color: var(--text) !important; margin: 16px 0 10px !important; }
 
 /* Budget tabs */
 .budget-tabs {
@@ -1742,7 +1742,7 @@ body { font-feature-settings: "tnum" 1; }
   border-radius: 14px;
   background: transparent;
   color: var(--muted);
-  font-weight: 900;
+  font-weight: 800;
 }
 .budget-tab.active {
   color: #fff;
@@ -3323,7 +3323,7 @@ html.dark .report-cat-bar{
   border-radius: 16px !important;
   padding: 10px 12px !important;
   font-size: 14px !important;
-  font-weight: 900 !important;
+  font-weight: 800 !important;
   line-height: 1.25 !important;
   box-shadow: none !important;
 }
@@ -3695,7 +3695,7 @@ html.dark .v5-already-recorded-banner {
 
 .v5-acct-pts {
   font-size: 18px;
-  font-weight: 900;
+  font-weight: 800;
   color: var(--primary);
   letter-spacing: -.025em;
 }
@@ -3974,7 +3974,7 @@ body.keyboard-open .add-detail-actions {
 }
 .v64-recurring-head b {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: 800;
   color: var(--text);
 }
 .v64-recurring-head span {
@@ -3999,7 +3999,7 @@ body.keyboard-open .add-detail-actions {
   background: transparent;
   color: var(--muted);
   font-size: 12.5px;
-  font-weight: 900;
+  font-weight: 800;
 }
 .v64-rec-tab.active {
   background: var(--surface);
@@ -4031,7 +4031,7 @@ html.dark .v64-rec-tab.active {
   min-height: 44px !important;
   border-radius: 16px !important;
   font-size: 14px !important;
-  font-weight: 900 !important;
+  font-weight: 800 !important;
 }
 .v65-rec-delete-actions .v65-rec-cancel {
   margin-top: 2px !important;
