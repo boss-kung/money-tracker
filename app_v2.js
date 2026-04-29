@@ -70,8 +70,13 @@
 })()
 
 /* ============================================================
-   Money Tracker — app.js
+   Money Tracker — app_v2.js
    Vanilla JS, no build tools, works on file:// and GitHub Pages
+   ============================================================ */
+
+/* ============================================================
+   Core App Shell
+   State / persistence / theme / toast / navigation / base screens
    ============================================================ */
 
 // ── State ────────────────────────────────────────────────────
@@ -116,7 +121,11 @@ let S = {
 }
 
 // ── Persist ──────────────────────────────────────────────────
-function persist() { Storage.saveAll(S) }
+function persist() {
+  try { App._beforePersistV50?.() } catch (_) {}
+  try { App._beforePersistV40?.() } catch (_) {}
+  Storage.saveAll(S)
+}
 function moneyFmt(n) { return S.settings?.hideMoney ? '฿*****' : Calc.fmt(n || 0) }
 
 // ── Apply theme ───────────────────────────────────────────────
@@ -176,6 +185,30 @@ const App = {
       return Promise.resolve()
     }
   },
+  closeAddTx() {
+    App.closeOverlay('overlay-add-tx')
+    S.txMode = 'add'
+    S.editingTxId = null
+    S.tx = {
+      ...(S.tx || {}),
+      step: 'amount',
+      type: 'expense',
+      amount: '0',
+      walletId: '',
+      toWalletId: '',
+      categoryId: '',
+      merchant: '',
+      note: '',
+      date: TODAY,
+      isRecurring: false,
+      isInstallment: false,
+      installmentMonths: '',
+      rewardRuleIds: [],
+      rewardEstimate: null,
+      rewardIncludePoints: true,
+      rewardIncludeCashback: true,
+    }
+  },
 
   // ── Navigation ────────────────────────────────────────────
   showPage(page) {
@@ -202,37 +235,8 @@ const App = {
     renders[S.page]?.()
   },
 
-  // ─────────────────────────────────────────────────────────
-  // DASHBOARD
-  // ─────────────────────────────────────────────────────────
-  // renderDashboard is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
-  // ─────────────────────────────────────────────────────────
-  // TRANSACTIONS PAGE
-  // ─────────────────────────────────────────────────────────
-/* consolidated: removed legacy renderTransactions from line 120 */
-/* consolidated: removed legacy renderTransactionsList from line 142 */
-/* consolidated: removed legacy setTxMonth from line 180 *//* consolidated: removed legacy setTxType from line 181 */
-  // ─────────────────────────────────────────────────────────
-  // WALLETS PAGE
-  // ─────────────────────────────────────────────────────────
-  // renderWallets is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
-  // ─────────────────────────────────────────────────────────
-  // REPORTS PAGE
-  // ─────────────────────────────────────────────────────────
-/* consolidated: removed legacy renderReports from line 193 */
-/* consolidated: removed legacy setRptMonth from line 304 *//* consolidated: removed legacy setRptView from line 305 */
-  // ─────────────────────────────────────────────────────────
-  // MORE / SETTINGS PAGE
-  // ─────────────────────────────────────────────────────────
-  // renderMore is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
+  // Page renderers are defined in the feature blocks below:
+  // dashboard / transactions / wallets / reports / more
 
   toggleDark() {
     S.settings.darkMode = !S.settings.darkMode
@@ -244,34 +248,10 @@ const App = {
     persist(); applyTheme(); App.renderMore()
   },
 
-/* consolidated: removed legacy exportData from line 324 */
-  // importData is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
+  // Data backup/import helpers are defined in later storage-sync blocks.
 
-
-/* consolidated: removed legacy resetData from line 333 */
-  // ─────────────────────────────────────────────────────────
-  // BUDGET SUB-SCREEN
-  // ─────────────────────────────────────────────────────────
-  // openBudgetScreen is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
-  // saveBudgets is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
-  // ─────────────────────────────────────────────────────────
-  // ADD TRANSACTION OVERLAY
-  // ─────────────────────────────────────────────────────────
-  // openAddTx is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
-  // _renderAddTxAmount is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
+  // Budget screen and add-transaction flow are defined in later UI blocks.
+  
   _setTxType(type) {
     S.tx.type = type
     S.tx.categoryId = ''
@@ -303,14 +283,8 @@ const App = {
     App._renderAddTxDetail()
   },
 
-/* consolidated: removed legacy _renderAddTxDetail from line 387 */
-/* consolidated: removed legacy _selectCat from line 454 */
   _txField(field, val) { S.tx[field] = val },
   _backToAmount()      { S.tx.step = 'amount'; App._renderAddTxAmount() },
-
-  // saveTx is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
 
   // ─────────────────────────────────────────────────────────
   // TRANSACTION DETAIL
@@ -322,25 +296,11 @@ const App = {
     App.openOverlay('overlay-tx-detail')
   },
 
-  // _renderTxDetail is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
   deleteTx() { S.deleteConfirm = true; App._renderTxDetail() },
   _cancelDelete() { S.deleteConfirm = false; App._renderTxDetail() },
 
-/* consolidated: removed legacy confirmDeleteTx from line 492 */
-  // ─────────────────────────────────────────────────────────
-  // WALLET FORM
-  // ─────────────────────────────────────────────────────────
-  // openWalletForm is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
-  // _selectWalletType is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
+  // Wallet form is defined in later wallet / credit-card blocks.
+  
   _selectWalletColor(color) {
     document.getElementById('wf-color').value = color
     document.querySelectorAll('#wf-color-row .color-dot').forEach(d => {
@@ -348,11 +308,6 @@ const App = {
     })
   },
 
-  // saveWallet is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
-/* consolidated: removed legacy deleteWallet from line 526 */
   // ─────────────────────────────────────────────────────────
   // CC PAYMENT
   // ─────────────────────────────────────────────────────────
@@ -388,14 +343,8 @@ const App = {
     App.openOverlay('overlay-cc-pay')
   },
 
-/* consolidated: removed legacy saveCCPay from line 570 */
-  // ─────────────────────────────────────────────────────────
-  // CC DETAIL (tapping a CC card)
-  // ─────────────────────────────────────────────────────────
-  // openCCDetail is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
+  // Credit-card detail screen is defined in later credit-card blocks.
+  
   // ─────────────────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────────────────
@@ -416,22 +365,15 @@ const App = {
     return [...S.categories.expense, ...S.categories.income].find(c => c.id === id)
   },
 
-/* consolidated: removed legacy _txRow from line 623 */
-/* consolidated: removed legacy _bindTxRows from line 646 */
-/* consolidated: removed legacy _emptyState from line 652 */
-  // _walletTypeLabel is intentionally defined by the V2+ override block below.
-  // Keeping one active implementation avoids stale prototype logic overriding latest behavior.
-
-
   _txTypeLabel(type) {
     const m = { expense:'รายจ่าย', income:'รายรับ', transfer:'โอน', cc_payment:'ชำระบัตร' }
     return m[type] || type
   },
 }
 
-
 /* ============================================================
-   V2 overrides
+   Core Calculation Overrides
+   Shared Calc/App helpers required before later feature blocks
    ============================================================ */
 Object.assign(Calc, {
   getIncomeBudgetProgress(transactions, budgets, categories, month) {
@@ -492,9 +434,7 @@ Object.assign(Calc, {
 Object.assign(App, {
   _ensureV2State() { S.recurring ||= []; S.merchants ||= []; S.ccBenefits ||= {}; S.incomeBudgets ||= []; S.marketPrices ||= {} },
 
-/* consolidated: removed legacy renderDashboard from line 733 */
-/* consolidated: removed legacy openAddTx from line 771 *//* consolidated: removed legacy openEditTx from line 776 *//* consolidated: removed legacy openDuplicateTx from line 782 *//* consolidated: removed legacy _renderAddTxAmount from line 788 *//* consolidated: removed legacy saveTx from line 794 *//* consolidated: removed legacy _renderTxDetail from line 808 */
-/* consolidated: removed legacy renderWallets from line 815 *//* consolidated: removed legacy _walletCard from line 822 *//* consolidated: removed legacy refreshMarketPrices from line 828 *//* consolidated: removed legacy _marketText from line 835 */  openWalletForm(walletId) {
+  openWalletForm(walletId) {
     S.editingWalletId = walletId
     const w = walletId ? S.wallets.find(x => x.id === walletId) : null
     const COLORS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
@@ -563,22 +503,24 @@ Object.assign(App, {
     persist(); App.closeOverlay('overlay-wallet-form'); App.render(); toast(S.editingWalletId ? 'แก้ไขกระเป๋าแล้ว' : 'เพิ่มกระเป๋าแล้ว', 'success')
   },
 
-/* consolidated: removed legacy renderMore from line 869 */
-/* consolidated: removed legacy openBudgetScreen from line 876 *//* consolidated: removed legacy saveBudgets from line 881 */
-/* consolidated: removed legacy openRecurringScreen from line 886 *//* consolidated: removed legacy openRecurringForm from line 887 *//* consolidated: removed legacy saveRecurring from line 888 */  toggleRecurring(id) { const r = S.recurring.find(x => x.id === id); if (r) r.paused = !r.paused; persist(); App.openRecurringScreen() },
-/* consolidated: removed legacy deleteRecurring from line 890 */
+  toggleRecurring(id) { const r = S.recurring.find(x => x.id === id); if (r) r.paused = !r.paused; persist(); App.openRecurringScreen() },
+
   openCategoryScreen(type='expense', q='') { S.catManageType = type; const cats = (S.categories[type] || []).filter(c => !q || c.label.toLowerCase().includes(q.toLowerCase())); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll"><div class="tab-strip"><button class="tab-btn ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="tab-btn ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${q}" oninput="App.openCategoryScreen('${type}', this.value)"><div class="card mt-12"><div style="padding:0 16px">${cats.map(c => `<div class="list-item"><div class="list-item-icon" style="background:${c.color}20">${c.icon}</div><div class="list-item-info"><div class="list-item-name">${c.label}</div><div class="list-item-sub">${c.color}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openCategoryForm('${c.id}')">✏️</button><button class="icon-btn" onclick="App.deleteCategory('${c.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')}</div></div></div>`) },
-/* consolidated: removed legacy openCategoryForm from line 893 */  saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { toast('กรุณากรอกชื่อหมวดหมู่','error'); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
-/* consolidated: removed legacy deleteCategory from line 895 */
+  saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { toast('กรุณากรอกชื่อหมวดหมู่','error'); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
+
   openMerchantScreen(q='') { App._ensureV2State(); const usage = Calc.getMerchantUsage(S.transactions); const list = S.merchants.filter(m => !q || m.name.toLowerCase().includes(q.toLowerCase())); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${q}" oninput="App.openMerchantScreen(this.value)"><div class="card mt-12"><div style="padding:0 16px">${list.map(m => `<div class="list-item"><div class="list-item-icon" style="background:${m.color}20">${m.emoji || '🏪'}</div><div class="list-item-info"><div class="list-item-name">${m.name}</div><div class="list-item-sub">ใช้จ่าย ${usage[m.name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${m.id}')">✏️</button><button class="icon-btn" onclick="App.deleteMerchant('${m.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')}</div></div></div>`) },
-/* consolidated: removed legacy openMerchantForm from line 898 */  saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { toast('กรุณากรอกชื่อร้านค้า','error'); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
-/* consolidated: removed legacy deleteMerchant from line 900 */  _registerMerchantFromTx(tx) { App._ensureV2State(); if (!tx.merchant) return; if (!S.merchants.some(m => m.name.toLowerCase() === tx.merchant.toLowerCase())) S.merchants.push({ id:Calc.genId(), name:tx.merchant, emoji:'🏪', color:'#64748B' }) },
+  saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { toast('กรุณากรอกชื่อร้านค้า','error'); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
+  _registerMerchantFromTx(tx) { App._ensureV2State(); if (!tx.merchant) return; if (!S.merchants.some(m => m.name.toLowerCase() === tx.merchant.toLowerCase())) S.merchants.push({ id:Calc.genId(), name:tx.merchant, emoji:'🏪', color:'#64748B' }) },
 
-/* consolidated: removed legacy openCCDetail from line 903 *//* consolidated: removed legacy openCCBenefitScreen from line 913 *//* consolidated: removed legacy saveCCBenefit from line 914 *//* consolidated: removed legacy _walletTypeLabel from line 915 */})
-
+})
 
 Object.assign(App, {
-/* consolidated: removed legacy importData from line 920 */})
+})
+
+/* ============================================================
+   App Bootstrap
+   Initial storage load / theme / nav binding / first render
+   ============================================================ */
 
 // ── Init ──────────────────────────────────────────────────────
 function init() {
@@ -626,20 +568,20 @@ function init() {
 
 init()
 
-/* V2.1 quick patch */
+/* ============================================================
+   Shared UI + Form Foundations
+   Transaction sheet / wallet drilldown / V2 mobile UI layers
+   ============================================================ */
+
+/* Core finance primitives */
 ;(function(){
 const COLORS10=['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#16A34A','#EA580C','#475569'];
 const EMOJIS30=['🍔','🚗','🛍️','💊','🎬','💡','📚','📦','💼','💻','📈','💰','🏠','☕','🍱','✈️','🧾','🎮','🐶','🎁','💄','🏋️','🚌','🛒','📱','💳','🏦','🥇','₿','💱'];
-/* consolidated: removed legacy renderDashboard from line 983 */
-/* consolidated: removed legacy _toggleTxFlag from line 985 */
-/* consolidated: removed legacy _renderAddTxDetail from line 986 */
+
 Calc.getCardRewards=function(txns,b){const pe=!!(b?.points?.enabled||b?.enabled),ce=!!(b?.cashback?.enabled||b?.enabled),p=b?.points||{},c=b?.cashback||{};let points=0,cashback=0;(txns||[]).forEach(t=>{if(pe&&t.rewardIncludePoints!==false){let pt=0;if(p.bahtPerPoint)pt+=Math.floor(t.amount/p.bahtPerPoint);pt*=p.multiplier||1;if(p.maxPerTxn)pt=Math.min(pt,p.maxPerTxn);points+=pt}if(ce&&t.rewardIncludeCashback!==false&&(!c.minSpend||t.amount>=c.minSpend)){let base=c.everyBaht?Math.floor(t.amount/c.everyBaht)*c.everyBaht:t.amount,cb=base*((c.percent||0)/100);if(c.tierThreshold&&t.amount<c.tierThreshold)cb=0;if(c.maxPerTxn)cb=Math.min(cb,c.maxPerTxn);cashback+=cb}});if(p.maxPerCycle)points=Math.min(points,p.maxPerCycle);if(c.maxPerCycle)cashback=Math.min(cashback,c.maxPerCycle);return{points:Math.floor(points),cashback:Math.round(cashback*100)/100}};
 App._benefit=id=>S.ccBenefits?.[id]||{points:{},cashback:{}};App._rewardForTx=tx=>{const card=S.wallets.find(w=>w.id===tx.walletId&&w.type==='credit');if(!(card&&tx.type==='expense'))return{points:0,cashback:0};if(App.getTransactionRewardEstimate){const est=App.getTransactionRewardEstimate(tx)||{points:0,cashback:0};return{points:Number(est.points||0),cashback:Number(est.cashback||0)}}return Calc.getCardRewards([tx],App._benefit(card.id))};
-/* consolidated: removed legacy openCCBenefitScreen from line 997 */
-/* consolidated: removed legacy _investmentUnitPriceTHB from line 1000 *//* consolidated: removed legacy _investmentValueTHB from line 1000 */
 
-// Early investment helpers are required before later market-price patches load.
-// The final v45 block below will enhance these helpers, but startup must not crash.
+// Provide baseline investment pricing before later market-sync layers load.
 App._investmentUnitPriceTHB = App._investmentUnitPriceTHB || function earlyInvestmentUnitPriceTHB(w) {
   if (!w) return 0
   const p = S.marketPrices || {}
@@ -662,12 +604,11 @@ App._investmentValueTHB = App._investmentValueTHB || function earlyInvestmentVal
     : Number(w?.balance || 0)
 }
 
-/* consolidated: removed legacy openWalletDetail from line 1002 */
-/* consolidated: removed legacy toggleEmojiPanel from line 1006 */App.pickEmoji=(p,e)=>{document.getElementById(p+'-emoji').value=e;document.getElementById(p+'-emoji-preview').textContent=e;App.toggleEmojiPanel(p)};/* consolidated: removed legacy customEmoji from line 1006 *//* consolidated: removed legacy pickColor from line 1006 */
+App.pickEmoji=(p,e)=>{document.getElementById(p+'-emoji').value=e;document.getElementById(p+'-emoji-preview').textContent=e;App.toggleEmojiPanel(p)};
 App.render();
 })();
 
-/* V2.1.1 professional fix: CC reward detail, wallet drilldown, investment valuation */
+/* Wallet drilldown + investment valuation */
 ;(function(){
   const INVEST_TYPES = ['gold','crypto','fcd']
   const isInvest = w => w && INVEST_TYPES.includes(w.type)
@@ -681,12 +622,13 @@ App.render();
 
   Calc.getNetWorth = function(wallets) {
     let assets = 0, debt = 0
-    ;(wallets || []).forEach(w => {
+    ;(wallets || []).filter(w => !w?.excludeFromNetWorth).forEach(w => {
       const value = App._walletValueTHB ? App._walletValueTHB(w) : Number(w.balance || 0)
       if (value >= 0) assets += value
       else debt += Math.abs(value)
     })
-    return { assets, debt, net: assets - debt }
+    const cryptoValue = Number(App.getCryptoPortfolioSummary?.().totalValueTHB || 0)
+    return { assets: assets + cryptoValue, debt, net: assets + cryptoValue - debt }
   }
 
   Calc.getWalletGroups = function(wallets) {
@@ -702,8 +644,6 @@ App.render();
       netTotal: sum(assets) + sum(investments) - debt,
     }
   }
-
-  /* consolidated: removed legacy _walletCard from line 1048 */
 
   App._filterWalletTx = function(walletId) {
     const range = S.walletTxRange || 'all'
@@ -731,12 +671,6 @@ App.render();
     App.openWalletDetail(walletId)
   }
 
-  /* consolidated: removed legacy openWalletDetail from line 1103 */
-
-  /* consolidated: removed legacy _txDetailRowsHtml from line 1131 */
-
-  /* consolidated: removed legacy openTxDetailSub from line 1153 */
-
   App._bindTxRows = function(containerId) {
     const root = document.getElementById(containerId)
     if (!root) return
@@ -751,19 +685,12 @@ App.render();
     })
   }
 
-  /* consolidated: removed legacy openCCDetail from line 1178 */
-
-  /* consolidated: removed legacy openWalletForm from line 1208 */
-
-  /* consolidated: removed legacy saveWallet from line 1219 */
-
   App.render()
 })();
 
 /* ============================================================
-   V2.2 Professional UI/UX refresh
-   - Final safe overrides only. Keeps existing state/storage/handlers.
-   - Fixes edit-save flags, privacy display, wallet drilldown, and mobile UI.
+   Transactions + Shared Mobile UI
+   Add-tx flow / tx detail / wallet detail / sheet presentation
    ============================================================ */
 ;(function(){
   const INVEST_TYPES = ['gold','crypto','fcd']
@@ -791,7 +718,7 @@ App.render();
   App._esc = esc
   App._fmtMoney = fmt
   App._fmtSignedMoney = signedFmt
-  /* consolidated: removed legacy _walletTypeLabel from line 1269 */
+
   App._emptyState = function(icon, title, sub) {
     return `<div class="empty"><div class="empty-icon">${esc(icon)}</div><div class="empty-title">${esc(title)}</div>${sub ? `<div class="empty-sub">${esc(sub)}</div>` : ''}</div>`
   }
@@ -800,22 +727,12 @@ App.render();
     return `<div class="section-header"><h3>${esc(title)}</h3>${actionLabel ? `<button type="button" onclick="${action}">${esc(actionLabel)}</button>` : ''}</div>`
   }
 
-  /* consolidated: removed legacy renderDashboard from line 1278 */
-
-  /* consolidated: removed legacy _txRow from line 1361 */
-
-  /* consolidated: removed legacy _renderAddTxAmount from line 1393 */
-
-  /* consolidated: removed legacy _renderAddTxDetail from line 1405 */
-
   App._toggleTxFlag = function(key) {
     S.tx[key] = !S.tx[key]
     if (key === 'isInstallment' && !S.tx[key]) S.tx.installmentMonths = ''
-    if (key === 'isRecurring' && S.tx?.isRecurring) initRecurringDefaults()
+    if (key === 'isRecurring' && S.tx?.isRecurring) App._initRecurringLiteDefaults?.()
     App._renderAddTxDetail()
   }
-
-  /* consolidated: removed legacy openAddTx from line 1433 */
 
   App.openEditTx = function(id) {
     const tx = S.transactions.find(t => t.id === id)
@@ -839,12 +756,6 @@ App.render();
     App.openOverlay('overlay-add-tx')
     toast('คัดลอกรายการแล้ว แก้จำนวนเงินก่อนบันทึกได้', 'info')
   }
-
-  /* consolidated: removed legacy saveTx from line 1464 */
-
-  /* consolidated: removed legacy renderWallets from line 1509 */
-
-  /* consolidated: removed legacy _walletCard from line 1518 */
 
   App.openWalletDetail = function(id) {
     const w = S.wallets.find(x => x.id === id)
@@ -899,15 +810,12 @@ App.render();
     box.innerHTML = `${App._txDetailRowsHtml(tx)}<div class="tx-action-grid"><button class="btn btn-secondary" onclick="App.openEditTx('${esc(tx.id)}')">✏️ แก้ไข</button><button class="btn btn-secondary" onclick="App.openDuplicateTx('${esc(tx.id)}')">⧉ ทำซ้ำ</button></div><div style="margin-top:10px">${S.deleteConfirm ? `<button class="btn btn-danger" onclick="App.confirmDeleteTx()">ยืนยันการลบ</button><button class="btn btn-secondary mt-8" onclick="App._cancelDelete()">ยกเลิก</button>` : `<button class="btn btn-outline" onclick="App.deleteTx()">🗑 ลบรายการ</button>`}</div>`
   }
 
-  /* consolidated: removed legacy openCCDetail from line 1589 */
-
   App.render()
 })();
 
 /* ============================================================
-   V2.2 UI Style Overrides
-   Re-applies mobile-first presentation on top of v2-2 while
-   preserving existing app state, storage, calculations and handlers.
+   Add-Tx Presentation Layer
+   Amount keypad / detail step / recurring inline controls
    ============================================================ */
 ;(function uiStyleForV22(){
   const esc = App._esc
@@ -969,12 +877,10 @@ App.render();
     </div>`
   }
 
+  App._initRecurringDefaults = initRecurringDefaults
+  App._recurringInlineHtml = recurringInlineHtml
+
   const originalShowPage = App.showPage?.bind(App) || function(){}
-  /* consolidated: removed legacy showPage from line 1639 */
-
-  /* consolidated: removed legacy renderDashboard from line 1646 */
-
-  /* consolidated: removed legacy _txRow from line 1741 */
 
   App._renderAddTxAmount = function() {
     const title = S.txMode === 'edit' ? 'แก้ไขรายการ' : S.txMode === 'duplicate' ? 'ทำซ้ำรายการ' : 'เพิ่มรายการ'
@@ -1010,8 +916,6 @@ App.render();
     App._renderAddTxAmount()
   }
 
-  /* consolidated: removed legacy _renderAddTxDetail from line 1802 */
-
   App.openAddTx = function() {
     S.txMode = 'add'
     S.editingTxId = null
@@ -1024,11 +928,10 @@ App.render();
 })();
 
 /* ============================================================
-   V2.2.1 Chrome sync fix
-   Ensures the dashboard FAB visibility always matches the active page,
-   even after render overrides or future patches.
+   Mobile shell sync
+   Keep FAB visibility and body page classes aligned
    ============================================================ */
-;(function v221ChromeSync(){
+;(function(){
   const syncChrome = () => {
     const isDashboard = S.page === 'dashboard'
     const allowFab = isDashboard || S.page === 'transactions'
@@ -1037,10 +940,6 @@ App.render();
     document.body.classList.toggle('is-dashboard', isDashboard)
     document.body.classList.toggle('is-transactions', S.page === 'transactions')
   }
-
-  /* consolidated: removed legacy showPage from line 1852 */
-
-  /* consolidated: removed legacy render from line 1858 */
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', syncChrome, { once: true })
@@ -1052,11 +951,10 @@ App.render();
 })();
 
 /* ============================================================
-   V2.2.2 Final mobile chrome guard
-   Keeps viewport height, 5-tab nav, and dashboard-only FAB stable
-   without touching transaction/storage/sync logic.
+   Viewport / nav stability
+   Keep app height, bottom nav, and FAB stable on mobile
    ============================================================ */
-;(function v222FinalMobileChrome(){
+;(function(){
   const root = document.documentElement
   const isStandaloneMode = () => !!(
     window.navigator?.standalone === true ||
@@ -1067,9 +965,7 @@ App.render();
     const screenH = Math.round(window.screen?.height || 0)
     return Math.max(layoutH, screenH)
   }
-  // Keep the app height stable when the iOS keyboard opens.
-  // visualViewport.height shrinks above the keyboard; using it for --app-height
-  // makes bottom/sticky controls jump into the middle of the screen.
+  // Keep app height stable while the iOS keyboard is open.
   let stableAppHeight = Math.round(isStandaloneMode() ? getStandaloneHeight() : (window.innerHeight || document.documentElement.clientHeight || 0))
   const isFormControl = el => !!el && el.matches?.('input, textarea, select, [contenteditable="true"]')
   const isKeyboardLikelyOpen = () => {
@@ -1114,10 +1010,6 @@ App.render();
     }
   }
 
-  /* consolidated: removed legacy showPage from line 1906 */
-
-  /* consolidated: removed legacy render from line 1913 */
-
   setAppHeight()
   syncChrome()
   syncStandaloneMode()
@@ -1134,12 +1026,10 @@ App.render();
 })();
 
 /* ============================================================
-   V2.2.3 Readability + Interaction Fixes
-   Fixes: number comma format, wallet edit overlay stack, visible wallet
-   cards, budget tabs, and category color picker. Presentation only;
-   storage/sync/calculation structures are preserved.
+   Add-tx interaction + editor polish
+   Number formatting, wallet editor stacking, budget tabs, color pickers
    ============================================================ */
-;(function v223ReadabilityInteractionFixes(){
+;(function(){
   const esc = App._esc
   const fmt = n => moneyFmt(Number(n) || 0)
   const numFmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
@@ -1153,10 +1043,7 @@ App.render();
     return Number(w.balance || 0)
   }
 
-  // Wallet cards: use CSS variables so final CSS can keep gradient cards visible.
-  /* consolidated: removed legacy _walletCard from line 1952 */
-
-  // Budget screen: split into two tabs, preserving existing budget arrays.
+  // Budget screen with separate income/expense tabs.
   App.openBudgetScreen = function(kind = S.budgetTab || 'expense') {
     S.budgetTab = kind === 'income' ? 'income' : 'expense'
     const active = S.budgetTab
@@ -1204,25 +1091,15 @@ App.render();
     toast(`บันทึกงบ${active === 'income' ? 'รายรับ' : 'รายจ่าย'}แล้ว`, 'success')
   }
 
-  // Category color: add swatches + a larger native picker for reliable mobile tap.
-  /* consolidated: removed legacy setCategoryColor from line 2021 */
-
-  /* consolidated: removed legacy openCategoryForm from line 2027 */
-
-  // Make sure overlay sheets can sit above a currently open sub-screen.
-  /* consolidated: removed legacy openOverlay from line 2042 */
-
   // Re-render current page so patched wallet cards are applied immediately.
   try { App.render() } catch (_) {}
 })();
 
 /* ============================================================
-   V2.2.5 Practical UX polish + data fixes
-   Scope: category/merchant editors, CC benefit tabs, wallet cards,
-   Aurora gold THB pricing, transaction list UI, add-tx category picker,
-   and rule-based AI-style financial insights. No storage schema rewrite.
+   Category / merchant / dashboard polish
+   Editors, wallet cards, tx list UI, advisor helpers
    ============================================================ */
-;(function v225PracticalUxFixes(){
+;(function(){
   const esc = App._esc
   const fmt = n => moneyFmt(Number(n) || 0)
   const numFmt = (n, digits = 2) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: digits })
@@ -1279,35 +1156,6 @@ App.render();
     return { cat, wallet, toWallet, title, icon, meta }
   }
 
-  function fullMonthLabel(ym) {
-    if (!ym) return ''
-    const [y, m] = ym.split('-').map(Number)
-    const names = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
-    return `${names[m - 1]} ${y}`
-  }
-
-  function groupDateLabel(dateStr) {
-    if (!dateStr) return ''
-    const base = Calc.shortDate(dateStr)
-    if (dateStr === TODAY) return `วันนี้ ${base}`
-    const y = new Date(); y.setDate(y.getDate() - 1)
-    if (dateStr === y.toISOString().slice(0, 10)) return `เมื่อวาน ${base}`
-    return base
-  }
-
-  function filterTransactionsForList() {
-    const q = (S.txSearch || '').toLowerCase()
-    return S.transactions.filter(t => {
-      if (!String(t.date || '').startsWith(S.txMonth)) return false
-      if (S.txType !== 'all' && t.type !== S.txType) return false
-      if (!q) return true
-      const cat = App._findCat?.(t.categoryId)
-      const wallet = S.wallets.find(w => w.id === t.walletId)
-      const toWallet = S.wallets.find(w => w.id === t.toWalletId)
-      return [t.merchant, t.note, cat?.label, wallet?.name, toWallet?.name].some(v => String(v || '').toLowerCase().includes(q))
-    }).sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
-  }
-
   function renderEditorEmoji(prefix, current, targetId) {
     return `<button type="button" class="emoji-current" onclick="App.toggleEmojiPanel('${prefix}')"><span id="${prefix}-emoji-preview">${esc(current)}</span><small>แตะเพื่อเปลี่ยน</small></button>
       <input type="hidden" id="${targetId}" value="${esc(current)}">
@@ -1326,7 +1174,7 @@ App.render();
     if (!panel) return
     panel.style.display = panel.style.display === 'grid' ? 'none' : 'grid'
   }
-  /* consolidated: removed legacy pickEmoji from line 2144 */
+
   App.customEmoji = function(prefix) {
     const v = prompt('ใส่อีโมจิที่ต้องการ')
     if (v && v.trim()) App.pickEmoji(prefix, v.trim().slice(0, 4))
@@ -1364,26 +1212,6 @@ App.render();
       </div>`)
   }
 
-  /* consolidated: removed legacy openCCBenefitScreen from line 2189 */
-
-  /* consolidated: removed legacy saveCCBenefit from line 2203 */
-
-  /* consolidated: removed legacy _parseAuroraGold from line 2232 */
-
-  /* consolidated: removed legacy refreshMarketPrices from line 2249 */
-
-  /* consolidated: removed legacy _investmentUnitPriceTHB from line 2268 */
-  /* consolidated: removed legacy _investmentValueTHB from line 2283 */
-  /* consolidated: removed legacy _marketText from line 2284 */
-
-  /* consolidated: removed legacy _walletCard from line 2292 */
-
-  /* consolidated: removed legacy renderWallets from line 2313 */
-
-  /* consolidated: removed legacy openWalletForm from line 2325 */
-  /* consolidated: removed legacy _selectWalletType from line 2355 */
-  /* consolidated: removed legacy saveWallet from line 2363 */
-
   App._txRow = function(tx) {
     const v = txVisual(tx)
     const bg = v.cat?.color ? `${v.cat.color}16` : tx.type === 'transfer' ? 'rgba(37,99,235,.10)' : 'var(--elevated)'
@@ -1394,13 +1222,6 @@ App.render();
     </div>`
   }
 
-  /* consolidated: removed legacy renderTransactions from line 2380 */
-
-  /* consolidated: removed legacy renderTransactionsList from line 2395 */
-
-  /* consolidated: removed legacy setTxMonth from line 2419 */
-  /* consolidated: removed legacy setTxType from line 2420 */
-
   function getFrequentCategories(type) {
     const cats = (S.categories[type] || []).filter(c => !c.archived)
     const usage = {}
@@ -1409,10 +1230,10 @@ App.render();
   }
   App.showAllTxCategories = function() { S.txShowAllCats = true; App._renderAddTxDetail() }
   App.hideAllTxCategories = function() { S.txShowAllCats = false; App._renderAddTxDetail() }
-  /* consolidated: removed legacy _setTxType from line 2431 */
+
   App._setTxRecurringType = function(type) {
     S.tx.recurrenceType = type === 'days' ? 'days' : 'monthly'
-    initRecurringDefaults()
+    App._initRecurringDefaults?.()
     App._renderAddTxDetail?.()
   }
   App._selectCat = function(id) {
@@ -1448,7 +1269,7 @@ App.render();
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);App._renderAddTxDetail()">${walletOptions}</select></div>
           ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value);App._showMerchantDropdown?.(this.value)" onfocus="App._showMerchantDropdown?.(this.value)" onblur="setTimeout(()=>document.getElementById('mt-merchant-dropdown')?.classList.add('hidden'),180)"></div>`}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value);App._renderAddTxDetail()"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
-          ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? recurringInlineHtml() : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
+          ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? (App._recurringInlineHtml?.() || '') : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
           ${(() => {
             try {
               if (type !== 'expense' || !S.tx.walletId) return ''
@@ -1522,16 +1343,14 @@ App.render();
     return insights.slice(0, 4)
   }
 
-  /* consolidated: removed legacy renderReports from line 2484 */
-
   try { if (S.page === 'transactions') App.renderTransactions(); else App.render?.() } catch (_) {}
 })();
 
 /* ============================================================
-   V2.2.6 Investment, Aurora gold sync, and circular color controls
-   Scope: presentation/market-price robustness only. Keeps storage/sync logic intact.
+   Investment pricing + gold sync
+   Presentation and market-price robustness
    ============================================================ */
-;(function v226InvestmentGoldAndColorFixes(){
+;(function(){
   const esc = App._esc
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const numFmt = (n, digits = 4) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: digits })
@@ -1598,12 +1417,6 @@ App.render();
     return null
   }
 
-  /* consolidated: removed legacy refreshMarketPrices from line 2566 */
-
-  /* consolidated: removed legacy _investmentUnitPriceTHB from line 2602 */
-  /* consolidated: removed legacy _investmentValueTHB from line 2617 */
-  /* consolidated: removed legacy _marketText from line 2618 */
-
   function syncInvestmentWalletForm(type = document.getElementById('wf-type')?.value) {
     const isInv = isInvestType(type)
     const balanceGroup = document.getElementById('wf-balance')?.closest('.form-group')
@@ -1656,24 +1469,14 @@ App.render();
     priceBox.innerHTML = `<div><strong>ราคาจริง</strong><span>${esc(marketSourceLabel(type))}${unitPrice ? ` · ${fmt(unitPrice)}/${esc(assetUnitLabel(type))}` : ' · ยังไม่ sync'}</span></div><a href="${esc(marketUrlFor(type, w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a>`
   }
 
-  /* consolidated: removed legacy openWalletForm from line 2679 */
-  /* consolidated: removed legacy _selectWalletType from line 2684 */
-  /* consolidated: removed legacy saveWallet from line 2689 */
-
-  /* consolidated: removed legacy _walletCard from line 2697 */
-
-  /* consolidated: removed legacy openWalletDetail from line 2714 */
-
   try { App.render?.() } catch (_) {}
 })()
 
 /* ============================================================
-   V2.2.7 Reliable Aurora gold sync bridge
-   Why: Aurora blocks normal browser cross-origin fetch from GitHub Pages.
-   This layer supports a user-owned proxy endpoint (recommended) via JSONP,
-   then falls back to public proxies only as best-effort.
+   Aurora gold bridge
+   Proxy / JSONP bridge for browser-safe gold-price access
    ============================================================ */
-;(function v227ReliableAuroraGoldSync(){
+;(function(){
   const AURORA_GOLD_URL = 'https://www.aurora.co.th/price/gold_pricelist'
   const toastSafe = (msg, type='info') => { try { toast(msg, type) } catch { console.log(msg) } }
   const toNumber = (s) => Number(String(s || '').replace(/,/g, '').replace(/[^d.-]/g, '')) || 0
@@ -1730,24 +1533,13 @@ App.render();
     })
   }
 
-  App._getGoldProxyUrl = function(){
-    return String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '').trim()
-  }
-
-  /* consolidated: removed legacy _fetchAuroraGoldViaProxy from line 2808 */
-
-  /* consolidated: removed legacy refreshMarketPrices from line 2833 */
-
-  /* consolidated: removed legacy setGoldProxyUrl from line 2873 */
 })();
 
 /* ============================================================
-   V2.2.8 Thai Gold / Gold Traders source switch
-   Why: Aurora URL cannot be fetched reliably from Apps Script.
-   Uses Gold Traders Association-compatible data via a JSON API/proxy.
-   Keeps legacy auroraGold key populated for backward compatibility.
+   Gold source switch
+   Gold Traders / Thai gold API normalization with legacy compatibility
    ============================================================ */
-;(function v228ThaiGoldSourceSwitch(){
+;(function(){
   const GTA_URL = 'https://classic.goldtraders.or.th/'
   const THAI_GOLD_API_URL = 'https://api.chnwt.dev/thai-gold-api/latest'
   const toastSafe = (msg, type='info') => { try { toast(msg, type) } catch { console.log(msg) } }
@@ -1794,19 +1586,6 @@ App.render();
     }
   }
 
-  /* consolidated: removed legacy _normaliseThaiGoldPayload from line 2935 */
-
-  /* consolidated: removed legacy _fetchThaiGoldViaSource from line 2937 */
-
-  // Backward compatibility: older code still calls this method name.
-  /* consolidated: removed legacy _fetchAuroraGoldViaProxy from line 2973 */
-
-  /* consolidated: removed legacy refreshMarketPrices from line 2975 */
-
-  /* consolidated: removed legacy _investmentUnitPriceTHB from line 3014 */
-
-  /* consolidated: removed legacy _marketText from line 3031 */
-
   function isInvestType(type) { return ['gold','crypto','fcd'].includes(type) }
   function assetUnitLabel(w) {
     if (w?.type === 'gold') return 'บาททอง'
@@ -1820,25 +1599,13 @@ App.render();
     return '#'
   }
 
-  /* consolidated: removed legacy _walletCard from line 3056 */
-
-  /* consolidated: removed legacy openWalletDetail from line 3072 */
-
-  App.setGoldProxyUrl = function(url){
-    const value = String(url || '').trim()
-    if (value) localStorage.setItem('MT_GOLD_PROXY_URL', value)
-    else localStorage.removeItem('MT_GOLD_PROXY_URL')
-    window.MT_GOLD_PROXY_URL = value
-    toastSafe(value ? 'บันทึก Gold Proxy URL แล้ว' : 'ลบ Gold Proxy URL แล้ว', value ? 'success' : 'info')
-  }
-
   try { App.render?.() } catch (_) {}
 })();
 
 /* ============================================================
-   V2.2.9 Wallet rollback + Gold Traders API hardening
+   Wallet market rendering + Gold Traders hardening
    ============================================================ */
-;(function v229WalletRollbackGoldApi(){
+;(function(){
   const MONEY = n => (typeof fmtMoney === 'function' ? fmtMoney(n) : Calc.fmt(Number(n)||0));
   const NUM = (n, digits = 4) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: digits });
   const ESC = v => (typeof esc === 'function' ? esc(v) : String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])));
@@ -1852,14 +1619,6 @@ App.render();
   const goldData = () => S.marketPrices?.thaiGold || S.marketPrices?.auroraGold || null;
   App._walletTypeLabel = App._walletTypeLabel || walletTypeLabel;
 
-  /* consolidated: removed legacy _investmentUnitPriceTHB from line 3125 */
-  /* consolidated: removed legacy _investmentValueTHB from line 3133 */
-  App._marketText = function(w){
-    if (w?.type === 'gold') { const g = goldData(); return g?.jewelryBuy ? `สมาคมค้าทองคำ · ทองรูปพรรณรับซื้อ ${MONEY(g.jewelryBuy)}/บาททอง` : 'ยังไม่ Sync ราคาทองสมาคมค้าทองคำ'; }
-    if (w?.type === 'crypto') return 'CoinGecko';
-    if (w?.type === 'fcd') return 'Frankfurter FX';
-    return '';
-  };
   function netWorthGroups(){
     const wallets = S.wallets || [];
     const assets = wallets.filter(w => ['bank','cash','ewallet','saving'].includes(w.type));
@@ -1871,12 +1630,6 @@ App.render();
     return { assets, liabilities, investments, assetTotal: sumAssets + sumInvest, liabilityTotal: debt, netTotal: sumAssets + sumInvest - debt };
   }
   Calc.getWalletGroups = () => netWorthGroups();
-
-  /* consolidated: removed legacy _walletCard from line 3152 */
-
-  /* consolidated: removed legacy renderWallets from line 3167 */
-
-  /* consolidated: removed legacy openWalletDetail from line 3179 */
 
   function normaliseGoldPayload(raw){
     let json = raw; if (typeof raw === 'string') { const trimmed = raw.trim(); try { json = JSON.parse(trimmed); } catch { const m = trimmed.match(/^[^(]+\((.*)\);?$/s); if (m) json = JSON.parse(m[1]); else return null; } }
@@ -1893,56 +1646,41 @@ App.render();
     return null;
   };
   App._fetchAuroraGoldViaProxy = App._fetchThaiGoldViaSource;
-  /* consolidated: removed legacy refreshMarketPrices from line 3201 */
+
   try { if (S.page === 'wallets') App.renderWallets(); } catch (err) { console.warn('wallet rollback render failed', err); }
 })();
 
 /* ============================================================
-   V2.2-safety-ux: Targeted bug fixes & UX improvements
-   All changes are additive patches — nothing removed, no data
-   model changes.
+   Safety + UX fixes
+   Small additive fixes without schema changes
    ============================================================ */
-;(function v22SafetyUX() {
+;(function() {
 
-  // ── P0: CC Payment — check source wallet has enough balance ──
-  // Original saveCCPay deducts from source without any balance check,
-  // silently sending it deeply negative.
+  // ── P0: CC payment source-balance check ──
   const _origSaveCCPay = App.saveCCPay?.bind(App) || function(){}
-  /* consolidated: removed legacy saveCCPay from line 3223 */
 
-  // ── P1: Search debounce — 250ms to prevent re-render on every keystroke ──
-  // The V2.2 renderTransactions sets oninput without debounce.
-  // We re-attach with debounce each time the transactions page renders.
+  // ── P1: Search debounce ──
   let _txSearchTimer = null
   const _origRenderTx = App.renderTransactions?.bind(App) || function(){}
-  /* consolidated: removed legacy renderTransactions from line 3241 */
 
   // ── P1: FAB visible on Transactions tab ──
-  // V2.2.2 final guard hides FAB on all non-dashboard pages.
-  // We wrap showPage (outer-most) so our change runs after syncChrome.
   const _origShowPage = App.showPage?.bind(App) || function(){}
-  /* consolidated: removed legacy showPage from line 3259 */
 
   const _origRender = App.render?.bind(App) || function(){}
-  /* consolidated: removed legacy render from line 3265 */
 
   function _syncFab(page) {
     const fab = document.getElementById('fab')
     if (!fab) return
     const visible = page === 'dashboard' || page === 'transactions'
-    // Toggle body class so the CSS rule body:not(.is-transactions) #fab
-    // in V2.2.1 layer also allows the FAB through on the transactions page
+    // Keep the page class in sync so FAB visibility follows the current tab
     document.body.classList.toggle('is-transactions', page === 'transactions')
     fab.classList.toggle('hidden', !visible)
     fab.setAttribute('aria-hidden', String(!visible))
     fab.tabIndex = visible ? 0 : -1
   }
 
-  // ── P1: Merchant autocomplete (datalist) in add-tx form ──
-  // After each _renderAddTxDetail call, inject a <datalist> pointing at
-  // the user's saved merchants so the browser shows suggestions.
+  // ── P1: Merchant autocomplete in add-tx ──
   const _origDetailRender = App._renderAddTxDetail?.bind(App) || function(){}
-  /* consolidated: removed legacy _renderAddTxDetail from line 3287 */
 
   function _injectMerchantDatalist() {
     const input = document.getElementById('tx-merchant')
@@ -1960,7 +1698,7 @@ App.render();
     input.setAttribute('list', listId)
   }
 
-  // ── P2: getDueDate — local timezone instead of UTC ──
+  // ── P2: getDueDate in local timezone ──
   // Original uses toISOString() which is UTC; in UTC+7 an 11 PM local
   // calculation shifts the due date to the next day.
   Calc.getDueDate = function(dueDay) {
@@ -1982,6 +1720,11 @@ App.render();
 })();
 
 /* ============================================================
+   Dashboard / More / Utility Screens
+   Dashboard cards, recurring alerts, CSV export, confirm dialog
+   ============================================================ */
+
+/* ============================================================
    V2.3 Features
    1. Recurring auto-post alert on Dashboard
    2. Replace confirm() dialogs with inline confirmation
@@ -1990,7 +1733,7 @@ App.render();
    5. Dashboard month switcher
    6. Wire up Thai gold proxy URL setting in More page
    ============================================================ */
-;(function v23Features() {
+;(function() {
 
   // ── Shared helpers ──────────────────────────────────────────
   const ESC = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
@@ -2020,12 +1763,6 @@ App.render();
     }
   }
 
-  function ensureMinimumWallet() {
-    if (!Array.isArray(S.wallets)) S.wallets = []
-    if (S.wallets.length === 0) S.wallets.push(createStarterWallet())
-    return S.wallets
-  }
-
   function cleanResetState() {
     return {
       transactions: [],
@@ -2040,8 +1777,6 @@ App.render();
       marketPrices: {},
     }
   }
-
-  /* consolidated: removed legacy _ensureV2State from line 3390 */
 
   // ── 1. Inline confirm dialog — replaces all 6 browser confirm() calls ──
   App.showConfirm = function({ title = 'ยืนยัน', body = '', confirmLabel = 'ยืนยัน', danger = false, onConfirm, onCancel } = {}) {
@@ -2064,8 +1799,6 @@ App.render();
     el.addEventListener('click', e => { if (e.target === el) { el.remove(); onCancel?.() } })
   }
 
-  /* consolidated: removed legacy importData from line 3416 */
-
   App.resetData = function() {
     App.showConfirm({
       title: 'รีเซ็ตข้อมูลทั้งหมด',
@@ -2080,8 +1813,6 @@ App.render();
     })
   }
 
-  /* consolidated: removed legacy deleteWallet from line 3457 */
-
   App.deleteRecurring = function(id) {
     App.showConfirm({
       title: 'ลบรายการประจำ',
@@ -2092,10 +1823,6 @@ App.render();
       }
     })
   }
-
-  /* consolidated: removed legacy deleteCategory from line 3490 */
-
-  /* consolidated: removed legacy deleteMerchant from line 3502 */
 
   // ── 2. Export CSV ────────────────────────────────────────────
   App.exportCSV = function() {
@@ -2145,8 +1872,6 @@ App.render();
       return daysSince >= (r.everyDays || 30)
     })
   }
-
-  /* consolidated: removed legacy postRecurringNow from line 3561 */
 
   // ── 4. Dashboard: month switcher + recurring alerts + daily budget ──
   S.dashMonth = S.dashMonth || getTHISMONTH()
@@ -2255,7 +1980,7 @@ Calc.getUsableMoney = function(wallets) {
           <div class="mt-subtitle">${ESC(Calc.monthLabel(dm))}</div>
         </div>
         <div class="mt-topbar-actions">
-          <button class="mt-hide-btn" onclick="App.refreshDashboard()">↻ รีเฟรช</button>
+          <button class="mt-hide-btn" onclick="App.refreshDashboard()">↻</button>
           <button class="mt-hide-btn" onclick="App.toggleHideMoney()">${S.settings.hideMoney ? '👁 แสดงตัวเลข' : '🙈 ซ่อนตัวเลข'}</button>
         </div>
       </div>
@@ -2377,7 +2102,6 @@ Calc.getUsableMoney = function(wallets) {
   }
 
   // ── 5. More page: CSV export row + Thai gold proxy setting ──
-  /* consolidated: removed legacy renderMore from line 3771 */
 
   App.saveGoldProxyUrl = function() {
     const url = (document.getElementById('gold-proxy-input')?.value || '').trim()
@@ -2394,12 +2118,14 @@ Calc.getUsableMoney = function(wallets) {
 })();
 
 /* ============================================================
-   V2.4 Wallet + Reports polish
-   Wallet: edit button top-right, remove ดูรายการ/market-link/
-   market-note, show real THB value for invest wallets.
-   Reports: single AI insights section + analyzing toast.
+   Wallets / Reports
+   Wallet cards, wallet summaries, reports presentation polish
    ============================================================ */
-;(function v24WalletReportsPolish() {
+
+/* ============================================================
+   Wallet cards + reports polish
+   ============================================================ */
+;(function() {
   const ESC = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
   const MONEY = n => moneyFmt(Number(n) || 0)
   const NUM = (n, d = 4) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: d })
@@ -2411,7 +2137,7 @@ Calc.getUsableMoney = function(wallets) {
     return w.symbol || 'หน่วย'
   }
 
-  // ── Override _walletCard ──────────────────────────────────────
+  // ── Wallet card rendering ─────────────────────────────────────
   App._walletCard = function(w) {
     const isCC = w.type === 'credit'
     const invest = isInvest(w)
@@ -2463,7 +2189,7 @@ Calc.getUsableMoney = function(wallets) {
       </div>`
     }
 
-    // Regular asset wallet — card click opens transaction history
+    // Regular asset wallet
     return `<div class="wallet-card wallet-card-colored" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="App.openWalletDetail('${ESC(w.id)}')">
       <div class="wc-header">
         <div><div class="wc-name">${ESC(name)}</div><div class="wc-type">${ESC(typeLabel)}</div></div>
@@ -2473,12 +2199,6 @@ Calc.getUsableMoney = function(wallets) {
     </div>`
   }
 
-  // ── Strip wallet-market-note after render ────────────────────
-  /* consolidated: removed legacy renderWallets from line 3899 */
-
-  // ── Reports: single AI insights + "analyzing" toast ──────────
-  /* consolidated: removed legacy renderReports from line 3906 */
-
   // Apply immediately
   try { if (S.page === 'wallets') App.renderWallets() } catch (_) {}
   try { if (S.page === 'reports') App.renderReports() } catch (_) {}
@@ -2486,12 +2206,15 @@ Calc.getUsableMoney = function(wallets) {
 })();
 
 /* ============================================================
-   V2.4.1 Credit card pay button placement guard
-   Ensures legacy wallet-card renderers cannot leave “ชำระ” in
-   the bottom action row. The visible target is header actions:
-   [ชำระ] [แก้ไข].
+   Credit-Card Wallet Presentation
+   Credit card wallet-card safeguards before later credit modules
    ============================================================ */
-;(function v241CreditPayPlacementGuard() {
+
+/* ============================================================
+   Credit-card action placement guard
+   Keep pay/edit actions in the wallet-card header
+   ============================================================ */
+;(function() {
   function isPayButton(btn) {
     return btn && (btn.textContent || '').trim() === 'ชำระ'
   }
@@ -2536,7 +2259,7 @@ Calc.getUsableMoney = function(wallets) {
 
   const _renderWallets = App.renderWallets?.bind(App)
   if (_renderWallets) {
-    /* consolidated: removed legacy renderWallets from line 3996 */
+
   }
 
   try { if (S.page === 'wallets') ensureCreditPayPlacement() } catch (_) {}
@@ -2548,7 +2271,7 @@ Calc.getUsableMoney = function(wallets) {
    - Keep the existing gold/crypto sync behavior.
    - Revalue investment wallets that have units after fresh prices arrive.
    ============================================================ */
-;(function v242FcdFxSyncPolish() {
+;(function() {
   const COMMON_FCD_QUOTES = ['THB', 'EUR', 'JPY', 'GBP', 'CNY', 'SGD', 'HKD', 'AUD', 'NZD', 'CAD', 'CHF'];
   const cleanCurrency = value => String(value || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : `฿${(Number(n) || 0).toLocaleString('en-US')}`);
@@ -2661,12 +2384,6 @@ Calc.getUsableMoney = function(wallets) {
     });
   }
 
-  /* consolidated: removed legacy _investmentUnitPriceTHB from line 4125 */
-
-  /* consolidated: removed legacy _marketText from line 4134 */
-
-  /* consolidated: removed legacy refreshMarketPrices from line 4143 */
-
   try { if (S.page === 'wallets') App.renderWallets?.(); } catch (_) {}
 })();
 
@@ -2675,7 +2392,7 @@ Calc.getUsableMoney = function(wallets) {
    search · amount filter · installment auto-gen · cashback
    auto-credit · settings restore on import · wallet spend summary
    ============================================================ */
-;(function v30AllPhases() {
+;(function() {
   const esc = App._esc
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
 
@@ -2700,10 +2417,8 @@ Calc.getUsableMoney = function(wallets) {
   }
 
   // ── 2. Merchant datalist autocomplete ────────────────────────
-  /* consolidated: removed legacy _renderAddTxDetail from line 4226 */
 
   // ── 6. Wallet monthly spend summary ──────────────────────────
-  /* consolidated: removed legacy openWalletDetail from line 4241 */
 
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
 })();
@@ -2713,7 +2428,7 @@ Calc.getUsableMoney = function(wallets) {
    1. Balance reconciliation + repair tool (openBalanceRepairScreen)
    2. deleteMerchant with showConfirm (replaces base confirm())
    ============================================================ */
-;(function v31FinancialSafety() {
+;(function() {
   const esc = App._esc
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const TX_TYPE_LABELS = { income:'รายรับ', expense:'รายจ่าย', transfer:'โอนเงิน', cc_payment:'ชำระบัตร' }
@@ -2861,10 +2576,7 @@ Calc.getUsableMoney = function(wallets) {
     return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   }
 
-  function getDropdown() { return document.getElementById('mt-merchant-dropdown') }
-
   // ── Override _renderAddTxDetail to clean up datalist/dropdown leftovers ──
-  /* consolidated: removed legacy _renderAddTxDetail from line 4433 */
 
   // Re-apply to current render if add-tx sheet is open
   try {
@@ -2873,14 +2585,10 @@ Calc.getUsableMoney = function(wallets) {
 })();
 
 /* ============================================================
-   V4.0 Roadmap Phases 1-5 implementation
-   - Phase 1: ledger recalculation, backup/restore, validation, local-sync status
-   - Phase 2: credit statement center + reward ledger, no auto-cashback posting
-   - Phase 3: installment groups + recurring due schedule
-   - Phase 4: spending vs cash-flow reports + net-worth snapshots
-   - Phase 5: investment buy/sell/adjust + portfolio status
+   Ledger / validation / recurring / installments foundation
+   Recalculation, backup state, reports helpers, investment tx flows
    ============================================================ */
-;(function v40RoadmapPhases(){
+;(function(){
   const VERSION = '4.0-roadmap-phases'
   const INVEST_TYPES = new Set(['gold','crypto','fcd'])
   const CASH_TYPES = new Set(['bank','cash','ewallet','saving','credit'])
@@ -2913,11 +2621,8 @@ Calc.getUsableMoney = function(wallets) {
   function catById(id) { return App._findCat?.(id) || null }
   function walletById(id) { return (S.wallets || []).find(w => w.id === id) || null }
   function isInvestWallet(w) { return INVEST_TYPES.has(w?.type) }
-  function isCashWallet(w) { return CASH_TYPES.has(w?.type) && !isInvestWallet(w) }
-
-  // ── Extra persisted state not covered by older Storage keys ────────────────
+  // ── Extra persisted state outside early Storage keys ───────
   function loadJSON(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback } catch { return fallback } }
-  function saveJSON(key, value) { try { localStorage.setItem(key, JSON.stringify(value)) } catch (_) {} }
 
   function ensureV4State() {
     S.settings ||= {}
@@ -2936,18 +2641,14 @@ Calc.getUsableMoney = function(wallets) {
 
   ensureV4State()
 
-  const basePersist = typeof persist === 'function' ? persist : null
-  persist = function v40Persist() {
+  App._beforePersistV40 = function() {
     ensureV4State()
     try { App.recalculateWalletBalances?.({ save:false, recordSnapshot:false }) } catch (_) {}
     S.settings.storageMeta.lastSavedAt = localNow()
     S.settings.storageMeta.storageMode = 'local-only'
-    if (basePersist) basePersist()
-    else Storage.saveAll(S)
-    // rewardLedger / netWorthSnapshots / investmentSnapshots now saved by Storage.saveAll
   }
 
-  // ── Phase 1: Ledger balance source of truth ────────────────────────────────
+  // ── Ledger balance source of truth ──────────────────────────
   App._ledgerFlows = function() {
     const cash = {}, units = {}
     ;(S.transactions || []).forEach(tx => {
@@ -3017,11 +2718,8 @@ Calc.getUsableMoney = function(wallets) {
   App.recalculateWalletBalances({ save:false, recordSnapshot:true })
 
   const baseRender = App.render?.bind(App)
-  /* consolidated: removed legacy render from line 4612 */
 
-  // ── Phase 1: validation / import/export / backup status ───────────────────
-  // V4 validateTransactionDraft — superseded by V5 version; kept for reference only.
-  // The active validator is App.validateTransactionDraft defined in the V5 block.
+  // ── Validation / import / backup status ─────────────────────
 
   App._rewardEstimateForTx = function(tx) {
     const card = walletById(tx.walletId)
@@ -3060,63 +2758,100 @@ Calc.getUsableMoney = function(wallets) {
     return tx
   }
 
-  /* AUTHORITATIVE base — V6.5 (v65SaveTx) wraps this via prevSaveTx */
-  App.saveTx = function v40SaveTx() {
+  App.saveTx = function() {
+    const beforeTxIds = new Set((S.transactions || []).map(t => t.id))
+    const beforeRecIds = new Set((S.recurring || []).map(r => r.id))
     const isEdit = S.txMode === 'edit' && !!S.editingTxId
     const draft = { ...S.tx, amount:Number(S.tx.amount || 0) }
-    const err = App.validateTransactionDraft(draft, { isEdit, editingTxId: S.editingTxId })
-    if (err) { toast(err, 'error'); return }
+    const modeBefore = S.txMode
+    if (draft.isRecurring) {
+      App._initRecurringLiteDefaults?.()
+      Object.assign(draft, {
+        recurrenceType: S.tx.recurrenceType,
+        recurringDayOfMonth: S.tx.recurringDayOfMonth,
+        durationMonths: S.tx.durationMonths,
+        everyDays: S.tx.everyDays,
+      })
+    }
+    try {
+      const err = App.validateTransactionDraft(draft, { isEdit, editingTxId: S.editingTxId })
+      if (err) { toast(err, 'error'); return }
 
-    const months = parseInt(S.tx.installmentMonths || 0)
-    if (!isEdit && S.tx.type === 'expense' && S.tx.isInstallment && months >= 2) {
-      const total = Number(S.tx.amount || 0)
-      const base = Math.floor((total / months) * 100) / 100
-      let allocated = 0
-      const groupId = Calc.genId()
-      const baseDate = S.tx.date || today()
-      const txs = []
-      for (let i = 0; i < months; i++) {
-        const amount = i === months - 1 ? Math.round((total - allocated) * 100) / 100 : base
-        allocated += amount
-        const tx = cleanTxFromDraft(Calc.genId())
-        Object.assign(tx, {
-          amount,
-          date: addMonths(baseDate, i),
-          installmentGroupId: groupId,
-          installmentNo: i + 1,
-          installmentMonths: months,
-          installmentTotalAmount: total,
-          scheduled: addMonths(baseDate, i) > today(),
-        })
-        const reward = App._rewardEstimateForTx(tx)
-        if (reward) tx.rewardEstimate = reward
-        txs.push(tx)
+      const months = parseInt(S.tx.installmentMonths || 0)
+      if (!isEdit && S.tx.type === 'expense' && S.tx.isInstallment && months >= 2) {
+        const total = Number(S.tx.amount || 0)
+        const base = Math.floor((total / months) * 100) / 100
+        let allocated = 0
+        const groupId = Calc.genId()
+        const baseDate = S.tx.date || today()
+        const txs = []
+        for (let i = 0; i < months; i++) {
+          const amount = i === months - 1 ? Math.round((total - allocated) * 100) / 100 : base
+          allocated += amount
+          const tx = cleanTxFromDraft(Calc.genId())
+          Object.assign(tx, {
+            amount,
+            date: addMonths(baseDate, i),
+            installmentGroupId: groupId,
+            installmentNo: i + 1,
+            installmentMonths: months,
+            installmentTotalAmount: total,
+            scheduled: addMonths(baseDate, i) > today(),
+          })
+          const reward = App._rewardEstimateForTx(tx)
+          if (reward) tx.rewardEstimate = reward
+          txs.push(tx)
+        }
+        S.transactions.unshift(...txs)
+        App._registerMerchantFromTx?.(txs[0])
+        App.recalculateWalletBalances({ save:false, recordSnapshot:true })
+        persist(); App.closeOverlay('overlay-add-tx')
+        if (S.txMode === 'add') App.showPage('transactions')
+        else App.render()
+        toast(`สร้างรายการผ่อน ${months} งวดแล้ว`, 'success')
+        S.txMode = 'add'; S.editingTxId = null
+        return
       }
-      S.transactions.unshift(...txs)
-      App._registerMerchantFromTx?.(txs[0])
+
+      const tx = cleanTxFromDraft(isEdit ? S.editingTxId : Calc.genId())
+      if (isEdit) {
+        const idx = S.transactions.findIndex(t => t.id === S.editingTxId)
+        if (idx >= 0) S.transactions[idx] = { ...S.transactions[idx], ...tx }
+      } else {
+        S.transactions.unshift(tx)
+      }
+      App._registerMerchantFromTx?.(tx)
       App.recalculateWalletBalances({ save:false, recordSnapshot:true })
       persist(); App.closeOverlay('overlay-add-tx')
-      if (S.txMode === 'add') App.showPage('transactions')
-      else App.render()
-      toast(`สร้างรายการผ่อน ${months} งวดแล้ว`, 'success')
+      if (isEdit) App.render()
+      else App.showPage('transactions')
+      toast(isEdit ? 'แก้ไขรายการแล้ว' : 'บันทึกรายการแล้ว', 'success')
       S.txMode = 'add'; S.editingTxId = null
-      return
-    }
 
-    const tx = cleanTxFromDraft(isEdit ? S.editingTxId : Calc.genId())
-    if (isEdit) {
-      const idx = S.transactions.findIndex(t => t.id === S.editingTxId)
-      if (idx >= 0) S.transactions[idx] = { ...S.transactions[idx], ...tx }
-    } else {
-      S.transactions.unshift(tx)
+      if (modeBefore === 'edit' || !draft.isRecurring || draft.type !== 'expense') return
+      const createdTx = (S.transactions || []).find(t => !beforeTxIds.has(t.id) && Number(t.amount || 0) === Number(draft.amount || 0) && t.type === draft.type && t.walletId === draft.walletId)
+      App._createRecurringFromDraft?.({ ...draft, amount: Number(draft.amount || 0), _savedTxId: createdTx?.id })
+      const createdRec = (S.recurring || []).find(r => !beforeRecIds.has(r.id) || (createdTx?.id && r.createdFromTxId === createdTx.id))
+      if (createdTx && createdRec) {
+        const startDate = draft.date || createdTx.date || today()
+        createdRec.startDate = startDate
+        if (createdRec.durationMonths && !createdRec.totalOccurrences) createdRec.totalOccurrences = Number(createdRec.durationMonths)
+        if (createdRec.recurrenceType === 'monthly' && !createdRec.recurringDayOfMonth) createdRec.recurringDayOfMonth = Number(draft.recurringDayOfMonth || String(startDate).slice(-2)) || 1
+        const scheduledDate = occurrenceDate(createdRec, 1)
+        createdTx.sourceRecurringId = createdRec.id
+        createdTx.recurringDueDate = scheduledDate
+        createdTx.recurringOccurrenceNo = 1
+        createdTx.recurringInstanceKey = instanceKey(createdRec.id, 1, scheduledDate)
+        createdTx.isRecurring = true
+        updateRecurringNext(createdRec)
+        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+        persist()
+      }
+    } catch (err) {
+      console.error('saveTx failed', err)
+      notify(`บันทึกรายการไม่สำเร็จ: ${err?.message || err}`, 'error')
+      console.warn('V6.5 recurring metadata sync failed', err)
     }
-    App._registerMerchantFromTx?.(tx)
-    App.recalculateWalletBalances({ save:false, recordSnapshot:true })
-    persist(); App.closeOverlay('overlay-add-tx')
-    if (isEdit) App.render()
-    else App.showPage('transactions')
-    toast(isEdit ? 'แก้ไขรายการแล้ว' : 'บันทึกรายการแล้ว', 'success')
-    S.txMode = 'add'; S.editingTxId = null
   }
 
   App._validateImportPayload = function(data) {
@@ -3138,7 +2873,7 @@ Calc.getUsableMoney = function(wallets) {
     return { ok:true, errors, warnings, data:{ ...data, transactions } }
   }
 
-  App.saveCCPay = function v40SaveCCPay() {
+  App.saveCCPay = function() {
     const sourceId = document.getElementById('cc-pay-wallet')?.value
     const amount = Number(document.getElementById('cc-pay-amount')?.value || 0)
     const card = walletById(S.payingCardId)
@@ -3165,7 +2900,7 @@ Calc.getUsableMoney = function(wallets) {
     toast(`ชำระ ${money(amount)} สำเร็จ`, 'success')
   }
 
-  // ── Phase 3: Installment center + recurring due schedule ──────────────────
+  // ── Installment center + recurring due schedule ─────────────
   App.getInstallmentGroups = function() {
     const map = {}
     ;(S.transactions || []).filter(t => t.installmentGroupId).forEach(t => {
@@ -3185,12 +2920,6 @@ Calc.getUsableMoney = function(wallets) {
     const g = App.getInstallmentGroups().find(x => x.id === groupId)
     if (!g) return
     App.showConfirm({ title:'ลบชุดผ่อน', danger:true, body:`ลบรายการผ่อน “${g.merchant}” ทั้ง ${g.rows.length} งวด?`, confirmLabel:'ลบทั้งชุด', onConfirm(){ S.transactions = S.transactions.filter(t => t.installmentGroupId !== groupId); App.recalculateWalletBalances({ save:false, recordSnapshot:true }); persist(); App.openInstallmentCenter(); toast('ลบชุดผ่อนแล้ว', 'success') } })
-  }
-
-  App._nextDueForRecurring = function(r, fromDate = today()) {
-    if (r.nextDueDate) return r.nextDueDate
-    const start = r.startDate || r.lastPostedAt || fromDate
-    return String(start) < fromDate ? addDays(fromDate, 0) : start
   }
 
   App.openRecurringForm = function(id) {
@@ -3279,56 +3008,9 @@ Calc.getUsableMoney = function(wallets) {
 
   App.snoozeRecurring = function(id, days = 7) { const r = S.recurring.find(x => x.id === id); if (!r) return; r.nextDueDate = addDays(r.nextDueDate || today(), days); persist(); App.openRecurringScreen(); toast(`เลื่อน ${days} วันแล้ว`, 'info') }
 
-  // ── Phase 4: Reports split ────────────────────────────────────────────────
-  function statsFor(month, mode = 'spending') {
-    const txs = (S.transactions || []).filter(t => String(t.date || '').startsWith(month))
-    let income = 0, expense = 0, transferOut = 0, ccPay = 0
-    const byCategory = {}
-    txs.forEach(t => {
-      if (t.type === 'income') income += Number(t.amount || 0)
-      if (t.type === 'expense') { expense += Number(t.amount || 0); byCategory[t.categoryId] = (byCategory[t.categoryId] || 0) + Number(t.amount || 0) }
-      if (t.type === 'transfer') transferOut += Number(t.amount || 0)
-      if (t.type === 'cc_payment') ccPay += Number(t.amount || 0)
-    })
-    const cashOut = expense + (mode === 'cashflow' ? ccPay : 0)
-    return { income, expense, transferOut, ccPay, cashOut, net: income - cashOut, byCategory }
-  }
-
-  // ── Phase 5: investment transactions ──────────────────────────────────────
-  App.openInvestmentTxForm = function(walletId, mode = 'buy') {
-    const w = walletById(walletId)
-    if (!w || !isInvestWallet(w)) { toast('เลือกกระเป๋าการลงทุนก่อน', 'error'); return }
-    const cashWallets = (S.wallets || []).filter(x => x.id !== walletId && x.type !== 'credit' && !isInvestWallet(x))
-    const price = App._investmentUnitPriceV4(w) || Number(w.manualPrice || 0)
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openWalletDetail('${esc(walletId)}')">←</button><h2>${mode==='buy'?'ซื้อ':mode==='sell'?'ขาย':'ปรับจำนวน'} ${esc(w.name)}</h2><button class="btn btn-primary btn-sm" onclick="App.saveInvestmentTx('${esc(walletId)}','${esc(mode)}')" style="width:auto">บันทึก</button></div><div class="sub-scroll"><div class="form-group"><label class="form-label">จำนวนหน่วย</label><input class="form-input" type="number" step="0.00000001" id="inv-units" placeholder="เช่น 0.1" oninput="App.previewInvestmentAmount()"></div><div class="form-group"><label class="form-label">ราคาต่อหน่วย</label><input class="form-input" type="number" step="0.01" id="inv-price" value="${esc(price || '')}" oninput="App.previewInvestmentAmount()"></div>${mode!=='adjust' ? `<div class="form-group"><label class="form-label">กระเป๋าเงินสด</label><select class="form-input" id="inv-cash-wallet">${cashWallets.map(c => `<option value="${esc(c.id)}">${esc(c.icon || '')} ${esc(c.name)} · ${money(c.balance)}</option>`).join('')}</select></div>` : ''}<div class="phase-card"><span>ยอดรวมโดยประมาณ</span><strong id="inv-preview">${money(0)}</strong></div><div class="form-group"><label class="form-label">หมายเหตุ</label><input class="form-input" id="inv-note" placeholder="เช่น DCA, ขายบางส่วน"></div></div>`)
-  }
-  App.previewInvestmentAmount = function() { const units = Number(document.getElementById('inv-units')?.value || 0); const price = Number(document.getElementById('inv-price')?.value || 0); const el = document.getElementById('inv-preview'); if (el) el.textContent = money(units * price) }
-  App.saveInvestmentTx = function(walletId, mode) {
-    const w = walletById(walletId)
-    const units = Number(document.getElementById('inv-units')?.value || 0)
-    const price = Number(document.getElementById('inv-price')?.value || 0)
-    const amount = Math.round(units * price * 100) / 100
-    const cashWalletId = document.getElementById('inv-cash-wallet')?.value || ''
-    const note = document.getElementById('inv-note')?.value || ''
-    if (!w || !units || units <= 0) { toast('กรุณาระบุจำนวนหน่วย', 'error'); return }
-    if (mode !== 'adjust' && (!price || price <= 0 || !cashWalletId)) { toast('กรุณาระบุราคาและกระเป๋าเงินสด', 'error'); return }
-    if (mode === 'buy') { const cash = walletById(cashWalletId); if (cash && Number(cash.balance || 0) < amount) { toast('ยอดเงินสดไม่เพียงพอ', 'error'); return } }
-    if (mode === 'sell' && Number(w.units || 0) < units) { toast('จำนวน asset ไม่พอสำหรับขาย', 'error'); return }
-    const tx = { id:Calc.genId(), type:mode==='buy'?'investment_buy':mode==='sell'?'investment_sell':'investment_adjust', walletId, cashWalletId:cashWalletId || undefined, amount: mode==='adjust' ? 0 : amount, units: mode==='adjust' ? undefined : units, unitsDelta: mode==='adjust' ? units : undefined, unitPrice:price, date:today(), note, merchant:w.name }
-    S.transactions.unshift(tx)
-    App.recalculateWalletBalances({ save:false, recordSnapshot:true })
-    S.investmentSnapshots.push({ date:today(), walletId, units:S.wallets.find(x=>x.id===walletId)?.units || 0, value:S.wallets.find(x=>x.id===walletId)?.balance || 0, price })
-    S.investmentSnapshots = S.investmentSnapshots.slice(-500)
-    persist(); App.openWalletDetail(walletId); toast('บันทึกรายการลงทุนแล้ว', 'success')
-  }
-
-  /* consolidated: removed legacy openWalletDetail from line 5007 */
-
   // Make transaction rows readable for new types.
-  /* consolidated: removed legacy _txTypeLabel from line 5020 */
-  /* consolidated: removed legacy _txRow from line 5022 */
 
-  // Delete/archive protection: block hard delete referenced masters.
+  // Delete/archive protection for referenced masters.
   App.deleteWallet = function(id) {
     const refs = (S.transactions || []).filter(t => t.walletId === id || t.toWalletId === id || t.cashWalletId === id).length + (S.recurring || []).filter(r => r.walletId === id).length
     if (refs > 0) { const w = walletById(id); if (w) { w.archived = true; persist(); App.closeOverlay('overlay-wallet-form'); App.render(); toast('มีรายการอ้างอิง จึง Archive กระเป๋าแทนการลบ', 'warn') } return }
@@ -3342,7 +3024,7 @@ Calc.getUsableMoney = function(wallets) {
     S.categories[type] = (S.categories[type] || []).filter(c => c.id !== id); persist(); App.openCategoryScreen(type); toast('ลบหมวดหมู่แล้ว', 'success')
   }
 
-  // Backup reminder: local-only users should export regularly.
+  // Backup reminder for local-only users.
   App.maybeShowBackupReminder = function() {
     const last = S.settings?.storageMeta?.lastExportedAt
     const days = last ? (Date.now() - new Date(last).getTime()) / 86400000 : Infinity
@@ -3355,9 +3037,13 @@ Calc.getUsableMoney = function(wallets) {
 })();
 
 /* ============================================================
-   App.utils — centralized shared helper hub
-   Canonical implementations. IIFEs after V4.0 should reference
-   these instead of re-defining local copies.
+   Transaction Engine / Storage Meta / Shared Helpers
+   Ledger source of truth, saveTx, import validation, App.utils hub
+   ============================================================ */
+
+/* ============================================================
+   App.utils
+   Shared helper hub for later blocks
    ============================================================ */
 ;(function installAppUtils(){
   function _pad2(n) { return String(n).padStart(2, '0') }
@@ -3395,17 +3081,15 @@ Calc.getUsableMoney = function(wallets) {
 })();
 
 /* ============================================================
-   V4.1 UX corrections on top of roadmap phases
-   - Compact transaction filters
-   - CC detail order + compact statement
-   - Thai reward ledger + confirm/rollback cashback
-   - Reports rollback to prior report layout
-   - More page re-grouping
-   - Robust merchant dropdown
-   - Compact installment center
-   - Recurring cadence prompt fields in add transaction
+   Transactions / Reports / Keyboard Interaction
+   Transactions page, recurring screen, installment editing, iOS form fixes
    ============================================================ */
-;(function v41UxCorrections(){
+
+/* ============================================================
+   Transactions / reports UX corrections
+   Filters, merchant dropdown, recurring screens, installment editing
+   ============================================================ */
+;(function(){
   const esc = App._esc
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
@@ -3428,10 +3112,6 @@ Calc.getUsableMoney = function(wallets) {
     return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(Math.min(d || 1, last)).padStart(2,'0')}`
   }
 
-  function statementReceived(st) {
-    return !!(st && (S.rewardLedger || []).some(r => r.type === 'cashback_received' && r.statementId === st.id))
-  }
-
   function cleanupRewardReceivedForTx(tx) {
     if (!tx || !tx.isRewardReceived) return
     S.rewardLedger = (S.rewardLedger || []).filter(r => {
@@ -3449,20 +3129,17 @@ Calc.getUsableMoney = function(wallets) {
   }
 
   // ── 2/3. Credit-card detail order + compact statement + Thai reward ledger ──
-  /* consolidated: removed legacy markCashbackReceived from line 5110 */
 
   // Add delete action into transaction details opened from a credit-card detail screen.
-  App.openTxDetailSub = function v41OpenTxDetailSub(id, backType, backId) {
+  App.openTxDetailSub = function(id, backType, backId) {
     const tx = (S.transactions || []).find(t => t.id === id)
     if (!tx) return
     const back = backType === 'cc' ? `App.openCCDetail('${esc(backId)}')` : backType === 'wallet' ? `App.openWalletDetail('${esc(backId)}')` : 'App.closeSubScreen()'
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>รายละเอียดรายการ</h2></div><div class="sub-scroll tx-detail-sub-screen">${App._txDetailRowsHtml(tx)}<div class="tx-action-grid"><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openEditTx('${esc(tx.id)}')">✏️ แก้ไข</button><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openDuplicateTx('${esc(tx.id)}')">⧉ ทำซ้ำ</button></div><button class="btn btn-outline mt-8" onclick="App.deleteTxFromSub('${esc(tx.id)}','${esc(backType || '')}','${esc(backId || '')}')">🗑 ลบรายการ</button>${tx.isRewardReceived ? '<div class="form-hint" style="margin-top:8px">เมื่อลบ Cashback ระบบจะ rollback ให้กลับไปรับ Cashback รอบนี้ได้อีกครั้ง</div>' : ''}</div>`)
   }
 
-  /* consolidated: removed legacy confirmDeleteTx from line 5145 */
-
   // ── 4. Reports rollback: restore previous report structure ─────────────────
-  App.renderReports = function v41ReportsRollback() {
+  App.renderReports = function() {
     if (!['expense','income','budget'].includes(S.rptView)) S.rptView = 'expense'
     const months = Calc.getMonths(6)
     const monthEl = document.getElementById('report-month-chips')
@@ -3554,9 +3231,6 @@ Calc.getUsableMoney = function(wallets) {
     if (inp) inp.value = S.tx.merchant
     document.getElementById('mt-merchant-dropdown')?.classList.add('hidden')
   }
-  /* consolidated: removed legacy _renderAddTxDetail from line 5229 */
-  /* consolidated: removed legacy _toggleTxFlag from line 5250 */
-  /* consolidated: removed legacy saveTx from line 5260 */
 
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
   try { if (S.page === 'reports') App.renderReports() } catch (_) {}
@@ -3571,7 +3245,7 @@ Calc.getUsableMoney = function(wallets) {
    - reports AI advisor restored
    - installment group edit flow
    ============================================================ */
-;(function v42UxAndInstallmentEdit(){
+;(function(){
   const esc = App._esc
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
@@ -3613,7 +3287,7 @@ Calc.getUsableMoney = function(wallets) {
   }
 
   // 1) Restore compact 2-column income/expense summary cards in Transactions.
-  App.renderTransactions = function v42RenderTransactions() {
+  App.renderTransactions = function() {
     const months = Calc.getMonths(6)
     const header = document.querySelector('#page-transactions .page-header')
     if (!header) return
@@ -3637,7 +3311,7 @@ Calc.getUsableMoney = function(wallets) {
     App.renderTransactionsList()
   }
 
-  App.renderTransactionsList = function v42RenderTransactionsList() {
+  App.renderTransactionsList = function() {
     const filtered = currentTxFilteredV42()
     const income = filtered.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
     const expense = filtered.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
@@ -3663,7 +3337,7 @@ Calc.getUsableMoney = function(wallets) {
   App.setTxMonth = function(m) { S.txMonth = m; App.renderTransactions() }
   App.setTxType = function(t) { S.txType = t; App.renderTransactions() }
 
-  // 2/4) iOS keyboard/select guard: hide nav/FAB while form controls are active.
+  // iOS keyboard/select guard: hide nav/FAB while form controls are active.
   function isFormControl(el) { return !!el && (el.matches?.('input, textarea, select, [contenteditable="true"]')) }
   function syncKeyboardClass(force) {
     const active = isFormControl(document.activeElement)
@@ -3676,9 +3350,7 @@ Calc.getUsableMoney = function(wallets) {
   window.visualViewport?.addEventListener('resize', () => syncKeyboardClass(), { passive:true })
   window.visualViewport?.addEventListener('scroll', () => syncKeyboardClass(), { passive:true })
 
-
-  // Keep --app-height stable after keyboard class changes. This prevents
-  // form action bars/sheets from being laid out against the shrunken visual viewport.
+  // Keep --app-height stable after keyboard class changes.
   const reassertStableAppHeight = () => {
     const standalone = !!(
       window.navigator?.standalone === true ||
@@ -3701,15 +3373,12 @@ Calc.getUsableMoney = function(wallets) {
     if (document.body.classList.contains('keyboard-open')) requestAnimationFrame(reassertStableAppHeight)
   }, { passive:true })
 
-  /* consolidated: removed legacy openRewardLedgerScreen from line 5436 */
-
-  App.openRecurringScreen = function v42RecurringScreen() {
+  App.openRecurringScreen = function() {
     const rows = (S.recurring || []).slice().sort((a,b) => String(a.nextDueDate || '').localeCompare(String(b.nextDueDate || '')))
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.openRecurringForm()" style="width:auto">+ เพิ่ม</button></div><div class="sub-scroll">${rows.length ? rows.map(r => { const due = r.nextDueDate || today(); const dueNow = due <= today(); return `<div class="recurring-item ${r.paused?'paused':''}"><div class="list-item-icon" style="background:${esc(r.color || '#2563EB')}20">${esc(r.icon || '🔁')}</div><div class="list-item-info"><div class="list-item-name">${esc(r.name)}</div><div class="list-item-sub">${money(r.amount)} · ${r.type === 'income' ? 'รายรับ' : 'รายจ่าย'} · ครบกำหนด ${thaiDateShort(due)}${dueNow ? ' · ถึงกำหนดแล้ว' : ''}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.postRecurringNow('${esc(r.id)}')">✓</button><button class="icon-btn" onclick="App.snoozeRecurring('${esc(r.id)}',7)">+7</button><button class="icon-btn" onclick="App.skipRecurring('${esc(r.id)}')">ข้าม</button><button class="icon-btn" onclick="App.openRecurringForm('${esc(r.id)}')">✏️</button><button class="icon-btn" onclick="App.deleteRecurring('${esc(r.id)}')">🗑</button></div></div>` }).join('') : App._emptyState('🔁','ยังไม่มีรายการประจำ','')}</div>`)
   }
 
   // 6) Restore AI financial advisor card on the rolled-back Reports screen.
-  /* consolidated: removed legacy renderReports from line 5462 */
 
   // 8) Installment group edit flow.
   function installmentGroups() { return App.getInstallmentGroups?.() || [] }
@@ -3803,7 +3472,7 @@ Calc.getUsableMoney = function(wallets) {
     } else apply()
   }
 
-  App.openInstallmentCenter = function v42InstallmentCenter(cardId = '') {
+  App.openInstallmentCenter = function(cardId = '') {
     const groups = installmentGroups().filter(g => !cardId || g.walletId === cardId)
     const back = cardId ? `App.openCCDetail('${esc(cardId)}')` : 'App.closeSubScreen()'
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>ศูนย์ผ่อนชำระ</h2></div><div class="sub-scroll installment-compact-screen">${groups.length ? `<div class="compact-card-list">${groups.map(g => { const w = walletById(g.walletId); const next = g.next; return `<div class="installment-compact-row installment-compact-row-edit"><div class="icr-main"><b>${esc(g.merchant)}</b><span>${esc(w?.name || '')}${next ? ` · งวด ${next.installmentNo}/${next.installmentMonths} · ${thaiDateShort(next.date)}` : ' · ครบแล้ว'}</span></div><div class="icr-amount"><strong>${money(g.remaining || 0)}</strong><span>เหลือ</span></div><button class="icon-btn" onclick="App.openEditInstallmentGroup('${esc(g.id)}','${esc(cardId)}')">✏️</button><button class="icon-btn" onclick="App.deleteInstallmentGroup('${esc(g.id)}')">🗑</button></div>` }).join('')}</div>` : App._emptyState('🧾','ยังไม่มีรายการผ่อน','เพิ่มรายการจ่ายแล้วเลือก “ผ่อนชำระ”')}</div>`)
@@ -3814,14 +3483,15 @@ Calc.getUsableMoney = function(wallets) {
 })();
 
 /* ============================================================
-   V45 Fixes — 5 bugs/UI improvements:
-   1. CC benefit screen: editable cycleDay / dueDay
-   2. Crypto: expanded symbol map + dynamic refresh + unit save
-   3. Cashback confirmation: editable amounts dialog
-   4. CC wallet card: restructured due-date row
-   5. Wallet page: refresh btn in section header, + in page header
+   Credit Cards / Benefits / Rewards
+   Credit-card settings, reward books, credit limits, due/statement logic
    ============================================================ */
-;(function v45Fixes() {
+
+/* ============================================================
+   Credit-card benefits + reward capture
+   Benefit rules, reward confirmation, and credit-card wallet UI
+   ============================================================ */
+;(function() {
   const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
   const fmt = n => Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits:2, maximumFractionDigits:2 })
   const money = n => `฿${fmt(n)}`
@@ -3833,7 +3503,7 @@ Calc.getUsableMoney = function(wallets) {
   const isInvestType = t => ['gold','crypto','fcd'].includes(t)
 
   // ═══════════════════════════════════════════════════════════════════
-  // FIX 1: openCCBenefitScreen — add editable cycleDay / dueDay section
+  // Benefit rule screen + statement settings
   // ═══════════════════════════════════════════════════════════════════
   App.openCCBenefitScreen = function(cardId) {
     App.ensureCCBenefitRulesState?.()
@@ -4070,10 +3740,8 @@ Calc.getUsableMoney = function(wallets) {
     })
   }
 
-  /* consolidated: removed legacy saveCCBenefit from line 5711 */
-
   // ═══════════════════════════════════════════════════════════════════
-  // FIX 2: Crypto — expanded symbol map, dynamic refresh, unit save
+  // Crypto pricing helpers reused by wallet cards
   // ═══════════════════════════════════════════════════════════════════
   const CRYPTO_MAP = {
     BTC:'bitcoin', ETH:'ethereum', BNB:'binancecoin', USDT:'tether',
@@ -4099,7 +3767,7 @@ Calc.getUsableMoney = function(wallets) {
     return sym ? (CRYPTO_MAP[sym] || sym.toLowerCase()) : null
   }
 
-  App._investmentUnitPriceTHB = function v45InvestmentPrice(w) {
+  App._investmentUnitPriceTHB = function(w) {
     if (!w) return 0
     const p = S.marketPrices || {}
     if (w.type === 'gold') return Number(p.thaiGold?.jewelryBuy || p.auroraGold?.jewelryBuy || w.manualPrice || 0)
@@ -4121,44 +3789,10 @@ Calc.getUsableMoney = function(wallets) {
       : Number(w?.balance || 0)
   }
 
-  /* consolidated: removed legacy _marketText from line 5799 */
-
-  /* DEAD CODE — completely replaced by V6.6 (App.refreshMarketPrices = function(){return syncMarketSuite(...)}) */
-  App.refreshMarketPrices = async function v45RefreshMarket() {
-    const next = { ...(S.marketPrices || {}) }
-    let anyOk = false, goldOk = false
-    App.showToast?.('กำลัง Sync ราคา…', 'info')
-    const base = new Set(['bitcoin','ethereum','binancecoin','tether'])
-    ;(S.wallets || []).filter(w => w.type === 'crypto').forEach(w => {
-      const id = App._cryptoId(w); if (id) base.add(id)
-    })
-    try {
-      const ids = [...base].join(',')
-      const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=thb,usd`, { cache:'no-store' })
-      if (r.ok) { next.crypto = await r.json(); anyOk = true }
-    } catch (_) {}
-    try {
-      const r = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB,EUR,JPY,GBP,CNY', { cache:'no-store' })
-      if (r.ok) { next.fx = await r.json(); anyOk = true }
-    } catch (_) {}
-    try {
-      const gold = await App._fetchThaiGoldViaSource?.()
-      if (gold?.jewelryBuy) { next.thaiGold = gold; next.auroraGold = gold; anyOk = true; goldOk = true }
-    } catch (_) {}
-    next.updatedAt = new Date().toISOString()
-    S.marketPrices = next
-    persist(); App.renderWallets?.(); App.render?.()
-    if (goldOk) App.showToast?.('Sync ราคาทองและ Crypto สำเร็จ', 'success')
-    else if (anyOk) App.showToast?.('อัปเดต Crypto/FX แล้ว (ราคาทองยังไม่ได้)', 'warn')
-    else App.showToast?.('Sync ราคาไม่ได้ ใช้ราคาสำรองแทน', 'error')
-  }
-
-  /* consolidated: removed legacy saveWallet from line 5839 */
-
   // ═══════════════════════════════════════════════════════════════════
-  // FIX 3: markCashbackReceived — editable confirmation dialog
+  // Reward receipt confirmation dialog
   // ═══════════════════════════════════════════════════════════════════
-  App.markCashbackReceived = function v45MarkCashbackReceived(cardId) {
+  App.markCashbackReceived = function(cardId) {
     const st = App.getCardStatement?.(cardId)
     if (!st) { App.showToast?.('ยังไม่มีข้อมูลรอบบัญชี', 'warn'); return }
     const alreadyReceived = (S.rewardLedger || []).some(r =>
@@ -4234,9 +3868,15 @@ Calc.getUsableMoney = function(wallets) {
 })();
 
 /* ============================================================
-   V5.0 Credit-limit groups · Centralized rewards · Record-rewards flow
+   Credit Accounts / Reward Ledger / More Menu Extensions
+   Shared credit limits, reward accounts, reward recording, More page links
    ============================================================ */
-;(function v50CreditLimitAndRewards(){
+
+/* ============================================================
+   Credit accounts / reward ledger / More-menu extensions
+   Shared credit limits, reward accounts, reward recording, More links
+   ============================================================ */
+;(function(){
   'use strict'
 
   // ── Shared micro-helpers ────────────────────────────────────
@@ -4250,7 +3890,7 @@ Calc.getUsableMoney = function(wallets) {
   const loadV5JSON = (key, def) => { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : def } catch { return def } }
   const saveV5JSON = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)) } catch (_) {} }
 
-  // Alias showToast → toast (used in V45 with ?.)
+  // Alias showToast → toast
   App.showToast = App.showToast || notify
 
   const TH_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
@@ -4259,13 +3899,6 @@ Calc.getUsableMoney = function(wallets) {
     if (!y||!m||!d) return esc(dateStr || '-')
     return `${d} ${TH_MONTHS_SHORT[m-1]} ${String((y+543)%100).padStart(2,'0')}`
   }
-  function thaiDateLong(dateStr) {
-    const [y,m,d] = String(dateStr || '').split('-').map(Number)
-    if (!y||!m||!d) return esc(dateStr || '-')
-    const fullNames = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
-    return `${d} ${fullNames[m-1]} ${y+543}`
-  }
-
   const KNOWN_ISSUERS = ['KTC','SCB','KBank','BBL','Krungsri','UOB','TTB','Citi','CIMB','GHB','KBTG','Amex']
 
   // ── State migration ────────────────────────────────────────
@@ -4282,12 +3915,9 @@ Calc.getUsableMoney = function(wallets) {
   }
   migrateToV5()
 
-  // ── Extend persist ─────────────────────────────────────────
-  const _basePersistV5 = (typeof persist === 'function') ? persist : (() => Storage.saveAll(S))
-  persist = function v50Persist() {
+  // ── Persist extension ──────────────────────────────────────
+  App._beforePersistV50 = function() {
     migrateToV5()
-    _basePersistV5()
-    // creditLimitGroups / rewardAccounts / rewardLedger now saved by Storage.saveAll
   }
 
   // ── ═══════════════════════════════════════════════════════
@@ -4302,20 +3932,20 @@ Calc.getUsableMoney = function(wallets) {
     return (S.wallets || []).filter(w => w.type === 'credit' && w.creditLimitGroupId === groupId)
   }
 
-  // Total credit usage for one card (balance already includes all future installment txns)
+  // Total credit usage for one card
   App.getCreditUsageForCard = function(cardId) {
     const card = walletById(cardId)
     if (!card || card.type !== 'credit') return 0
     return Math.abs(Number(card.balance || 0))
   }
 
-  // Usage for an entire shared group = sum across linked cards
+  // Usage for an entire shared group
   App.getCreditUsageForLimitGroup = function(groupId) {
     return App.getCreditCardsInLimitGroup(groupId)
       .reduce((s, c) => s + App.getCreditUsageForCard(c.id), 0)
   }
 
-  // Effective credit limit for a card (shared group limit or individual)
+  // Effective credit limit for a card
   App.getCreditLimitForCard = function(card) {
     if (!card || card.type !== 'credit') return 0
     if (card.creditLimitMode === 'shared' && card.creditLimitGroupId) {
@@ -4325,7 +3955,7 @@ Calc.getUsableMoney = function(wallets) {
     return Number(card.limit || 0)
   }
 
-  // Available credit for a card (respects shared group)
+  // Available credit for a card
   App.getAvailableCreditForCard = function(card) {
     if (!card || card.type !== 'credit') return Infinity
     const limit = App.getCreditLimitForCard(card)
@@ -4367,7 +3997,7 @@ Calc.getUsableMoney = function(wallets) {
     return (S.wallets || []).filter(w => w.type === 'credit' && w.rewardAccountId === accountId)
   }
 
-  // Check if this statement already has a recorded reward entry
+  // Check whether this statement already has a recorded reward entry
   function statementRewardRecorded(statementId) {
     return (S.rewardLedger || []).some(r =>
       r.statementId === statementId &&
@@ -4376,10 +4006,10 @@ Calc.getUsableMoney = function(wallets) {
   }
 
   // ── ═══════════════════════════════════════════════════════
-  // UPDATED validateTransactionDraft (shared credit limit aware)
+  // Credit-limit-aware transaction validation
   // ══════════════════════════════════════════════════════════
 
-  App.validateTransactionDraft = function v50ValidateTx(tx, opts = {}) {
+  App.validateTransactionDraft = function(tx, opts = {}) {
     const { isEdit = false, editingTxId } = opts
     const amt = Number(tx.amount || 0)
     if (!tx.type) return 'ไม่พบประเภทรายการ'
@@ -4388,7 +4018,7 @@ Calc.getUsableMoney = function(wallets) {
     const w = walletById(tx.walletId)
     if (!w) return 'ไม่พบกระเป๋าเงินที่เลือก'
 
-    // For edits: simulate effective balance by reverting the original transaction
+    // For edits, simulate effective balance by reverting the original transaction
     const origTx = isEdit && editingTxId ? (S.transactions || []).find(t => t.id === editingTxId) : null
     function effectiveBalance(walletId) {
       const wallet = walletById(walletId)
@@ -4436,7 +4066,7 @@ Calc.getUsableMoney = function(wallets) {
   // UPDATED openWalletForm — adds CC fields
   // ══════════════════════════════════════════════════════════
 
-  App.openWalletForm = function v50OpenWalletForm(walletId) {
+  App.openWalletForm = function(walletId) {
     S.editingWalletId = walletId
     const w = walletId ? (S.wallets || []).find(x => x.id === walletId) : null
     if (w?.legacyMigratedToCryptoPortfolio || w?.hiddenFromWalletList) {
@@ -4651,7 +4281,7 @@ Calc.getUsableMoney = function(wallets) {
   }
 
   // ── Updated _selectWalletType ───────────────────────────────
-  App._selectWalletType = function v50SelectWalletType(type) {
+  App._selectWalletType = function(type) {
     document.getElementById('wf-type').value = type
     document.querySelectorAll('#wf-type-grid .cat-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type))
     const isCC  = type === 'credit'
@@ -4666,7 +4296,7 @@ Calc.getUsableMoney = function(wallets) {
   }
 
   // ── Updated saveWallet ──────────────────────────────────────
-  App.saveWallet = function v50SaveWallet() {
+  App.saveWallet = function() {
     const name  = document.getElementById('wf-name')?.value.trim()
     const type  = document.getElementById('wf-type')?.value || 'bank'
     const color = document.getElementById('wf-color')?.value || '#2563EB'
@@ -4766,7 +4396,7 @@ Calc.getUsableMoney = function(wallets) {
   }
 
   // ── Updated saveCCBenefit — saves cycleDay/dueDay too ────────
-  App.saveCCBenefit = function v50SaveCCBenefit(id) {
+  App.saveCCBenefit = function(id) {
     const v = i => parseFloat(document.getElementById(i)?.value) || 0
     const w = walletById(id)
     if (!w) return
@@ -4951,7 +4581,7 @@ Calc.getUsableMoney = function(wallets) {
   // CENTRALIZED REWARDS BOOK
   // ══════════════════════════════════════════════════════════
 
-  App.openRewardLedgerScreen = function v50RewardBook(cardId = '') {
+  App.openRewardLedgerScreen = function(cardId = '') {
     migrateToV5()
     const cards    = (S.wallets||[]).filter(w => w.type === 'credit')
     const accounts = S.rewardAccounts || []
@@ -5235,7 +4865,7 @@ Calc.getUsableMoney = function(wallets) {
   // UPDATED More page — adds credit-group + reward-account links
   // ══════════════════════════════════════════════════════════
 
-  App.renderMore = function v50RenderMore() {
+  App.renderMore = function() {
     const content = document.getElementById('more-content')
     if (!content) return
     const budgetCount  = (S.budgets||[]).length + (S.incomeBudgets||[]).length
@@ -5310,16 +4940,15 @@ Calc.getUsableMoney = function(wallets) {
 })();
 
 /* ============================================================
-   V6.0 — Targeted fixes:
-   1. Data migration: pointPerBahtEvery → bahtPerPoint
-   2. Recurring monthly fields (recurringDayOfMonth, durationMonths)
-   3. Per-transaction CC reward eligibility toggles in add-tx form
-   4. Merchant combo wired to _renderAddTxDetail
-   5. cleanTxFromDraft includes reward eligibility flags
-   6. openAddTx initialises reward eligibility flags
-   7. syncKeyboardClass scrolls focused input into view
+   Add-Tx / Reward Selection / Recurring-Lite
+   Late-stage transaction form fixes, reward toggles, recurring UX
    ============================================================ */
-;(function v60Fixes(){
+
+/* ============================================================
+   Add-tx reward / recurring hotfixes
+   Reward flags, recurring defaults, keyboard/focus stability
+   ============================================================ */
+;(function(){
   // ── Shared helpers ────────────────────────────────────────────────────────
   const esc = App._esc
   const today = () => typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)
@@ -5341,7 +4970,7 @@ Calc.getUsableMoney = function(wallets) {
   }
   function notify(msg, type) { App.showToast?.(msg, type) || console.log(msg) }
 
-  // ── 1. Data migration: pointPerBahtEvery → bahtPerPoint ──────────────────
+  // ── Data migration: pointPerBahtEvery → bahtPerPoint ───────
   ;(function migratePointPerBaht() {
     const benefits = S.ccBenefits || {}
     let changed = false
@@ -5356,32 +4985,9 @@ Calc.getUsableMoney = function(wallets) {
     if (changed) { try { persist() } catch(_){} }
   })()
 
-  // ── 2. Recurring monthly fields ───────────────────────────────────────────
-  // openRecurringForm and saveRecurring consolidated into V4 source (Fix 17).
+  // ── Reward flags now live directly in cleanTxFromDraft ─────
 
-  // Also patch getOverdueRecurring to handle monthly type correctly
-  // Override via App namespace — the dashboard renderDashboard calls the local getOverdueRecurring
-  // We patch it by redefining the function used by renderDashboard:
-  App._getOverdueRecurring = function v6GetOverdueRecurring() {
-    const t = today()
-    return (S.recurring || []).filter(r => {
-      if (r.paused) return false
-      if (r.recurrenceType === 'monthly') {
-        return (r.nextDueDate || t) <= t
-      }
-      if (!r.nextDueDate) return !r.lastPostedAt
-      return r.nextDueDate <= t
-    })
-  }
-
-  // ── 3. cleanTxFromDraft reward flags ─────────────────────────────────────
-  // rewardIncludePoints / rewardIncludeCashback are now set directly in
-  // cleanTxFromDraft (source-of-truth fix), so no saveTx patch needed here.
-
-  // ── 4. _renderAddTxDetail: merchant combo + CC reward section consolidated into V4 source (Fix 17).
-
-  // ── 5. syncKeyboardClass: scroll focused input into view ──────────────────
-  // Patch the existing visualViewport handler to also scroll input into view
+  // ── Focused field scroll assistance ────────────────────────
   window.visualViewport?.addEventListener('resize', () => {
     const el = document.activeElement
     if (!el || !el.matches?.('input, textarea, select')) return
@@ -5400,7 +5006,7 @@ Calc.getUsableMoney = function(wallets) {
    - Restore inline recurring schedule fields in add-tx detail
    - Create/update a recurring schedule when saving a recurring tx
    ============================================================ */
-;(function v64AddTxDecimalAndRecurringFix(){
+;(function(){
   const esc = App._esc
   const typeColor = type => type === 'income' ? 'var(--income)' : type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
   const typeLabel = type => type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'
@@ -5494,14 +5100,16 @@ Calc.getUsableMoney = function(wallets) {
   } catch (_) {}
 })()
 
+/* ============================================================
+   Recurring-Lite Posting / Delete Flow
+   Recurring instance lifecycle, delete variants, sub-screen callbacks
+   ============================================================ */
 
 /* ============================================================
-   V6.5 Recurring Lite ledger
-   - Store occurrence metadata on generated transactions.
-   - Use transaction existence + skipped exceptions as quota source.
-   - Show a delete-choice modal for every recurring transaction.
+   Recurring-lite ledger
+   Occurrence metadata, skipped exceptions, recurring delete choices
    ============================================================ */
-;(function v65RecurringLiteLedger(){
+;(function(){
   const esc = App._esc
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
   const notify = (msg, type='info') => { try { toast(msg, type) } catch { try { App.showToast?.(msg, type) } catch { console.log(msg) } } }
@@ -5779,7 +5387,7 @@ Calc.getUsableMoney = function(wallets) {
     })
   }
 
-  App._getOverdueRecurringLite = function v65GetOverdueRecurringLite() {
+  App._getOverdueRecurringLite = function() {
     migrateRecurringLite()
     const t = today()
     return (S.recurring || []).filter(r => {
@@ -5792,7 +5400,7 @@ Calc.getUsableMoney = function(wallets) {
     })
   }
 
-  App.postRecurringNow = function v65PostRecurringNow(id) {
+  App.postRecurringNow = function(id) {
     migrateRecurringLite()
     const r = (S.recurring || []).find(x => x.id === id)
     if (!r) return
@@ -5830,7 +5438,7 @@ Calc.getUsableMoney = function(wallets) {
     notify(`บันทึก "${r.name}" แล้ว`, 'success')
   }
 
-  App.skipRecurringNow = function v65SkipRecurringNow(id) {
+  App.skipRecurringNow = function(id) {
     migrateRecurringLite()
     const r = (S.recurring || []).find(x => x.id === id)
     if (!r) return
@@ -5844,17 +5452,17 @@ Calc.getUsableMoney = function(wallets) {
     else App.renderDashboard?.()
     notify(`ข้าม "${r.name}" แล้ว`, 'info')
   }
-  App.skipRecurring = function v65SkipRecurring(id) { App.skipRecurringNow(id) }
+  App.skipRecurring = function(id) { App.skipRecurringNow(id) }
 
   const prevDeleteTx = App.deleteTx?.bind(App)
-  /* AUTHORITATIVE FINAL — App.deleteTx */
-  App.deleteTx = function v65DeleteTx() {
+
+  App.deleteTx = function() {
     const tx = (S.transactions || []).find(t => t.id === S.selectedTxId)
     if (isRecurringTx(tx)) { showRecurringDeleteChoice(tx); return }
     prevDeleteTx ? prevDeleteTx() : (S.deleteConfirm = true, App._renderTxDetail?.())
   }
 
-  App.confirmDeleteTx = function v65ConfirmDeleteTx() {
+  App.confirmDeleteTx = function() {
     const tx = (S.transactions || []).find(t => t.id === S.selectedTxId)
     if (isRecurringTx(tx)) { showRecurringDeleteChoice(tx); return }
     if (!tx) return
@@ -5884,7 +5492,7 @@ Calc.getUsableMoney = function(wallets) {
     notify('ลบรายการแล้ว', 'success')
   }
 
-  App.deleteTxFromSub = function v65DeleteTxFromSub(id, backType = '', backId = '') {
+  App.deleteTxFromSub = function(id, backType = '', backId = '') {
     const tx = (S.transactions || []).find(t => t.id === id)
     if (!tx) return
     if (isRecurringTx(tx)) { showRecurringDeleteChoice(tx, { backType, backId }); return }
@@ -5906,61 +5514,19 @@ Calc.getUsableMoney = function(wallets) {
     })
   }
 
-  const prevSaveTx = App.saveTx?.bind(App)
-  /* AUTHORITATIVE FINAL — App.saveTx (wraps V4.0 base via prevSaveTx) */
-  App.saveTx = function v65SaveTx() {
-    const beforeTxIds = new Set((S.transactions || []).map(t => t.id))
-    const beforeRecIds = new Set((S.recurring || []).map(r => r.id))
-    const draft = { ...(S.tx || {}) }
-    const modeBefore = S.txMode
-    if (draft.isRecurring) {
-      App._initRecurringLiteDefaults?.()
-      Object.assign(draft, {
-        recurrenceType: S.tx.recurrenceType,
-        recurringDayOfMonth: S.tx.recurringDayOfMonth,
-        durationMonths: S.tx.durationMonths,
-        everyDays: S.tx.everyDays,
-      })
-    }
-    try {
-      const result = prevSaveTx?.()
-      if (modeBefore === 'edit' || !draft.isRecurring || draft.type !== 'expense') return result
-      const createdTx = (S.transactions || []).find(t => !beforeTxIds.has(t.id) && Number(t.amount || 0) === Number(draft.amount || 0) && t.type === draft.type && t.walletId === draft.walletId)
-      App._createRecurringFromDraft?.({ ...draft, amount: Number(draft.amount || 0), _savedTxId: createdTx?.id })
-      const createdRec = (S.recurring || []).find(r => !beforeRecIds.has(r.id) || (createdTx?.id && r.createdFromTxId === createdTx.id))
-      if (createdTx && createdRec) {
-        const startDate = draft.date || createdTx.date || today()
-        createdRec.startDate = startDate
-        if (createdRec.durationMonths && !createdRec.totalOccurrences) createdRec.totalOccurrences = Number(createdRec.durationMonths)
-        if (createdRec.recurrenceType === 'monthly' && !createdRec.recurringDayOfMonth) createdRec.recurringDayOfMonth = Number(draft.recurringDayOfMonth || String(startDate).slice(-2)) || 1
-        const scheduledDate = occurrenceDate(createdRec, 1)
-        createdTx.sourceRecurringId = createdRec.id
-        createdTx.recurringDueDate = scheduledDate
-        createdTx.recurringOccurrenceNo = 1
-        createdTx.recurringInstanceKey = instanceKey(createdRec.id, 1, scheduledDate)
-        createdTx.isRecurring = true
-        updateRecurringNext(createdRec)
-        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-        persist()
-      }
-      return result
-    } catch (err) {
-      console.error('saveTx failed', err)
-      notify(`บันทึกรายการไม่สำเร็จ: ${err?.message || err}`, 'error')
-      console.warn('V6.5 recurring metadata sync failed', err)
-    }
-  }
-
   try { migrateRecurringLite() } catch (err) { console.warn('V6.5 recurring migration failed', err) }
 })()
 
 /* ============================================================
-   V6.6 Centralized Crypto Portfolio
-   - Centralized holdings/assets/transactions
-   - Safe migration from legacy crypto wallets
-   - Wallets-page portfolio section + reports summary
+   Crypto Portfolio
+   Centralized crypto assets, holdings, pricing, sync, portfolio UI
    ============================================================ */
-;(function v66CentralizedCryptoPortfolio() {
+
+/* ============================================================
+   Centralized crypto portfolio
+   Holdings/assets/transactions, legacy migration, wallet/report integration
+   ============================================================ */
+;(function() {
   const esc = App._esc
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
   const nowISO = () => new Date().toISOString()
@@ -6281,23 +5847,6 @@ Calc.getUsableMoney = function(wallets) {
       .slice(0, 12)
   }
 
-  function cryptoStatusClass(status) {
-    if (status === 'fresh') return 'fresh'
-    if (status === 'stale') return 'stale'
-    if (status === 'manual fallback') return 'manual'
-    return 'error'
-  }
-
-  function cryptoStatusLabel(status) {
-    return ({
-      fresh: 'สด',
-      stale: 'ราคาเก่า',
-      'manual fallback': 'Manual',
-      'sync failed': 'Sync ไม่สำเร็จ',
-      'no price': 'ไม่มีราคา',
-    })[status] || status || '-'
-  }
-
   function latestCryptoUpdatedAt() {
     return Object.values(S.marketPrices?.crypto || {})
       .map(row => row?.fetchedAt ? new Date(row.fetchedAt).getTime() : 0)
@@ -6450,23 +5999,6 @@ Calc.getUsableMoney = function(wallets) {
     const manual = Number(holding?.manualPriceTHB || assetOrHolding?.manualPriceTHB || 0)
     if (manual > 0) return manual
     return 0
-  }
-
-  App.getCryptoPriceStatus = function(assetOrHolding) {
-    ensureCryptoState()
-    const holding = assetOrHolding?.assetId ? assetOrHolding : null
-    const asset = holding ? App.getCryptoAsset(holding.assetId) : assetOrHolding
-    const marketId = normalizeCoinGeckoId(asset?.coinGeckoId)
-    const row = marketId ? S.marketPrices?.crypto?.[marketId] : null
-    const live = Number(row?.thb || 0)
-    if (live > 0) {
-      const ageMs = row?.fetchedAt ? (Date.now() - new Date(row.fetchedAt).getTime()) : Infinity
-      return ageMs <= 12 * 60 * 60 * 1000 ? 'fresh' : 'stale'
-    }
-    const manual = Number(holding?.manualPriceTHB || assetOrHolding?.manualPriceTHB || 0)
-    if (manual > 0) return 'manual fallback'
-    if (marketId && S.cryptoSyncMeta?.lastErrorAt) return 'sync failed'
-    return 'no price'
   }
 
   App.getCryptoHoldingValueTHB = function(holding) {
@@ -6682,21 +6214,8 @@ Calc.getUsableMoney = function(wallets) {
     })
   }
 
-  /* AUTHORITATIVE FINAL — App.refreshMarketPrices */
   App.refreshMarketPrices = function() {
     return syncMarketSuite({ cryptoOnly: false })
-  }
-
-  const prevNetWorth = Calc.getNetWorth?.bind(Calc)
-  Calc.getNetWorth = function(wallets) {
-    const baseWallets = (wallets || []).filter(w => !w.excludeFromNetWorth)
-    const base = prevNetWorth ? prevNetWorth(baseWallets) : { assets: 0, debt: 0, net: 0 }
-    const cryptoValue = App.getCryptoPortfolioSummary().totalValueTHB
-    return {
-      assets: round2(Number(base.assets || 0) + cryptoValue),
-      debt: round2(Number(base.debt || 0)),
-      net: round2(Number(base.assets || 0) + cryptoValue - Number(base.debt || 0)),
-    }
   }
 
   App.openCryptoHoldingForm = function(holdingId = '') {
@@ -7258,7 +6777,6 @@ Calc.getUsableMoney = function(wallets) {
       </div>`)
   }
 
-  /* AUTHORITATIVE FINAL — App.renderWallets */
   App.renderWallets = function() {
     ensureCryptoState()
     const wallets = visibleWallets()
@@ -7288,7 +6806,7 @@ Calc.getUsableMoney = function(wallets) {
         actions.style.cssText = 'display:flex;gap:8px;align-items:center'
         const refreshBtn = document.createElement('button')
         refreshBtn.className = 'btn btn-secondary btn-sm wallet-section-refresh-btn'
-        refreshBtn.innerHTML = '↻ Refresh'
+        refreshBtn.innerHTML = '↻'
         refreshBtn.onclick = e => { e.stopPropagation(); App.refreshMarketPrices() }
         const addBtn = document.createElement('button')
         addBtn.className = 'btn btn-primary btn-sm wallets-header-add-btn'
@@ -7352,9 +6870,15 @@ Calc.getUsableMoney = function(wallets) {
 })()
 
 /* ============================================================
-   V6.7 Backup schema + CC due-after-cycle + viewport bottom-nav
+   Final Integration Layer
+   Reward-rule engine, credit-card due logic, backup/import, viewport sync
    ============================================================ */
-;(function v67BackupCreditViewport(){
+
+/* ============================================================
+   Backup / credit due logic / viewport sync
+   Reward rules, due selection, import/export, app-height sync
+   ============================================================ */
+;(function(){
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
   const esc = App._esc
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
@@ -7917,7 +7441,6 @@ Calc.getUsableMoney = function(wallets) {
     return candidates.length ? Calc.getDaysUntilDate(candidates[0], refDate) : null
   }
 
-  /* AUTHORITATIVE FINAL — App.getCardStatement */
   App.getCardStatement = function(cardId, refDate = today()) {
     const card = walletById(cardId)
     if (!card) return null
@@ -7951,7 +7474,6 @@ Calc.getUsableMoney = function(wallets) {
     return { id, cardId, start: startStr, end: endStr, dueDate: dueStr, dueAfterCycleDays, purchases, payments, purchaseTotal, paidTotal, balanceDue, paid: balanceDue <= 0 && purchaseTotal > 0, reward }
   }
 
-  /* AUTHORITATIVE FINAL — App.openCCDetail */
   App.openCCDetail = function(cardId) {
     const card = walletById(cardId)
     if (!card) return
@@ -8051,7 +7573,6 @@ Calc.getUsableMoney = function(wallets) {
     })
   }
 
-  /* AUTHORITATIVE FINAL — App.syncAppViewportHeight */
   App.syncAppViewportHeight = function() {
     const vv = window.visualViewport
     const visualHeight = Math.round(vv?.height || window.innerHeight || document.documentElement.clientHeight || stableViewportHeight || 0)
@@ -8069,7 +7590,7 @@ Calc.getUsableMoney = function(wallets) {
 
   normalizeCreditCardWallets()
   try { ensureCCBenefitRulesState() } catch (_) {}
-  /* AUTHORITATIVE FINAL viewport sync registration — supersedes earlier setAppHeight listeners */
+
   App.syncAppViewportHeight()
   const syncViewportSoon = () => requestAnimationFrame(() => App.syncAppViewportHeight())
   window.addEventListener('resize', syncViewportSoon, { passive:true })
