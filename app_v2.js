@@ -162,6 +162,20 @@ const App = {
     App.render()
   },
   toggleHideMoney() { S.settings.hideMoney = !S.settings.hideMoney; persist(); App.render() },
+  refreshDashboard() {
+    try { App.recalculateWalletBalances?.({ save:false, recordSnapshot:true }) } catch (_) {}
+    if (S.page === 'dashboard') App.renderDashboard?.()
+    else App.render?.()
+    try { App.showToast?.('รีเฟรชข้อมูลล่าสุดแล้ว', 'success') || toast('รีเฟรชข้อมูลล่าสุดแล้ว', 'success') } catch (_) {}
+    try {
+      return Promise.resolve(App.refreshMarketPrices?.()).finally(() => {
+        try { App.recalculateWalletBalances?.({ save:false, recordSnapshot:true }) } catch (_) {}
+        if (S.page === 'dashboard') App.renderDashboard?.()
+      })
+    } catch (_) {
+      return Promise.resolve()
+    }
+  },
 
   // ── Navigation ────────────────────────────────────────────
   showPage(page) {
@@ -896,7 +910,7 @@ App.render();
    preserving existing app state, storage, calculations and handlers.
    ============================================================ */
 ;(function uiStyleForV22(){
-  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const fmt = n => moneyFmt(Number(n) || 0)
   const clampPct = n => Math.max(0, Math.min(100, Number(n) || 0))
   const typeColor = type => type === 'income' ? 'var(--income)' : type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
@@ -1126,7 +1140,7 @@ App.render();
    storage/sync/calculation structures are preserved.
    ============================================================ */
 ;(function v223ReadabilityInteractionFixes(){
-  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const fmt = n => moneyFmt(Number(n) || 0)
   const numFmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
   const clampPct = n => Math.max(0, Math.min(100, Number(n) || 0))
@@ -1209,7 +1223,7 @@ App.render();
    and rule-based AI-style financial insights. No storage schema rewrite.
    ============================================================ */
 ;(function v225PracticalUxFixes(){
-  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const fmt = n => moneyFmt(Number(n) || 0)
   const numFmt = (n, digits = 2) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: digits })
   const pct = n => Math.max(0, Math.min(100, Number(n) || 0))
@@ -1518,7 +1532,7 @@ App.render();
    Scope: presentation/market-price robustness only. Keeps storage/sync logic intact.
    ============================================================ */
 ;(function v226InvestmentGoldAndColorFixes(){
-  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const numFmt = (n, digits = 4) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: digits })
   const investTypes = new Set(['gold','crypto','fcd'])
@@ -2203,8 +2217,17 @@ Calc.getUsableMoney = function(wallets) {
       .filter(Boolean)
       .filter(card => Number(card.due?.daysLeft) >= 0)
       .sort((a, b) => Number(a.due?.daysLeft || 9999) - Number(b.due?.daysLeft || 9999))
+    const todayStr = getTODAY()
+    const todayDay = Number(String(todayStr || '').slice(-2)) || 0
+    const dueTodayCards = alertCards.filter(card =>
+      String(card.due?.dateStr || '') === String(todayStr) ||
+      Number(card.due?.daysLeft || 9999) === 0 ||
+      Number(card.dueDay || 0) === todayDay
+    )
     const minDaysLeft = alertCards.length ? Number(alertCards[0].due.daysLeft || 0) : null
-    const nearDueCards = minDaysLeft === null ? [] : alertCards.filter(card => Number(card.due?.daysLeft || 0) === minDaysLeft)
+    const nearDueCards = dueTodayCards.length
+      ? dueTodayCards
+      : (minDaysLeft === null ? [] : alertCards.filter(card => Number(card.due?.daysLeft || 0) === minDaysLeft))
     const transferTotal = S.transactions
       .filter(t => (t.date || '').startsWith(dm) && t.type === 'transfer')
       .reduce((s,t) => s + Number(t.amount || 0), 0)
@@ -2231,7 +2254,10 @@ Calc.getUsableMoney = function(wallets) {
           <div class="mt-title">Money Tracker</div>
           <div class="mt-subtitle">${ESC(Calc.monthLabel(dm))}</div>
         </div>
+        <div class="mt-topbar-actions">
+          <button class="mt-hide-btn" onclick="App.refreshDashboard()">↻ รีเฟรช</button>
           <button class="mt-hide-btn" onclick="App.toggleHideMoney()">${S.settings.hideMoney ? '👁 แสดงตัวเลข' : '🙈 ซ่อนตัวเลข'}</button>
+        </div>
       </div>
       <div class="dash-month-nav">${months.map(m =>
         `<button class="chip${m === dm ? ' active' : ''}" onclick="App.setDashMonth('${ESC(m)}')">${ESC(mlabel(m))}</button>`
@@ -2650,7 +2676,7 @@ Calc.getUsableMoney = function(wallets) {
    auto-credit · settings restore on import · wallet spend summary
    ============================================================ */
 ;(function v30AllPhases() {
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
 
   // Add n months to a YYYY-MM-DD string, clamped to last day of target month
@@ -2688,7 +2714,7 @@ Calc.getUsableMoney = function(wallets) {
    2. deleteMerchant with showConfirm (replaces base confirm())
    ============================================================ */
 ;(function v31FinancialSafety() {
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const TX_TYPE_LABELS = { income:'รายรับ', expense:'รายจ่าย', transfer:'โอนเงิน', cc_payment:'ชำระบัตร' }
 
@@ -2858,7 +2884,7 @@ Calc.getUsableMoney = function(wallets) {
   const VERSION = '4.0-roadmap-phases'
   const INVEST_TYPES = new Set(['gold','crypto','fcd'])
   const CASH_TYPES = new Set(['bank','cash','ewallet','saving','credit'])
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const number = (n, digits = 4) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: digits })
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
@@ -3034,6 +3060,7 @@ Calc.getUsableMoney = function(wallets) {
     return tx
   }
 
+  /* AUTHORITATIVE base — V6.5 (v65SaveTx) wraps this via prevSaveTx */
   App.saveTx = function v40SaveTx() {
     const isEdit = S.txMode === 'edit' && !!S.editingTxId
     const draft = { ...S.tx, amount:Number(S.tx.amount || 0) }
@@ -3124,9 +3151,18 @@ Calc.getUsableMoney = function(wallets) {
     if (owed > 0 && amount > owed + 0.01) { toast(`ยอดค้างชำระมี ${money(owed)} ไม่ควรชำระเกิน`, 'error'); return }
     const st = App.getCardStatement(card.id)
     const tx = { id:Calc.genId(), type:'cc_payment', amount, walletId:sourceId, toWalletId:card.id, date:today(), note:`ชำระ ${card.name}`, statementId:st?.id }
+    const subScreenCardId = document.querySelector('.cc-detail-screen')?.dataset.cardId || ''
     S.transactions.unshift(tx)
     App.recalculateWalletBalances({ save:false, recordSnapshot:true })
-    persist(); App.closeOverlay('overlay-cc-pay'); App.render(); toast(`ชำระ ${money(amount)} สำเร็จ`, 'success')
+    persist()
+    App.closeOverlay('overlay-cc-pay')
+    if (subScreenCardId && subScreenCardId === card.id) {
+      App.openCCDetail(card.id)
+    }
+    if (S.page === 'dashboard') App.renderDashboard?.()
+    else if (S.page === 'wallets') App.renderWallets?.()
+    else App.render()
+    toast(`ชำระ ${money(amount)} สำเร็จ`, 'success')
   }
 
   // ── Phase 3: Installment center + recurring due schedule ──────────────────
@@ -3319,6 +3355,46 @@ Calc.getUsableMoney = function(wallets) {
 })();
 
 /* ============================================================
+   App.utils — centralized shared helper hub
+   Canonical implementations. IIFEs after V4.0 should reference
+   these instead of re-defining local copies.
+   ============================================================ */
+;(function installAppUtils(){
+  function _pad2(n) { return String(n).padStart(2, '0') }
+  function _clampDay(year, monthIndex, day) {
+    return Math.max(1, Math.min(Number(day) || 1, new Date(year, monthIndex + 1, 0).getDate()))
+  }
+  function _today() {
+    return typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+  }
+  function _addDays(dateStr, days) {
+    const [y, m, d] = String(dateStr || _today()).split('-').map(Number)
+    const dt = new Date(y, (m || 1) - 1, d || 1)
+    dt.setDate(dt.getDate() + Number(days || 0))
+    return `${dt.getFullYear()}-${_pad2(dt.getMonth() + 1)}-${_pad2(dt.getDate())}`
+  }
+  function _addMonths(dateStr, months, preferredDay) {
+    const [y, m, d] = String(dateStr || _today()).split('-').map(Number)
+    const target = new Date((y || new Date().getFullYear()), (m || 1) - 1 + Number(months || 0), 1)
+    const day = _clampDay(target.getFullYear(), target.getMonth(), preferredDay || d || 1)
+    return `${target.getFullYear()}-${_pad2(target.getMonth() + 1)}-${_pad2(day)}`
+  }
+  function _walletById(id) { return (S.wallets || []).find(w => w.id === id) || null }
+  function _catById(id) {
+    return [...(S.categories?.expense || []), ...(S.categories?.income || [])].find(c => c.id === id) || null
+  }
+  App.utils = {
+    esc: App._esc,
+    clampDay: _clampDay,
+    today: _today,
+    addDays: _addDays,
+    addMonths: _addMonths,
+    walletById: _walletById,
+    catById: _catById,
+  }
+})();
+
+/* ============================================================
    V4.1 UX corrections on top of roadmap phases
    - Compact transaction filters
    - CC detail order + compact statement
@@ -3330,11 +3406,11 @@ Calc.getUsableMoney = function(wallets) {
    - Recurring cadence prompt fields in add transaction
    ============================================================ */
 ;(function v41UxCorrections(){
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
   const number = (n, digits = 4) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: digits })
-  const walletById = id => (S.wallets || []).find(w => w.id === id) || null
+  const walletById = App.utils.walletById
   const catById = id => App._findCat?.(id) || null
   const isInvestWallet = w => ['gold','crypto','fcd'].includes(w?.type)
 
@@ -3496,11 +3572,11 @@ Calc.getUsableMoney = function(wallets) {
    - installment group edit flow
    ============================================================ */
 ;(function v42UxAndInstallmentEdit(){
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
   const number = (n, digits = 4) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: digits })
-  const walletById = id => (S.wallets || []).find(w => w.id === id) || null
+  const walletById = App.utils.walletById
   const catById = id => App._findCat?.(id) || null
   const isInvestWallet = w => ['gold','crypto','fcd'].includes(w?.type)
   const TH_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
@@ -4047,6 +4123,7 @@ Calc.getUsableMoney = function(wallets) {
 
   /* consolidated: removed legacy _marketText from line 5799 */
 
+  /* DEAD CODE — completely replaced by V6.6 (App.refreshMarketPrices = function(){return syncMarketSuite(...)}) */
   App.refreshMarketPrices = async function v45RefreshMarket() {
     const next = { ...(S.marketPrices || {}) }
     let anyOk = false, goldOk = false
@@ -4163,10 +4240,10 @@ Calc.getUsableMoney = function(wallets) {
   'use strict'
 
   // ── Shared micro-helpers ────────────────────────────────────
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
-  const walletById = id => (S.wallets || []).find(w => w.id === id) || null
+  const walletById = App.utils.walletById
   const genId = () => (typeof Calc !== 'undefined' && Calc.genId) ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2))
   const nowISO = () => new Date().toISOString()
   const notify = (msg, type = 'info') => { try { toast(msg, type) } catch { console.log(msg) } }
@@ -5244,7 +5321,7 @@ Calc.getUsableMoney = function(wallets) {
    ============================================================ */
 ;(function v60Fixes(){
   // ── Shared helpers ────────────────────────────────────────────────────────
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))
+  const esc = App._esc
   const today = () => typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)
   function walletById(id) { return (S.wallets || []).find(w => w.id === id) || null }
   function addMonths(dateStr, n) {
@@ -5324,7 +5401,7 @@ Calc.getUsableMoney = function(wallets) {
    - Create/update a recurring schedule when saving a recurring tx
    ============================================================ */
 ;(function v64AddTxDecimalAndRecurringFix(){
-  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const typeColor = type => type === 'income' ? 'var(--income)' : type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
   const typeLabel = type => type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'
   const primaryWallet = () => S.wallets?.find(w => w.type !== 'credit')?.id || S.wallets?.[0]?.id || ''
@@ -5425,7 +5502,7 @@ Calc.getUsableMoney = function(wallets) {
    - Show a delete-choice modal for every recurring transaction.
    ============================================================ */
 ;(function v65RecurringLiteLedger(){
-  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = App._esc
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
   const notify = (msg, type='info') => { try { toast(msg, type) } catch { try { App.showToast?.(msg, type) } catch { console.log(msg) } } }
   const money = n => { try { return moneyFmt(Number(n) || 0) } catch { return `฿${(Number(n)||0).toLocaleString('th-TH')}` } }
@@ -5770,6 +5847,7 @@ Calc.getUsableMoney = function(wallets) {
   App.skipRecurring = function v65SkipRecurring(id) { App.skipRecurringNow(id) }
 
   const prevDeleteTx = App.deleteTx?.bind(App)
+  /* AUTHORITATIVE FINAL — App.deleteTx */
   App.deleteTx = function v65DeleteTx() {
     const tx = (S.transactions || []).find(t => t.id === S.selectedTxId)
     if (isRecurringTx(tx)) { showRecurringDeleteChoice(tx); return }
@@ -5829,6 +5907,7 @@ Calc.getUsableMoney = function(wallets) {
   }
 
   const prevSaveTx = App.saveTx?.bind(App)
+  /* AUTHORITATIVE FINAL — App.saveTx (wraps V4.0 base via prevSaveTx) */
   App.saveTx = function v65SaveTx() {
     const beforeTxIds = new Set((S.transactions || []).map(t => t.id))
     const beforeRecIds = new Set((S.recurring || []).map(r => r.id))
@@ -5882,7 +5961,7 @@ Calc.getUsableMoney = function(wallets) {
    - Wallets-page portfolio section + reports summary
    ============================================================ */
 ;(function v66CentralizedCryptoPortfolio() {
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[ch]))
+  const esc = App._esc
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
   const nowISO = () => new Date().toISOString()
   const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
@@ -6603,6 +6682,7 @@ Calc.getUsableMoney = function(wallets) {
     })
   }
 
+  /* AUTHORITATIVE FINAL — App.refreshMarketPrices */
   App.refreshMarketPrices = function() {
     return syncMarketSuite({ cryptoOnly: false })
   }
@@ -7178,6 +7258,7 @@ Calc.getUsableMoney = function(wallets) {
       </div>`)
   }
 
+  /* AUTHORITATIVE FINAL — App.renderWallets */
   App.renderWallets = function() {
     ensureCryptoState()
     const wallets = visibleWallets()
@@ -7275,10 +7356,10 @@ Calc.getUsableMoney = function(wallets) {
    ============================================================ */
 ;(function v67BackupCreditViewport(){
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[ch]))
+  const esc = App._esc
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
-  const walletById = id => (S.wallets || []).find(w => w.id === id) || null
+  const walletById = App.utils.walletById
   const genId = () => (typeof Calc?.genId === 'function' ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2)))
   const TH_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
   const isStandaloneMode = () => !!(
@@ -7321,6 +7402,56 @@ Calc.getUsableMoney = function(wallets) {
     return clampDueAfter(diff > 0 ? diff : 10)
   }
 
+  function buildNextDueDateFromDay(dueDay, refDate = today()) {
+    const numericDueDay = Math.max(1, Math.min(31, Number(dueDay) || 0))
+    if (!numericDueDay) return ''
+    const [ry, rm, rd] = String(refDate || today()).split('-').map(Number)
+    const baseYear = ry || new Date().getFullYear()
+    const baseMonthIndex = (rm || 1) - 1
+    const buildDateStr = (year, monthIndex) => {
+      const day = Calc.clampDay(year, monthIndex, numericDueDay)
+      return `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+    }
+    let dueDate = buildDateStr(baseYear, baseMonthIndex)
+    if (String(dueDate) < String(refDate || today())) {
+      const nextBase = new Date(baseYear, baseMonthIndex + 1, 1)
+      dueDate = buildDateStr(nextBase.getFullYear(), nextBase.getMonth())
+    }
+    return dueDate
+  }
+
+  function buildNextDueDateFromCycle(card, refDate = today()) {
+    if (!card) return ''
+    const cycleDay = clampCycleDay(card.cycleDay || 25)
+    const dueAfterCycleDays = clampDueAfter(
+      card.dueAfterCycleDays || deriveDueAfterCycleDays(cycleDay, card.dueDay || 5, refDate)
+    )
+    const [ry, rm] = String(refDate || today()).split('-').map(Number)
+    const baseYear = ry || new Date().getFullYear()
+    const baseMonthIndex = (rm || 1) - 1
+    const buildEndStr = (year, monthIndex) => {
+      const day = Calc.clampDay(year, monthIndex, cycleDay)
+      return `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+    }
+    let dueDate = Calc.getCreditCardDueDate(buildEndStr(baseYear, baseMonthIndex), dueAfterCycleDays)
+    if (String(dueDate || '') < String(refDate || today())) {
+      const nextBase = new Date(baseYear, baseMonthIndex + 1, 1)
+      dueDate = Calc.getCreditCardDueDate(
+        buildEndStr(nextBase.getFullYear(), nextBase.getMonth()),
+        dueAfterCycleDays
+      )
+    }
+    return dueDate || ''
+  }
+
+  function shiftDateStr(dateStr, dayDelta = 0) {
+    const [y, m, d] = String(dateStr || '').split('-').map(Number)
+    if (!y || !m || !d) return ''
+    const next = new Date(y, m - 1, d)
+    next.setDate(next.getDate() + Number(dayDelta || 0))
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`
+  }
+
   function normalizeCreditCardWallets() {
     let changed = false
     ;(S.wallets || []).forEach(w => {
@@ -7331,9 +7462,11 @@ Calc.getUsableMoney = function(wallets) {
         : deriveDueAfterCycleDays(cycleDay, w.dueDay || 5, today())
       if (w.cycleDay !== cycleDay) { w.cycleDay = cycleDay; changed = true }
       if (w.dueAfterCycleDays !== dueAfterCycleDays) { w.dueAfterCycleDays = dueAfterCycleDays; changed = true }
-      const nextDue = Calc.getCreditCardDueDate(`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Calc.clampDay(new Date().getFullYear(), new Date().getMonth(), cycleDay)).padStart(2,'0')}`, dueAfterCycleDays)
-      const legacyDueDay = Number(String(nextDue).slice(-2)) || w.dueDay || 5
-      if (w.dueDay !== legacyDueDay) { w.dueDay = legacyDueDay; changed = true }
+      if (!Number(w.dueDay)) {
+        const nextDue = Calc.getCreditCardDueDate(`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Calc.clampDay(new Date().getFullYear(), new Date().getMonth(), cycleDay)).padStart(2,'0')}`, dueAfterCycleDays)
+        const legacyDueDay = Number(String(nextDue).slice(-2)) || 5
+        if (w.dueDay !== legacyDueDay) { w.dueDay = legacyDueDay; changed = true }
+      }
     })
     return changed
   }
@@ -7757,28 +7890,34 @@ Calc.getUsableMoney = function(wallets) {
 
   App.getCreditCardDueInfo = function(card, refDate = today()) {
     if (!card) return null
-    const cycleDay = clampCycleDay(card.cycleDay || 25)
-    const dueAfterCycleDays = clampDueAfter(
-      card.dueAfterCycleDays || deriveDueAfterCycleDays(cycleDay, card.dueDay || 5, refDate)
-    )
-    const [ry, rm] = String(refDate || today()).split('-').map(Number)
-    const baseYear = ry || new Date().getFullYear()
-    const baseMonthIndex = (rm || 1) - 1
-    const buildEndStr = (year, monthIndex) => {
-      const day = Calc.clampDay(year, monthIndex, cycleDay)
-      return `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+    const statementDueDates = []
+    if (card.id && typeof App.getCardStatement === 'function') {
+      let cursorRef = refDate
+      const seenStatementIds = new Set()
+      for (let i = 0; i < 3; i++) {
+        const st = App.getCardStatement(card.id, cursorRef)
+        if (!st || !st.id || seenStatementIds.has(st.id)) break
+        seenStatementIds.add(st.id)
+        if (Number(st.balanceDue || 0) > 0 && String(st.dueDate || '') >= String(refDate || today())) {
+          statementDueDates.push(String(st.dueDate || ''))
+        }
+        const prevRef = shiftDateStr(st.start, -1)
+        if (!prevRef || prevRef === cursorRef) break
+        cursorRef = prevRef
+      }
     }
-    let dueDate = Calc.getCreditCardDueDate(buildEndStr(baseYear, baseMonthIndex), dueAfterCycleDays)
-    if (String(dueDate || '') < String(refDate || today())) {
-      const nextBase = new Date(baseYear, baseMonthIndex + 1, 1)
-      dueDate = Calc.getCreditCardDueDate(
-        buildEndStr(nextBase.getFullYear(), nextBase.getMonth()),
-        dueAfterCycleDays
-      )
-    }
-    return dueDate ? Calc.getDaysUntilDate(dueDate, refDate) : null
+    const candidates = [
+      ...statementDueDates,
+      buildNextDueDateFromDay(card.dueDay, refDate),
+      buildNextDueDateFromCycle(card, refDate),
+    ]
+      .filter(Boolean)
+      .filter((value, index, arr) => arr.indexOf(value) === index)
+      .sort((a, b) => String(a).localeCompare(String(b)))
+    return candidates.length ? Calc.getDaysUntilDate(candidates[0], refDate) : null
   }
 
+  /* AUTHORITATIVE FINAL — App.getCardStatement */
   App.getCardStatement = function(cardId, refDate = today()) {
     const card = walletById(cardId)
     if (!card) return null
@@ -7812,6 +7951,7 @@ Calc.getUsableMoney = function(wallets) {
     return { id, cardId, start: startStr, end: endStr, dueDate: dueStr, dueAfterCycleDays, purchases, payments, purchaseTotal, paidTotal, balanceDue, paid: balanceDue <= 0 && purchaseTotal > 0, reward }
   }
 
+  /* AUTHORITATIVE FINAL — App.openCCDetail */
   App.openCCDetail = function(cardId) {
     const card = walletById(cardId)
     if (!card) return
@@ -7911,6 +8051,7 @@ Calc.getUsableMoney = function(wallets) {
     })
   }
 
+  /* AUTHORITATIVE FINAL — App.syncAppViewportHeight */
   App.syncAppViewportHeight = function() {
     const vv = window.visualViewport
     const visualHeight = Math.round(vv?.height || window.innerHeight || document.documentElement.clientHeight || stableViewportHeight || 0)
@@ -7928,6 +8069,7 @@ Calc.getUsableMoney = function(wallets) {
 
   normalizeCreditCardWallets()
   try { ensureCCBenefitRulesState() } catch (_) {}
+  /* AUTHORITATIVE FINAL viewport sync registration — supersedes earlier setAppHeight listeners */
   App.syncAppViewportHeight()
   const syncViewportSoon = () => requestAnimationFrame(() => App.syncAppViewportHeight())
   window.addEventListener('resize', syncViewportSoon, { passive:true })

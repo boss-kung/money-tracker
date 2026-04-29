@@ -402,14 +402,7 @@ select.form-input  { appearance: none; cursor: pointer; }
   background-repeat: no-repeat; background-position: 12px center;
 }
 
-/* ── Desktop Shell ───────────────────────────────────────── */
-@media (min-width: 431px) {
-  
-  html.dark body { background: #020617; }
-  #app  { border-radius: 40px; box-shadow: 0 24px 80px rgba(0,0,0,.3); top: 20px; bottom: 20px; height: auto; }
-  #bottom-nav { border-radius: 0 0 40px 40px; }
-}
-
+/* consolidated: removed V1 desktop shell @media (min-width: 431px) — overridden by V2.3.1 shell */
 
 /* ── V2 refinements ───────────────────────────────────────── */
 .tx-action-grid {
@@ -609,10 +602,7 @@ select.form-input  { appearance: none; cursor: pointer; }
 }
 
 
-@media (min-width: 431px) {
-  body { background: linear-gradient(135deg, #CBD5E1, #E2E8F0); }
-  #app { border-radius: 38px; }
-}
+/* consolidated: removed V2 desktop gradient block — overridden by V2.3.1 shell */
 
 @media (max-width: 360px) {
   .wallet-filter-custom { grid-template-columns: 1fr; }
@@ -689,21 +679,7 @@ body {
 }
 
 
-@media (min-width: 560px) {
-  #app {
-    width: 390px;
-    max-width: 390px;
-    height: min(844px, calc(100dvh - 80px));
-    min-height: 720px;
-    inset: auto;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    border-radius: 48px;
-    overflow: hidden;
-    box-shadow: 0 40px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08);
-  }
-}
+/* consolidated: removed V2.2 phone-mockup @media (min-width: 560px) — overridden by V2.3.1 shell */
 
 /* Keep all floating layers inside the app frame on desktop. */
 #bottom-nav,
@@ -814,6 +790,13 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   gap: 14px;
+}
+.mt-topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .mt-title { font-size: 22px; font-weight: 900; color: var(--text); line-height: 1.15; letter-spacing: -.055em; }
 .mt-subtitle { font-size: 12px; color: var(--muted); margin-top: 1px; }
@@ -1155,9 +1138,16 @@ body.ios-standalone {
 
 body.ios-standalone,
 body.ios-standalone #app,
-body.ios-standalone #sub-screenbody.ios-standalone #sub-screen {
-  height: 97lvh !important;
-  min-height: 97lvh !important;
+body.ios-standalone #sub-screen {
+  height: 100lvh !important;
+  min-height: 100lvh !important;
+}
+
+body.ios-standalone #app,
+body.ios-standalone #sub-screen {
+  inset: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
 }
 
 body.ios-standalone #page-transactions .page-header,
@@ -1179,7 +1169,7 @@ body.ios-standalone #bottom-nav {
   position: fixed !important;
   left: 0 !important;
   right: 0 !important;
-  bottom: 3px !important;
+  bottom: 0px !important;
   width: 100% !important;
   margin: 0 !important;
   height: var(--nav-h) !important;
@@ -1246,6 +1236,9 @@ body.ios-standalone.keyboard-open .add-detail-actions {
   --shadow-sm: 0 8px 22px rgba(15, 23, 42, .065);
   --shadow-md: 0 16px 36px rgba(15, 23, 42, .11);
   --shadow-float: 0 18px 44px rgba(15, 23, 42, .18);
+  --card: var(--surface);
+  --panel: var(--elevated);
+  --line: var(--border);
 }
 
 html.dark {
