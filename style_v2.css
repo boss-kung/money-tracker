@@ -1136,6 +1136,10 @@ body.ios-standalone {
   --safe-t: max(env(safe-area-inset-top, 0px), 12px) !important;
 }
 
+body.standalone {
+  --safe-b: 0px !important;
+}
+
 body.ios-standalone,
 body.ios-standalone #app,
 body.ios-standalone #sub-screen {
@@ -1287,7 +1291,7 @@ input,
 select,
 textarea {
   font-family: var(--font-ios) !important;
-  font-size: 16px;
+  font-size: 16px !important;
 }
 
 button { cursor: pointer; }
@@ -1314,6 +1318,135 @@ textarea:disabled {
   border-radius: 0 !important;
   background: var(--bg) !important;
   color: var(--text);
+}
+
+#mt-update-banner {
+  position: fixed;
+  left: max(12px, var(--safe-l));
+  right: max(12px, var(--safe-r));
+  bottom: calc(var(--nav-h) + var(--safe-b) + 12px);
+  z-index: 10020;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(16px);
+}
+
+#mt-update-banner .mt-update-copy {
+  min-width: 0;
+}
+
+#mt-update-banner strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text);
+}
+
+#mt-update-banner span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+#mt-update-banner button {
+  width: auto;
+  min-height: 38px;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  color: #fff;
+  background: var(--primary);
+  font-size: 13px !important;
+  font-weight: 800;
+}
+
+body.keyboard-open #mt-update-banner {
+  display: none;
+}
+
+.goal-card {
+  margin-bottom: 12px;
+}
+
+.goal-head,
+.goal-title,
+.goal-progress-row,
+.goal-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.goal-head,
+.goal-progress-row,
+.goal-foot {
+  justify-content: space-between;
+}
+
+.goal-title {
+  min-width: 0;
+}
+
+.goal-title > span {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--elevated);
+  flex-shrink: 0;
+}
+
+.goal-title b,
+.goal-title small {
+  display: block;
+}
+
+.goal-title b {
+  font-size: 15px;
+}
+
+.goal-title small,
+.goal-foot {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.goal-progress-row {
+  margin-top: 12px;
+}
+
+.goal-progress-row strong {
+  font-size: 18px;
+  letter-spacing: -.04em;
+}
+
+.goal-progress-row span {
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.goal-progress-row em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.goal-progress {
+  margin: 8px 0 7px;
+}
+
+.upcoming-item.overdue .list-item-name {
+  color: var(--expense);
 }
 
 @supports not (height: 100dvh) {

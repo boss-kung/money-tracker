@@ -19,10 +19,13 @@ const KEYS = {
   cryptoHoldings:      'mt_crypto_holdings',
   cryptoTransactions:  'mt_crypto_transactions',
   cryptoSyncMeta:      'mt_crypto_sync_meta',
+  goals:               'mt_goals',
   migrations:          'mt_migrations',
 }
 
 const BACKUP_SCHEMA_VERSION = 2
+const LOCAL_BACKUP_KEY = 'mt_local_backup_snapshots'
+const LOCAL_BACKUP_LIMIT = 5
 const BACKUP_SCHEMA_KEYS = [
   'transactions',
   'wallets',
@@ -43,6 +46,7 @@ const BACKUP_SCHEMA_KEYS = [
   'cryptoHoldings',
   'cryptoTransactions',
   'cryptoSyncMeta',
+  'goals',
   'migrations',
   'settings',
 ]
@@ -67,27 +71,51 @@ const BACKUP_DEFAULTS = {
   cryptoHoldings: [],
   cryptoTransactions: [],
   cryptoSyncMeta: {},
+  goals: [],
   migrations: { cryptoCentralizedV1: false },
   settings: {},
 }
 
 const Storage = {
+  lastLoadError: null,
+  lastSaveError: null,
+  _lastStorageToastAt: 0,
+
   load(key) {
-    try { return JSON.parse(localStorage.getItem(key)) } catch { return null }
+    try { return JSON.parse(localStorage.getItem(key)) } catch (e) {
+      Storage.lastLoadError = { key, message: e?.message || 'JSON parse failed', at: new Date().toISOString() }
+      setTimeout(() => {
+        if (typeof toast === 'function') toast('พบข้อมูลบางส่วนอ่านไม่ได้ ระบบใช้ค่าปลอดภัยแทน', 'warn')
+      }, 0)
+      return null
+    }
   },
 
   save(key, data) {
     try {
       localStorage.setItem(key, JSON.stringify(data))
+      if (Storage.lastSaveError?.key === key) Storage.lastSaveError = null
+      return true
     } catch (e) {
+      Storage.lastSaveError = { key, message: e?.message || 'save failed', at: new Date().toISOString() }
+      const canToast = Date.now() - Number(Storage._lastStorageToastAt || 0) > 1200
       if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
         // Defer toast call — Storage may be loaded before App
         setTimeout(() => {
-          if (typeof toast === 'function') toast('พื้นที่จัดเก็บเต็ม กรุณาส่งออกข้อมูลก่อนเพิ่มรายการใหม่', 'error')
+          if (canToast && typeof toast === 'function') {
+            Storage._lastStorageToastAt = Date.now()
+            toast('พื้นที่จัดเก็บเต็ม กรุณาส่งออกข้อมูลก่อนเพิ่มรายการใหม่', 'error')
+          }
         }, 0)
       } else {
-        throw e
+        setTimeout(() => {
+          if (canToast && typeof toast === 'function') {
+            Storage._lastStorageToastAt = Date.now()
+            toast('บันทึกข้อมูลไม่สำเร็จ กรุณาส่งออกข้อมูลสำรองไว้ก่อน', 'error')
+          }
+        }, 0)
       }
+      return false
     }
   },
 
@@ -114,32 +142,37 @@ const Storage = {
     data.cryptoHoldings      = Storage.load(KEYS.cryptoHoldings)      || JSON.parse(JSON.stringify(typeof DEFAULT_CRYPTO_HOLDINGS !== 'undefined' ? DEFAULT_CRYPTO_HOLDINGS : []))
     data.cryptoTransactions  = Storage.load(KEYS.cryptoTransactions)  || JSON.parse(JSON.stringify(typeof DEFAULT_CRYPTO_TRANSACTIONS !== 'undefined' ? DEFAULT_CRYPTO_TRANSACTIONS : []))
     data.cryptoSyncMeta      = Storage.load(KEYS.cryptoSyncMeta)      || {}
+    data.goals               = Storage.load(KEYS.goals)               || JSON.parse(JSON.stringify(typeof DEFAULT_GOALS !== 'undefined' ? DEFAULT_GOALS : []))
     data.migrations          = Storage.load(KEYS.migrations)          || JSON.parse(JSON.stringify(typeof DEFAULT_MIGRATIONS !== 'undefined' ? DEFAULT_MIGRATIONS : { cryptoCentralizedV1: false }))
     return data
   },
 
   saveAll(state) {
-    Storage.save(KEYS.transactions,  state.transactions)
-    Storage.save(KEYS.wallets,       state.wallets)
-    Storage.save(KEYS.categories,    state.categories)
-    Storage.save(KEYS.budgets,       state.budgets)
-    Storage.save(KEYS.settings,      state.settings)
-    Storage.save(KEYS.recurring,     state.recurring)
-    Storage.save(KEYS.merchants,     state.merchants)
-    Storage.save(KEYS.ccBenefits,    state.ccBenefits)
-    Storage.save(KEYS.ccBenefitRules, state.ccBenefitRules || [])
-    Storage.save(KEYS.incomeBudgets,       state.incomeBudgets)
-    Storage.save(KEYS.marketPrices,        state.marketPrices        || {})
-    Storage.save(KEYS.rewardLedger,        state.rewardLedger        || [])
-    Storage.save(KEYS.netWorthSnapshots,   state.netWorthSnapshots   || [])
-    Storage.save(KEYS.investmentSnapshots, state.investmentSnapshots || [])
-    Storage.save(KEYS.creditLimitGroups,   state.creditLimitGroups   || [])
-    Storage.save(KEYS.rewardAccounts,      state.rewardAccounts      || [])
-    Storage.save(KEYS.cryptoAssets,        state.cryptoAssets        || [])
-    Storage.save(KEYS.cryptoHoldings,      state.cryptoHoldings      || [])
-    Storage.save(KEYS.cryptoTransactions,  state.cryptoTransactions  || [])
-    Storage.save(KEYS.cryptoSyncMeta,      state.cryptoSyncMeta      || {})
-    Storage.save(KEYS.migrations,          state.migrations          || { cryptoCentralizedV1: false })
+    const results = [
+      Storage.save(KEYS.transactions,  state.transactions),
+      Storage.save(KEYS.wallets,       state.wallets),
+      Storage.save(KEYS.categories,    state.categories),
+      Storage.save(KEYS.budgets,       state.budgets),
+      Storage.save(KEYS.settings,      state.settings),
+      Storage.save(KEYS.recurring,     state.recurring),
+      Storage.save(KEYS.merchants,     state.merchants),
+      Storage.save(KEYS.ccBenefits,    state.ccBenefits),
+      Storage.save(KEYS.ccBenefitRules, state.ccBenefitRules || []),
+      Storage.save(KEYS.incomeBudgets,       state.incomeBudgets),
+      Storage.save(KEYS.marketPrices,        state.marketPrices        || {}),
+      Storage.save(KEYS.rewardLedger,        state.rewardLedger        || []),
+      Storage.save(KEYS.netWorthSnapshots,   state.netWorthSnapshots   || []),
+      Storage.save(KEYS.investmentSnapshots, state.investmentSnapshots || []),
+      Storage.save(KEYS.creditLimitGroups,   state.creditLimitGroups   || []),
+      Storage.save(KEYS.rewardAccounts,      state.rewardAccounts      || []),
+      Storage.save(KEYS.cryptoAssets,        state.cryptoAssets        || []),
+      Storage.save(KEYS.cryptoHoldings,      state.cryptoHoldings      || []),
+      Storage.save(KEYS.cryptoTransactions,  state.cryptoTransactions  || []),
+      Storage.save(KEYS.cryptoSyncMeta,      state.cryptoSyncMeta      || {}),
+      Storage.save(KEYS.goals,               state.goals               || []),
+      Storage.save(KEYS.migrations,          state.migrations          || { cryptoCentralizedV1: false }),
+    ]
+    return results.every(Boolean)
   },
 
   buildExportPayload(state) {
@@ -195,6 +228,33 @@ const Storage = {
     a.download = `money-tracker-${(typeof getTODAY === 'function' ? getTODAY() : TODAY)}.json`
     a.click()
     URL.revokeObjectURL(url)
+  },
+
+  createLocalBackup(state, reason = 'manual') {
+    try {
+      const snapshot = {
+        id: `backup-${Date.now()}`,
+        reason,
+        createdAt: new Date().toISOString(),
+        payload: Storage.buildExportPayload(state),
+      }
+      let rows = []
+      try { rows = JSON.parse(localStorage.getItem(LOCAL_BACKUP_KEY) || '[]') } catch (_) { rows = [] }
+      rows = [snapshot, ...(Array.isArray(rows) ? rows : [])].slice(0, LOCAL_BACKUP_LIMIT)
+      try {
+        localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(rows))
+      } catch (e) {
+        rows = rows.slice(0, 2)
+        localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(rows))
+      }
+      return snapshot
+    } catch (e) {
+      Storage.lastSaveError = { key: LOCAL_BACKUP_KEY, message: e?.message || 'backup failed', at: new Date().toISOString() }
+      setTimeout(() => {
+        if (typeof toast === 'function') toast('สร้าง backup อัตโนมัติไม่สำเร็จ กรุณาส่งออก JSON เองก่อนทำรายการเสี่ยง', 'warn')
+      }, 0)
+      return null
+    }
   },
 
   importJSON(file, onSuccess, onError) {

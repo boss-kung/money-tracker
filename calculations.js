@@ -124,6 +124,216 @@ const Calc = {
     return Number(t.amount || 0)
   },
 
+  getPostedTransactions(transactions) {
+    return (transactions || []).filter(t => Calc.isPostedTx(t))
+  },
+
+  getPreviousMonth(month) {
+    const [y, m] = String(month || '').split('-').map(Number)
+    if (!y || !m) return ''
+    const dt = new Date(y, m - 2, 1)
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`
+  },
+
+  getMonthlyTransactions(transactions, month, opts = {}) {
+    const { types = null, includeScheduled = false } = opts
+    const allowed = Array.isArray(types) ? new Set(types) : null
+    return (transactions || []).filter(t => {
+      if (!t || !String(t.date || '').startsWith(month)) return false
+      if (!includeScheduled && !Calc.isPostedTx(t)) return false
+      if (allowed && !allowed.has(t.type)) return false
+      return true
+    })
+  },
+
+  getMonthlyIncomeExpense(transactions, month) {
+    const txns = Calc.getMonthlyTransactions(transactions, month)
+    let income = 0
+    let expense = 0
+    let transfer = 0
+    let ccPayment = 0
+    txns.forEach(t => {
+      if (t.type === 'income') income += Number(t.amount || 0)
+      else if (t.type === 'expense') expense += Calc.getExpenseLedgerAmount(t)
+      else if (t.type === 'transfer') transfer += Number(t.amount || 0)
+      else if (t.type === 'cc_payment') ccPayment += Number(t.amount || 0)
+    })
+    const netCashflow = income - expense
+    const savingsRate = income > 0 ? (netCashflow / income) * 100 : null
+    return {
+      income: Math.round(income * 100) / 100,
+      expense: Math.round(expense * 100) / 100,
+      transfer: Math.round(transfer * 100) / 100,
+      ccPayment: Math.round(ccPayment * 100) / 100,
+      netCashflow: Math.round(netCashflow * 100) / 100,
+      savingsRate: savingsRate === null ? null : Math.round(savingsRate * 10) / 10,
+    }
+  },
+
+  getCategoryBreakdown(transactions, month, opts = {}) {
+    const {
+      type = 'expense',
+      categories = [],
+      uncategorizedLabel = 'ไม่ระบุหมวดหมู่',
+      uncategorizedIcon = '📦',
+      uncategorizedColor = '#94A3B8',
+    } = opts
+    const txns = Calc.getMonthlyTransactions(transactions, month, { types: [type] })
+    const total = txns.reduce((sum, t) => {
+      const amount = type === 'expense' ? Calc.getExpenseLedgerAmount(t) : Number(t.amount || 0)
+      return sum + amount
+    }, 0)
+    const map = new Map()
+    txns.forEach(t => {
+      const key = t.categoryId || '__uncategorized__'
+      const current = map.get(key) || { id: key, amount: 0, count: 0 }
+      current.amount += type === 'expense' ? Calc.getExpenseLedgerAmount(t) : Number(t.amount || 0)
+      current.count += 1
+      map.set(key, current)
+    })
+    return [...map.values()]
+      .map(row => {
+        const cat = row.id === '__uncategorized__' ? null : (categories || []).find(c => c.id === row.id)
+        const amount = Math.round(Number(row.amount || 0) * 100) / 100
+        return {
+          id: row.id,
+          amount,
+          count: row.count,
+          pct: total > 0 ? (amount / total) * 100 : 0,
+          label: cat?.label || uncategorizedLabel,
+          icon: cat?.icon || uncategorizedIcon,
+          color: cat?.color || uncategorizedColor,
+        }
+      })
+      .sort((a, b) => b.amount - a.amount || b.count - a.count)
+  },
+
+  getMerchantBreakdown(transactions, month, opts = {}) {
+    const {
+      uncategorizedLabel = 'ไม่ระบุร้านค้า',
+    } = opts
+    const txns = Calc.getMonthlyTransactions(transactions, month, { types: ['expense'] })
+    const total = txns.reduce((sum, t) => sum + Calc.getExpenseLedgerAmount(t), 0)
+    const map = new Map()
+    txns.forEach(t => {
+      const key = String(t.merchant || '').trim() || '__unknown_merchant__'
+      const current = map.get(key) || { merchant: key, amount: 0, count: 0 }
+      current.amount += Calc.getExpenseLedgerAmount(t)
+      current.count += 1
+      map.set(key, current)
+    })
+    return [...map.values()]
+      .map(row => {
+        const amount = Math.round(Number(row.amount || 0) * 100) / 100
+        return {
+          merchant: row.merchant === '__unknown_merchant__' ? uncategorizedLabel : row.merchant,
+          amount,
+          count: row.count,
+          pct: total > 0 ? (amount / total) * 100 : 0,
+        }
+      })
+      .sort((a, b) => b.amount - a.amount || b.count - a.count || String(a.merchant).localeCompare(String(b.merchant)))
+  },
+
+  getMonthComparison(transactions, month, opts = {}) {
+    const previousMonth = opts.previousMonth || Calc.getPreviousMonth(month)
+    const current = Calc.getMonthlyIncomeExpense(transactions, month)
+    const previous = previousMonth ? Calc.getMonthlyIncomeExpense(transactions, previousMonth) : null
+    const expCats = Calc.getCategoryBreakdown(transactions, month, { type: 'expense', categories: opts.expenseCategories || [] })
+    const prevExpCats = previousMonth
+      ? Calc.getCategoryBreakdown(transactions, previousMonth, { type: 'expense', categories: opts.expenseCategories || [] })
+      : []
+    const prevMap = new Map(prevExpCats.map(row => [row.id, row]))
+    const topCategory = expCats[0] || null
+    const topCategoryDelta = topCategory
+      ? Math.round((topCategory.amount - Number(prevMap.get(topCategory.id)?.amount || 0)) * 100) / 100
+      : 0
+    const compare = (cur, prev) => {
+      if (!previous || !(Math.abs(Number(prev || 0)) > 0)) return null
+      return ((Number(cur || 0) - Number(prev || 0)) / Math.abs(Number(prev || 0))) * 100
+    }
+    return {
+      month,
+      previousMonth,
+      current,
+      previous,
+      incomePctChange: compare(current.income, previous?.income),
+      expensePctChange: compare(current.expense, previous?.expense),
+      netCashflowDelta: previous ? Math.round((current.netCashflow - Number(previous.netCashflow || 0)) * 100) / 100 : null,
+      topCategory,
+      topCategoryDelta,
+    }
+  },
+
+  getAssetBreakdown(wallets, opts = {}) {
+    const { cryptoTotal = 0 } = opts
+    const rows = Array.isArray(wallets) ? wallets : []
+    let cash = 0
+    let investment = 0
+    let gold = 0
+    let fcd = 0
+    let liabilities = 0
+    rows.forEach(w => {
+      if (!w || w.hiddenFromWalletList) return
+      const type = String(w.type || '').toLowerCase()
+      const value = Number(w.balance || 0)
+      if (['cash', 'bank', 'ewallet', 'saving'].includes(type)) cash += Math.max(0, value)
+      else if (type === 'gold') gold += Math.max(0, value)
+      else if (type === 'fcd') fcd += Math.max(0, value)
+      else if (type === 'credit') liabilities += Math.abs(Math.min(0, value))
+      else if (type !== 'crypto') investment += Math.max(0, value)
+    })
+    const crypto = Math.max(0, Number(cryptoTotal || 0))
+    const assets = cash + investment + gold + fcd + crypto
+    return {
+      cash: Math.round(cash * 100) / 100,
+      investment: Math.round(investment * 100) / 100,
+      gold: Math.round(gold * 100) / 100,
+      fcd: Math.round(fcd * 100) / 100,
+      crypto: Math.round(crypto * 100) / 100,
+      liabilities: Math.round(liabilities * 100) / 100,
+      assets: Math.round(assets * 100) / 100,
+      netWorth: Math.round((assets - liabilities) * 100) / 100,
+    }
+  },
+
+  getCreditLiabilitySummary(wallets, opts = {}) {
+    const cards = (wallets || []).filter(w => w && w.type === 'credit' && !w.hiddenFromWalletList)
+    const items = cards.map(card => {
+      const statement = typeof App !== 'undefined' && typeof App.getCardStatement === 'function' ? App.getCardStatement(card.id, opts.refDate) : null
+      const due = typeof App !== 'undefined' && typeof App.getCreditCardDueInfo === 'function' ? App.getCreditCardDueInfo(card, opts.refDate) : null
+      const committed = typeof App !== 'undefined' && typeof App._getUnpostedInstallmentDebt === 'function' ? Number(App._getUnpostedInstallmentDebt(card.id) || 0) : 0
+      const availableLimit = typeof App !== 'undefined' && typeof App.getAvailableCreditForCard === 'function'
+        ? Number(App.getAvailableCreditForCard(card) || 0)
+        : Math.max(0, Number(card.limit || 0) - Math.abs(Number(card.balance || 0)) - committed)
+      return {
+        card,
+        statementDue: Math.round(Number(statement?.balanceDue || 0) * 100) / 100,
+        currentCycleSpending: Math.round(Number(statement?.purchaseTotal || 0) * 100) / 100,
+        committedInstallments: Math.round(committed * 100) / 100,
+        availableLimit: Math.round(availableLimit * 100) / 100,
+        nextDueDate: due?.dateStr || statement?.dueDate || '',
+        nextDueLabel: due?.dueStr || '',
+        daysLeft: Number(due?.daysLeft ?? 9999),
+      }
+    })
+    const totals = items.reduce((sum, row) => {
+      sum.statementDue += row.statementDue
+      sum.currentCycleSpending += row.currentCycleSpending
+      sum.committedInstallments += row.committedInstallments
+      return sum
+    }, { statementDue: 0, currentCycleSpending: 0, committedInstallments: 0 })
+    return {
+      cards: items.sort((a, b) => a.daysLeft - b.daysLeft || String(a.card.name).localeCompare(String(b.card.name))),
+      totals: {
+        statementDue: Math.round(totals.statementDue * 100) / 100,
+        currentCycleSpending: Math.round(totals.currentCycleSpending * 100) / 100,
+        committedInstallments: Math.round(totals.committedInstallments * 100) / 100,
+        totalLiability: Math.round((totals.statementDue + totals.committedInstallments) * 100) / 100,
+      },
+    }
+  },
+
   getMonthlyStats(transactions, month) {
     // Only count posted transactions — future-scheduled items (installments, etc.)
     // must not inflate or deflate the reported income/expense for the month.

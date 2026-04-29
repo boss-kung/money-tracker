@@ -130,6 +130,7 @@ const DEFAULT_CRYPTO_PRESETS = [
 const DEFAULT_CRYPTO_ASSETS = []
 const DEFAULT_CRYPTO_HOLDINGS = []
 const DEFAULT_CRYPTO_TRANSACTIONS = []
+const DEFAULT_GOALS = []
 const DEFAULT_MIGRATIONS = {
   cryptoCentralizedV1: false,
 }

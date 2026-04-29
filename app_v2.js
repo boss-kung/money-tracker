@@ -74,6 +74,9 @@
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
+const APP_VERSION = '2026.04.29-phase5'
+window.MT_APP_VERSION = APP_VERSION
+
 /* ============================================================
    Core App Shell
    State / persistence / theme / toast / navigation / base screens
@@ -90,6 +93,7 @@ let S = {
   recurring: [], merchants: [], ccBenefits: {}, ccBenefitRules: [], incomeBudgets: [], marketPrices: {}, txMode: 'add', editingTxId: null,
   cryptoAssets: [], cryptoHoldings: [], cryptoTransactions: [], cryptoSyncMeta: {}, migrations: { cryptoCentralizedV1: false },
   creditLimitGroups: [], rewardAccounts: [], rewardLedger: [], netWorthSnapshots: [], investmentSnapshots: [],
+  goals: [],
 
   // Add-transaction flow
   tx: {
@@ -124,9 +128,30 @@ let S = {
 function persist() {
   try { App._beforePersistV50?.() } catch (_) {}
   try { App._beforePersistV40?.() } catch (_) {}
-  Storage.saveAll(S)
+  const ok = Storage.saveAll(S)
+  if (!ok) {
+    try { toast('บันทึกข้อมูลไม่สำเร็จ กรุณาส่งออก JSON สำรองไว้ก่อน', 'error') } catch (_) {}
+  }
+  return ok
 }
 function moneyFmt(n) { return S.settings?.hideMoney ? '฿*****' : Calc.fmt(n || 0) }
+
+const APP_ROUTE_PAGES = new Set(['dashboard', 'transactions', 'wallets', 'reports', 'more'])
+function parseAppHashRoute() {
+  const raw = String(location.hash || '').replace(/^#/, '')
+  if (!raw) return { page: '', params: new URLSearchParams() }
+  const [pageRaw, query = ''] = raw.split('?')
+  const page = APP_ROUTE_PAGES.has(pageRaw) ? pageRaw : ''
+  return { page, params: new URLSearchParams(query) }
+}
+
+function writeAppHashRoute(page) {
+  if (!APP_ROUTE_PAGES.has(page)) return
+  const reportMonth = page === 'reports' && /^\d{4}-\d{2}$/.test(String(S.rptMonth || '')) ? `?month=${encodeURIComponent(S.rptMonth)}` : ''
+  const nextHash = `#${page}${reportMonth}`
+  if (location.hash === nextHash) return
+  try { history.replaceState(null, '', `${location.pathname}${location.search}${nextHash}`) } catch (_) {}
+}
 
 // ── Apply theme ───────────────────────────────────────────────
 function applyTheme() {
@@ -212,7 +237,10 @@ const App = {
 
   // ── Navigation ────────────────────────────────────────────
   showPage(page) {
+    page = APP_ROUTE_PAGES.has(page) ? page : 'dashboard'
     S.page = page
+    try { localStorage.setItem('mt_last_page', page) } catch (_) {}
+    if (!App._suppressHashRoute) writeAppHashRoute(page)
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
     document.getElementById('page-' + page)?.classList.add('active')
     document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
@@ -522,6 +550,82 @@ Object.assign(App, {
    Initial storage load / theme / nav binding / first render
    ============================================================ */
 
+function setupServiceWorkerUpdates() {
+  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return
+
+  let controllerReloading = false
+  const showUpdateBanner = (registration) => {
+    if (!registration?.waiting || document.getElementById('mt-update-banner')) return
+    const el = document.createElement('div')
+    el.id = 'mt-update-banner'
+    el.innerHTML = `
+      <div class="mt-update-copy">
+        <strong>มีเวอร์ชันใหม่ พร้อมอัปเดต</strong>
+        <span>รีโหลดเมื่อสะดวก เพื่อใช้ไฟล์ล่าสุด</span>
+      </div>
+      <button type="button">รีโหลด</button>`
+    el.querySelector('button').onclick = () => {
+      try { sessionStorage.setItem('mt_sw_update_reload', '1') } catch (_) {}
+      registration.waiting?.postMessage({ type: 'SKIP_WAITING' })
+      setTimeout(() => {
+        if (!controllerReloading) location.reload()
+      }, 1600)
+    }
+    document.body.appendChild(el)
+  }
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (controllerReloading) return
+    const shouldReload = (() => {
+      try { return sessionStorage.getItem('mt_sw_update_reload') === '1' } catch (_) { return false }
+    })()
+    if (!shouldReload) return
+    controllerReloading = true
+    try { sessionStorage.removeItem('mt_sw_update_reload') } catch (_) {}
+    location.reload()
+  })
+
+  navigator.serviceWorker.register('./service-worker_v2.js').then(registration => {
+    if (registration.waiting && navigator.serviceWorker.controller) showUpdateBanner(registration)
+    registration.addEventListener('updatefound', () => {
+      const worker = registration.installing
+      if (!worker) return
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateBanner(registration)
+        }
+      })
+    })
+    setTimeout(() => registration.update().catch(() => {}), 1500)
+  }).catch(() => {})
+}
+
+function setupConnectivityWatch() {
+  if (!('onLine' in navigator)) return
+  let lastOnline = navigator.onLine
+  if (!lastOnline) setTimeout(() => toast('ออฟไลน์อยู่ ข้อมูลราคาบางอย่างอาจไม่อัปเดต', 'warn'), 500)
+  window.addEventListener('offline', () => {
+    if (lastOnline === false) return
+    lastOnline = false
+    toast('ออฟไลน์อยู่ ข้อมูลราคาบางอย่างอาจไม่อัปเดต', 'warn')
+  }, { passive: true })
+  window.addEventListener('online', () => {
+    if (lastOnline === true) return
+    lastOnline = true
+    toast('กลับมาออนไลน์แล้ว', 'success')
+  }, { passive: true })
+}
+
+function syncStandaloneBodyClass() {
+  const standalone = !!(
+    window.navigator?.standalone === true ||
+    window.matchMedia?.('(display-mode: standalone)')?.matches
+  )
+  document.body.classList.toggle('ios-standalone', standalone)
+  document.body.classList.toggle('standalone', standalone)
+  return standalone
+}
+
 // ── Init ──────────────────────────────────────────────────────
 function init() {
   // Load data
@@ -541,6 +645,7 @@ function init() {
   S.cryptoHoldings = data.cryptoHoldings || []
   S.cryptoTransactions = data.cryptoTransactions || []
   S.cryptoSyncMeta = data.cryptoSyncMeta || {}
+  S.goals = data.goals || []
   S.migrations = { cryptoCentralizedV1: false, ...(data.migrations || {}) }
   S.creditLimitGroups  = data.creditLimitGroups  || []
   S.rewardAccounts     = data.rewardAccounts     || []
@@ -548,6 +653,25 @@ function init() {
   S.netWorthSnapshots  = data.netWorthSnapshots  || []
   S.investmentSnapshots = data.investmentSnapshots || []
 
+  S.settings ||= {}
+  S.settings.storageMeta ||= {}
+  S.settings.storageMeta.appVersion = APP_VERSION
+
+  const route = parseAppHashRoute()
+  if (route.page) {
+    S.page = route.page
+    const month = route.params.get('month')
+    if (route.page === 'reports' && /^\d{4}-\d{2}$/.test(month || '')) S.rptMonth = month
+  } else if (location.hash) {
+    S.page = 'dashboard'
+  } else {
+    try {
+      const lastPage = localStorage.getItem('mt_last_page')
+      if (APP_ROUTE_PAGES.has(lastPage)) S.page = lastPage
+    } catch (_) {}
+  }
+
+  syncStandaloneBodyClass()
   applyTheme()
 
   // ── Safe migration: normalize transaction status fields ──────
@@ -592,13 +716,20 @@ function init() {
     btn.addEventListener('click', () => App.showPage(btn.dataset.tab))
   })
 
-  // Initial render
-  App.render()
+  window.addEventListener('hashchange', () => {
+    const next = parseAppHashRoute()
+    if (!next.page) return App.showPage('dashboard')
+    const month = next.params.get('month')
+    if (next.page === 'reports' && /^\d{4}-\d{2}$/.test(month || '')) S.rptMonth = month
+    App._suppressHashRoute = true
+    try { App.showPage(next.page) } finally { App._suppressHashRoute = false }
+  }, { passive: true })
 
-  // PWA Service Worker
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker_v2.js').catch(() => {})
-  }
+  // Initial render
+  App.showPage(S.page)
+
+  setupServiceWorkerUpdates()
+  setupConnectivityWatch()
 }
 
 init()
@@ -1020,11 +1151,7 @@ App.render();
   }
 
   const syncStandaloneMode = () => {
-    const isStandalone = !!(
-      window.navigator?.standalone === true ||
-      window.matchMedia?.('(display-mode: standalone)')?.matches
-    )
-    document.body.classList.toggle('ios-standalone', isStandalone)
+    syncStandaloneBodyClass()
   }
 
   const syncChrome = () => {
@@ -1816,6 +1943,7 @@ App.render();
       budgets: [],
       settings: { ...JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), hideMoney: false },
       recurring: [],
+      goals: [],
       merchants: [],
       ccBenefits: {},
       incomeBudgets: [],
@@ -1850,6 +1978,7 @@ App.render();
       body: 'ไม่สามารถกู้คืนได้ ยืนยันการรีเซ็ต?',
       confirmLabel: 'รีเซ็ต', danger: true,
       onConfirm() {
+        try { Storage.createLocalBackup?.(S, 'before-reset-data') } catch (_) {}
         Storage.reset()
         Object.assign(S, cleanResetState())
         persist(); applyTheme(); App.render()
@@ -2697,7 +2826,7 @@ Calc.getUsableMoney = function(wallets) {
    Recalculation, backup state, reports helpers, investment tx flows
    ============================================================ */
 ;(function(){
-  const VERSION = '4.0-roadmap-phases'
+  const VERSION = APP_VERSION
   const INVEST_TYPES = new Set(['gold','crypto','fcd'])
   const CASH_TYPES = new Set(['bank','cash','ewallet','saving','credit'])
   const esc = App._esc
@@ -3278,55 +3407,262 @@ Calc.getUsableMoney = function(wallets) {
 
   // ── 4. Reports rollback: restore previous report structure ─────────────────
   App.renderReports = function() {
-    if (!['expense','income','budget'].includes(S.rptView)) S.rptView = 'expense'
+    if (!['expense','income','cashflow','assets','credit','budget'].includes(S.rptView)) S.rptView = 'assets'
     const months = Calc.getMonths(6)
     const monthEl = document.getElementById('report-month-chips')
     const viewEl = document.getElementById('report-view-chips')
     if (monthEl) monthEl.innerHTML = months.map(m => `<button class="chip${m === S.rptMonth ? ' active' : ''}" onclick="App.setRptMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`).join('')
-    if (viewEl) viewEl.innerHTML = [['expense','รายจ่าย'],['income','รายรับ'],['budget','งบประมาณ']].map(([v,l]) => `<button class="chip${S.rptView === v ? ' active' : ''}" onclick="App.setRptView('${v}')">${l}</button>`).join('')
-    const stats  = Calc.getMonthlyStats(S.transactions, S.rptMonth)
-    const nw     = Calc.getNetWorth(S.wallets)
-    const budget = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, S.rptMonth)
-    let html = ''
-    const advisorInsights = (typeof App.getFinancialAdvisorInsights === 'function') ? App.getFinancialAdvisorInsights(S.rptMonth) : []
-    if (advisorInsights.length) {
-      html += `<div class="sec-title">คำแนะนำทางการเงินโดย AI</div><div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><div><strong>AI Financial Coach</strong><span>วิเคราะห์จากรายรับ รายจ่าย และงบประมาณในเครื่อง</span></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${advisorInsights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')}</div>`
+    if (viewEl) viewEl.innerHTML = [
+      ['assets','สินทรัพย์'],
+      ['expense','ใช้จ่าย'],
+      ['income','รายรับ'],
+      ['cashflow','กระแสเงินสด'],
+      ['credit','บัตร/หนี้'],
+      ['budget','งบประมาณ'],
+    ].map(([v,l]) => `<button class="chip${S.rptView === v ? ' active' : ''}" onclick="App.setRptView('${v}')">${l}</button>`).join('')
+
+    const month = S.rptMonth
+    const prevMonth = Calc.getPreviousMonth?.(month) || Calc.getMonths(2)[1]
+    const monthly = Calc.getMonthlyIncomeExpense(S.transactions, month)
+    const previous = prevMonth ? Calc.getMonthlyIncomeExpense(S.transactions, prevMonth) : null
+    const comparison = Calc.getMonthComparison(S.transactions, month, { expenseCategories: S.categories?.expense || [] })
+    const expenseBreakdown = Calc.getCategoryBreakdown(S.transactions, month, { type: 'expense', categories: S.categories?.expense || [] })
+    const incomeBreakdown = Calc.getCategoryBreakdown(S.transactions, month, { type: 'income', categories: S.categories?.income || [], uncategorizedIcon: '💰' })
+    const merchantBreakdown = Calc.getMerchantBreakdown(S.transactions, month)
+    const budget = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, month)
+    const creditSummary = Calc.getCreditLiabilitySummary(S.wallets, { refDate: today() })
+    const cryptoSummary = App.getCryptoPortfolioSummary?.() || { totalValueTHB: 0, holdings: [] }
+    const assetBreakdown = Calc.getAssetBreakdown(S.wallets, { cryptoTotal: cryptoSummary.totalValueTHB })
+    const postedMonthTx = Calc.getMonthlyTransactions(S.transactions, month)
+    const expenseTxCount = postedMonthTx.filter(t => t.type === 'expense').length
+    const incomeTxCount = postedMonthTx.filter(t => t.type === 'income').length
+    const hasPrevData = !!(previous && (previous.income || previous.expense))
+    const isCurrentMonth = month === today().slice(0, 7)
+    const [year, monthNo] = month.split('-').map(Number)
+    const totalDays = new Date(year, monthNo, 0).getDate()
+    const dayOfMonth = isCurrentMonth ? Number(today().slice(8, 10)) : totalDays
+    const elapsedDays = Math.max(1, Math.min(totalDays, dayOfMonth))
+    const remainingDays = isCurrentMonth ? Math.max(0, totalDays - dayOfMonth) : 0
+    const totalBudget = budget.reduce((sum, row) => sum + Number(row.monthlyLimit || 0), 0)
+    const totalBudgetSpent = budget.reduce((sum, row) => sum + Number(row.spent || 0), 0)
+    const budgetRemaining = totalBudget - totalBudgetSpent
+    const avgDailySpend = elapsedDays > 0 ? totalBudgetSpent / elapsedDays : 0
+    const suggestedDailyBudget = remainingDays > 0 ? budgetRemaining / remainingDays : null
+    const pctText = pct => `${Math.abs(Number(pct || 0)) >= 10 ? Math.abs(Number(pct || 0)).toFixed(0) : Math.abs(Number(pct || 0)).toFixed(1)}%`
+    const compareText = (pct, positiveIsGood = false) => {
+      if (pct === null || pct === undefined || !Number.isFinite(Number(pct))) return 'ไม่มีข้อมูลเดือนก่อน'
+      if (Math.abs(Number(pct)) < 0.05) return 'ใกล้เคียงเดือนก่อน'
+      const up = Number(pct) > 0
+      const color = up === positiveIsGood ? 'var(--income)' : 'var(--expense)'
+      const label = up ? 'เพิ่มขึ้น' : 'ลดลง'
+      return `<span style="color:${color}">${label} ${pctText(pct)}</span>`
     }
-    html += `<div class="report-summary-grid">${[['รายรับ', stats.income, 'var(--income)'], ['รายจ่าย', stats.expense, 'var(--expense)'], ['สุทธิ', stats.net, stats.net >= 0 ? 'var(--income)' : 'var(--expense)']].map(([l,v,c]) => `<div class="card report-summary-card"><div class="report-summary-label">${l}</div><div class="report-summary-value" style="color:${c}">${money(Math.abs(v))}</div></div>`).join('')}</div><div class="card card-pad nw-card" style="margin-bottom:16px"><div class="nw-label">ความมั่งคั่งสุทธิ</div><div class="nw-value ${nw.net>=0?'c-income':'c-expense'}">${nw.net<0?'-':''}${money(Math.abs(nw.net))}</div><div class="nw-detail"><span class="nw-item">สินทรัพย์ <strong class="c-income">${money(nw.assets)}</strong></span><span class="nw-item">หนี้ <strong class="c-expense">${money(nw.debt)}</strong></span></div></div>`
-    if (S.rptView === 'budget') {
+    const reportModeHint = {
+      expense: 'ดูเฉพาะรายจ่ายที่บันทึกแล้ว ไม่รวมโอนเงิน และไม่รวมรายการอนาคต',
+      income: 'ดูเฉพาะรายรับที่บันทึกแล้ว แยกตามหมวดรายรับ',
+      cashflow: 'ดูรายรับลบรายจ่ายจริงของเดือนนี้ ไม่รวมโอนเงินภายใน',
+      assets: 'ดูมูลค่าสินทรัพย์และหนี้จากยอดกระเป๋าปัจจุบัน พร้อมสรุปความมั่งคั่งสุทธิ',
+      credit: 'ดูยอดค้างชำระ ยอดใช้ในรอบ และภาระผ่อนในอนาคตของบัตรเครดิต',
+      budget: 'ดูงบประมาณรายเดือนและแนวทางใช้จ่ายต่อวันจากรายการที่บันทึกแล้ว',
+    }[S.rptView] || ''
+    const uncategorizedEmpty = App._emptyState('📊', 'ไม่มีข้อมูลหมวดหมู่', 'เพิ่มรายการพร้อมหมวดหมู่เพื่อดูการกระจาย')
+    const merchantEmpty = App._emptyState('🏪', 'ยังไม่มีข้อมูลร้านค้า', 'เพิ่มชื่อร้านค้าในรายการเพื่อดูร้านที่ใช้เงินบ่อย')
+    const txEmpty = App._emptyState('📋', 'ยังไม่มีรายการในเดือนนี้', 'เพิ่มรายการเพื่อให้รายงานเริ่มแสดงผล')
+    const neutralComparison = `<span style="color:var(--muted)">ไม่มีข้อมูลเดือนก่อน</span>`
+    let html = ''
+
+    const buildSummaryCard = (label, value, color, sub = '') => `
+      <div class="card report-summary-card">
+        <div class="report-summary-label">${label}</div>
+        <div class="report-summary-value" style="color:${color}">${value}</div>
+        <div class="list-item-sub">${sub || ' '}</div>
+      </div>`
+
+    const renderCategoryCard = (title, rows, total, emptyState) => {
+      if (!rows.length) return emptyState
+      return `<div class="card card-pad report-category-card" style="margin-bottom:12px">
+        <div class="report-category-title">${title}</div>
+        <div class="report-category-list">
+          ${rows.map(row => {
+            const pct = total > 0 ? (Number(row.amount || 0) / total) * 100 : 0
+            return `<div class="report-cat-row">
+              <div class="report-cat-top">
+                <div class="report-cat-name"><span class="report-cat-icon">${esc(row.icon || '📦')}</span><span>${esc(row.label)}</span></div>
+                <div class="report-cat-value"><strong>${money(row.amount)}</strong><span style="font-weight:400">${pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)}%</span></div>
+              </div>
+              <div class="list-item-sub">${row.count} รายการ</div>
+              <div class="report-cat-bar"><div class="report-cat-fill" style="width:${Math.min(100, Math.max(0, pct))}%;background:${esc(row.color || '#2563EB')}"></div></div>
+            </div>`
+          }).join('')}
+        </div>
+      </div>`
+    }
+
+    const renderMerchantCard = () => {
+      if (!merchantBreakdown.length) return merchantEmpty
+      const totalExpense = Math.max(0, Number(monthly.expense || 0))
+      return `<div class="card card-pad" style="margin-bottom:12px">
+        <div class="report-category-title">ร้านค้าที่ใช้เงินมากที่สุด</div>
+        ${merchantBreakdown.slice(0, 6).map(row => `
+          <div class="report-cat-row">
+            <div class="report-cat-top">
+              <div class="report-cat-name"><span class="report-cat-icon">🏪</span><span>${esc(row.merchant)}</span></div>
+              <div class="report-cat-value"><strong>${money(row.amount)}</strong><span style="font-weight:400">${totalExpense > 0 ? ((row.amount / totalExpense) * 100 >= 10 ? ((row.amount / totalExpense) * 100).toFixed(0) : ((row.amount / totalExpense) * 100).toFixed(1)) : 0}%</span></div>
+            </div>
+            <div class="list-item-sub">${row.count} รายการ</div>
+          </div>
+        `).join('')}
+      </div>`
+    }
+
+    const smartInsights = []
+    if (monthly.expense > 0 || monthly.income > 0) {
+      if (comparison.expensePctChange !== null) smartInsights.push({
+        icon: Number(comparison.expensePctChange) > 0 ? '📈' : '📉',
+        title: 'รายจ่ายเทียบเดือนก่อน',
+        body: `รายจ่าย${Number(comparison.expensePctChange) > 0 ? 'เพิ่มขึ้น' : 'ลดลง'} ${pctText(comparison.expensePctChange)} จากเดือนก่อน`
+      })
+      if (comparison.incomePctChange !== null) smartInsights.push({
+        icon: Number(comparison.incomePctChange) > 0 ? '💹' : '💸',
+        title: 'รายรับเทียบเดือนก่อน',
+        body: `รายรับ${Number(comparison.incomePctChange) > 0 ? 'เพิ่มขึ้น' : 'ลดลง'} ${pctText(comparison.incomePctChange)} จากเดือนก่อน`
+      })
+      if (comparison.topCategory && Math.abs(Number(comparison.topCategoryDelta || 0)) > 0.01) smartInsights.push({
+        icon: Number(comparison.topCategoryDelta) > 0 ? '🔎' : '🧾',
+        title: 'หมวดที่ใช้จ่ายสูงสุด',
+        body: `${comparison.topCategory.label} ${Number(comparison.topCategoryDelta) > 0 ? 'เพิ่มขึ้น' : 'ลดลง'} ${money(Math.abs(comparison.topCategoryDelta || 0))} จากเดือนก่อน`
+      })
+      smartInsights.push({
+        icon: monthly.netCashflow >= 0 ? '✅' : '⚠️',
+        title: 'กระแสเงินสดเดือนนี้',
+        body: monthly.netCashflow >= 0
+          ? `เดือนนี้กระแสเงินสดเป็นบวก ${money(monthly.netCashflow)}`
+          : `เดือนนี้กระแสเงินสดติดลบ ${money(Math.abs(monthly.netCashflow))} ควรระวังรายจ่ายก้อนใหญ่`
+      })
+    }
+    if (budget.length && suggestedDailyBudget !== null) smartInsights.push({
+      icon: suggestedDailyBudget >= 0 ? '📅' : '🚨',
+      title: 'งบใช้จ่ายต่อวัน',
+      body: suggestedDailyBudget >= 0
+        ? `ถ้าต้องการคุมงบที่เหลือ ควรใช้ได้เฉลี่ยวันละ ${money(suggestedDailyBudget)}`
+        : `งบรวมเดือนนี้เกินแล้ว ${money(Math.abs(budgetRemaining))} ควรลดการใช้จ่ายที่เหลือของเดือน`
+    })
+
+    html += `<div class="list-item-sub" style="margin:2px 0 12px">${reportModeHint}</div>`
+    html += `<div class="report-summary-grid">
+      ${buildSummaryCard('รายรับ', `+${money(monthly.income)}`, 'var(--income)', hasPrevData ? compareText(comparison.incomePctChange, true) : neutralComparison)}
+      ${buildSummaryCard('รายจ่าย', `-${money(monthly.expense)}`, 'var(--expense)', hasPrevData ? compareText(comparison.expensePctChange, false) : neutralComparison)}
+      ${buildSummaryCard('กระแสเงินสดสุทธิ', `${monthly.netCashflow < 0 ? '-' : ''}${money(Math.abs(monthly.netCashflow))}`, monthly.netCashflow >= 0 ? 'var(--income)' : 'var(--expense)', previous ? `${comparison.netCashflowDelta === null ? 'ไม่มีข้อมูลเดือนก่อน' : `ต่างจากเดือนก่อน ${comparison.netCashflowDelta >= 0 ? '+' : '-'}${money(Math.abs(comparison.netCashflowDelta || 0))}`}` : 'ไม่มีข้อมูลเดือนก่อน')}
+      ${buildSummaryCard('อัตราออม', monthly.savingsRate === null ? '—' : `${monthly.savingsRate.toFixed(1)}%`, monthly.savingsRate === null ? 'var(--muted)' : monthly.savingsRate >= 0 ? 'var(--income)' : 'var(--expense)', monthly.income > 0 ? 'รายรับหลังหักรายจ่าย' : 'ยังไม่มีรายรับในเดือนนี้')}
+    </div>`
+
+    html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><div><strong>AI Financial Coach</strong><span>สรุปเชิงกฎจากข้อมูลในเครื่อง ไม่ใช้ API ภายนอก</span></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${
+      smartInsights.length
+        ? smartInsights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')
+        : `<div class="list-item-sub">ข้อมูลเดือนนี้ยังไม่พอสำหรับสรุปแนวโน้มเพิ่มเติม</div>`
+    }</div>`
+
+    if (!postedMonthTx.length && !['assets','credit','budget'].includes(S.rptView)) {
+      html += txEmpty
+      const content = document.getElementById('reports-content')
+      if (content) content.innerHTML = html
+      return
+    }
+
+    if (S.rptView === 'expense') {
+      html += renderCategoryCard('รายจ่ายตามหมวดหมู่', expenseBreakdown, monthly.expense, uncategorizedEmpty)
+      html += renderMerchantCard()
+    } else if (S.rptView === 'income') {
+      html += renderCategoryCard('รายรับตามหมวดหมู่', incomeBreakdown, monthly.income, App._emptyState('💰', 'ยังไม่มีข้อมูลรายรับ', 'เพิ่มรายการรายรับเพื่อดูการกระจาย'))
+      if (incomeBreakdown.length) {
+        html += `<div class="card card-pad" style="margin-bottom:12px"><div class="report-category-title">ภาพรวมรายรับเดือนนี้</div><div class="list-item-sub">จำนวนรายการรายรับ ${incomeTxCount} รายการ</div><div class="list-item-sub">รายรับรวม ${money(monthly.income)}</div></div>`
+      }
+    } else if (S.rptView === 'cashflow') {
+      html += `<div class="card card-pad" style="margin-bottom:12px">
+        <div class="report-category-title">สรุปกระแสเงินสด</div>
+        <div class="reward-grid" style="margin-top:10px">
+          <div class="reward-tile"><span>รายรับ</span><strong>${money(monthly.income)}</strong></div>
+          <div class="reward-tile"><span>รายจ่าย</span><strong>${money(monthly.expense)}</strong></div>
+          <div class="reward-tile"><span>สุทธิ</span><strong class="${monthly.netCashflow >= 0 ? 'c-income' : 'c-expense'}">${monthly.netCashflow < 0 ? '-' : ''}${money(Math.abs(monthly.netCashflow))}</strong></div>
+        </div>
+        <div class="list-item-sub" style="margin-top:10px">ไม่รวมการโอนเงินภายใน และไม่รวมรายการอนาคต</div>
+      </div>`
+      html += renderCategoryCard('รายจ่ายตามหมวดหมู่', expenseBreakdown.slice(0, 5), monthly.expense, uncategorizedEmpty)
+      html += renderCategoryCard('รายรับตามหมวดหมู่', incomeBreakdown.slice(0, 5), monthly.income, App._emptyState('💰', 'ยังไม่มีข้อมูลรายรับ', 'เพิ่มรายการรายรับเพื่อดูภาพรวม'))
+    } else if (S.rptView === 'budget') {
+      html += `<div class="card card-pad" style="margin-bottom:12px">
+        <div class="report-category-title">งบประมาณและค่าใช้จ่ายต่อวัน</div>
+        ${budget.length ? `
+          <div class="reward-grid" style="margin-top:10px">
+            <div class="reward-tile"><span>ใช้ไปแล้ว</span><strong>${money(totalBudgetSpent)}</strong></div>
+            <div class="reward-tile"><span>เฉลี่ย/วัน</span><strong>${money(avgDailySpend)}</strong></div>
+            <div class="reward-tile"><span>เหลือใช้ได้</span><strong class="${budgetRemaining >= 0 ? 'c-income' : 'c-expense'}">${budgetRemaining >= 0 ? '' : '-'}${money(Math.abs(budgetRemaining))}</strong></div>
+          </div>
+          <div class="list-item-sub" style="margin-top:10px">${remainingDays > 0 ? `แนะนำใช้ได้อีกเฉลี่ยวันละ ${money(Math.max(0, suggestedDailyBudget || 0))} ใน ${remainingDays} วันที่เหลือ` : isCurrentMonth ? 'วันนี้เป็นวันสุดท้ายของเดือนแล้ว' : 'เดือนที่เลือกสิ้นสุดแล้ว'}</div>
+        ` : `<div class="list-item-sub">ยังไม่ได้ตั้งงบประมาณรายเดือน</div>`}
+      </div>`
       html += `<div class="card card-pad">`
       if (!budget.length) html += App._emptyState('💰', 'ยังไม่ได้ตั้งงบประมาณ', 'ไปที่ เพิ่มเติม → งบประมาณ')
-      else budget.forEach(b => { const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'; html += `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="font-weight:600">${esc(b.icon)} ${esc(b.label)}</span><span style="color:${b.over?'var(--expense)':'var(--muted)'}">${money(b.spent)} / ${money(b.monthlyLimit)}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,b.pct)}%;background:${barColor}"></div></div><div style="font-size:11px;color:${b.over?'var(--expense)':'var(--muted)'};margin-top:4px">${b.over ? `เกิน ${money(b.spent - b.monthlyLimit)}` : `เหลือ ${money(b.monthlyLimit - b.spent)}`}</div></div>` })
+      else budget.forEach(b => {
+        const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'
+        html += `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="font-weight:600">${esc(b.icon)} ${esc(b.label)}</span><span style="color:${b.over?'var(--expense)':'var(--muted)'}">${money(b.spent)} / ${money(b.monthlyLimit)}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,b.pct)}%;background:${barColor}"></div></div><div style="font-size:11px;color:${b.over?'var(--expense)':'var(--muted)'};margin-top:4px">${b.over ? `เกิน ${money(b.spent - b.monthlyLimit)}` : `เหลือ ${money(b.monthlyLimit - b.spent)}`}</div></div>`
+      })
       html += `</div>`
-    } else {
-      const cats = S.categories[S.rptView] || []
-      const data = cats.map(c => ({ label:c.icon, name:c.label, value:stats.byCategory[c.id] || 0, color:c.color, id:c.id })).filter(d => d.value > 0).sort((a,b) => b.value - a.value)
-      const total = data.reduce((s,d) => s + d.value, 0); const max = Math.max(...data.map(d => d.value), 1)
-      if (!data.length) html += App._emptyState('📊','ไม่มีข้อมูล','ยังไม่มีรายการในช่วงเวลานี้')
-      else {
-        const title = S.rptView === 'income' ? 'รายรับตามหมวด' : 'รายจ่ายตามหมวด'
-        html += `<div class="card card-pad report-category-card">`
-        html += `<div class="report-category-title">${title}</div>`
-        html += `<div class="report-category-list">`
-        data.forEach(d => {
-          const pct = total > 0 ? (d.value / total * 100) : 0
-          const pctLabel = pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)
-          html += `<div class="report-cat-row">
-            <div class="report-cat-top">
-              <div class="report-cat-name"><span class="report-cat-icon">${esc(d.label)}</span><span>${esc(d.name)}</span></div>
-              <div class="report-cat-value"><strong>${money(d.value)}</strong><span style="font-weight: 400;">${pctLabel}%</span></div>
-            </div>
-            <div class="report-cat-bar"><div class="report-cat-fill" style="width:${Math.min(100, Math.max(0, pct))}%;background:${esc(d.color)}"></div></div>
-          </div>`
-        })
-        html += `</div></div>`
-      }
+    } else if (S.rptView === 'credit') {
+      html += `<div class="card card-pad" style="margin-bottom:12px">
+        <div class="report-category-title">สรุปหนี้บัตรเครดิต</div>
+        <div class="reward-grid" style="margin-top:10px">
+          <div class="reward-tile"><span>ยอดถึงกำหนดชำระ</span><strong>${money(creditSummary.totals.statementDue)}</strong></div>
+          <div class="reward-tile"><span>ยอดใช้ในรอบ</span><strong>${money(creditSummary.totals.currentCycleSpending)}</strong></div>
+          <div class="reward-tile"><span>ผ่อนอนาคต</span><strong>${money(creditSummary.totals.committedInstallments)}</strong></div>
+        </div>
+      </div>`
+      if (!creditSummary.cards.length) html += App._emptyState('💳', 'ยังไม่มีบัตรเครดิต', 'เพิ่มกระเป๋าประเภทบัตรเครดิตเพื่อดูรายงานหนี้')
+      else html += `<div class="card card-pad">` + creditSummary.cards.map(row => `
+        <div class="report-cat-row" style="padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line)">
+          <div class="report-cat-top">
+            <div class="report-cat-name"><span class="report-cat-icon">${esc(row.card.icon || '💳')}</span><span>${esc(row.card.name)}</span></div>
+            <div class="report-cat-value"><strong>${money(row.statementDue)}</strong><span style="font-weight:400">${row.nextDueLabel ? `ครบกำหนด ${esc(row.nextDueLabel)}` : 'ยังไม่มี due date'}</span></div>
+          </div>
+          <div class="reward-grid" style="margin-top:8px">
+            <div class="reward-tile"><span>ยอดค้างชำระ</span><strong>${money(row.statementDue)}</strong></div>
+            <div class="reward-tile"><span>ยอดใช้ในรอบ</span><strong>${money(row.currentCycleSpending)}</strong></div>
+            <div class="reward-tile"><span>วงเงินคงเหลือ</span><strong>${money(row.availableLimit)}</strong></div>
+            <div class="reward-tile"><span>ผ่อนอนาคต</span><strong>${money(row.committedInstallments)}</strong></div>
+          </div>
+        </div>`).join('') + `</div>`
+    } else if (S.rptView === 'assets') {
+      const cryptoStatus = cryptoSummary.holdings?.length
+        ? (App.getMarketFreshnessText?.('crypto') || (S.cryptoSyncMeta?.lastSuccessAt ? 'ราคา crypto มีการ sync แล้ว' : cryptoSummary.holdings.some(h => Number(h.manualPriceTHB || 0) > 0) ? 'Crypto บางรายการใช้ราคาสำรอง' : 'Crypto บางรายการอาจยังไม่มีราคาตลาด'))
+        : 'ยังไม่มี crypto'
+      const goldStatus = (S.wallets || []).some(w => w.type === 'gold')
+        ? (App.getMarketFreshnessText?.('gold') || (S.marketPrices?.thaiGold?.jewelryBuy ? 'ทองใช้ราคาตลาดล่าสุด' : 'ทองบางรายการอาจใช้ราคาสำรอง'))
+        : 'ยังไม่มีทองคำ'
+      const fcdStatus = (S.wallets || []).some(w => w.type === 'fcd')
+        ? (App.getMarketFreshnessText?.('fcd') || (S.marketPrices?.fx?.rates?.THB ? 'FCD ใช้อัตราแลกเปลี่ยนล่าสุด' : 'FCD บางรายการอาจใช้ราคาสำรอง'))
+        : 'ยังไม่มี FCD'
+      html += `<div class="card card-pad nw-card" style="margin-bottom:12px"><div class="nw-label">ความมั่งคั่งสุทธิ</div><div class="nw-value ${assetBreakdown.netWorth>=0?'c-income':'c-expense'}">${assetBreakdown.netWorth<0?'-':''}${money(Math.abs(assetBreakdown.netWorth))}</div><div class="nw-detail"><span class="nw-item">สินทรัพย์ <strong class="c-income">${money(assetBreakdown.assets)}</strong></span><span class="nw-item">หนี้ <strong class="c-expense">${money(assetBreakdown.liabilities)}</strong></span></div></div>`
+      if (!(assetBreakdown.assets || assetBreakdown.liabilities)) html += App._emptyState('🏦', 'ยังไม่มีข้อมูลสินทรัพย์', 'เพิ่มกระเป๋าเงินหรือพอร์ตลงทุนเพื่อดูภาพรวมสินทรัพย์')
+      else html += `<div class="card card-pad">
+        <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">💵</span><span>เงินสด / ธนาคาร / E-Wallet</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.cash)}</strong></div></div></div>
+        <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">📈</span><span>การลงทุน</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.investment)}</strong></div></div></div>
+        <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">🥇</span><span>ทองคำ</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.gold)}</strong></div></div></div>
+        <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">💱</span><span>FCD / เงินตราต่างประเทศ</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.fcd)}</strong></div></div></div>
+        <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">🪙</span><span>Crypto</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.crypto)}</strong></div></div></div>
+        <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">💳</span><span>หนี้บัตรเครดิต</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.liabilities)}</strong></div></div></div>
+      </div>`
     }
     const content = document.getElementById('reports-content')
     if (content) content.innerHTML = html
   }
   App.setRptView = function(v) { S.rptView = v; App.renderReports() }
-  App.setRptMonth = function(m) { S.rptMonth = m; App.renderReports() }
+  App.setRptMonth = function(m) {
+    S.rptMonth = m
+    if (S.page === 'reports' && /^\d{4}-\d{2}$/.test(String(m || ''))) {
+      try { history.replaceState(null, '', `${location.pathname}${location.search}#reports?month=${encodeURIComponent(m)}`) } catch (_) {}
+    }
+    App.renderReports()
+  }
 
   // ── 6. Robust merchant dropdown: pick existing or type a new merchant ──────
   function ensureMerchantWrap(inp) {
@@ -5201,6 +5537,8 @@ Calc.getUsableMoney = function(wallets) {
         <div style="font-size:20px;font-weight:800;padding:20px 0 4px">เพิ่มเติม</div>
         <div class="sec-title">เครื่องมือหลัก</div>
         <div class="card card-pad">
+          ${row({ icon:'🎯', label:'เป้าหมาย / Sinking Funds', value:`${(S.goals||[]).filter(g=>g.status!=='archived').length} เป้าหมาย`, onclick:'App.openGoalsScreen()' })}
+          ${row({ icon:'📅', label:'ปฏิทินบิล / รายการที่จะถึง', onclick:'App.openUpcomingScreen()' })}
           ${row({ icon:'🔁', label:'รายการประจำ', value:`${(S.recurring||[]).length} รายการ`, onclick:'App.openRecurringScreen()' })}
           ${row({ icon:'🧾', label:'ศูนย์ผ่อนชำระ', onclick:'App.openInstallmentCenter()' })}
           ${row({ icon:'🎁', label:'สมุดสิทธิประโยชน์', onclick:'App.openRewardLedgerScreen()' })}
@@ -5218,7 +5556,7 @@ Calc.getUsableMoney = function(wallets) {
         <div class="card card-pad">
           ${row({ icon:'📤', label:'ส่งออกข้อมูล (JSON)', onclick:'App.exportData()' })}
           ${row({ icon:'📊', label:'ส่งออก CSV', onclick:'App.exportCSV()' })}
-          ${row({ icon:'📥', label:'นำเข้าข้อมูล (JSON)', onclick:"document.getElementById('import-file-v5').click()" })}
+          ${row({ icon:'📥', label:'นำเข้าข้อมูล (JSON)', value:'Preview ก่อนนำเข้า', onclick:"document.getElementById('import-file-v5').click()" })}
           <input type="file" id="import-file-v5" accept=".json" style="display:none" onchange="App.importData(this)">
           ${row({ icon:'🧯', label:'กู้คืน Backup ก่อน Import', onclick:'App.restorePreImportBackup?.()' })}
           <div class="settings-row"><div class="s-icon">💾</div><div class="s-label">สถานะข้อมูล<br><div class="s-value" style="font-weight:400">บันทึกเมื่อ: ${esc(lastSaved)}<br>Export ข้อมูล: ${esc(lastExport)}</div></div></div>
@@ -5233,6 +5571,7 @@ Calc.getUsableMoney = function(wallets) {
         </div>
         <div class="sec-title">ระบบ</div>
         <div class="card card-pad">
+          ${row({ icon:'🧹', label:'ล้างแคชแอป', value:'ไม่ลบข้อมูลการเงิน', onclick:'App.resetAppCache?.()' })}
           <div style="padding:14px 0;border-bottom:1px solid var(--border)">
             <div style="font-size:15px;font-weight:700;margin-bottom:8px">Thai Gold API Proxy</div>
             <input class="form-input" id="gold-proxy-input" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(currentProxy)}" style="margin-bottom:10px">
@@ -5244,7 +5583,7 @@ Calc.getUsableMoney = function(wallets) {
         <div style="text-align:center;padding:32px 0 8px">
           <div style="font-size:40px">💰</div>
           <div style="font-size:16px;font-weight:700;margin-top:8px">Money Tracker</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px">v5.0</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(window.MT_APP_VERSION || APP_VERSION)}</div>
         </div>
       </div>`
   }
@@ -6409,6 +6748,19 @@ Calc.getUsableMoney = function(wallets) {
         if (!silent) notify('ยังไม่มีเหรียญที่ sync ราคาอัตโนมัติได้ ใช้ราคาสำรองแทน', 'warn')
         return { syncedIds: [], failedIds: [], usedFallback: false }
       }
+      if (navigator.onLine === false) {
+        updateCryptoSyncMeta({
+          attemptAt,
+          source: 'Offline',
+          syncedIds: [],
+          failedIds: activeIds,
+          errorAt: nowISO(),
+          errorMessage: 'offline',
+        })
+        persist()
+        if (!silent) notify('ออฟไลน์อยู่ ใช้ราคาเดิมหรือราคาสำรองแทน', 'warn')
+        return { syncedIds: [], failedIds: activeIds, usedFallback: false, offline: true }
+      }
 
       const geckoSources = {}
       let syncedIds = []
@@ -6494,6 +6846,10 @@ Calc.getUsableMoney = function(wallets) {
 
   async function syncMarketSuite({ cryptoOnly = false } = {}) {
     ensureCryptoState()
+    if (navigator.onLine === false) {
+      notify('ออฟไลน์อยู่ ใช้ราคาเดิมหรือราคาสำรองแทน', 'warn')
+      return { syncedIds: [], failedIds: [], offline: true }
+    }
     const next = { ...(S.marketPrices || {}), crypto: { ...(S.marketPrices?.crypto || {}) } }
     let fxOk = false
     let goldOk = false
@@ -7213,6 +7569,7 @@ Calc.getUsableMoney = function(wallets) {
   const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
   const walletById = App.utils.walletById
   const genId = () => (typeof Calc?.genId === 'function' ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2)))
+  const nowISO = () => new Date().toISOString()
   const TH_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
   const isStandaloneMode = () => !!(
     window.navigator?.standalone === true ||
@@ -7845,6 +8202,35 @@ Calc.getUsableMoney = function(wallets) {
     setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
   }
 
+  App.getMarketFreshnessText = function(kind) {
+    const staleMs = 24 * 60 * 60 * 1000
+    const now = Date.now()
+    const ageLabel = iso => {
+      const ts = iso ? new Date(iso).getTime() : 0
+      if (!ts) return { stale: true, label: '' }
+      return { stale: now - ts > staleMs, label: new Date(ts).toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' }) }
+    }
+    if (kind === 'crypto') {
+      const last = S.cryptoSyncMeta?.lastSuccessAt || Object.values(S.marketPrices?.crypto || {}).map(row => row?.fetchedAt || row?.lastUpdatedAt).filter(Boolean).sort().pop()
+      const age = ageLabel(last)
+      if (!last) return 'Crypto ใช้ราคาสำรอง/manual หรือยังไม่เคย sync'
+      return `${age.stale ? 'ราคา Crypto เก่า' : 'ราคา Crypto ล่าสุด'} · ${age.label}`
+    }
+    if (kind === 'gold') {
+      const row = S.marketPrices?.thaiGold || S.marketPrices?.auroraGold
+      const age = ageLabel(row?.fetchedAt || row?.updatedAt)
+      if (!row?.jewelryBuy) return 'ทองบางรายการอาจใช้ราคาสำรอง'
+      return `${age.stale ? 'ราคาทองเก่า' : 'ราคาทองล่าสุด'}${age.label ? ` · ${age.label}` : ''}`
+    }
+    if (kind === 'fcd') {
+      const row = S.marketPrices?.fx || {}
+      const age = ageLabel(row?.fetchedAt || row?.updatedAt || S.marketPrices?.updatedAt)
+      if (!row?.rates?.THB) return 'FCD บางรายการอาจใช้ราคาสำรอง'
+      return `${age.stale ? 'อัตราแลกเปลี่ยนเก่า' : 'อัตราแลกเปลี่ยนล่าสุด'}${age.label ? ` · ${age.label}` : ''}`
+    }
+    return ''
+  }
+
   App._applyBackupPayload = function(data) {
     const normalized = Storage.normalizeBackupPayload(data)
     BACKUP_SCHEMA_KEYS.forEach(key => {
@@ -7894,6 +8280,7 @@ Calc.getUsableMoney = function(wallets) {
         confirmLabel:'นำเข้า',
         body:`Wallets: ${(payload.wallets||[]).length} · Transactions: ${(payload.transactions||[]).length} · ระบบจะเก็บ backup ก่อนแทนที่ข้อมูลปัจจุบัน`,
         onConfirm() {
+          try { Storage.createLocalBackup?.(S, 'before-import') } catch (_) {}
           try { localStorage.setItem('mt_pre_import_backup', JSON.stringify(Storage.buildExportPayload(S))) } catch (_) {}
           App._applyBackupPayload(payload)
           notify(`นำเข้าสำเร็จ${(checked.warnings || []).length ? ` · มีคำเตือน ${(checked.warnings || []).length} จุด` : ''}`, 'success')
@@ -7902,6 +8289,382 @@ Calc.getUsableMoney = function(wallets) {
         onCancel() { if (input) input.value = '' },
       })
     }, err => { notify('นำเข้าล้มเหลว: ' + err, 'error'); if (input) input.value = '' })
+  }
+
+  App.resetAppCache = function() {
+    App.showConfirm?.({
+      title:'ล้างแคชแอป',
+      confirmLabel:'ล้างแคช',
+      body:'ล้างเฉพาะไฟล์แอปและ service worker เพื่อดึงเวอร์ชันล่าสุด ข้อมูลการเงินในเครื่องจะไม่ถูกลบ',
+      onConfirm: async () => {
+        try {
+          const keys = 'caches' in window ? await caches.keys() : []
+          await Promise.all(keys.filter(key => key.startsWith('money-tracker')).map(key => caches.delete(key)))
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations()
+            const appDir = location.href.replace(/[^/]*$/, '')
+            await Promise.all(regs
+              .filter(reg => String(reg.scope || '').startsWith(appDir) || String(reg.active?.scriptURL || reg.waiting?.scriptURL || reg.installing?.scriptURL || '').includes('service-worker_v2.js'))
+              .map(reg => reg.unregister()))
+          }
+          toast('ล้างแคชแล้ว กำลังโหลดไฟล์ล่าสุด', 'success')
+          setTimeout(() => location.reload(), 500)
+        } catch (_) {
+          toast('ล้างแคชไม่สำเร็จ กรุณาปิดและเปิดแอปใหม่', 'error')
+        }
+      },
+    })
+  }
+
+  /* ============================================================
+     Phase 5 Priority A
+     Goals / upcoming commitments / safer import / CSV export
+     ============================================================ */
+
+  function fmtHidden(n) { return S.settings?.hideMoney ? '฿*****' : money(Number(n) || 0) }
+  function dateDiffDays(a, b) {
+    const [ay, am, ad] = String(a || today()).split('-').map(Number)
+    const [by, bm, bd] = String(b || today()).split('-').map(Number)
+    return Math.ceil((new Date(ay, (am || 1) - 1, ad || 1) - new Date(by, (bm || 1) - 1, bd || 1)) / 86400000)
+  }
+  function addMonthsLocal(dateStr, months) {
+    const [y, m, d] = String(dateStr || today()).split('-').map(Number)
+    const next = new Date(y || new Date().getFullYear(), (m || 1) - 1 + Number(months || 0), 1)
+    const last = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2,'0')}-${String(Math.min(d || 1, last)).padStart(2,'0')}`
+  }
+  function normalizeGoal(goal = {}) {
+    const now = nowISO()
+    const mode = goal.mode === 'linked' || goal.linkedWalletId ? 'linked' : 'manual'
+    return {
+      id: String(goal.id || genId()),
+      name: String(goal.name || 'เป้าหมายใหม่').trim(),
+      icon: String(goal.icon || '🎯').trim() || '🎯',
+      mode,
+      targetAmount: Math.max(0, Number(goal.targetAmount || 0)),
+      currentAmount: Math.max(0, Number(goal.currentAmount || 0)),
+      targetDate: String(goal.targetDate || '').trim(),
+      linkedWalletId: String(goal.linkedWalletId || '').trim(),
+      monthlyContribution: Math.max(0, Number(goal.monthlyContribution || 0)),
+      status: ['active', 'completed', 'archived'].includes(goal.status) ? goal.status : 'active',
+      createdAt: goal.createdAt || now,
+      updatedAt: now,
+    }
+  }
+  function ensureGoalsState() {
+    S.goals = Array.isArray(S.goals) ? S.goals.map(normalizeGoal) : []
+  }
+  App.getGoalCurrentAmount = function(goal = {}) {
+    if (goal.mode === 'linked' && goal.linkedWalletId) {
+      const w = walletById(goal.linkedWalletId)
+      if (!w) return 0
+      const value = App._walletValueTHB ? App._walletValueTHB(w) : Number(w.balance || 0)
+      return Math.max(0, Number(value || 0))
+    }
+    return Math.max(0, Number(goal.currentAmount || 0))
+  }
+  App.getGoalProgress = function(goal = {}) {
+    const target = Math.max(0, Number(goal.targetAmount || 0))
+    const current = App.getGoalCurrentAmount(goal)
+    const remaining = Math.max(0, target - current)
+    const pct = target > 0 ? Math.min(100, Math.round((current / target) * 1000) / 10) : 0
+    const daysLeft = goal.targetDate ? dateDiffDays(goal.targetDate, today()) : null
+    const monthsLeft = daysLeft !== null && daysLeft > 0 ? Math.max(1, Math.ceil(daysLeft / 30.4375)) : null
+    const suggestedMonthly = monthsLeft ? Math.ceil(remaining / monthsLeft) : 0
+    const estimatedCompletionDate = remaining > 0 && Number(goal.monthlyContribution || 0) > 0
+      ? addMonthsLocal(today(), Math.ceil(remaining / Number(goal.monthlyContribution || 0)))
+      : ''
+    return { target, current, remaining, pct, daysLeft, suggestedMonthly, estimatedCompletionDate }
+  }
+
+  App.openGoalsScreen = function(showArchived = false) {
+    ensureGoalsState()
+    const rows = (S.goals || []).filter(g => showArchived ? g.status === 'archived' : g.status !== 'archived')
+    const card = g => {
+      const p = App.getGoalProgress(g)
+      const wallet = g.linkedWalletId ? walletById(g.linkedWalletId) : null
+      const meta = [
+        g.mode === 'linked' ? `เชื่อมกับ ${wallet?.name || 'กระเป๋าที่ไม่พบ'}` : 'ยอดแบบกรอกเอง',
+        g.targetDate ? `เป้าหมาย ${thaiDate(g.targetDate)}` : '',
+        p.estimatedCompletionDate ? `คาดว่าจะครบ ${thaiDate(p.estimatedCompletionDate)}` : '',
+      ].filter(Boolean).join(' · ')
+      return `<div class="card card-pad goal-card">
+        <div class="goal-head">
+          <div class="goal-title"><span>${esc(g.icon)}</span><div><b>${esc(g.name)}</b><small>${esc(meta || 'ยังไม่ตั้งวันเป้าหมาย')}</small></div></div>
+          <button class="btn btn-secondary btn-sm" onclick="App.openGoalForm('${esc(g.id)}')" style="width:auto">แก้ไข</button>
+        </div>
+        <div class="goal-progress-row"><strong>${fmtHidden(p.current)}</strong><span>${p.pct.toFixed(p.pct % 1 ? 1 : 0)}%</span><em>${fmtHidden(p.target)}</em></div>
+        <div class="progress-bar goal-progress"><div class="progress-fill" style="width:${p.pct}%;background:${p.pct >= 100 ? 'var(--income)' : 'var(--primary)'}"></div></div>
+        <div class="goal-foot"><span>เหลือ ${fmtHidden(p.remaining)}</span>${g.targetDate ? `<span>${p.daysLeft < 0 && p.remaining > 0 ? 'เลยวันเป้าหมายแล้ว' : `ควรออม ${fmtHidden(p.suggestedMonthly)}/เดือน`}</span>` : ''}</div>
+      </div>`
+    }
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>เป้าหมาย / Sinking Funds</h2><button class="btn btn-primary btn-sm" onclick="App.openGoalForm()" style="width:auto">+ เพิ่ม</button></div>
+      <div class="sub-scroll">
+        <div class="chips" style="padding:0 0 12px"><button class="chip ${showArchived ? '' : 'active'}" onclick="App.openGoalsScreen(false)">กำลังใช้งาน</button><button class="chip ${showArchived ? 'active' : ''}" onclick="App.openGoalsScreen(true)">เก็บถาวร</button></div>
+        ${rows.length ? rows.map(card).join('') : App._emptyState?.('🎯', showArchived ? 'ยังไม่มีเป้าหมายที่เก็บถาวร' : 'ยังไม่มีเป้าหมาย', 'ใช้วางแผนเงินฉุกเฉิน ท่องเที่ยว ภาษี หรือรายจ่ายประจำปี') || ''}
+      </div>`)
+  }
+
+  App.openGoalForm = function(goalId = '') {
+    ensureGoalsState()
+    const g = goalId ? (S.goals || []).find(x => x.id === goalId) : null
+    const goal = normalizeGoal(g || {})
+    const walletOptions = (S.wallets || [])
+      .filter(w => w.type !== 'credit')
+      .map(w => `<option value="${esc(w.id)}"${goal.linkedWalletId === w.id ? ' selected' : ''}>${esc(w.icon || '')} ${esc(w.name)}</option>`)
+      .join('')
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openGoalsScreen()">←</button><h2>${g ? 'แก้ไขเป้าหมาย' : 'เพิ่มเป้าหมาย'}</h2><button class="btn btn-primary btn-sm" onclick="App.saveGoal('${esc(goalId)}')" style="width:auto">บันทึก</button></div>
+      <div class="sub-scroll">
+        <div class="form-group"><label class="form-label">ชื่อเป้าหมาย</label><input class="form-input" id="goal-name" value="${esc(g?.name || '')}" placeholder="เช่น Emergency fund"></div>
+        <div class="form-split-row"><div class="form-group"><label class="form-label">Emoji</label><input class="form-input" id="goal-icon" value="${esc(g?.icon || '🎯')}" maxlength="4"></div><div class="form-group"><label class="form-label">เป้าหมาย (บาท)</label><input class="form-input" type="number" min="0" id="goal-target" value="${g?.targetAmount || ''}"></div></div>
+        <div class="form-group"><label class="form-label">โหมด</label><select class="form-input" id="goal-mode" onchange="App._syncGoalFormMode()"><option value="manual"${goal.mode === 'manual' ? ' selected' : ''}>กรอกยอดเอง</option><option value="linked"${goal.mode === 'linked' ? ' selected' : ''}>เชื่อมกับกระเป๋า</option></select></div>
+        <div class="form-group" id="goal-manual-row"><label class="form-label">ยอดปัจจุบัน (บาท)</label><input class="form-input" type="number" min="0" id="goal-current" value="${g?.currentAmount || ''}"></div>
+        <div class="form-group" id="goal-linked-row"><label class="form-label">กระเป๋าที่เชื่อม</label><select class="form-input" id="goal-wallet"><option value="">เลือกกระเป๋า</option>${walletOptions}</select><div class="form-hint">ยอดปัจจุบันจะอ่านจาก balance กระเป๋านี้ ไม่แก้ยอดกระเป๋าโดยตรง</div></div>
+        <div class="form-split-row"><div class="form-group"><label class="form-label">วันที่อยากให้ครบ</label><input class="form-input" type="date" id="goal-target-date" value="${esc(g?.targetDate || '')}"></div><div class="form-group"><label class="form-label">ออมต่อเดือน</label><input class="form-input" type="number" min="0" id="goal-monthly" value="${g?.monthlyContribution || ''}"></div></div>
+        <div class="form-group"><label class="form-label">สถานะ</label><select class="form-input" id="goal-status"><option value="active"${goal.status === 'active' ? ' selected' : ''}>กำลังใช้งาน</option><option value="completed"${goal.status === 'completed' ? ' selected' : ''}>สำเร็จแล้ว</option><option value="archived"${goal.status === 'archived' ? ' selected' : ''}>เก็บถาวร</option></select></div>
+        ${g ? `<div class="flex-row"><button class="btn btn-outline flex-1" onclick="App.archiveGoal('${esc(g.id)}')">เก็บถาวร</button><button class="btn btn-danger flex-1" onclick="App.deleteGoal('${esc(g.id)}')">ลบ</button></div>` : ''}
+      </div>`)
+    App._syncGoalFormMode()
+  }
+
+  App._syncGoalFormMode = function() {
+    const mode = document.getElementById('goal-mode')?.value || 'manual'
+    const manual = document.getElementById('goal-manual-row')
+    const linked = document.getElementById('goal-linked-row')
+    if (manual) manual.style.display = mode === 'manual' ? '' : 'none'
+    if (linked) linked.style.display = mode === 'linked' ? '' : 'none'
+  }
+
+  App.saveGoal = function(goalId = '') {
+    ensureGoalsState()
+    const existing = goalId ? (S.goals || []).find(g => g.id === goalId) : null
+    const mode = document.getElementById('goal-mode')?.value === 'linked' ? 'linked' : 'manual'
+    const raw = {
+      ...(existing || {}),
+      id: goalId || undefined,
+      name: document.getElementById('goal-name')?.value.trim(),
+      icon: document.getElementById('goal-icon')?.value.trim() || '🎯',
+      mode,
+      targetAmount: Number(document.getElementById('goal-target')?.value || 0),
+      currentAmount: Number(document.getElementById('goal-current')?.value || 0),
+      linkedWalletId: mode === 'linked' ? document.getElementById('goal-wallet')?.value || '' : '',
+      targetDate: document.getElementById('goal-target-date')?.value || '',
+      monthlyContribution: Number(document.getElementById('goal-monthly')?.value || 0),
+      status: document.getElementById('goal-status')?.value || 'active',
+    }
+    if (!raw.name) return notify('กรุณากรอกชื่อเป้าหมาย', 'error')
+    if (!(raw.targetAmount > 0)) return notify('กรุณาระบุยอดเป้าหมายมากกว่า 0', 'error')
+    if (mode === 'linked' && !raw.linkedWalletId) return notify('กรุณาเลือกกระเป๋าที่เชื่อม', 'error')
+    const normalized = normalizeGoal(raw)
+    const idx = S.goals.findIndex(g => g.id === normalized.id)
+    if (idx >= 0) S.goals[idx] = normalized
+    else S.goals.unshift(normalized)
+    persist()
+    App.openGoalsScreen(normalized.status === 'archived')
+    notify('บันทึกเป้าหมายแล้ว', 'success')
+  }
+
+  App.archiveGoal = function(goalId) {
+    const g = (S.goals || []).find(x => x.id === goalId)
+    if (!g) return
+    g.status = 'archived'
+    g.updatedAt = nowISO()
+    persist(); App.openGoalsScreen(true); notify('เก็บเป้าหมายแล้ว', 'success')
+  }
+
+  App.deleteGoal = function(goalId) {
+    const g = (S.goals || []).find(x => x.id === goalId)
+    if (!g) return
+    App.showConfirm?.({ title:'ลบเป้าหมาย', danger:true, confirmLabel:'ลบ', body:`ลบ “${g.name}”? การลบนี้ไม่กระทบยอดในกระเป๋า`, onConfirm() {
+      S.goals = (S.goals || []).filter(x => x.id !== goalId)
+      persist(); App.openGoalsScreen(); notify('ลบเป้าหมายแล้ว', 'success')
+    }})
+  }
+
+  App.getUpcomingItems = function(days = 60) {
+    const t = today()
+    const end = addMonthsLocal(t, Math.ceil(days / 30))
+    const rows = []
+    ;(S.recurring || []).forEach(r => {
+      if (!r || r.paused) return
+      const due = r.nextDueDate || r.startDate || r.date || t
+      if (String(due) <= end) rows.push({ id:`rec-${r.id}`, date:due, icon:r.icon || '🔁', title:r.name || 'รายการประจำ', amount:Number(r.amount || 0), type:'recurring', status:String(due) < t ? 'overdue' : 'upcoming', action:`App.postRecurringNow('${esc(r.id)}')`, skip:`App.skipRecurringNow('${esc(r.id)}')` })
+    })
+    ;(S.transactions || []).forEach(tx => {
+      if (!(tx.scheduled === true && String(tx.date || '') >= t)) return
+      rows.push({ id:`tx-${tx.id}`, date:tx.date, icon:tx.installmentGroupId ? '🧾' : '📅', title:tx.merchant || tx.note || App._txTypeLabel?.(tx.type) || 'รายการตามแผน', amount:Number(tx.amount || 0), type:tx.installmentGroupId ? 'installment' : 'scheduled', status:'upcoming' })
+    })
+    ;(S.wallets || []).filter(w => w.type === 'credit').forEach(card => {
+      const due = App.getCreditCardDueInfo?.(card)
+      if (!due?.dateStr || due.dateStr > end) return
+      const st = App.getCardStatement?.(card.id)
+      const amount = Math.max(0, Number(st?.balanceDue || Math.abs(card.balance || 0)))
+      if (amount <= 0) return
+      rows.push({ id:`cc-${card.id}`, date:due.dateStr, icon:card.icon || '💳', title:`ชำระบัตร ${card.name}`, amount, type:'credit_due', status:due.daysLeft < 0 ? 'overdue' : 'upcoming', open:`App.openCCDetail('${esc(card.id)}')` })
+    })
+    ;(S.goals || []).forEach(g => {
+      if (!g.targetDate || g.status === 'archived') return
+      const p = App.getGoalProgress(g)
+      if (p.remaining <= 0 || g.targetDate > end) return
+      rows.push({ id:`goal-${g.id}`, date:g.targetDate, icon:g.icon || '🎯', title:`เป้าหมาย ${g.name}`, amount:p.remaining, type:'goal', status:String(g.targetDate) < t ? 'overdue' : 'upcoming', open:`App.openGoalForm('${esc(g.id)}')` })
+    })
+    return rows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.title).localeCompare(String(b.title)))
+  }
+
+  App.openUpcomingScreen = function() {
+    ensureGoalsState()
+    const rows = App.getUpcomingItems(90)
+    const grouped = rows.reduce((m, row) => {
+      const diff = dateDiffDays(row.date, today())
+      const key = diff < 0 ? 'ค้างอยู่' : diff <= 7 ? '7 วันข้างหน้า' : diff <= 31 ? 'เดือนนี้ / 30 วัน' : 'ถัดไป'
+      ;(m[key] ||= []).push(row)
+      return m
+    }, {})
+    const order = ['ค้างอยู่', '7 วันข้างหน้า', 'เดือนนี้ / 30 วัน', 'ถัดไป']
+    const itemHtml = row => `<div class="list-item upcoming-item ${row.status === 'overdue' ? 'overdue' : ''}" ${row.open ? `onclick="${row.open}"` : ''}>
+      <div class="list-item-icon">${esc(row.icon)}</div>
+      <div class="list-item-info"><div class="list-item-name">${esc(row.title)}</div><div class="list-item-sub">${thaiDate(row.date)} · ${esc(row.type)} · ${row.status === 'overdue' ? 'เลยกำหนด' : 'กำลังจะถึง'}</div></div>
+      <div style="text-align:right"><strong>${fmtHidden(row.amount)}</strong>${row.action ? `<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();${row.action}" style="width:auto">บันทึก</button>${row.skip ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();${row.skip}" style="width:auto">ข้าม</button>` : ''}</div>` : ''}</div>
+    </div>`
+    const html = order.filter(k => grouped[k]?.length).map(k => `<div class="sec-title">${k}</div><div class="card"><div style="padding:0 12px">${grouped[k].map(itemHtml).join('')}</div></div>`).join('')
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ปฏิทินบิล / รายการที่จะถึง</h2></div><div class="sub-scroll">${html || App._emptyState?.('📅','ยังไม่มีรายการที่จะถึง','รายการประจำ ผ่อนชำระ วันครบกำหนดบัตร และวันเป้าหมายจะแสดงที่นี่') || ''}</div>`)
+  }
+
+  function previewCount(payload, key) {
+    if (key === 'categories') return Number(payload?.categories?.expense?.length || 0) + Number(payload?.categories?.income?.length || 0)
+    if (key === 'installments') return new Set((payload?.transactions || []).map(t => t?.installmentGroupId).filter(Boolean)).size
+    const value = payload?.[key]
+    if (Array.isArray(value)) return value.length
+    if (value && typeof value === 'object') return Object.keys(value).length
+    return 0
+  }
+  function mergeById(current = [], incoming = []) {
+    const byId = new Map((Array.isArray(current) ? current : []).map(row => [String(row.id || ''), row]))
+    let added = 0, skipped = 0
+    ;(Array.isArray(incoming) ? incoming : []).forEach(row => {
+      const id = String(row?.id || '')
+      if (!id) { skipped++; return }
+      if (byId.has(id)) { skipped++; return }
+      byId.set(id, row); added++
+    })
+    return { rows:[...byId.values()], added, skipped }
+  }
+  function mergeObjectByKey(current = {}, incoming = {}) {
+    return { ...(incoming || {}), ...(current || {}) }
+  }
+
+  App._applyImportMergePayload = function(payload) {
+    const stats = {}
+    ;['transactions','wallets','budgets','incomeBudgets','recurring','merchants','ccBenefitRules','creditLimitGroups','rewardAccounts','rewardLedger','netWorthSnapshots','investmentSnapshots','cryptoAssets','cryptoHoldings','cryptoTransactions','goals'].forEach(key => {
+      const result = mergeById(S[key] || [], payload[key] || [])
+      S[key] = result.rows
+      stats[key] = result
+    })
+    S.categories = {
+      expense: mergeById(S.categories?.expense || [], payload.categories?.expense || []).rows,
+      income: mergeById(S.categories?.income || [], payload.categories?.income || []).rows,
+    }
+    S.ccBenefits = mergeObjectByKey(S.ccBenefits || {}, payload.ccBenefits || {})
+    S.marketPrices = mergeObjectByKey(S.marketPrices || {}, payload.marketPrices || {})
+    S.cryptoSyncMeta = { ...(payload.cryptoSyncMeta || {}), ...(S.cryptoSyncMeta || {}) }
+    S.migrations = { ...(payload.migrations || {}), ...(S.migrations || {}) }
+    App.ensureCryptoState?.()
+    App.ensureLedgerBaselines?.(true)
+    App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+    persist(); applyTheme?.(); App.render?.()
+    return stats
+  }
+
+  App.openImportPreview = function(payload, checked = { warnings: [] }, input = null) {
+    const rows = [
+      ['กระเป๋า', 'wallets'], ['รายการ', 'transactions'], ['หมวดหมู่', 'categories'],
+      ['ร้านค้า', 'merchants'], ['รายการประจำ', 'recurring'], ['เป้าหมาย', 'goals'],
+      ['ผ่อนชำระ', 'installments'], ['บัญชีคะแนน', 'rewardAccounts'], ['Crypto holdings', 'cryptoHoldings'],
+      ['กฎสิทธิประโยชน์', 'ccBenefitRules'],
+    ]
+    const counts = rows.map(([label, key]) => `<div class="reward-tile"><span>${esc(label)}</span><strong>${previewCount(payload, key).toLocaleString('en-US')}</strong></div>`).join('')
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen();${input ? "document.getElementById('import-file-v5').value=''" : ''}">←</button><h2>Preview นำเข้า</h2></div>
+      <div class="sub-scroll">
+        <div class="card card-pad" style="margin-bottom:12px"><div class="report-category-title">ข้อมูลในไฟล์สำรอง</div><div class="reward-grid" style="margin-top:10px">${counts}</div>${(checked.warnings || []).length ? `<div class="form-hint" style="margin-top:10px">คำเตือน ${checked.warnings.length} จุด: ${esc(checked.warnings.slice(0,3).join(' · '))}</div>` : ''}</div>
+        <div class="card card-pad"><button class="btn btn-primary" onclick="App.confirmImportPayload('merge')">Merge: เพิ่มเฉพาะข้อมูลใหม่</button><button class="btn btn-outline mt-8" onclick="App.confirmImportPayload('replace')">Replace: แทนที่ข้อมูลทั้งหมด</button><div class="form-hint" style="margin-top:10px">ระบบจะสร้าง local backup ก่อนนำเข้าทุกครั้ง Merge จะไม่เขียนทับ id ที่มีอยู่แล้ว</div></div>
+      </div>`)
+    App._pendingImportPayload = payload
+    if (input) input.value = ''
+  }
+
+  App.confirmImportPayload = function(mode = 'merge') {
+    const payload = App._pendingImportPayload
+    if (!payload) return notify('ไม่พบข้อมูลนำเข้า', 'error')
+    const replace = mode === 'replace'
+    App.showConfirm?.({
+      title: replace ? 'Replace ข้อมูลทั้งหมด' : 'Merge ข้อมูล',
+      danger: replace,
+      confirmLabel: replace ? 'Replace' : 'Merge',
+      body: replace ? 'จะแทนที่ข้อมูลปัจจุบันทั้งหมด แต่จะสร้าง local backup ก่อน' : 'จะเพิ่มเฉพาะรายการ id ใหม่ และข้าม conflict ที่ id ซ้ำ',
+      onConfirm() {
+        try { Storage.createLocalBackup?.(S, replace ? 'before-import-replace' : 'before-import-merge') } catch (_) {}
+        try { localStorage.setItem('mt_pre_import_backup', JSON.stringify(Storage.buildExportPayload(S))) } catch (_) {}
+        const stats = replace ? null : App._applyImportMergePayload(payload)
+        if (replace) App._applyBackupPayload(payload)
+        App._pendingImportPayload = null
+        App.closeSubScreen?.()
+        if (replace) notify('นำเข้าแบบ Replace สำเร็จ', 'success')
+        else {
+          const added = Object.values(stats || {}).reduce((s, r) => s + Number(r.added || 0), 0)
+          const skipped = Object.values(stats || {}).reduce((s, r) => s + Number(r.skipped || 0), 0)
+          notify(`นำเข้าแบบ Merge สำเร็จ · เพิ่ม ${added} · ข้ามซ้ำ ${skipped}`, 'success')
+        }
+      },
+    })
+  }
+
+  App.importData = function(input) {
+    const file = input?.files?.[0]
+    if (!file) return
+    Storage.importJSON(file, data => {
+      const checked = App._validateImportPayload?.(data) || { ok:true, warnings:[], data }
+      if (!checked.ok) { notify('นำเข้าไม่ได้: ' + (checked.errors || []).join(', '), 'error'); if (input) input.value = ''; return }
+      App.openImportPreview(checked.data || data, checked, input)
+    }, err => { notify('นำเข้าล้มเหลว: ' + err, 'error'); if (input) input.value = '' })
+  }
+
+  App.exportCSV = function() {
+    const typeLabel = { expense:'expense', income:'income', transfer:'transfer', cc_payment:'cc_payment' }
+    const headers = ['date','type','amount','wallet','toWallet','category','merchant','note','status','recurringId','installmentGroupId','installmentNo','rewardRuleIds','createdAt']
+    const csvCell = value => `"${String(value ?? '').replace(/"/g, '""')}"`
+    const rows = [...(S.transactions || [])]
+      .sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
+      .map(t => {
+        const cat = App._findCat?.(t.categoryId)
+        const wallet = walletById(t.walletId)
+        const toWallet = walletById(t.toWalletId)
+        const signedAmount = (t.type === 'expense' || t.type === 'cc_payment') ? -Math.abs(Number(t.amount || 0)) : Number(t.amount || 0)
+        const status = App._isPostedTx?.(t) ? 'posted' : 'scheduled'
+        return [
+          t.date || '',
+          typeLabel[t.type] || t.type || '',
+          Number.isFinite(signedAmount) ? signedAmount : 0,
+          wallet?.name || '',
+          toWallet?.name || '',
+          cat?.label || '',
+          t.merchant || '',
+          t.note || '',
+          status,
+          t.sourceRecurringId || t.recurringId || '',
+          t.installmentGroupId || '',
+          t.installmentNo || '',
+          Array.isArray(t.rewardRuleIds) ? t.rewardRuleIds.join('|') : '',
+          t.createdAt || '',
+        ].map(csvCell).join(',')
+      })
+    const csv = '\ufeff' + [headers.map(csvCell).join(','), ...rows].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `money-tracker-transactions-${today()}.csv`
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    notify('ส่งออก CSV สำเร็จ', 'success')
   }
 
   App.restorePreImportBackup = function() {
