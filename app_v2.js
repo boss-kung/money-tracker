@@ -229,6 +229,7 @@ const App = {
       isInstallment: false,
       installmentMonths: '',
       rewardRuleIds: [],
+      txSuggestedFields: {},
       rewardEstimate: null,
       rewardIncludePoints: true,
       rewardIncludeCashback: true,
@@ -282,6 +283,7 @@ const App = {
   
   _setTxType(type) {
     S.tx.type = type
+    S.txSuggestedFields ||= {}
     S.tx.categoryId = ''
     if (type !== 'expense') {
       S.tx.isRecurring = false
@@ -905,7 +907,7 @@ App.render();
     if (!tx) return
     S.txMode = 'edit'
     S.editingTxId = id
-    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxDetail()
     App.openOverlay('overlay-add-tx')
@@ -916,7 +918,7 @@ App.render();
     if (!tx) return
     S.txMode = 'duplicate'
     S.editingTxId = null
-    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
@@ -1088,7 +1090,7 @@ App.render();
   App.openAddTx = function() {
     S.txMode = 'add'
     S.editingTxId = null
-    S.tx = { step:'amount', type:'expense', amount:'0', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', note:'', date:txToday(), isRecurring:false, isInstallment:false, installmentMonths:'', rewardRuleIds:[], rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
+    S.tx = { step:'amount', type:'expense', amount:'0', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', note:'', date:txToday(), isRecurring:false, isInstallment:false, installmentMonths:'', rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
   }
@@ -1439,7 +1441,7 @@ App.render();
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div class="cat-grid cat-grid-compact" id="cat-grid">${shownCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}${hasMore ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.showAllTxCategories()"><span class="cat-icon">⋯</span><span>เพิ่มเติม</span></button>` : ''}${S.txShowAllCats && allCats.length > 5 ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.hideAllTxCategories()"><span class="cat-icon">⌃</span><span>ย่อ</span></button>` : ''}</div></div>` : ''}
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);App._renderAddTxDetail()">${walletOptions}</select></div>
-          ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value);App._showMerchantDropdown?.(this.value)" onfocus="App._showMerchantDropdown?.(this.value)" onblur="setTimeout(()=>document.getElementById('mt-merchant-dropdown')?.classList.add('hidden'),180)"></div>`}
+          ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value);App._showMerchantDropdown?.(this.value)" onfocus="App._showMerchantDropdown?.(this.value)" onblur="setTimeout(()=>{document.getElementById('mt-merchant-dropdown')?.classList.add('hidden');App._applyMerchantSuggestion?.(this.value)},180)">${S.tx.merchantSuggestionNote ? `<div class="form-hint">${esc(S.tx.merchantSuggestionNote)}</div>` : ''}</div>`}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value);App._renderAddTxDetail()"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
           ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? (App._recurringInlineHtml?.() || '') : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
           ${(() => {
@@ -1512,7 +1514,25 @@ App.render();
     if (cat && top) insights.push({ icon:'🔍', title:'หมวดที่ควรจับตา', body:`หมวด ${cat.label} ใช้สูงสุดที่ ${fmt(top[1])} (${stats.expense ? (top[1]/stats.expense*100).toFixed(0) : 0}% ของรายจ่าย) แนะนำตั้งงบย่อยหรือ review รายการซ้ำ` })
     const over = budget.find(b => b.over)
     if (over) insights.push({ icon:'⚠️', title:'งบประมาณเกิน', body:`${over.label} เกินงบ ${fmt(over.spent - over.monthlyLimit)} แล้ว ควรหยุดใช้หมวดนี้ชั่วคราวจนจบรอบเดือน` })
-    return insights.slice(0, 4)
+    const usable = Calc.getUsableMoney ? Calc.getUsableMoney(S.wallets || []) : null
+    const upcoming = App.getUpcomingItems?.(14) || []
+    const upcomingCommitted = upcoming.filter(row => ['credit_due', 'recurring', 'scheduled', 'installment'].includes(row.type)).reduce((sum, row) => sum + Number(row.amount || 0), 0)
+    if (usable && upcomingCommitted > 0 && usable.liquid < upcomingCommitted) {
+      insights.push({ icon:'💸', title:'บิลใกล้ถึงเกินเงินพร้อมใช้', body:`14 วันข้างหน้ามีภาระประมาณ ${fmt(upcomingCommitted)} แต่เงินพร้อมใช้มี ${fmt(usable.liquid)} ควรเตรียมสภาพคล่องล่วงหน้า` })
+    }
+    const creditSoon = (S.wallets || []).filter(w => w.type === 'credit').map(card => ({ card, due: App.getCreditCardDueInfo?.(card) })).filter(row => row.due && Number(row.due.daysLeft) >= 0 && Number(row.due.daysLeft) <= 7)
+    if (creditSoon.length && usable && usable.liquid < creditSoon.reduce((sum, row) => sum + Math.abs(Number(row.card.balance || 0)), 0)) {
+      insights.push({ icon:'💳', title:'บัตรเครดิตครบกำหนดเร็ว ๆ นี้', body:`มีบัตรครบกำหนดภายใน 7 วันและเงินพร้อมใช้อาจไม่พอชำระเต็มจำนวน ควรจัดลำดับการจ่ายก่อนถึง due date` })
+    }
+    const behindGoal = (S.goals || []).filter(g => g.status === 'active').map(g => ({ goal: g, progress: App.getGoalProgress?.(g) })).find(row => row.progress && row.progress.remaining > 0 && ((row.goal.targetDate && row.progress.daysLeft < 0) || (row.goal.targetDate && row.goal.monthlyContribution > 0 && row.progress.suggestedMonthly > row.goal.monthlyContribution)))
+    if (behindGoal) {
+      insights.push({ icon:'🎯', title:'เป้าหมายอาจตามไม่ทัน', body:`${behindGoal.goal.name} ยังเหลือ ${fmt(behindGoal.progress.remaining)}${behindGoal.goal.targetDate ? ' และมีความเสี่ยงไม่ทันวันเป้าหมาย' : ''} ลองเพิ่มเงินออมรายเดือนหรือขยับวันเป้าหมาย` })
+    }
+    const staleTexts = ['crypto', 'gold', 'fcd'].map(kind => App.getMarketFreshnessText?.(kind) || '').filter(text => /เก่า|manual|สำรอง/.test(text))
+    if (staleTexts.length) {
+      insights.push({ icon:'🕰️', title:'ราคาสินทรัพย์อาจไม่ล่าสุด', body:'มูลค่าสินทรัพย์บางส่วนกำลังใช้ราคาที่เก่าหรือราคาสำรอง ควร sync ราคาอีกครั้งก่อนตัดสินใจ' })
+    }
+    return insights.slice(0, 6)
   }
 
   try { if (S.page === 'transactions') App.renderTransactions(); else App.render?.() } catch (_) {}
@@ -3704,6 +3724,66 @@ Calc.getUsableMoney = function(wallets) {
     const inp = document.getElementById('tx-merchant')
     if (inp) inp.value = S.tx.merchant
     document.getElementById('mt-merchant-dropdown')?.classList.add('hidden')
+    App._applyMerchantSuggestion?.(S.tx.merchant)
+  }
+
+  function sameValue(a, b) {
+    return String(a ?? '') === String(b ?? '')
+  }
+  function canApplySuggestedField(field) {
+    const prev = S.tx?.txSuggestedFields?.[field]
+    const current = S.tx?.[field]
+    return current === '' || current === null || typeof current === 'undefined' || sameValue(current, prev)
+  }
+  App.getMerchantSuggestion = function(name) {
+    const normalized = String(name || '').trim().toLowerCase()
+    if (!normalized) return null
+    const matches = (S.transactions || [])
+      .filter(t => String(t.merchant || '').trim().toLowerCase() === normalized)
+      .filter(t => ['expense', 'income'].includes(t.type))
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+    if (!matches.length) return null
+    const latest = matches[0]
+    const rewardRuleIds = Array.isArray(latest.rewardRuleIds) ? latest.rewardRuleIds.filter(Boolean) : []
+    return {
+      merchant: latest.merchant || name,
+      type: latest.type || '',
+      categoryId: latest.categoryId || '',
+      walletId: latest.walletId || '',
+      rewardRuleIds,
+      hint: `แนะนำจากประวัติเดิม: ${App._txTypeLabel?.(latest.type) || latest.type}${latest.categoryId ? ` · ${(App._findCat?.(latest.categoryId)?.label || latest.categoryId)}` : ''}${latest.walletId ? ` · ${(walletById(latest.walletId)?.name || latest.walletId)}` : ''}`,
+    }
+  }
+  App._applyMerchantSuggestion = function(name) {
+    const suggestion = App.getMerchantSuggestion?.(name)
+    if (!suggestion) {
+      S.tx.merchantSuggestionNote = ''
+      return
+    }
+    S.tx.txSuggestedFields ||= {}
+    let changed = false
+    if (suggestion.type && canApplySuggestedField('type')) {
+      S.tx.type = suggestion.type
+      S.tx.txSuggestedFields.type = suggestion.type
+      changed = true
+    }
+    if (suggestion.walletId && canApplySuggestedField('walletId')) {
+      S.tx.walletId = suggestion.walletId
+      S.tx.txSuggestedFields.walletId = suggestion.walletId
+      changed = true
+    }
+    if (suggestion.categoryId && canApplySuggestedField('categoryId')) {
+      S.tx.categoryId = suggestion.categoryId
+      S.tx.txSuggestedFields.categoryId = suggestion.categoryId
+      changed = true
+    }
+    if (suggestion.rewardRuleIds?.length && (!Array.isArray(S.tx.rewardRuleIds) || !S.tx.rewardRuleIds.length || sameValue((S.tx.rewardRuleIds || []).join('|'), String(S.tx.txSuggestedFields.rewardRuleIds || '')))) {
+      S.tx.rewardRuleIds = [...suggestion.rewardRuleIds]
+      S.tx.txSuggestedFields.rewardRuleIds = suggestion.rewardRuleIds.join('|')
+      changed = true
+    }
+    S.tx.merchantSuggestionNote = suggestion.hint
+    if (changed) App._renderAddTxDetail?.()
   }
 
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
