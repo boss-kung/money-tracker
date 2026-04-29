@@ -377,7 +377,7 @@ const App = {
    ============================================================ */
 Object.assign(Calc, {
   getIncomeBudgetProgress(transactions, budgets, categories, month) {
-    const txns = transactions.filter(t => t.date.startsWith(month) && t.type === 'income')
+    const txns = transactions.filter(t => t.date.startsWith(month) && t.type === 'income' && (typeof App._isPostedTx === 'function' ? App._isPostedTx(t) : t.scheduled !== true))
     return (budgets || []).map(b => {
       const received = txns.filter(t => t.categoryId === b.categoryId).reduce((s,t) => s + t.amount, 0)
       const cat = categories.income.find(c => c.id === b.categoryId)
@@ -549,6 +549,41 @@ function init() {
   S.investmentSnapshots = data.investmentSnapshots || []
 
   applyTheme()
+
+  // ── Safe migration: normalize transaction status fields ──────
+  // This is idempotent — running it multiple times produces the same result.
+  // It ensures the `scheduled` flag is set consistently on installment rows.
+  // Existing transactions without the field are left untouched (treated as posted).
+  ;(function migrateTransactionStatus() {
+    const migrationKey = 'statusNormV1'
+    if (S.migrations && S.migrations[migrationKey]) return   // already ran
+
+    // Back up to localStorage before touching anything
+    try {
+      const snapshot = JSON.stringify({ transactions: S.transactions, wallets: S.wallets, migratedAt: new Date().toISOString() })
+      localStorage.setItem('mt_pre_migration_backup', snapshot)
+    } catch (_) {}
+
+    const todayStr = _localDateStr(new Date())
+    let changed = 0
+
+    ;(S.transactions || []).forEach(t => {
+      // For installment transactions whose date is still in the future, ensure
+      // scheduled=true is present. This catches data saved before this field existed.
+      if (t.installmentGroupId && typeof t.scheduled === 'undefined' && String(t.date || '') > todayStr) {
+        t.scheduled = true
+        changed++
+      }
+    })
+
+    if (S.migrations) S.migrations[migrationKey] = true
+    // Always persist the migration flag so we don't re-run on next load.
+    try { Storage.save('mt_migrations', S.migrations) } catch (_) {}
+    if (changed > 0) {
+      try { Storage.save('mt_transactions', S.transactions) } catch (_) {}
+      console.log(`[Migration statusNormV1] Marked ${changed} future installment rows as scheduled.`)
+    }
+  })()
 
   // Bottom nav
   document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
@@ -788,8 +823,11 @@ App.render();
     const toWal = S.wallets.find(w => w.id === tx.toWalletId)
     const r = App._rewardForTx ? App._rewardForTx(tx) : {points:0,cashback:0}
     const transferLine = tx.type === 'transfer' && wallet && toWal ? `${wallet.icon} ${wallet.name} → ${toWal.icon} ${toWal.name}` : ''
-    return `<div style="text-align:center;margin-bottom:20px"><div style="font-size:44px;font-weight:800;color:${cssAmountColor(tx.type)};letter-spacing:-.05em">${signedFmt(tx.amount, tx.type)}</div><div style="font-size:14px;color:var(--muted);margin-top:6px">${esc(Calc.labelDate(tx.date))}</div></div>
+    const todayNow = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    const isScheduledFuture = tx.scheduled === true && String(tx.date || '') > todayNow
+    return `<div style="text-align:center;margin-bottom:20px"><div style="font-size:44px;font-weight:800;color:${cssAmountColor(tx.type)};letter-spacing:-.05em;${isScheduledFuture ? 'opacity:.55' : ''}">${signedFmt(tx.amount, tx.type)}</div><div style="font-size:14px;color:var(--muted);margin-top:6px">${esc(Calc.labelDate(tx.date))}</div>${isScheduledFuture ? `<div style="display:inline-block;margin-top:8px;padding:4px 10px;border-radius:999px;background:rgba(100,116,139,.15);color:var(--muted);font-size:12px;font-weight:600">📅 ตามแผน · ยังไม่หักยอดจริง</div>` : ''}</div>
       <div>
+        ${isScheduledFuture ? `<div class="detail-row" style="background:rgba(100,116,139,.08);border-radius:8px;padding:8px 12px;margin-bottom:4px"><span class="detail-label" style="color:var(--muted)">สถานะ</span><span class="detail-value" style="color:var(--muted)">ตามแผน — ยังไม่กระทบยอดกระเป๋า</span></div>` : ''}
         ${transferLine ? `<div class="detail-row"><span class="detail-label">รายการโอน</span><span class="detail-value">${esc(transferLine)}</span></div>` : ''}
         ${cat ? `<div class="detail-row"><span class="detail-label">หมวดหมู่</span><span class="detail-value">${esc(cat.icon)} ${esc(cat.label)}</span></div>` : ''}
         ${wallet ? `<div class="detail-row"><span class="detail-label">กระเป๋าเงิน</span><span class="detail-value">${esc(wallet.icon)} ${esc(wallet.name)}</span></div>` : ''}
@@ -1215,10 +1253,17 @@ App.render();
   App._txRow = function(tx) {
     const v = txVisual(tx)
     const bg = v.cat?.color ? `${v.cat.color}16` : tx.type === 'transfer' ? 'rgba(37,99,235,.10)' : 'var(--elevated)'
-    return `<div class="tx-row tx-row-modern tx-row--${esc(tx.type)}" data-txid="${esc(tx.id)}">
-      <div class="tx-icon" style="background:${bg}">${esc(v.icon)}</div>
-      <div class="tx-info"><div class="tx-title">${esc(v.title)}</div><div class="tx-sub">${v.meta.map(x => `<span class="tx-meta-pill">${esc(x)}</span>`).join('')}</div></div>
-      <div class="tx-right"><div class="tx-amount" style="color:${typeColor(tx.type)}">${signedAmount(tx)}</div></div>
+    // Show a clear "ตามแผน" badge for future-scheduled transactions so the user
+    // always knows these rows have NOT yet reduced their real balance.
+    const todayNow = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    const isScheduledFuture = tx.scheduled === true && String(tx.date || '') > todayNow
+    const scheduledPill = isScheduledFuture ? `<span class="tx-meta-pill tx-scheduled-pill" style="background:rgba(100,116,139,.15);color:var(--muted)">📅 ตามแผน</span>` : ''
+    const amountColor = isScheduledFuture ? 'var(--muted)' : typeColor(tx.type)
+    const notYetNote = isScheduledFuture ? `<div style="font-size:10px;color:var(--muted);text-align:right;margin-top:2px">ยังไม่หัก</div>` : ''
+    return `<div class="tx-row tx-row-modern tx-row--${esc(tx.type)}${isScheduledFuture ? ' tx-row--scheduled' : ''}" data-txid="${esc(tx.id)}">
+      <div class="tx-icon" style="background:${bg};${isScheduledFuture ? 'opacity:.6' : ''}">${esc(v.icon)}</div>
+      <div class="tx-info"><div class="tx-title">${esc(v.title)}</div><div class="tx-sub">${v.meta.map(x => `<span class="tx-meta-pill">${esc(x)}</span>`).join('')}${scheduledPill}</div></div>
+      <div class="tx-right"><div class="tx-amount" style="color:${amountColor}">${signedAmount(tx)}</div>${notYetNote}</div>
     </div>`
   }
 
@@ -1902,7 +1947,11 @@ Calc.getUsableMoney = function(wallets) {
 
       if (type === 'credit') {
         const balance = Number(w.balance || 0)
-        if (balance < 0) creditDebt += Math.abs(balance)
+        const postedDebt = balance < 0 ? Math.abs(balance) : 0
+        // Include future installment rows not yet posted — the full purchase
+        // principal is already committed against the credit limit.
+        const committedDebt = App._getUnpostedInstallmentDebt ? App._getUnpostedInstallmentDebt(w.id) : 0
+        creditDebt += postedDebt + committedDebt
       }
     })
 
@@ -2164,12 +2213,22 @@ Calc.getUsableMoney = function(wallets) {
     }
 
     if (isCC) {
-      const owed = Math.abs(Number(w.balance || 0))
+      // postedOwed = what's already on the ledger (current statement)
+      // committedInstallments = future installment months that are already committed
+      //   against the credit limit even though not yet posted to the statement
+      const postedOwed = Math.abs(Number(w.balance || 0))
+      const committedInstallments = App._getUnpostedInstallmentDebt ? App._getUnpostedInstallmentDebt(w.id) : 0
+      const totalOwed = postedOwed + committedInstallments
       const limit = App.getCreditLimitForCard ? App.getCreditLimitForCard(w) : Number(w.limit || 0)
       const due = App.getCreditCardDueInfo ? App.getCreditCardDueInfo(w) : (w.dueDay ? Calc.getDueDate(w.dueDay) : null)
-      const pct = limit ? Math.min(100, Math.max(0, owed / limit * 100)) : 0
-      const avail = App.getAvailableCreditForCard ? App.getAvailableCreditForCard(w) : (limit ? Math.max(0, limit - owed) : 0)
+      // pct and avail use totalOwed — getCreditUsageForCard already includes committed debt
+      const pct = limit ? Math.min(100, Math.max(0, totalOwed / limit * 100)) : 0
+      const avail = App.getAvailableCreditForCard ? App.getAvailableCreditForCard(w) : (limit ? Math.max(0, limit - totalOwed) : 0)
       const payBtn = `<button class="wallet-chip-btn wc-card-pay-btn" onclick="event.stopPropagation();App.openCCPay('${ESC(w.id)}')">ชำระ</button>`
+      // Show committed installment breakdown when there are future installment months
+      const installmentNote = committedInstallments > 0
+        ? `<div class="wc-prog-info" style="margin-top:4px;font-size:11px;opacity:.8"><span>ค้างชำระ ${MONEY(postedOwed)}</span><span>ผ่อนล่วงหน้า ${MONEY(committedInstallments)}</span></div>`
+        : ''
       let sharedBadge = ''
       if (w.creditLimitMode === 'shared' && w.creditLimitGroupId) {
         const g = App.getCreditLimitGroup?.(w.creditLimitGroupId)
@@ -2182,7 +2241,8 @@ Calc.getUsableMoney = function(wallets) {
           <div><div class="wc-name">${ESC(name)}</div><div class="wc-type">บัตรเครดิต${w.issuer ? ` · ${ESC(w.issuer)}` : ''}${limit ? ` · วงเงิน ${MONEY(limit)}` : ''}</div></div>
           <div class="wc-card-actions">${payBtn}${editBtn}</div>
         </div>
-        <div class="wc-balance">-${MONEY(owed)}</div>
+        <div class="wc-balance">-${MONEY(totalOwed)}</div>
+        ${installmentNote}
         ${sharedBadge}
         ${due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em><strong>${ESC(due.dueStr)}</strong></div>` : ''}
         ${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : ''}
@@ -2432,32 +2492,65 @@ Calc.getUsableMoney = function(wallets) {
   const esc = App._esc
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const TX_TYPE_LABELS = { income:'รายรับ', expense:'รายจ่าย', transfer:'โอนเงิน', cc_payment:'ชำระบัตร' }
+  const isInvestWalletForRepair = w => ['gold','crypto','fcd'].includes(String(w?.type || '').toLowerCase())
+  const round2Repair = n => Math.round((Number(n) || 0) * 100) / 100
+  const round8Repair = n => Math.round((Number(n) || 0) * 1e8) / 1e8
 
   // ── 1. Balance reconciliation ─────────────────────────────────
 
   App._computeWalletFlows = function() {
-    const flows = {}
+    if (typeof App._ledgerFlows === 'function') return App._ledgerFlows()
+    const cash = {}
     S.transactions.forEach(tx => {
       const amt = Number(tx.amount) || 0
       if (!tx.walletId) return
       if (tx.type === 'income')
-        flows[tx.walletId] = (flows[tx.walletId] || 0) + amt
+        cash[tx.walletId] = (cash[tx.walletId] || 0) + amt
       else if (tx.type === 'expense')
-        flows[tx.walletId] = (flows[tx.walletId] || 0) - amt
+        cash[tx.walletId] = (cash[tx.walletId] || 0) - amt
       else if (tx.type === 'transfer' || tx.type === 'cc_payment') {
-        flows[tx.walletId]   = (flows[tx.walletId]   || 0) - amt
+        cash[tx.walletId] = (cash[tx.walletId] || 0) - amt
         if (tx.toWalletId)
-          flows[tx.toWalletId] = (flows[tx.toWalletId] || 0) + amt
+          cash[tx.toWalletId] = (cash[tx.toWalletId] || 0) + amt
       }
     })
-    return flows
+    return { cash, units: {} }
+  }
+
+  function expectedWalletStateForRepair(w, flows) {
+    if (isInvestWalletForRepair(w)) {
+      const openingUnits = w.openingUnits !== undefined ? Number(w.openingUnits || 0) : null
+      if (openingUnits === null) return { expectedBalance: null, expectedUnits: null }
+      const expectedUnits = round8Repair(openingUnits + Number(flows.units?.[w.id] || 0))
+      const price = typeof App._investmentUnitPriceV4 === 'function'
+        ? Number(App._investmentUnitPriceV4(w) || 0)
+        : Number(App._investmentUnitPriceTHB?.(w) || w.manualPrice || 0)
+      return {
+        expectedUnits,
+        expectedBalance: round2Repair(expectedUnits * price),
+      }
+    }
+
+    const openingBalance = w.openingBalance !== undefined ? Number(w.openingBalance || 0) : null
+    if (openingBalance === null) return { expectedBalance: null, expectedUnits: null }
+    return {
+      expectedUnits: null,
+      expectedBalance: round2Repair(openingBalance + Number(flows.cash?.[w.id] || 0)),
+    }
   }
 
   App._snapshotOpeningBalances = function() {
     const flows = App._computeWalletFlows()
     S.wallets.forEach(w => {
-      if (w.openingBalance === undefined)
-        w.openingBalance = Math.round(((Number(w.balance) || 0) - (flows[w.id] || 0)) * 100) / 100
+      if (isInvestWalletForRepair(w)) {
+        if (w.openingUnits === undefined) {
+          w.openingUnits = round8Repair((Number(w.units || 0) - Number(flows.units?.[w.id] || 0)))
+        }
+        return
+      }
+      if (w.openingBalance === undefined) {
+        w.openingBalance = round2Repair((Number(w.balance) || 0) - Number(flows.cash?.[w.id] || 0))
+      }
     })
     persist()
   }
@@ -2466,9 +2559,16 @@ Calc.getUsableMoney = function(wallets) {
     const flows = App._computeWalletFlows()
     let fixed = 0
     S.wallets.forEach(w => {
-      if (w.openingBalance === undefined) return
-      const expected = Math.round(((Number(w.openingBalance) || 0) + (flows[w.id] || 0)) * 100) / 100
-      if (Math.abs(expected - Number(w.balance)) > 0.01) { w.balance = expected; fixed++ }
+      const expected = expectedWalletStateForRepair(w, flows)
+      if (expected.expectedBalance === null) return
+      if (isInvestWalletForRepair(w) && expected.expectedUnits !== null && Math.abs(expected.expectedUnits - Number(w.units || 0)) > 1e-8) {
+        w.units = expected.expectedUnits
+        fixed++
+      }
+      if (Math.abs(Number(expected.expectedBalance || 0) - Number(w.balance || 0)) > 0.01) {
+        w.balance = expected.expectedBalance
+        fixed++
+      }
     })
     persist(); App.render()
     toast(fixed > 0 ? `แก้ไข ${fixed} กระเป๋าแล้ว` : 'ยอดทุกกระเป๋าถูกต้องแล้ว', fixed > 0 ? 'success' : 'info')
@@ -2477,8 +2577,11 @@ Calc.getUsableMoney = function(wallets) {
   App._repairOneWallet = function(id) {
     const flows = App._computeWalletFlows()
     const w = S.wallets.find(x => x.id === id)
-    if (!w || w.openingBalance === undefined) return
-    w.balance = Math.round(((Number(w.openingBalance) || 0) + (flows[id] || 0)) * 100) / 100
+    if (!w) return
+    const expected = expectedWalletStateForRepair(w, flows)
+    if (expected.expectedBalance === null) return
+    if (isInvestWalletForRepair(w) && expected.expectedUnits !== null) w.units = expected.expectedUnits
+    w.balance = expected.expectedBalance
     persist()
     App.openBalanceRepairScreen()
     toast('แก้ไขยอดแล้ว', 'success')
@@ -2500,7 +2603,7 @@ Calc.getUsableMoney = function(wallets) {
 
   App.openBalanceRepairScreen = function() {
     const flows = App._computeWalletFlows()
-    const hasBaseline = S.wallets.some(w => w.openingBalance !== undefined)
+    const hasBaseline = S.wallets.some(w => isInvestWalletForRepair(w) ? w.openingUnits !== undefined : w.openingBalance !== undefined)
     if (!hasBaseline) {
       App.showConfirm({
         title: 'ตั้งค่า Baseline',
@@ -2511,26 +2614,31 @@ Calc.getUsableMoney = function(wallets) {
       return
     }
     const rows = S.wallets.map(w => {
-      const netFlow = flows[w.id] || 0
-      const ob = w.openingBalance !== undefined ? Number(w.openingBalance) : null
-      const expected = ob !== null ? Math.round((ob + netFlow) * 100) / 100 : null
+      const expectedState = expectedWalletStateForRepair(w, flows)
+      const baseline = isInvestWalletForRepair(w)
+        ? (w.openingUnits !== undefined ? Number(w.openingUnits || 0) : null)
+        : (w.openingBalance !== undefined ? Number(w.openingBalance || 0) : null)
+      const netFlow = isInvestWalletForRepair(w) ? Number(flows.units?.[w.id] || 0) : Number(flows.cash?.[w.id] || 0)
+      const expected = expectedState.expectedBalance
       const current = Number(w.balance) || 0
       const gap = expected !== null ? Math.abs(expected - current) : 0
-      return { w, netFlow, ob, expected, current, gap }
+      const unitGap = expectedState.expectedUnits !== null ? Math.abs(Number(expectedState.expectedUnits || 0) - Number(w.units || 0)) : 0
+      return { w, netFlow, baseline, expected, current, gap, unitGap, expectedUnits: expectedState.expectedUnits }
     })
-    const anyGap = rows.some(r => r.gap > 0.01)
+    const anyGap = rows.some(r => r.gap > 0.01 || r.unitGap > 1e-8)
     const rowsHtml = rows.map(r => `
       <div class="card card-pad" style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div style="flex:1">
             <div style="font-weight:700;margin-bottom:4px">${esc(r.w.icon || '')} ${esc(r.w.name)}</div>
             <div style="font-size:12px;color:var(--muted)">ยอดปัจจุบัน: <b>${fmt(r.current)}</b></div>
+            ${r.expectedUnits !== null ? `<div style="font-size:12px;color:var(--muted)">จำนวนหน่วยที่คำนวณได้: <b>${r.expectedUnits.toLocaleString('en-US',{maximumFractionDigits:8})}</b></div>` : ''}
             ${r.expected !== null ? `<div style="font-size:12px;color:var(--muted)">คำนวณจาก transactions: <b>${fmt(r.expected)}</b></div>` : ''}
-            <div style="font-size:12px;font-weight:600;margin-top:4px;color:${r.gap > 0.01 ? 'var(--expense)' : 'var(--income)'}">
-              ${r.gap > 0.01 ? `⚠️ ต่างกัน ${fmt(r.gap)}` : '✓ ถูกต้อง'}
+            <div style="font-size:12px;font-weight:600;margin-top:4px;color:${(r.gap > 0.01 || r.unitGap > 1e-8) ? 'var(--expense)' : 'var(--income)'}">
+              ${(r.gap > 0.01 || r.unitGap > 1e-8) ? `⚠️ ต่างกัน ${fmt(r.gap)}${r.unitGap > 1e-8 ? ` · หน่วยต่าง ${r.unitGap.toLocaleString('en-US',{maximumFractionDigits:8})}` : ''}` : '✓ ถูกต้อง'}
             </div>
           </div>
-          ${r.gap > 0.01 ? `<button class="btn btn-secondary btn-sm" onclick="App._repairOneWallet('${esc(r.w.id)}')" style="width:auto;margin-left:10px">แก้ไข</button>` : ''}
+          ${(r.gap > 0.01 || r.unitGap > 1e-8) ? `<button class="btn btn-secondary btn-sm" onclick="App._repairOneWallet('${esc(r.w.id)}')" style="width:auto;margin-left:10px">แก้ไข</button>` : ''}
         </div>
       </div>`).join('')
     App.openSubScreen(`
@@ -2598,6 +2706,7 @@ Calc.getUsableMoney = function(wallets) {
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
   const monthOf = d => String(d || today()).slice(0,7)
   const localNow = () => new Date().toISOString()
+  const round2 = n => Math.round((Number(n) || 0) * 100) / 100
 
   function addMonths(dateStr, months) {
     const [y, m, d] = String(dateStr || today()).split('-').map(Number)
@@ -2649,10 +2758,37 @@ Calc.getUsableMoney = function(wallets) {
   }
 
   // ── Ledger balance source of truth ──────────────────────────
+  // Only "posted" transactions affect real wallet balances.
+  // A transaction is scheduled (not yet posted) when tx.scheduled === true
+  // AND its date is still in the future. Once the date arrives it is posted
+  // regardless of the flag, so past installment months are always included.
+  App._isPostedTx = function(tx) {
+    if (tx.scheduled !== true) return true          // not flagged scheduled → always posted
+    const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    return String(tx.date || '') <= todayStr         // scheduled but date arrived → posted
+  }
+
+  App.getLedgerAmountForTx = function(tx) {
+    if ('ledgerAmount' in (tx || {}) && Number.isFinite(Number(tx?.ledgerAmount))) {
+      return round2(Number(tx.ledgerAmount || 0))
+    }
+    const baseAmount = round2(Number(tx?.amount || 0))
+    if (!tx || tx.type !== 'expense') return baseAmount
+    const wallet = walletById(tx.walletId)
+    if (!wallet || wallet.type !== 'credit') return baseAmount
+    const discount = Math.max(0, round2(Number(tx.rewardEstimate?.discount || 0)))
+    if (!(discount > 0)) return baseAmount
+    return round2(Math.max(0, baseAmount - discount))
+  }
+
   App._ledgerFlows = function() {
     const cash = {}, units = {}
     ;(S.transactions || []).forEach(tx => {
-      const amt = Number(tx.amount || 0)
+      // Skip future-scheduled transactions — they have not happened yet and
+      // must not reduce today's real wallet/card balance.
+      if (!App._isPostedTx(tx)) return
+
+      const amt = App.getLedgerAmountForTx(tx)
       const addCash = (id, value) => { if (id) cash[id] = (cash[id] || 0) + value }
       const addUnits = (id, value) => { if (id) units[id] = (units[id] || 0) + value }
       if (!amt && !Number(tx.unitsDelta || tx.units || 0)) return
@@ -2755,6 +2891,7 @@ Calc.getUsableMoney = function(wallets) {
     }
     const reward = App._rewardEstimateForTx(tx)
     if (reward) tx.rewardEstimate = reward
+    if (tx.type === 'expense') tx.ledgerAmount = App.getLedgerAmountForTx(tx)
     return tx
   }
 
@@ -2800,6 +2937,7 @@ Calc.getUsableMoney = function(wallets) {
           })
           const reward = App._rewardEstimateForTx(tx)
           if (reward) tx.rewardEstimate = reward
+          tx.ledgerAmount = App.getLedgerAmountForTx?.(tx)
           txs.push(tx)
         }
         S.transactions.unshift(...txs)
@@ -3313,8 +3451,13 @@ Calc.getUsableMoney = function(wallets) {
 
   App.renderTransactionsList = function() {
     const filtered = currentTxFilteredV42()
+    const expenseAmountForList = tx => tx.type === 'expense'
+      ? Number(Calc.getExpenseLedgerAmount?.(tx) || tx.amount || 0)
+      : Number(tx.amount || 0)
     const income = filtered.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
-    const expense = filtered.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
+    const expense = filtered
+      .filter(t => t.type === 'expense' || t.type === 'cc_payment')
+      .reduce((s,t) => s + expenseAmountForList(t), 0)
     const summary = document.getElementById('tx-compact-summary')
     if (summary) summary.textContent = `${filtered.length} รายการ`
     const incEl = document.getElementById('tx-income-total'), expEl = document.getElementById('tx-expense-total')
@@ -3326,7 +3469,9 @@ Calc.getUsableMoney = function(wallets) {
     dates.forEach(date => {
       const rows = byDate[date]
       const dayInc = rows.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
-      const dayExp = rows.filter(t => t.type === 'expense' || t.type === 'cc_payment').reduce((s,t) => s + Number(t.amount || 0), 0)
+      const dayExp = rows
+        .filter(t => t.type === 'expense' || t.type === 'cc_payment')
+        .reduce((s,t) => s + expenseAmountForList(t), 0)
       const label = Calc.labelDate ? Calc.labelDate(date) : date
       html += `<div class="tx-date-header"><span>${esc(label)}</span><div>${dayInc ? `<b class="c-income">+${money(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense">-${money(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
     })
@@ -3932,11 +4077,34 @@ Calc.getUsableMoney = function(wallets) {
     return (S.wallets || []).filter(w => w.type === 'credit' && w.creditLimitGroupId === groupId)
   }
 
-  // Total credit usage for one card
+  // Sum of future installment rows for a wallet that are still scheduled (not yet posted).
+  // When a user buys ฿12,000 in 12 installments, the credit limit is fully committed from
+  // day 1 even though only ฿1,000/month flows through the ledger.  This function returns
+  // the "committed-but-not-yet-posted" portion so callers can show realistic credit usage.
+  App._getUnpostedInstallmentDebt = function(walletId) {
+    const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    return (S.transactions || []).reduce((sum, tx) => {
+      if (
+        tx.installmentGroupId &&
+        tx.scheduled === true &&
+        String(tx.date || '') > todayStr &&
+        (!walletId || tx.walletId === walletId)
+      ) {
+        sum += Number(App.getLedgerAmountForTx?.(tx) || tx.amount || 0)
+      }
+      return sum
+    }, 0)
+  }
+
+  // Total credit usage for one card = posted balance + future committed installments.
+  // Using the full committed amount means available credit and utilisation % reflect
+  // what the bank actually holds against the credit limit.
   App.getCreditUsageForCard = function(cardId) {
     const card = walletById(cardId)
     if (!card || card.type !== 'credit') return 0
-    return Math.abs(Number(card.balance || 0))
+    const postedDebt = Math.abs(Number(card.balance || 0))
+    const committedDebt = App._getUnpostedInstallmentDebt(cardId)
+    return postedDebt + committedDebt
   }
 
   // Usage for an entire shared group
@@ -4525,6 +4693,32 @@ Calc.getUsableMoney = function(wallets) {
     const destination    = document.querySelector('input[name="v50-dest"]:checked')?.value || 'history_only'
     const incomeWalletId = document.getElementById('v50-income-wallet')?.value || ''
 
+    // Idempotency guard: if this statement was already recorded, require a second
+    // deliberate confirmation rather than silently double-counting.
+    // The guard is bypassed when _forceRecordRewards is the caller.
+    const alreadyRecorded = !App._rewardRecordBypassGuard && (S.rewardLedger || []).some(r =>
+      r.statementId === statementId &&
+      (r.type === 'cashback_received' || r.type === 'points_earned' ||
+       r.type === 'cashback_statement_credit' || r.type === 'points_received')
+    )
+    if (alreadyRecorded) {
+      const dlgId = 'v50-record-rewards-dlg'
+      const confirmBanner = document.getElementById('v50-duplicate-confirm-row')
+      if (!confirmBanner) {
+        // First click after already recorded: inject an explicit confirm row.
+        document.getElementById(dlgId)?.insertAdjacentHTML('beforeend',
+          `<div id="v50-duplicate-confirm-row" style="position:fixed;bottom:0;left:0;right:0;background:var(--bg-card,#fff);border-top:2px solid var(--expense,#DC2626);padding:16px;z-index:9999;text-align:center">
+            <div style="font-size:13px;font-weight:700;color:var(--expense,#DC2626);margin-bottom:10px">⚠️ รอบนี้บันทึกแล้ว การบันทึกซ้ำจะนับสิทธิประโยชน์สองครั้ง</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <button class="btn btn-secondary" onclick="document.getElementById('${dlgId}')?.remove()">ยกเลิก</button>
+              <button class="btn btn-danger" onclick="App._forceRecordRewards('${cardId}','${statementId}')">บันทึกซ้ำ (ยืนยัน)</button>
+            </div>
+          </div>`)
+        return
+      }
+      // Second click (force confirm row already shown) falls through to record.
+    }
+
     document.getElementById('v50-record-rewards-dlg')?.remove()
 
     const card       = walletById(cardId)
@@ -4554,13 +4748,20 @@ Calc.getUsableMoney = function(wallets) {
           notify('กรุณาเลือกกระเป๋าที่รับเงินคืน', 'error'); return
         }
       } else if (destination === 'statement_credit') {
-        // Reduce card balance (credit back)
-        const idx = (S.wallets||[]).findIndex(x => x.id === cardId)
-        if (idx >= 0) {
-          S.wallets[idx].balance = Math.min(0, Number(S.wallets[idx].balance||0) + actualCashback)
-          S.wallets[idx].openingBalance = (S.wallets[idx].openingBalance || 0) + actualCashback
+        // Record as a proper income transaction on the credit card wallet so the
+        // balance reduction flows through the auditable ledger instead of directly
+        // mutating openingBalance (which is invisible to history and export).
+        // income to cardId → _ledgerFlows adds +cashback → wallet balance becomes
+        // less negative → owed amount decreases correctly.
+        const stCreditTx = {
+          id: genId(), type: 'income', amount: actualCashback,
+          walletId: cardId, categoryId: 'other_income',
+          merchant: 'Cashback', note: `Statement Credit – ${card?.name || ''}`,
+          date: today(), isRewardReceived: true, statementId, rewardLedgerId: ledgerId,
         }
+        S.transactions.unshift(stCreditTx)
         S.rewardLedger.push({ id:ledgerId, type:'cashback_statement_credit', cardId, statementId, amount:actualCashback, points:0, date:today(), note:'เครดิตคืนลดหนี้บัตร', createdAt:now })
+        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
       } else {
         // history_only
         S.rewardLedger.push({ id:ledgerId, type:'cashback_received', cardId, statementId, amount:actualCashback, points:0, date:today(), note:'บันทึกเฉพาะประวัติ', createdAt:now })
@@ -4574,8 +4775,121 @@ Calc.getUsableMoney = function(wallets) {
     App.openRewardLedgerScreen(cardId)
   }
 
+  // Force-record after the user explicitly confirmed a duplicate (second click).
+  // Sets a bypass flag so the guard inside _confirmRecordRewards is skipped.
+  App._forceRecordRewards = function(cardId, statementId) {
+    document.getElementById('v50-record-rewards-dlg')?.remove()
+    App._rewardRecordBypassGuard = true
+    try { App._confirmRecordRewards(cardId, statementId) } finally { App._rewardRecordBypassGuard = false }
+  }
+
   // Keep markCashbackReceived as alias for backward compat
   App.markCashbackReceived = App.recordActualRewards
+
+  // ── ═══════════════════════════════════════════════════════
+  // DATA HEALTH CHECK
+  // Detects common integrity issues. Does NOT modify data.
+  // Call App.runDataHealthCheck() from console or More page.
+  // ══════════════════════════════════════════════════════════
+  App.runDataHealthCheck = function() {
+    const warnings = [], errors = []
+    const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+
+    const txns     = S.transactions  || []
+    const wallets  = S.wallets        || []
+    const cats     = [...(S.categories?.expense || []), ...(S.categories?.income || [])]
+    const rLedger  = S.rewardLedger   || []
+    const recurring = S.recurring    || []
+
+    const walletIds   = new Set(wallets.map(w => w.id).filter(Boolean))
+    const catIds      = new Set(cats.map(c => c.id).filter(Boolean))
+    const txIdsSeen   = new Set()
+
+    txns.forEach((t, i) => {
+      const ref = `tx[${i}] id=${t.id || '(none)'}`
+
+      // Duplicate IDs
+      if (t.id) {
+        if (txIdsSeen.has(t.id)) errors.push(`${ref}: duplicate transaction ID`)
+        else txIdsSeen.add(t.id)
+      } else {
+        warnings.push(`${ref}: missing id`)
+      }
+
+      // Missing or invalid amount
+      const amt = Number(t.amount)
+      if (!Number.isFinite(amt) || amt < 0) errors.push(`${ref}: invalid amount (${t.amount})`)
+
+      // Missing wallet reference
+      if (!t.walletId) errors.push(`${ref}: missing walletId`)
+      else if (!walletIds.has(t.walletId)) warnings.push(`${ref}: walletId "${t.walletId}" not found`)
+
+      // Transfer/payment toWallet
+      if ((t.type === 'transfer' || t.type === 'cc_payment') && t.toWalletId && !walletIds.has(t.toWalletId))
+        warnings.push(`${ref}: toWalletId "${t.toWalletId}" not found`)
+
+      // Orphaned category
+      if (t.categoryId && !catIds.has(t.categoryId))
+        warnings.push(`${ref}: categoryId "${t.categoryId}" not found in categories`)
+
+      // Future-dated non-scheduled transactions (may be intentional but flag for review)
+      if (t.date > todayStr && t.scheduled !== true && !t.installmentGroupId)
+        warnings.push(`${ref}: future-dated (${t.date}) without scheduled flag — will affect balance if date is today or past`)
+
+      // Installment without group parent
+      if (t.isInstallment && !t.installmentGroupId)
+        warnings.push(`${ref}: isInstallment=true but no installmentGroupId`)
+
+      // Recurring transaction without template reference
+      if (t.isRecurring && !t.sourceRecurringId)
+        warnings.push(`${ref}: isRecurring=true but no sourceRecurringId`)
+    })
+
+    // Duplicate reward ledger entries per statement
+    const rewardByStatement = {}
+    rLedger.forEach(r => {
+      if (!r.statementId) return
+      const key = `${r.statementId}:${r.type}`
+      rewardByStatement[key] = (rewardByStatement[key] || 0) + 1
+    })
+    Object.entries(rewardByStatement).forEach(([key, count]) => {
+      if (count > 1) warnings.push(`rewardLedger: possible duplicate for key "${key}" (${count} entries)`)
+    })
+
+    // Orphaned reward ledger — references non-existent card
+    rLedger.forEach((r, i) => {
+      if (r.cardId && !walletIds.has(r.cardId))
+        warnings.push(`rewardLedger[${i}]: cardId "${r.cardId}" not found`)
+    })
+
+    // Recurring templates without wallets
+    recurring.forEach((r, i) => {
+      if (r.walletId && !walletIds.has(r.walletId))
+        warnings.push(`recurring[${i}] id=${r.id}: walletId "${r.walletId}" not found`)
+    })
+
+    const result = { errors, warnings, ok: errors.length === 0 }
+    const lines = [
+      `=== Data Health Check (${todayStr}) ===`,
+      `Transactions: ${txns.length} · Wallets: ${wallets.length} · RewardLedger: ${rLedger.length}`,
+      `Errors: ${errors.length} · Warnings: ${warnings.length}`,
+      ...(errors.length ? ['', '── ERRORS ──', ...errors] : []),
+      ...(warnings.length ? ['', '── WARNINGS ──', ...warnings] : []),
+      ...(errors.length === 0 && warnings.length === 0 ? ['✓ ไม่พบปัญหา'] : []),
+    ]
+    console.log(lines.join('\n'))
+
+    // Show a brief toast with the summary; full detail is always in the console.
+    const summary = errors.length
+      ? `Health check: ${errors.length} ข้อผิดพลาด · ${warnings.length} คำเตือน — ดูรายละเอียดใน Console`
+      : warnings.length
+        ? `Health check: ${warnings.length} คำเตือน — ดูรายละเอียดใน Console`
+        : 'Health check: ✓ ข้อมูลดูสมบูรณ์'
+    const toastType = errors.length ? 'error' : warnings.length ? 'warn' : 'success'
+    try { toast(summary, toastType) } catch (_) { console.log(summary) }
+
+    return result
+  }
 
   // ── ═══════════════════════════════════════════════════════
   // CENTRALIZED REWARDS BOOK
@@ -4898,6 +5212,7 @@ Calc.getUsableMoney = function(wallets) {
           ${row({ icon:'🏷️', label:'จัดการหมวดหมู่', value:'รายรับ/รายจ่าย', onclick:"App.openCategoryScreen('expense')" })}
           ${row({ icon:'🏪', label:'ร้านค้า / Platform', value:`${(S.merchants||[]).length} ร้าน`, onclick:'App.openMerchantScreen()' })}
           ${row({ icon:'🔧', label:'ตรวจสอบยอดคงเหลือ', onclick:'App.openBalanceRepairScreen()' })}
+          ${row({ icon:'🩺', label:'ตรวจสอบความถูกต้องของข้อมูล', onclick:'App.runDataHealthCheck()' })}
         </div>
         <div class="sec-title">สำรองข้อมูล</div>
         <div class="card card-pad">
@@ -5411,6 +5726,13 @@ Calc.getUsableMoney = function(wallets) {
       notify('รายการนี้ถูกบันทึกสำหรับรอบนี้แล้ว', 'warn')
       updateRecurringNext(r); persist(); return
     }
+    const currentDate = today()
+    // If the recurring due date is past or today, use today so the transaction
+    // posts immediately. If the user deliberately pre-posts a future occurrence
+    // (e.g. from the recurring management screen), keep the future date but mark
+    // it scheduled=true so it does not affect the real ledger balance yet.
+    const txDate = info.scheduledDate <= currentDate ? currentDate : info.scheduledDate
+    const isFuturePost = txDate > currentDate
     const tx = {
       id: Calc.genId(),
       type: r.type || 'expense',
@@ -5419,7 +5741,8 @@ Calc.getUsableMoney = function(wallets) {
       categoryId: r.categoryId,
       merchant: r.name,
       note: '🔁 รายการประจำ',
-      date: info.scheduledDate <= today() ? today() : info.scheduledDate,
+      date: txDate,
+      ...(isFuturePost ? { scheduled: true } : {}),
       isRecurring: true,
       sourceRecurringId: id,
       recurringDueDate: info.scheduledDate,
@@ -6786,7 +7109,12 @@ Calc.getUsableMoney = function(wallets) {
     const cryptoSummary = App.getCryptoPortfolioSummary()
     const sumBase = assets.reduce((s, w) => s + Math.max(0, Number(w.balance || 0)), 0)
     const sumInv = invests.reduce((s, w) => s + Math.max(0, App._investmentValueTHB?.(w) || Number(w.balance || 0)), 0)
-    const debt = credits.reduce((s, w) => s + Math.abs(Number(w.balance || 0)), 0)
+    // Include future committed installment rows — they are already reserved
+    // against the credit limit even though not yet posted to statements.
+    const debt = credits.reduce((s, w) => {
+      const committedInstallments = App._getUnpostedInstallmentDebt ? App._getUnpostedInstallmentDebt(w.id) : 0
+      return s + Math.abs(Number(w.balance || 0)) + committedInstallments
+    }, 0)
     const summaryEl = document.getElementById('wallets-summary')
     if (summaryEl) summaryEl.innerHTML = `<div class="wallet-summary-grid wallet-summary-grid-fixed">
       <div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${S.settings?.hideMoney ? '฿*****' : plainMoney(sumBase + sumInv + cryptoSummary.totalValueTHB)}</strong></div>
@@ -7456,9 +7784,15 @@ Calc.getUsableMoney = function(wallets) {
     const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2,'0')}-${String(start.getDate()).padStart(2,'0')}`
     const dueStr = Calc.getCreditCardDueDate(endStr, dueAfterCycleDays)
     const id = `${cardId}:${startStr}:${endStr}`
-    const purchases = (S.transactions || []).filter(t => t.type === 'expense' && t.walletId === cardId && t.date >= startStr && t.date <= endStr)
+    // Only include posted expenses — future-scheduled installment months must not
+    // appear as current-cycle spending even if their date falls in the cycle range.
+    const purchases = (S.transactions || []).filter(t =>
+      t.type === 'expense' && t.walletId === cardId &&
+      t.date >= startStr && t.date <= endStr &&
+      App._isPostedTx(t)
+    )
     const payments = (S.transactions || []).filter(t => t.type === 'cc_payment' && t.toWalletId === cardId && (t.statementId === id || (t.date > endStr && t.date <= dueStr)))
-    const purchaseTotal = purchases.reduce((s, t) => s + Number(t.amount || 0), 0)
+    const purchaseTotal = purchases.reduce((s, t) => s + Number(App.getLedgerAmountForTx?.(t) || t.amount || 0), 0)
     const paidTotal = payments.reduce((s, t) => s + Number(t.amount || 0), 0)
     const balanceDue = Math.max(0, Math.round((purchaseTotal - paidTotal) * 100) / 100)
     const reward = purchases.reduce((sum, tx) => {
@@ -7483,9 +7817,14 @@ Calc.getUsableMoney = function(wallets) {
       : App.getStatementPeriod(card.cycleDay || 25)
     const txns = (S.transactions||[]).filter(t => t.walletId===cardId).sort((a,b) => String(b.date||'').localeCompare(String(a.date||''))).slice(0,20)
     const rewards = st?.reward || { points: 0, cashback: 0 }
-    const owed = Math.abs(Number(card.balance||0))
+    // postedOwed = what's on the current statement (ledger balance)
+    // committedInstallments = future installment months not yet posted but already
+    //   consuming credit limit — real credit utilisation is the sum of both.
+    const postedOwed = Math.abs(Number(card.balance||0))
+    const committedInstallments = App._getUnpostedInstallmentDebt ? App._getUnpostedInstallmentDebt(cardId) : 0
+    const owed = postedOwed + committedInstallments   // total credit limit usage
     const limit = App.getCreditLimitForCard(card)
-    const avail = App.getAvailableCreditForCard(card)
+    const avail = App.getAvailableCreditForCard(card) // already uses getCreditUsageForCard which includes committed
     const usedPct = limit ? Math.min((owed/limit)*100, 100) : 0
     const due = App.getCreditCardDueInfo(card)
     const installments = (App.getInstallmentGroups?.() || []).filter(g => g.walletId===cardId).slice(0,3)
@@ -7497,7 +7836,12 @@ Calc.getUsableMoney = function(wallets) {
     const alreadyRecorded = st && statementRewardRecorded(st.id)
     const recordBtn = hasRewards ? `<button class="btn btn-primary btn-sm v5-record-btn" onclick="App.recordActualRewards('${esc(cardId)}')" style="width:100%;margin-top:8px">${alreadyRecorded ? '✓ บันทึกแล้ว · บันทึกซ้ำ?' : 'บันทึกยอด'}</button>` : ''
     const stHtml = st ? `<div class="statement-compact statement-compact-th"><div class="statement-main"><div><b>สรุปรอบบัตรเครดิต</b><span>รอบ ${thaiDate(st.start)} – ${thaiDate(st.end)}</span><span>วันกำหนดชำระ ${thaiDate(st.dueDate)}</span></div><em class="status-pill ${st.paid?'ok':'warn'}">${statusText(st)}</em></div><div class="statement-metrics"><div><span>ยอดใช้ในรอบ</span><strong>${money(st.purchaseTotal)}</strong></div><div><span>ชำระแล้ว</span><strong>${money(st.paidTotal)}</strong></div><div><span>ค้างชำระ</span><strong>${money(st.balanceDue)}</strong></div></div><button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen('${esc(cardId)}')">สมุดสิทธิประโยชน์</button></div>` : ''
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon||'')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button></div></div><div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}"><div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0"><div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${esc(statementText)}</div><div style="font-size:13px;opacity:.72;margin-bottom:4px">ยอดค้างชำระ</div><div class="big">${money(owed)}</div>${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}</div>${stHtml}<div class="card card-pad" style="margin-bottom:12px"><div class="cc-detail-header"><div><div style="font-size:14px;font-weight:800">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${thaiDate(period.start)} ถึง ${thaiDate(period.end)}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button></div><div class="reward-grid" style="margin-top:10px"><div class="reward-tile"><span>คะแนน</span><strong>${rewards.points.toLocaleString('en-US')}</strong></div><div class="reward-tile"><span>เงินคืน</span><strong>${money(rewards.cashback)}</strong></div><div class="reward-tile"><span>ส่วนลดทันที</span><strong>${money(rewards.discount || 0)}</strong></div></div>${rewardAcctHtml}${recordBtn}</div>${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : ''}<div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}</div></div>${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}<div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div></div>`)
+    // Hero section: show total owed (posted + committed installments).
+    // When there are committed installments, show a sub-line with breakdown.
+    const heroBreakdown = committedInstallments > 0
+      ? `<div style="display:flex;justify-content:space-between;font-size:11px;opacity:.75;margin-top:6px;margin-bottom:2px"><span>ค้างชำระปัจจุบัน ${money(postedOwed)}</span><span>ผ่อนกันวงเงิน ${money(committedInstallments)}</span></div>`
+      : ''
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon||'')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button></div></div><div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}"><div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0"><div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${esc(statementText)}</div><div style="font-size:13px;opacity:.72;margin-bottom:4px">วงเงินที่ใช้ทั้งหมด</div><div class="big">${money(owed)}</div>${heroBreakdown}${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}</div>${stHtml}<div class="card card-pad" style="margin-bottom:12px"><div class="cc-detail-header"><div><div style="font-size:14px;font-weight:800">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${thaiDate(period.start)} ถึง ${thaiDate(period.end)}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button></div><div class="reward-grid" style="margin-top:10px"><div class="reward-tile"><span>คะแนน</span><strong>${rewards.points.toLocaleString('en-US')}</strong></div><div class="reward-tile"><span>เงินคืน</span><strong>${money(rewards.cashback)}</strong></div><div class="reward-tile"><span>ส่วนลดทันที</span><strong>${money(rewards.discount || 0)}</strong></div></div>${rewardAcctHtml}${recordBtn}</div>${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : ''}<div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}</div></div>${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}<div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div></div>`)
     setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
   }
 
@@ -7607,4 +7951,495 @@ Calc.getUsableMoney = function(wallets) {
     else if (S.page === 'wallets') App.renderWallets?.()
   } catch (_) {}
   persist()
+})()
+
+/* ============================================================
+   Phase 2 — Daily UX Improvements
+   Duplicate detection, merchant smart-defaults, empty states,
+   recurring date choice, installment progress, reports income fix,
+   search UX, hidden-balance audit guard
+   ============================================================ */
+;(function() {
+  'use strict'
+
+  // ── Local helpers ────────────────────────────────────────
+  const esc    = s  => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  const money  = n  => (typeof moneyFmt === 'function' ? moneyFmt(Number(n)||0) : Calc.fmt(Number(n)||0))
+  const today  = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
+  const thisMonth = () => (typeof getTHISMONTH === 'function' ? getTHISMONTH() : new Date().toISOString().slice(0,7))
+  const persist = () => { try { Storage.saveAll(S) } catch (_) {} }
+  const walletById = id => (S.wallets||[]).find(w => w.id === id)
+  const TH_MONTHS_P2 = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  function thaiDateP2(dateStr) {
+    const [y,m,d] = String(dateStr||'').split('-').map(Number)
+    if (!y||!m||!d) return dateStr||''
+    return `${d} ${TH_MONTHS_P2[m-1]} ${String(y+543).slice(-2)}`
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // 1. DUPLICATE TRANSACTION DETECTION
+  // Prevent accidental double-save of the same transaction.
+  // Matching: type + amount (±0) + same date + same wallet +
+  //   merchant (if both have it, must match).
+  // Does NOT block the user — shows a confirmation modal.
+  // ════════════════════════════════════════════════════════════
+
+  App._detectDuplicateTx = function(draft, editingTxId) {
+    if (!draft || !Number(draft.amount || 0)) return null
+    const type         = draft.type
+    const roundedAmt   = Math.round(Number(draft.amount || 0) * 100)
+    const dateStr      = String(draft.date || '')
+    const walletId     = draft.walletId || ''
+    const normMerchant = String(draft.merchant || '').trim().toLowerCase()
+
+    return (S.transactions || []).find(t => {
+      if (editingTxId && t.id === editingTxId) return false          // skip self when editing
+      if (t.type !== type) return false
+      if (Math.round(Number(t.amount || 0) * 100) !== roundedAmt) return false
+      if (String(t.date || '') !== dateStr) return false
+      if (t.walletId !== walletId) return false
+      // Merchant: if both sides have a merchant, they must match.
+      // If either side has no merchant, the other fields are enough.
+      const tNorm = String(t.merchant || '').trim().toLowerCase()
+      if (normMerchant && tNorm && tNorm !== normMerchant) return false
+      return true
+    }) || null
+  }
+
+  // Double-submit guard + duplicate-check wrapper around saveTx.
+  // Pass true as first argument (internal only) to bypass the duplicate check.
+  const _prevSaveTx = App.saveTx?.bind(App)
+  App.saveTx = function(forceSkipDuplicateCheck) {
+    // Rapid double-tap guard — cleared after 600 ms
+    if (App._txSaveInProgress) return
+    App._txSaveInProgress = true
+    setTimeout(() => { App._txSaveInProgress = false }, 600)
+
+    const isEdit = S.txMode === 'edit' && !!S.editingTxId
+
+    // Duplicate check only for new transactions
+    if (!forceSkipDuplicateCheck && !isEdit && _prevSaveTx) {
+      const draft = { ...S.tx, amount: Number(S.tx?.amount || 0) }
+      const dup   = App._detectDuplicateTx(draft, null)
+      if (dup) {
+        // Show warning — user can still proceed
+        const w       = walletById(dup.walletId)
+        const dupDesc = [dup.merchant, Calc.fmt(dup.amount), dup.date, w?.name].filter(Boolean).join(' · ')
+        App.showConfirm?.({
+          title: '⚠️ รายการที่คล้ายกัน',
+          body: `พบรายการที่ตรงกัน:\n${dupDesc}\n\nต้องการบันทึกซ้ำหรือไม่?`,
+          confirmLabel: 'บันทึกต่อไป',
+          onConfirm: () => {
+            App._txSaveInProgress = false   // reset so the force-save can proceed
+            App.saveTx(true)
+          },
+          onCancel: () => { App._txSaveInProgress = false },
+        })
+        return
+      }
+    }
+
+    try {
+      if (_prevSaveTx) _prevSaveTx()
+    } catch (err) {
+      console.error('[Phase 2] saveTx failed', err)
+      App._txSaveInProgress = false
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // 2. SMART DEFAULTS — Wallet prefill + merchant suggestion
+  // ════════════════════════════════════════════════════════════
+
+  // Return the wallet used most recently for a given tx type.
+  App._getMostRecentWallet = function(type) {
+    const wallets = S.wallets || []
+    const tx = [...(S.transactions || [])]
+      .filter(t => t.type === type && t.walletId)
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+      .find(t => wallets.find(w => w.id === t.walletId && !w.archived))
+    return tx?.walletId || null
+  }
+
+  // After openAddTx initialises S.tx, override walletId with most-recently-used.
+  const _prevOpenAddTx = App.openAddTx?.bind(App)
+  App.openAddTx = function() {
+    if (_prevOpenAddTx) _prevOpenAddTx()
+    if (!S.tx) return
+    const recent = App._getMostRecentWallet(S.tx.type || 'expense')
+    // Only override if the wallet exists and is not archived
+    if (recent && (S.wallets||[]).find(w => w.id === recent && !w.archived)) {
+      S.tx.walletId = recent
+      // Mark as auto-set so merchant suggestion can still override it
+      S.tx._walletAutoSet = true
+      S.tx._walletManuallySet = false
+    }
+  }
+
+  // When user picks a merchant from dropdown, auto-suggest category and wallet
+  // from the most recent transaction with that merchant for the same type.
+  // Guards: never override a field the user has already manually changed.
+  const _prevPickMerchant = App._pickMerchant?.bind(App)
+  App._pickMerchant = function(name) {
+    if (_prevPickMerchant) _prevPickMerchant(name)
+    if (!name?.trim() || !S.tx) return
+
+    const norm = name.trim().toLowerCase()
+    const history = (S.transactions || [])
+      .filter(t => String(t.merchant || '').trim().toLowerCase() === norm
+                && t.type === (S.tx.type || 'expense'))
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+    if (!history.length) return
+
+    const best = history[0]
+    let needsRerender = false
+
+    // Suggest category — only if user has not manually picked one yet
+    if (!S.tx._categoryManuallySet && best.categoryId && !S.tx.categoryId) {
+      S.tx.categoryId = best.categoryId
+      needsRerender = true
+    }
+
+    // Suggest wallet — only if user has not manually changed it
+    if (!S.tx._walletManuallySet && best.walletId) {
+      const targetW = (S.wallets || []).find(w => w.id === best.walletId && !w.archived)
+      if (targetW) {
+        S.tx.walletId = best.walletId
+        S.tx._walletAutoSet = true
+        needsRerender = true
+      }
+    }
+
+    if (needsRerender) App._renderAddTxDetail?.()
+  }
+
+  // Track when the user manually selects a category button
+  const _prevSelectCat = App._selectCat?.bind(App)
+  App._selectCat = function(id) {
+    if (_prevSelectCat) _prevSelectCat(id)
+    if (S.tx) S.tx._categoryManuallySet = true
+  }
+
+  // Track when the user manually changes wallet via the form select
+  const _prevTxField = App._txField?.bind(App)
+  App._txField = function(key, value) {
+    if (_prevTxField) _prevTxField(key, value)
+    if (S.tx && key === 'walletId') {
+      S.tx._walletManuallySet = true
+      S.tx._walletAutoSet = false
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // 3. EMPTY STATES — Dashboard first-use setup guidance
+  // When there are no wallets, inject a clear call-to-action
+  // below the net-worth card so new users know what to do next.
+  // ════════════════════════════════════════════════════════════
+
+  const _prevRenderDashboard = App.renderDashboard?.bind(App)
+  App.renderDashboard = function() {
+    if (_prevRenderDashboard) _prevRenderDashboard()
+
+    const visibleWalletCount = (S.wallets || []).filter(w => !w.hiddenFromWalletList).length
+
+    // No wallets at all → first-use guidance card
+    if (visibleWalletCount === 0) {
+      const netCard = document.querySelector('#dashboard-content .mt-net-card')
+      if (netCard) {
+        const banner = document.createElement('div')
+        banner.className = 'card card-pad p2-setup-banner'
+        banner.style.cssText = 'text-align:center;padding:24px 16px;margin-bottom:16px'
+        banner.innerHTML = `
+          <div style="font-size:36px;margin-bottom:8px">👛</div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:6px">เริ่มต้นใช้งาน Money Tracker</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:16px">เพิ่มกระเป๋าเงินก่อน แล้วค่อยบันทึกรายการแรก</div>
+          <button class="btn btn-primary" onclick="App.showPage('wallets')" style="width:auto;padding:10px 28px">+ เพิ่มกระเป๋าเงิน</button>`
+        netCard.insertAdjacentElement('afterend', banner)
+      }
+    }
+
+    // Has wallets but no transactions this month → hint to add first transaction
+    if (visibleWalletCount > 0) {
+      const dm = S.dashMonth || thisMonth()
+      const hasThisMonth = (S.transactions || []).some(t => String(t.date||'').startsWith(dm))
+      if (!hasThisMonth) {
+        const recentSection = document.querySelector('#dashboard-content .card:last-of-type')
+        // Only inject once (check for existing banner)
+        const already = document.querySelector('.p2-first-tx-hint')
+        if (recentSection && !already) {
+          const hint = document.createElement('div')
+          hint.className = 'p2-first-tx-hint'
+          hint.style.cssText = 'text-align:center;padding:12px;color:var(--muted);font-size:13px'
+          hint.innerHTML = `ยังไม่มีรายการเดือนนี้ · <button class="btn btn-primary btn-sm" onclick="App.openAddTx()" style="width:auto">+ เพิ่มรายการแรก</button>`
+          recentSection.appendChild(hint)
+        }
+      }
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // 4. SEARCH EMPTY STATE — Clear-filter action button
+  // When search/filter returns no results, show a "ล้างตัวกรอง"
+  // button inside the empty state so the user can escape easily.
+  // ════════════════════════════════════════════════════════════
+
+  const _prevRenderTransactionsList = App.renderTransactionsList?.bind(App)
+  App.renderTransactionsList = function() {
+    if (_prevRenderTransactionsList) _prevRenderTransactionsList()
+
+    const listEl = document.getElementById('tx-list-content')
+    if (!listEl) return
+    const emptyEl = listEl.querySelector('.empty-state')
+    if (!emptyEl) return   // has results, nothing to do
+
+    const hasFilters = S.txSearch
+      || (S.txType && S.txType !== 'all')
+      || S.txWalletFilter || S.txCategoryFilter
+      || S.txAmtMin || S.txAmtMax
+
+    if (hasFilters) {
+      const btn = document.createElement('div')
+      btn.style.cssText = 'text-align:center;margin-top:10px'
+      btn.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="App.clearTxFilters()">ล้างตัวกรอง / ค้นหา</button>`
+      listEl.appendChild(btn)
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // 5. RECURRING — Overdue date choice modal
+  // When a recurring item is overdue (due date < today), ask
+  // the user whether to record it on the original due date or today.
+  // This preserves the existing "skip" / "advance" sequence.
+  // ════════════════════════════════════════════════════════════
+
+  const _prevPostRecurringNow = App.postRecurringNow?.bind(App)
+  App.postRecurringNow = function(id) {
+    const r = (S.recurring || []).find(x => x.id === id)
+    // If paused or missing, delegate immediately
+    if (!r || r.paused) { if (_prevPostRecurringNow) _prevPostRecurringNow(id); return }
+
+    const todayStr = today()
+    const dueDate  = r.nextDueDate || todayStr
+    const daysDiff = Math.round((new Date(todayStr) - new Date(dueDate)) / 86400000)
+
+    // Only prompt when genuinely overdue by at least 1 day
+    if (daysDiff < 1) {
+      if (_prevPostRecurringNow) _prevPostRecurringNow(id)
+      return
+    }
+
+    // Remove any existing confirm overlay, then build date-choice modal
+    document.getElementById('v23-confirm-overlay')?.remove()
+    const el = document.createElement('div')
+    el.id  = 'v23-confirm-overlay'
+    el.className = 'v23-confirm-overlay'
+    el.innerHTML = `
+      <div class="v23-confirm-sheet" role="alertdialog" aria-modal="true">
+        <div class="v23-confirm-title">📅 ${esc(r.name)}</div>
+        <div class="v23-confirm-body" style="font-size:13px;color:var(--muted);line-height:1.5">
+          ครบกำหนด <strong>${esc(thaiDateP2(dueDate))}</strong><br>
+          (${daysDiff} วันที่ผ่านมา)<br>
+          บันทึกด้วยวันที่ใด?
+        </div>
+        <div class="v23-confirm-actions" style="flex-direction:column;gap:10px">
+          <button class="btn btn-primary" id="p2-rec-today" style="justify-content:center">
+            บันทึกวันที่วันนี้ (${esc(thaiDateP2(todayStr))})
+          </button>
+          <button class="btn btn-secondary" id="p2-rec-orig" style="justify-content:center">
+            บันทึกวันที่ครบกำหนด (${esc(thaiDateP2(dueDate))})
+          </button>
+          <button class="btn btn-outline p2-cancel-slim" id="p2-rec-cancel">ยกเลิก</button>
+        </div>
+      </div>`
+    document.body.appendChild(el)
+
+    // Option A: use today — call original which defaults to today for overdue items
+    el.querySelector('#p2-rec-today').onclick = () => {
+      el.remove()
+      if (_prevPostRecurringNow) _prevPostRecurringNow(id)
+    }
+
+    // Option B: use original due date — post with today first, then patch tx date
+    el.querySelector('#p2-rec-orig').onclick = () => {
+      el.remove()
+      const beforeIds = new Set((S.transactions || []).map(t => t.id))
+      if (_prevPostRecurringNow) _prevPostRecurringNow(id)
+      const newTx = (S.transactions || []).find(t => !beforeIds.has(t.id) && t.sourceRecurringId === id)
+      if (newTx && dueDate) {
+        newTx.date = dueDate
+        // dueDate is past → not scheduled
+        if (newTx.scheduled === true) delete newTx.scheduled
+        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+        persist()
+        App.render?.()
+      }
+    }
+
+    el.querySelector('#p2-rec-cancel').onclick = () => el.remove()
+    el.addEventListener('click', e => { if (e.target === el) el.remove() })
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // 6. INSTALLMENT — Progress display (postedCount / totalCount)
+  // Adds postedCount and totalCount to every installment group so
+  // the UI can show "ชำระแล้ว 3/12 งวด" instead of just "งวด 4/12".
+  // ════════════════════════════════════════════════════════════
+
+  const _prevGetInstallmentGroups = App.getInstallmentGroups?.bind(App)
+  App.getInstallmentGroups = function() {
+    const groups = _prevGetInstallmentGroups ? _prevGetInstallmentGroups() : []
+    const todayStr = today()
+    groups.forEach(g => {
+      g.totalCount       = g.rows.length
+      g.postedCount      = g.rows.filter(t => String(t.date || '') <= todayStr && App._isPostedTx(t)).length
+      g.scheduledFuture  = g.rows.filter(t => t.scheduled === true && String(t.date || '') > todayStr).length
+    })
+    return groups
+  }
+
+  // Override installment center to show progress bar + "ชำระแล้ว X/Y งวด"
+  App.openInstallmentCenter = function(cardId = '') {
+    const groups = (App.getInstallmentGroups?.() || []).filter(g => !cardId || g.walletId === cardId)
+    const back   = cardId ? `App.openCCDetail('${esc(cardId)}')` : 'App.closeSubScreen()'
+
+    if (!groups.length) {
+      App.openSubScreen(
+        `<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>ศูนย์ผ่อนชำระ</h2></div>` +
+        `<div class="sub-scroll installment-compact-screen">` +
+          (App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','เพิ่มรายการจ่ายแล้วเลือก "ผ่อนชำระ"') || '') +
+        `</div>`)
+      return
+    }
+
+    const rowsHtml = groups.map(g => {
+      const w           = walletById(g.walletId)
+      const next        = g.next
+      const posted      = g.postedCount ?? g.rows.filter(t => String(t.date||'') <= today()).length
+      const total       = g.totalCount ?? g.rows.length
+      const pct         = total > 0 ? Math.round(posted / total * 100) : 0
+      const progressBar = `<div style="height:3px;background:var(--border);border-radius:99px;overflow:hidden;margin-top:5px">` +
+                          `<div style="height:100%;width:${pct}%;background:var(--income);border-radius:99px;transition:width .3s"></div></div>`
+      const walletName  = esc(w?.name || '')
+      const statusLabel = next
+        ? `${walletName} · ชำระแล้ว ${posted}/${total} งวด · ถัดไป ${thaiDateP2(next.date)}`
+        : `${walletName} · ครบแล้ว (${total} งวด)`
+      const amtLabel    = next ? money(g.remaining || 0) : '✓'
+      const amtSub      = next ? 'เหลือ' : 'ครบ'
+
+      return `<div class="installment-compact-row installment-compact-row-edit">
+        <div class="icr-main">
+          <b>${esc(g.merchant)}</b>
+          <span>${statusLabel}</span>
+          ${progressBar}
+        </div>
+        <div class="icr-amount">
+          <strong>${amtLabel}</strong>
+          <span>${amtSub}</span>
+        </div>
+        <button class="icon-btn" onclick="App.openEditInstallmentGroup('${esc(g.id)}','${esc(cardId)}')">✏️</button>
+        <button class="icon-btn" onclick="App.deleteInstallmentGroup('${esc(g.id)}')">🗑</button>
+      </div>`
+    }).join('')
+
+    App.openSubScreen(
+      `<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>ศูนย์ผ่อนชำระ</h2></div>` +
+      `<div class="sub-scroll installment-compact-screen"><div class="compact-card-list">${rowsHtml}</div></div>`)
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // 7. REPORTS — Fix income category breakdown
+  // Calc.getMonthlyStats only builds byCategory for expense.
+  // After the original renderReports runs, if income view is
+  // active and shows an empty state, replace it with the correct
+  // income-by-category breakdown computed here.
+  // ════════════════════════════════════════════════════════════
+
+  const _prevRenderReports = App.renderReports?.bind(App)
+  App.renderReports = function() {
+    if (_prevRenderReports) _prevRenderReports()
+    if (S.rptView !== 'income') return
+
+    const content = document.getElementById('reports-content')
+    if (!content) return
+
+    // Only fix if the original produced an empty state (income byCategory is empty)
+    const emptyEl = content.querySelector('.empty-state')
+    if (!emptyEl) return   // original found data — nothing to fix
+
+    const month = S.rptMonth || thisMonth()
+    const byIncomeCat = {}
+    ;(S.transactions || [])
+      .filter(t => String(t.date||'').startsWith(month) && t.type === 'income' && Calc.isPostedTx(t))
+      .forEach(t => { if (t.categoryId) byIncomeCat[t.categoryId] = (byIncomeCat[t.categoryId]||0) + Number(t.amount||0) })
+
+    const cats = S.categories?.income || []
+    const data = cats
+      .map(c => ({ label:c.icon, name:c.label, value:byIncomeCat[c.id]||0, color:c.color }))
+      .filter(d => d.value > 0)
+      .sort((a, b) => b.value - a.value)
+
+    if (!data.length) return   // truly no income → keep original empty state
+
+    const total = data.reduce((s,d) => s+d.value, 0)
+    let catHtml = `<div class="card card-pad report-category-card">` +
+                  `<div class="report-category-title">รายรับตามหมวด</div>` +
+                  `<div class="report-category-list">`
+    data.forEach(d => {
+      const pct      = total > 0 ? (d.value / total * 100) : 0
+      const pctLabel = pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)
+      catHtml += `<div class="report-cat-row">
+        <div class="report-cat-top">
+          <div class="report-cat-name"><span class="report-cat-icon">${esc(d.label)}</span><span>${esc(d.name)}</span></div>
+          <div class="report-cat-value"><strong>${money(d.value)}</strong><span style="font-weight:400">${pctLabel}%</span></div>
+        </div>
+        <div class="report-cat-bar"><div class="report-cat-fill" style="width:${Math.min(100,Math.max(0,pct))}%;background:${esc(d.color)}"></div></div>
+      </div>`
+    })
+    catHtml += `</div></div>`
+
+    // Replace the empty-state element (or its nearest .card wrapper) with the category card
+    const wrapper = emptyEl.closest('.card') || emptyEl
+    const tmp = document.createElement('div')
+    tmp.innerHTML = catHtml
+    wrapper.replaceWith(tmp.firstChild)
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // 8. HIDDEN BALANCE CONSISTENCY — Global render guard
+  // Expose a convenience helper used by any render path that
+  // needs to hide money amounts. Existing code already checks
+  // S.settings.hideMoney per-call; this ensures new code has
+  // a canonical single helper.
+  // ════════════════════════════════════════════════════════════
+
+  // Already covered by the global moneyFmt(n) at line ~129 which
+  // reads S.settings.hideMoney.  The cc-benefit IIFE uses its own
+  // money() that does NOT hide — but that screen shows rule config
+  // (cashback %, point rates) which are not personal balances.
+  // Sensitive balance amounts (wallet cards, dashboard, CC detail,
+  // reports, crypto, wallets summary) all use moneyFmt or the
+  // S.settings.hideMoney inline guard already. ✓
+
+  // ════════════════════════════════════════════════════════════
+  // 9. iOS KEYBOARD USABILITY — Verify existing guard is active
+  // syncKeyboardClass (defined earlier) already toggles
+  // .keyboard-open on document.body which hides nav/FAB via CSS.
+  // No additional changes needed here.
+  // ════════════════════════════════════════════════════════════
+
+  // ════════════════════════════════════════════════════════════
+  // 10. CREDIT CARD — Dashboard alert uses committed balance
+  // The dashboard alert card shows `card.used` = Math.abs(w.balance).
+  // This is the CURRENT STATEMENT amount (what to actually pay),
+  // which is correct for the payment reminder context.
+  // The wallet card itself now shows totalOwed (phase 2 CC fix).
+  // ════════════════════════════════════════════════════════════
+
+  // ════════════════════════════════════════════════════════════
+  // Re-render current page if already visible
+  // ════════════════════════════════════════════════════════════
+  try { if (S.page === 'dashboard')     App.renderDashboard?.()     } catch (_) {}
+  try { if (S.page === 'transactions')  App.renderTransactions?.()  } catch (_) {}
+  try { if (S.page === 'reports')       App.renderReports?.()       } catch (_) {}
+
 })()

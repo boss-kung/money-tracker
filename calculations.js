@@ -99,14 +99,45 @@ const Calc = {
   },
 
   // ── Business logic ──────────────────────────────────────────
+
+  // Returns true for transactions that have actually been posted (not future-scheduled).
+  // Transactions with scheduled !== true are always posted (backward-compatible with
+  // existing data that has no scheduled field).
+  // A scheduled transaction whose date has arrived is also treated as posted.
+  isPostedTx(t) {
+    if (!t || t.scheduled !== true) return true
+    const todayStr = (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
+    return String(t.date || '') <= todayStr
+  },
+
+  getExpenseLedgerAmount(t) {
+    if (!t) return 0
+    if (t.type !== 'expense') return Number(t.amount || 0)
+    try {
+      if (typeof App !== 'undefined' && typeof App.getLedgerAmountForTx === 'function') {
+        return Number(App.getLedgerAmountForTx(t) || 0)
+      }
+    } catch (_) {}
+    if ('ledgerAmount' in t && Number.isFinite(Number(t.ledgerAmount))) {
+      return Number(t.ledgerAmount || 0)
+    }
+    return Number(t.amount || 0)
+  },
+
   getMonthlyStats(transactions, month) {
-    const txns = transactions.filter(t => t.date.startsWith(month))
+    // Only count posted transactions — future-scheduled items (installments, etc.)
+    // must not inflate or deflate the reported income/expense for the month.
+    const txns = transactions.filter(t => t.date.startsWith(month) && Calc.isPostedTx(t))
     let income = 0, expense = 0
     const byCategory = {}
 
     txns.forEach(t => {
       if (t.type === 'income')  { income  += t.amount }
-      if (t.type === 'expense') { expense += t.amount; byCategory[t.categoryId] = (byCategory[t.categoryId] || 0) + t.amount }
+      if (t.type === 'expense') {
+        const amount = Calc.getExpenseLedgerAmount(t)
+        expense += amount
+        byCategory[t.categoryId] = (byCategory[t.categoryId] || 0) + amount
+      }
     })
 
     const net         = income - expense
@@ -115,9 +146,11 @@ const Calc = {
   },
 
   getBudgetProgress(transactions, budgets, categories, month) {
-    const txns = transactions.filter(t => t.date.startsWith(month) && t.type === 'expense')
+    const txns = transactions.filter(t => t.date.startsWith(month) && t.type === 'expense' && Calc.isPostedTx(t))
     return budgets.map(b => {
-      const spent = txns.filter(t => t.categoryId === b.categoryId).reduce((s, t) => s + t.amount, 0)
+      const spent = txns
+        .filter(t => t.categoryId === b.categoryId)
+        .reduce((s, t) => s + Calc.getExpenseLedgerAmount(t), 0)
       const cat   = categories.expense.find(c => c.id === b.categoryId)
       const pct   = b.monthlyLimit > 0 ? Math.min((spent / b.monthlyLimit) * 100, 100) : 0
       const over  = spent > b.monthlyLimit
