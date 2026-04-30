@@ -1037,13 +1037,13 @@ html.dark .mt-alert-row-name { color: var(--text); }
 }
 
 body.ios-standalone {
-  --app-bottom-gap: 4px !important;
+  --app-bottom-gap: 10px !important;
   --safe-b: 0px !important;
   --safe-t: max(env(safe-area-inset-top, 0px), 12px) !important;
 }
 
 body.standalone {
-  --app-bottom-gap: 4px !important;
+  --app-bottom-gap: 10px !important;
   --safe-b: 0px !important;
 }
 
