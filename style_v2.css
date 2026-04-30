@@ -1072,17 +1072,17 @@ body.ios-standalone #bottom-nav {
   bottom: 0 !important;
   width: 100% !important;
   margin: 0 !important;
-  height: calc(var(--nav-h) + var(--app-bottom-gap, 0px)) !important;
+  height: var(--nav-h) !important;
   padding-top: 2px !important;
-  padding-bottom: var(--app-bottom-gap, 0px) !important;
+  padding-bottom: 0 !important;
   padding-left: max(8px, var(--safe-l)) !important;
   padding-right: max(8px, var(--safe-r)) !important;
   margin-bottom: 0 !important;
 }
 
 body.ios-standalone #bottom-nav .nav-btn {
-  min-height: calc(var(--nav-h) - 2px + var(--app-bottom-gap, 0px)) !important;
-  height: calc(var(--nav-h) - 2px + var(--app-bottom-gap, 0px)) !important;
+  min-height: calc(var(--nav-h) - 2px) !important;
+  height: calc(var(--nav-h) - 2px) !important;
   padding-top: 6px !important;
   padding-bottom: 0 !important;
   align-items: center !important;
@@ -1392,8 +1392,8 @@ body.keyboard-open #mt-update-banner {
   transform: none !important;
   width: 100% !important;
   max-width: none !important;
-  height: calc(var(--nav-h) + var(--safe-b) + var(--app-bottom-gap)) !important;
-  padding: 4px max(8px, var(--safe-r)) calc(max(4px, var(--safe-b)) + var(--app-bottom-gap)) max(8px, var(--safe-l)) !important;
+  height: calc(var(--nav-h) + var(--safe-b)) !important;
+  padding: 4px max(8px, var(--safe-r)) max(4px, var(--safe-b)) max(8px, var(--safe-l)) !important;
   display: grid !important;
   grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   align-items: center !important;
@@ -2460,7 +2460,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   display:grid;
   grid-template-columns: .85fr 1.35fr;
   gap:8px;
-  padding:10px 16px calc(12px + var(--safe-b) + var(--app-bottom-gap));
+  padding:10px 16px calc(16px + var(--safe-b) + var(--app-bottom-gap));
   background:linear-gradient(to top, var(--surface) 78%, color-mix(in srgb, var(--surface) 0%, transparent));
   border-top:1px solid var(--border);
 }
@@ -4105,7 +4105,7 @@ html.dark .icon-btn {
     position: static !important;
     transform: none !important;
     bottom: auto !important;
-    padding-bottom: calc(12px + var(--safe-b) + var(--app-bottom-gap)) !important;
+    padding-bottom: calc(16px + var(--safe-b) + var(--app-bottom-gap)) !important;
   }
 }
 
@@ -4495,10 +4495,10 @@ html.dark .crypto-summary-item {
     bottom: 0 !important;
     width: 100% !important;
     margin: 0 !important;
-    height: calc(var(--nav-h) + var(--safe-b) + var(--app-bottom-gap)) !important;
+    height: calc(var(--nav-h) + var(--safe-b)) !important;
     padding-top: 6px !important;
     padding-right: max(8px, var(--safe-r)) !important;
-    padding-bottom: calc(max(4px, var(--safe-b)) + var(--app-bottom-gap)) !important;
+    padding-bottom: max(4px, var(--safe-b)) !important;
     padding-left: max(8px, var(--safe-l)) !important;
     border-radius: 0 !important;
     transform: none !important;
