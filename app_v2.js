@@ -772,7 +772,15 @@ App._investmentValueTHB = App._investmentValueTHB || function earlyInvestmentVal
     : Number(w?.balance || 0)
 }
 
-App.pickEmoji=(p,e)=>{document.getElementById(p+'-emoji').value=e;document.getElementById(p+'-emoji-preview').textContent=e;App.toggleEmojiPanel(p)};
+App.pickEmoji=(p,e)=>{
+  const hidden =
+    document.getElementById(p+'-emoji') ||
+    document.getElementById(p+'-icon')
+  if (hidden) hidden.value = e
+  const preview = document.getElementById(p+'-emoji-preview')
+  if (preview) preview.textContent = e
+  App.toggleEmojiPanel(p)
+};
 App.render();
 })();
 
