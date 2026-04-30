@@ -1037,11 +1037,13 @@ html.dark .mt-alert-row-name { color: var(--text); }
 }
 
 body.ios-standalone {
+  --app-bottom-gap: 4px !important;
   --safe-b: 0px !important;
   --safe-t: max(env(safe-area-inset-top, 0px), 12px) !important;
 }
 
 body.standalone {
+  --app-bottom-gap: 4px !important;
   --safe-b: 0px !important;
 }
 
@@ -1067,7 +1069,7 @@ body.ios-standalone #bottom-nav {
   position: fixed !important;
   left: 0 !important;
   right: 0 !important;
-  bottom: 0px !important;
+  bottom: var(--app-bottom-gap, 0px) !important;
   width: 100% !important;
   margin: 0 !important;
   height: var(--nav-h) !important;
@@ -1090,7 +1092,7 @@ body.ios-standalone #bottom-nav .nav-btn {
 body.ios-standalone .v23-confirm-overlay,
 body.ios-standalone .add-detail-actions,
 body.ios-standalone.keyboard-open .add-detail-actions {
-  padding-bottom: 0 !important;
+  padding-bottom: var(--app-bottom-gap, 0px) !important;
 }
 
 /* ============================================================
@@ -1104,6 +1106,7 @@ body.ios-standalone.keyboard-open .add-detail-actions {
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
+  --app-bottom-gap: 0px;
   --app-height: 97dvh;
   --app-max-w: 430px;
   --app-gutter: 16px;
@@ -1218,7 +1221,7 @@ textarea:disabled {
   position: fixed;
   left: max(12px, var(--safe-l));
   right: max(12px, var(--safe-r));
-  bottom: calc(var(--nav-h) + var(--safe-b) + 12px);
+  bottom: calc(var(--nav-h) + var(--safe-b) + var(--app-bottom-gap) + 12px);
   z-index: 10020;
   display: flex;
   align-items: center;
@@ -1385,7 +1388,7 @@ body.keyboard-open #mt-update-banner {
   position: absolute !important;
   left: 0 !important;
   right: 0 !important;
-  bottom: 0 !important;
+  bottom: var(--app-bottom-gap) !important;
   transform: none !important;
   width: 100% !important;
   max-width: none !important;
@@ -1469,7 +1472,7 @@ html.dark #bottom-nav {
   position: absolute !important;
   left: auto !important;
   right: max(16px, var(--safe-r)) !important;
-  bottom: calc(var(--nav-h) + var(--safe-b) + 12px) !important;
+  bottom: calc(var(--nav-h) + var(--safe-b) + var(--app-bottom-gap) + 12px) !important;
   width: var(--fab-size) !important;
   height: var(--fab-size) !important;
   border-radius: 18px !important;
@@ -2457,7 +2460,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   display:grid;
   grid-template-columns: .85fr 1.35fr;
   gap:8px;
-  padding:10px 16px calc(12px + var(--safe-b));
+  padding:10px 16px calc(12px + var(--safe-b) + var(--app-bottom-gap));
   background:linear-gradient(to top, var(--surface) 78%, color-mix(in srgb, var(--surface) 0%, transparent));
   border-top:1px solid var(--border);
 }
@@ -4489,7 +4492,7 @@ html.dark .crypto-summary-item {
     position: fixed !important;
     left: 0 !important;
     right: 0 !important;
-    bottom: 0 !important;
+    bottom: var(--app-bottom-gap) !important;
     width: 100% !important;
     margin: 0 !important;
     height: calc(var(--nav-h) + var(--safe-b)) !important;
