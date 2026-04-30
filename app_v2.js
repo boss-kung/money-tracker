@@ -1091,11 +1091,27 @@ App.render();
   App._initRecurringDefaults = initRecurringDefaults
   App._recurringInlineHtml = recurringInlineHtml
   App._syncAddTxAmountUI = syncAddTxAmountUI
-  App._numpadPointerDown = function(event, key) {
-    return handleFastTap(event, () => App._numpad(key))
-  }
-  App._quickAmountPointerDown = function(event, amount) {
-    return handleFastTap(event, () => App._quickAmount(amount))
+  App._bindAddTxAmountEvents = function() {
+    const box = document.getElementById('add-tx-content')
+    if (!box) return
+    const numpad = box.querySelector('.numpad')
+    if (numpad && !numpad.dataset.boundFastTap) {
+      numpad.dataset.boundFastTap = '1'
+      numpad.addEventListener('pointerdown', (event) => {
+        const btn = event.target.closest('[data-numpad-key]')
+        if (!btn) return
+        handleFastTap(event, () => App._numpad(btn.dataset.numpadKey || ''))
+      })
+    }
+    const quickRow = box.querySelector('.quick-amount-row')
+    if (quickRow && !quickRow.dataset.boundFastTap) {
+      quickRow.dataset.boundFastTap = '1'
+      quickRow.addEventListener('pointerdown', (event) => {
+        const btn = event.target.closest('[data-quick-amount]')
+        if (!btn) return
+        handleFastTap(event, () => App._quickAmount(Number(btn.dataset.quickAmount || 0)))
+      })
+    }
   }
 
   const originalShowPage = App.showPage?.bind(App) || function(){}
@@ -1120,13 +1136,14 @@ App.render();
       <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 20px">
         <div data-role="tx-type-label" style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">${esc(typeLabel(S.tx.type))}</div>
         <div class="amount-display" data-role="tx-amount-display" style="color:${canNext ? color : '#D1D5DB'}">${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}</div>
-        <div class="quick-amount-row">${[50,100,200,500,1000].map(n => `<button type="button" onpointerdown="return App._quickAmountPointerDown(event, ${n})">฿${n}</button>`).join('')}</div>
+        <div class="quick-amount-row">${[50,100,200,500,1000].map(n => `<button type="button" data-quick-amount="${n}">฿${n}</button>`).join('')}</div>
       </div>
       <div style="padding-bottom:calc(12px + var(--app-bottom-gap, 0px))">
-        <div class="numpad">${['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(k => `<button type="button" class="numpad-key${k === '⌫' ? ' del' : ''}" onpointerdown="return App._numpadPointerDown(event, '${k}')">${k}</button>`).join('')}</div>
+        <div class="numpad">${['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(k => `<button type="button" class="numpad-key${k === '⌫' ? ' del' : ''}" data-numpad-key="${esc(k)}">${k}</button>`).join('')}</div>
         <div style="padding:8px 16px 0"><button class="btn btn-primary" data-role="tx-next-btn" style="background:${canNext ? color : '#D1D5DB'};box-shadow:${canNext ? `0 4px 16px ${color}44` : 'none'}" onclick="App._goToDetail()">${canNext ? `ถัดไป  ฿${display} →` : 'ใส่จำนวนเงิน'}</button></div>
       </div>
     </div>`
+    App._bindAddTxAmountEvents()
   }
 
   App._quickAmount = function(n) {

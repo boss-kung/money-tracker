@@ -942,11 +942,12 @@ html.dark .mt-alert-row-name { color: var(--text); }
   touch-action:manipulation;
   -webkit-tap-highlight-color:transparent;
   user-select:none;
+  transition:none;
 }
 .numpad { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:0 16px; }
-.numpad-key { height:60px; border-radius:16px; border:0; background:var(--elevated); color:var(--text); font-size:22px; font-weight:800; touch-action:manipulation; -webkit-tap-highlight-color:transparent; user-select:none; }
+.numpad-key { height:60px; border-radius:16px; border:0; background:var(--elevated); color:var(--text); font-size:22px; font-weight:800; touch-action:manipulation; -webkit-tap-highlight-color:transparent; user-select:none; transition:none; }
 .numpad-key.del { background:var(--expense-soft); color:var(--expense); }
-.numpad-key:active { transform: scale(.94); }
+.numpad-key:active { background: color-mix(in srgb, var(--elevated) 84%, var(--border)); }
 .amount-summary-card {
   display:flex;
   align-items:center;
