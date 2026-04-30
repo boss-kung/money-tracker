@@ -304,7 +304,7 @@ const App = {
       }
     }
     S.tx.amount = v
-    App._renderAddTxAmount()
+    if (!App._syncAddTxAmountUI?.()) App._renderAddTxAmount()
   },
 
   _goToDetail() {
@@ -1027,6 +1027,38 @@ App.render();
     return Number(String(raw || '0').replace(/,/g, '')) || 0
   }
 
+  function handleFastTap(event, fn) {
+    if (event) {
+      if (event.pointerType === 'mouse' && event.button !== 0) return false
+      event.preventDefault?.()
+      event.stopPropagation?.()
+    }
+    fn?.()
+    return false
+  }
+
+  function syncAddTxAmountUI() {
+    if (S.tx?.step !== 'amount') return false
+    const box = document.getElementById('add-tx-content')
+    if (!box) return false
+    const displayEl = box.querySelector('[data-role="tx-amount-display"]')
+    const nextBtn = box.querySelector('[data-role="tx-next-btn"]')
+    const typeLabelEl = box.querySelector('[data-role="tx-type-label"]')
+    if (!displayEl || !nextBtn || !typeLabelEl) return false
+    const amount = String(S.tx.amount || '')
+    const num = numericAmount(amount)
+    const display = formatDraftAmount(amount)
+    const color = typeColor(S.tx.type)
+    const canNext = num > 0
+    displayEl.style.color = canNext ? color : '#D1D5DB'
+    displayEl.textContent = `${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}`
+    typeLabelEl.textContent = typeLabel(S.tx.type)
+    nextBtn.textContent = canNext ? `ถัดไป  ฿${display} →` : 'ใส่จำนวนเงิน'
+    nextBtn.style.background = canNext ? color : '#D1D5DB'
+    nextBtn.style.boxShadow = canNext ? `0 4px 16px ${color}44` : 'none'
+    return true
+  }
+
   function initRecurringDefaults() {
     const date = S.tx?.date || txToday()
     const day = Math.max(1, Math.min(31, parseInt(String(date).slice(-2), 10) || new Date().getDate()))
@@ -1058,6 +1090,13 @@ App.render();
 
   App._initRecurringDefaults = initRecurringDefaults
   App._recurringInlineHtml = recurringInlineHtml
+  App._syncAddTxAmountUI = syncAddTxAmountUI
+  App._numpadPointerDown = function(event, key) {
+    return handleFastTap(event, () => App._numpad(key))
+  }
+  App._quickAmountPointerDown = function(event, amount) {
+    return handleFastTap(event, () => App._quickAmount(amount))
+  }
 
   const originalShowPage = App.showPage?.bind(App) || function(){}
 
@@ -1079,20 +1118,20 @@ App.render();
       <div class="sheet-header"><h2>${esc(title)}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
       <div class="type-tabs">${tabs.map(([v,l,i]) => `<button class="type-tab type-${v}${S.tx.type === v ? ' active' : ''}" onclick="App._setTxType('${v}')"><span aria-hidden="true">${i}</span> ${l}</button>`).join('')}</div>
       <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 20px">
-        <div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">${esc(typeLabel(S.tx.type))}</div>
-        <div class="amount-display" style="color:${canNext ? color : '#D1D5DB'}">${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}</div>
-        <div class="quick-amount-row">${[50,100,200,500,1000].map(n => `<button onclick="App._quickAmount(${n})">฿${n}</button>`).join('')}</div>
+        <div data-role="tx-type-label" style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">${esc(typeLabel(S.tx.type))}</div>
+        <div class="amount-display" data-role="tx-amount-display" style="color:${canNext ? color : '#D1D5DB'}">${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}</div>
+        <div class="quick-amount-row">${[50,100,200,500,1000].map(n => `<button type="button" onpointerdown="return App._quickAmountPointerDown(event, ${n})">฿${n}</button>`).join('')}</div>
       </div>
       <div style="padding-bottom:calc(12px + var(--app-bottom-gap, 0px))">
-        <div class="numpad">${['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(k => `<button class="numpad-key${k === '⌫' ? ' del' : ''}" onclick="App._numpad('${k}')">${k}</button>`).join('')}</div>
-        <div style="padding:8px 16px 0"><button class="btn btn-primary" style="background:${canNext ? color : '#D1D5DB'};box-shadow:${canNext ? `0 4px 16px ${color}44` : 'none'}" onclick="App._goToDetail()">${canNext ? `ถัดไป  ฿${display} →` : 'ใส่จำนวนเงิน'}</button></div>
+        <div class="numpad">${['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(k => `<button type="button" class="numpad-key${k === '⌫' ? ' del' : ''}" onpointerdown="return App._numpadPointerDown(event, '${k}')">${k}</button>`).join('')}</div>
+        <div style="padding:8px 16px 0"><button class="btn btn-primary" data-role="tx-next-btn" style="background:${canNext ? color : '#D1D5DB'};box-shadow:${canNext ? `0 4px 16px ${color}44` : 'none'}" onclick="App._goToDetail()">${canNext ? `ถัดไป  ฿${display} →` : 'ใส่จำนวนเงิน'}</button></div>
       </div>
     </div>`
   }
 
   App._quickAmount = function(n) {
     S.tx.amount = String(n)
-    App._renderAddTxAmount()
+    if (!App._syncAddTxAmountUI?.()) App._renderAddTxAmount()
   }
 
   App.openAddTx = function() {
