@@ -1037,13 +1037,13 @@ html.dark .mt-alert-row-name { color: var(--text); }
 }
 
 body.ios-standalone {
-  --app-bottom-gap: 10px !important;
+  --app-bottom-gap: 4px !important;
   --safe-b: 0px !important;
   --safe-t: max(env(safe-area-inset-top, 0px), 12px) !important;
 }
 
 body.standalone {
-  --app-bottom-gap: 10px !important;
+  --app-bottom-gap: 4px !important;
   --safe-b: 0px !important;
 }
 
@@ -2074,7 +2074,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   font-weight: 800 !important;
   letter-spacing: -.04em !important;
 }
-.sheet-body { padding: 0 16px calc(22px + var(--safe-b)) !important; }
+.sheet-body { padding: 0 16px calc(22px + var(--safe-b) + var(--app-bottom-gap)) !important; }
 .sub-header {
   gap: 10px !important;
   padding: max(12px, calc(var(--safe-t) + 8px)) max(var(--app-gutter), var(--safe-r)) 12px max(var(--app-gutter), var(--safe-l)) !important;
@@ -2082,7 +2082,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 .sub-scroll {
   padding-left: max(var(--app-gutter), var(--safe-l)) !important;
   padding-right: max(var(--app-gutter), var(--safe-r)) !important;
-  padding-bottom: calc(24px + var(--safe-b)) !important;
+  padding-bottom: calc(24px + var(--safe-b) + var(--app-bottom-gap)) !important;
 }
 .type-tabs { padding: 0 16px 10px !important; gap: 6px !important; }
 .quick-amount-row { padding: 0 16px 12px !important; }
@@ -3417,7 +3417,7 @@ html.dark #reports-content .report-cat-bar{
   padding:
     max(18px, calc(var(--safe-t, 0px) + 14px))
     max(18px, calc(var(--safe-r, 0px) + 14px))
-    max(18px, calc(var(--safe-b, 0px) + 14px))
+    max(18px, calc(var(--safe-b, 0px) + var(--app-bottom-gap, 0px) + 14px))
     max(18px, calc(var(--safe-l, 0px) + 14px)) !important;
   background: rgba(15, 23, 42, .58) !important;
   backdrop-filter: blur(14px) saturate(1.15) !important;
@@ -3573,7 +3573,7 @@ html.dark .v23-confirm-actions .btn-secondary {
     padding:
       16px
       14px
-      max(14px, calc(var(--safe-b, 0px) + 10px))
+      max(14px, calc(var(--safe-b, 0px) + var(--app-bottom-gap, 0px) + 10px))
       14px !important;
   }
 
@@ -4098,14 +4098,14 @@ html.dark .icon-btn {
   }
 
   body.keyboard-open .add-detail-scroll {
-    padding-bottom: calc(18px + var(--safe-b)) !important;
+    padding-bottom: calc(18px + var(--safe-b) + var(--app-bottom-gap)) !important;
   }
 
   body.keyboard-open .add-detail-actions {
     position: static !important;
     transform: none !important;
     bottom: auto !important;
-    padding-bottom: calc(12px + var(--safe-b)) !important;
+    padding-bottom: calc(12px + var(--safe-b) + var(--app-bottom-gap)) !important;
   }
 }
 
