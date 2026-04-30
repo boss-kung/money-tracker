@@ -196,6 +196,20 @@ const App = {
     App.render()
   },
   toggleHideMoney() { S.settings.hideMoney = !S.settings.hideMoney; persist(); App.render() },
+  _syncPageChrome(page = S.page) {
+    const current = APP_ROUTE_PAGES.has(page) ? page : 'dashboard'
+    const isDashboard = current === 'dashboard'
+    const isTransactions = current === 'transactions'
+    const fab = document.getElementById('fab')
+    if (fab) {
+      const visible = isDashboard || isTransactions
+      fab.classList.toggle('hidden', !visible)
+      fab.setAttribute('aria-hidden', String(!visible))
+      fab.tabIndex = visible ? 0 : -1
+    }
+    document.body.classList.toggle('is-dashboard', isDashboard)
+    document.body.classList.toggle('is-transactions', isTransactions)
+  },
   refreshDashboard() {
     try { App.recalculateWalletBalances?.({ save:false, recordSnapshot:true }) } catch (_) {}
     if (S.page === 'dashboard') App.renderDashboard?.()
@@ -247,9 +261,7 @@ const App = {
     document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === page)
     })
-    document.getElementById('fab')?.classList.toggle('hidden', !['dashboard', 'transactions'].includes(page))
-    document.body.classList.toggle('is-dashboard', page === 'dashboard')
-    document.body.classList.toggle('is-transactions', page === 'transactions')
+    App._syncPageChrome(page)
     App.render()
   },
 
@@ -3114,6 +3126,10 @@ Calc.getUsableMoney = function(wallets) {
     const isEdit = S.txMode === 'edit' && !!S.editingTxId
     const draft = { ...S.tx, amount:Number(S.tx.amount || 0) }
     const modeBefore = S.txMode
+    const resetAfterSaveChrome = () => {
+      try { document.activeElement?.blur?.() } catch (_) {}
+      try { document.body?.classList.remove('keyboard-open') } catch (_) {}
+    }
     if (draft.isRecurring) {
       App._initRecurringLiteDefaults?.()
       Object.assign(draft, {
@@ -3156,8 +3172,13 @@ Calc.getUsableMoney = function(wallets) {
         S.transactions.unshift(...txs)
         App._registerMerchantFromTx?.(txs[0])
         App.recalculateWalletBalances({ save:false, recordSnapshot:true })
-        persist(); App.closeOverlay('overlay-add-tx')
-        if (S.txMode === 'add') App.showPage('transactions')
+        persist()
+        resetAfterSaveChrome()
+        App.closeOverlay('overlay-add-tx')
+        if (S.txMode === 'add') {
+          App.showPage('transactions')
+          App._syncPageChrome?.('transactions')
+        }
         else App.render()
         toast(`สร้างรายการผ่อน ${months} งวดแล้ว`, 'success')
         S.txMode = 'add'; S.editingTxId = null
@@ -3173,9 +3194,14 @@ Calc.getUsableMoney = function(wallets) {
       }
       App._registerMerchantFromTx?.(tx)
       App.recalculateWalletBalances({ save:false, recordSnapshot:true })
-      persist(); App.closeOverlay('overlay-add-tx')
+      persist()
+      resetAfterSaveChrome()
+      App.closeOverlay('overlay-add-tx')
       if (isEdit) App.render()
-      else App.showPage('transactions')
+      else {
+        App.showPage('transactions')
+        App._syncPageChrome?.('transactions')
+      }
       toast(isEdit ? 'แก้ไขรายการแล้ว' : 'บันทึกรายการแล้ว', 'success')
       S.txMode = 'add'; S.editingTxId = null
 

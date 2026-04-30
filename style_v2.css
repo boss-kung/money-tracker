@@ -2170,7 +2170,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
    due-date clarity, sticky actions, and AI insight spacing.
    ============================================================ */
 #page-transactions .page-header {
-  padding: 18px var(--app-gutter) 7px !important;
+  padding: max(10px, calc(var(--safe-t) + 8px)) var(--app-gutter) 7px !important;
   background: var(--bg) !important;
   border-bottom: 0 !important;
 }
