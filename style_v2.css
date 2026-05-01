@@ -1800,20 +1800,21 @@ textarea {
   padding-left: max(var(--app-gutter), var(--safe-l)) !important;
   padding-right: max(var(--app-gutter), var(--safe-r)) !important;
   padding-top: 8px !important;
-  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 18px) !important;
-  scroll-padding-bottom: calc(var(--nav-h) + var(--safe-b) + 18px) !important;
+  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 10px) !important;
+  scroll-padding-bottom: calc(var(--nav-h) + var(--safe-b) + 10px) !important;
 }
 
 body.is-dashboard #dashboard-content {
   padding-top: max(10px, calc(var(--safe-t) + 8px)) !important;
-  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 84px) !important;
-  scroll-padding-bottom: calc(var(--nav-h) + var(--safe-b) + 84px) !important;
+  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 64px) !important;
+  scroll-padding-bottom: calc(var(--nav-h) + var(--safe-b) + 64px) !important;
 }
 
 .page-header {
   padding: max(10px, calc(var(--safe-t) + 8px)) max(var(--app-gutter), var(--safe-r)) 8px max(var(--app-gutter), var(--safe-l)) !important;
 }
 .page-header + .page-scroll { padding-top: 6px !important; }
+#page-more #more-content { padding-top: max(10px, calc(var(--safe-t) + 8px)) !important; }
 .page-header h1,
 .mt-title {
   font-size: 23px !important;
@@ -2052,7 +2053,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   font-weight: 800 !important;
   letter-spacing: -.04em !important;
 }
-.sheet-body { padding: 0 16px calc(22px + var(--safe-b) + var(--app-bottom-gap)) !important; }
+.sheet-body { padding: 0 16px calc(14px + var(--safe-b) + var(--app-bottom-gap)) !important; }
 .sub-header {
   gap: 10px !important;
   padding: max(12px, calc(var(--safe-t) + 8px)) max(var(--app-gutter), var(--safe-r)) 12px max(var(--app-gutter), var(--safe-l)) !important;
@@ -2060,7 +2061,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 .sub-scroll {
   padding-left: max(var(--app-gutter), var(--safe-l)) !important;
   padding-right: max(var(--app-gutter), var(--safe-r)) !important;
-  padding-bottom: calc(24px + var(--safe-b) + var(--app-bottom-gap)) !important;
+  padding-bottom: calc(16px + var(--safe-b) + var(--app-bottom-gap)) !important;
 }
 .type-tabs { padding: 0 16px 10px !important; gap: 6px !important; }
 .quick-amount-row { padding: 0 16px 12px !important; }
