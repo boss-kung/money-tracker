@@ -10507,7 +10507,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const rows = getPrivilegeRows(S.privilegesFilter, S.privilegeSearch)
     const summary = getPrivilegesSummary()
     const chips = PRIVILEGE_FILTERS.map(([key, label]) => `<button class="chip${S.privilegesFilter === key ? ' active' : ''}" onclick="App.openPrivilegesScreen('${key}', document.getElementById('privilege-search')?.value || '')">${label}</button>`).join('')
-    const headerMeta = `${summary.activeCount} ใช้ได้ · ${summary.expiringCount} ใกล้หมดอายุ · ${summary.usedCount} ใช้แล้ว · ${summary.expiredCount} หมดอายุ`
     const html = `
       <div class="sub-header">
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
@@ -10522,7 +10521,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             <div class="privilege-summary-item privilege-summary-item-income"><span>ประหยัดแล้ว</span><strong>${money(summary.totalActualSaving)}</strong></div>
             <div class="privilege-summary-item privilege-summary-item-primary"><span>อาจประหยัดได้</span><strong>${money(summary.totalPotentialSaving)}</strong></div>
           </div>
-          <div class="privilege-summary-foot">${headerMeta}</div>
         </div>
         <div class="chips privilege-filter-row">${chips}</div>
         <div class="privilege-search-wrap">
@@ -10544,10 +10542,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const valueLabel = privilege.status === 'used'
       ? `ประหยัดจริง ${money(privilege.actualSaving || 0)}`
       : `คาดว่าประหยัด ${money(privilege.estimatedSaving || 0)}`
-    const codeLine = privilege.code ? `<div class="privilege-card-code">โค้ด: <strong>${esc(privilege.code)}</strong></div>` : ''
     const dateLabel = privilege.status === 'used' && privilege.usedAt
       ? `ใช้เมื่อ ${esc(Calc.labelDate ? Calc.labelDate(privilege.usedAt) : privilege.usedAt)}`
       : `หมดอายุ ${esc(Calc.labelDate ? Calc.labelDate(privilege.expiryDate) : privilege.expiryDate)}`
+    const metaLine = [
+      privilegeSecondaryText(privilege) || typeLabel(privilege.type),
+      privilege.code ? `โค้ด ${privilege.code}` : '',
+    ].filter(Boolean).join(' · ')
     const leadingAction = privilegeSupportsCopy(privilege)
       ? `<button class="btn btn-secondary btn-sm" onclick="App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอก</button>`
       : privilege.status === 'active'
@@ -10564,15 +10565,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             <div class="privilege-card-title">${esc(privilege.title || typeLabel(privilege.type))}</div>
             <span class="${meta.className}">${meta.label}</span>
           </div>
-          <div class="privilege-card-sub">${esc(privilegeSecondaryText(privilege) || typeLabel(privilege.type))}</div>
-          ${codeLine}
+          <div class="privilege-card-sub">${esc(metaLine)}</div>
         </div>
       </div>
       <div class="privilege-pill-row">
         <span class="status-pill muted">${dateLabel}</span>
         <span class="status-pill info privilege-saving-pill">${valueLabel}</span>
       </div>
-      ${privilege.note ? `<div class="privilege-card-note">${esc(privilege.note)}</div>` : ''}
       <div class="privilege-card-actions">
         ${leadingAction}
         ${primaryAction}
