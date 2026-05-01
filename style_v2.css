@@ -4521,3 +4521,227 @@ html.dark .crypto-summary-item {
     background: rgba(23,32,51,.96) !important;
   }
 }
+/* Upcoming bills */
+.upcoming-summary-card {
+  margin-bottom: 12px;
+}
+
+.upcoming-summary-title {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.upcoming-summary-total {
+  font-size: 28px;
+  font-weight: 800;
+  margin-bottom: 14px;
+  color: var(--expense);
+}
+
+.upcoming-summary-grid,
+.dashboard-upcoming-metrics,
+.wallet-available-block,
+.wallet-detail-availability {
+  display: grid;
+  gap: 10px;
+}
+
+.upcoming-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.upcoming-summary-grid span,
+.dashboard-upcoming-metrics span,
+.wallet-available-block span,
+.wallet-detail-availability span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.upcoming-summary-grid strong,
+.dashboard-upcoming-metrics strong,
+.wallet-available-block strong,
+.wallet-detail-availability strong {
+  font-size: 14px;
+}
+
+.upcoming-filter-row {
+  padding: 0 0 12px;
+  flex-wrap: wrap;
+}
+
+.upcoming-bills-list {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 16px;
+}
+
+.upcoming-bill-card {
+  border: 1px solid var(--border);
+  padding: 12px 14px !important;
+}
+
+.upcoming-bill-head,
+.dashboard-upcoming-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.upcoming-bill-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.upcoming-bill-meta,
+.upcoming-bill-note {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.upcoming-bill-meta {
+  margin-top: 3px;
+  line-height: 1.35;
+}
+
+.upcoming-bill-amount {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--expense);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.upcoming-pill-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 8px 0 0;
+}
+
+.status-pill.amber,
+.status-pill.info,
+.status-pill.muted {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.status-pill.amber {
+  background: rgba(245, 158, 11, .14);
+  color: var(--amber);
+}
+
+.status-pill.info {
+  background: rgba(37, 99, 235, .12);
+  color: var(--primary);
+}
+
+.status-pill.muted {
+  background: rgba(100, 116, 139, .12);
+  color: var(--muted);
+}
+
+.upcoming-bill-estimated {
+  background: rgba(37, 99, 235, .12);
+  color: var(--primary);
+}
+
+.upcoming-bill-note {
+  margin-top: 7px;
+  line-height: 1.35;
+}
+
+.upcoming-bill-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.upcoming-bill-actions .btn {
+  min-width: 0;
+  padding: 8px 6px;
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.upcoming-bill-dialog {
+  max-height: min(88dvh, 720px);
+  overflow: hidden;
+}
+
+.upcoming-bill-dialog-body {
+  max-height: min(58dvh, 460px);
+  overflow: auto;
+  text-align: left;
+}
+
+.upcoming-bill-dialog-actions {
+  gap: 8px;
+}
+
+.dashboard-upcoming-card {
+  margin: 12px 0 16px;
+}
+
+.dashboard-upcoming-head {
+  margin-bottom: 12px;
+}
+
+.dashboard-upcoming-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.dashboard-upcoming-list {
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard-upcoming-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 10px 12px;
+  color: inherit;
+}
+
+.wallet-available-block,
+.wallet-detail-availability {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,.18);
+}
+
+.wallet-available-block strong,
+.wallet-detail-availability strong {
+  color: #fff;
+}
+
+.wallet-detail-availability {
+  border-top-color: rgba(148, 163, 184, .25);
+}
+
+.wallet-detail-availability strong {
+  color: var(--text);
+}
