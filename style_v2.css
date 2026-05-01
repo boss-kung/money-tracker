@@ -4862,9 +4862,10 @@ html.dark .crypto-summary-item {
 
 .privilege-card-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
   gap: 6px;
   margin-top: 10px;
+  align-items: stretch;
 }
 
 .privilege-card-actions .btn {
@@ -4872,10 +4873,37 @@ html.dark .crypto-summary-item {
   padding: 8px 10px;
   font-size: 12px;
   line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.privilege-more-btn {
+  padding: 8px 0 !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+
+.privilege-actions-sheet .sheet-body {
+  padding-bottom: calc(12px + var(--safe-b));
+}
+
+.privilege-sheet-actions-stack {
+  display: grid;
+  gap: 8px;
 }
 
 .privilege-delete-btn {
   margin-top: 8px;
+}
+
+.privilege-advanced-toggle {
+  margin-bottom: 10px;
+}
+
+.privilege-advanced-card {
+  padding: 12px;
+  margin-bottom: 12px;
 }
 
 .privilege-sheet {

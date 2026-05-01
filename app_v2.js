@@ -10387,6 +10387,19 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (keepScreen) App.openPrivilegesScreen(S.privilegesFilter || 'active', S.privilegeSearch || '')
   }
 
+  function privilegeHasAdvancedDetails(privilege) {
+    if (!privilege) return false
+    return !!(
+      privilege.merchant
+      || Number(privilege.quantity || 1) > 1
+      || Number(privilege.value || 0) > 0
+      || Number(privilege.minSpend || 0) > 0
+      || Number(privilege.maxDiscount || 0) > 0
+      || (privilege.type === 'free_item' && privilege.freeItemName)
+      || privilege.valueType !== 'amount'
+    )
+  }
+
   function copyTextFallback(text) {
     const input = document.createElement('textarea')
     input.value = text
@@ -10433,6 +10446,42 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <div class="privilege-sheet-actions">
             <button class="btn btn-secondary" onclick="document.getElementById('privilege-used-overlay')?.remove()">ยกเลิก</button>
             <button class="btn btn-primary" onclick="App.confirmPrivilegeUsed('${esc(privilege.id)}')">ยืนยัน</button>
+          </div>
+        </div>
+      </div>`
+    document.body.appendChild(el)
+  }
+
+  function openPrivilegeActionsSheet(privilegeId) {
+    ensurePrivilegesState()
+    const privilege = (S.privileges || []).find(row => row.id === privilegeId)
+    if (!privilege) return
+    document.getElementById('privilege-actions-overlay')?.remove()
+    const actions = []
+    actions.push(`<button class="btn btn-secondary" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>`)
+    if (privilegeSupportsCopy(privilege)) {
+      actions.push(`<button class="btn btn-secondary" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอกโค้ด</button>`)
+    }
+    if (privilege.status !== 'used') {
+      if (privilege.status !== 'archived') actions.push(`<button class="btn btn-outline" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.archivePrivilege('${esc(privilege.id)}')">เก็บถาวร</button>`)
+      else actions.push(`<button class="btn btn-outline" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.deletePrivilege('${esc(privilege.id)}')">ลบ</button>`)
+    } else {
+      actions.push(`<button class="btn btn-outline" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.deletePrivilege('${esc(privilege.id)}')">ลบ</button>`)
+    }
+    const el = document.createElement('div')
+    el.id = 'privilege-actions-overlay'
+    el.className = 'overlay open'
+    el.innerHTML = `
+      <div class="overlay-backdrop" onclick="document.getElementById('privilege-actions-overlay')?.remove()"></div>
+      <div class="sheet privilege-sheet privilege-actions-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h2>${esc(privilege.title || 'สิทธิพิเศษ')}</h2>
+          <button class="btn-icon" onclick="document.getElementById('privilege-actions-overlay')?.remove()">✕</button>
+        </div>
+        <div class="sheet-body">
+          <div class="privilege-sheet-actions-stack">
+            ${actions.join('')}
           </div>
         </div>
       </div>`
@@ -10499,6 +10548,14 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const dateLabel = privilege.status === 'used' && privilege.usedAt
       ? `ใช้เมื่อ ${esc(Calc.labelDate ? Calc.labelDate(privilege.usedAt) : privilege.usedAt)}`
       : `หมดอายุ ${esc(Calc.labelDate ? Calc.labelDate(privilege.expiryDate) : privilege.expiryDate)}`
+    const leadingAction = privilegeSupportsCopy(privilege)
+      ? `<button class="btn btn-secondary btn-sm" onclick="App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอก</button>`
+      : privilege.status === 'active'
+        ? `<button class="btn btn-secondary btn-sm" onclick="App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>`
+        : `<button class="btn btn-secondary btn-sm" onclick="App.openPrivilegeForm('${esc(privilege.id)}')">ดูรายละเอียด</button>`
+    const primaryAction = privilege.status === 'active'
+      ? `<button class="btn btn-primary btn-sm" onclick="App.openPrivilegeUsedDialog('${esc(privilege.id)}')">ใช้แล้ว</button>`
+      : `<button class="btn btn-secondary btn-sm" onclick="App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>`
     return `<div class="card privilege-card">
       <div class="privilege-card-head">
         <div class="privilege-card-icon">${esc(privilegeTypeIcon(privilege))}</div>
@@ -10517,10 +10574,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>
       ${privilege.note ? `<div class="privilege-card-note">${esc(privilege.note)}</div>` : ''}
       <div class="privilege-card-actions">
-        ${privilegeSupportsCopy(privilege) ? `<button class="btn btn-secondary btn-sm" onclick="App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอกโค้ด</button>` : ''}
-        ${privilege.status === 'active' ? `<button class="btn btn-primary btn-sm" onclick="App.openPrivilegeUsedDialog('${esc(privilege.id)}')">ใช้แล้ว</button>` : ''}
-        <button class="btn btn-secondary btn-sm" onclick="App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>
-        ${privilege.status === 'used' ? `<button class="btn btn-outline btn-sm" onclick="App.deletePrivilege('${esc(privilege.id)}')">ลบ</button>` : privilege.status !== 'archived' ? `<button class="btn btn-outline btn-sm" onclick="App.archivePrivilege('${esc(privilege.id)}')">เก็บถาวร</button>` : `<button class="btn btn-outline btn-sm" onclick="App.deletePrivilege('${esc(privilege.id)}')">ลบ</button>`}
+        ${leadingAction}
+        ${primaryAction}
+        <button class="btn btn-secondary btn-sm privilege-more-btn" aria-label="ตัวเลือกเพิ่มเติม" onclick="App.openPrivilegeActions('${esc(privilege.id)}')">⋯</button>
       </div>
     </div>`
   }
@@ -10528,6 +10584,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   App.openPrivilegeForm = function(privilegeId = '', preserveDraft = false) {
     ensurePrivilegesState()
     const existing = privilegeId ? (S.privileges || []).find(row => row.id === privilegeId) : null
+    if (!preserveDraft) S.privilegeFormExpanded = undefined
     S.editingPrivilegeId = privilegeId || ''
     const reuseDraft = preserveDraft && S.privilegeDraft && String(S.privilegeDraft.id || '') === String(existing?.id || S.privilegeDraft.id || '')
       && String(S.editingPrivilegeId || '') === String(privilegeId || '')
@@ -10538,6 +10595,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const showValueFields = draft.type !== 'free_item'
     const showFreeItemName = draft.type === 'free_item'
     const maxDiscountLabel = draft.type === 'free_item' ? 'มูลค่าสินค้า' : 'ส่วนลดสูงสุด'
+    const showAdvanced = S.privilegeFormExpanded ?? privilegeHasAdvancedDetails(draft)
     const html = `
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}')">←</button>
@@ -10550,28 +10608,38 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <div><label class="form-label">ประเภท</label><select class="form-input" onchange="App._updatePrivilegeDraft('type', this.value); App.openPrivilegeForm('${esc(privilegeId)}', true)">${typeOpts}</select></div>
           <div><label class="form-label">Platform / Source</label><input class="form-input" value="${esc(draft.platform)}" placeholder="เช่น Shopee" oninput="App._updatePrivilegeDraft('platform', this.value)"></div>
         </div>
-        <div class="form-split-row">
-          <div><label class="form-label">ร้านค้า</label><input class="form-input" value="${esc(draft.merchant)}" placeholder="ถ้ามี" oninput="App._updatePrivilegeDraft('merchant', this.value)"></div>
-          <div><label class="form-label">โค้ด</label><input class="form-input" value="${esc(draft.code)}" placeholder="เช่น PAYDAY10" oninput="App._updatePrivilegeDraft('code', this.value)"></div>
-        </div>
-        <div class="form-split-row">
-          <div><label class="form-label">Value type</label><select class="form-input" onchange="App._updatePrivilegeDraft('valueType', this.value)">${valueTypeOpts}</select></div>
-          <div><label class="form-label">จำนวนสิทธิ์</label><input class="form-input" type="number" min="1" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
-        </div>
-        ${showValueFields ? `<div class="form-split-row">
-          <div><label class="form-label">มูลค่า</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.value)}" oninput="App._updatePrivilegeDraft('value', this.value)"></div>
-          <div><label class="form-label">ยอดขั้นต่ำ</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.minSpend)}" oninput="App._updatePrivilegeDraft('minSpend', this.value)"></div>
-        </div>` : ''}
-        <div class="form-split-row">
-          <div><label class="form-label">${maxDiscountLabel}</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.maxDiscount)}" oninput="App._updatePrivilegeDraft('maxDiscount', this.value)"></div>
-          <div><label class="form-label">วันหมดอายุ</label><input class="form-input" type="date" value="${esc(draft.expiryDate)}" oninput="App._updatePrivilegeDraft('expiryDate', this.value)"></div>
-        </div>
+        <div class="form-group"><label class="form-label">โค้ด</label><input class="form-input" value="${esc(draft.code)}" placeholder="ถ้ามี เช่น PAYDAY10" oninput="App._updatePrivilegeDraft('code', this.value)"></div>
         ${showFreeItemName ? `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>` : ''}
-        <div class="form-group"><label class="form-label">คาดว่าประหยัดได้</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.estimatedSaving)}" oninput="App._updatePrivilegeDraft('estimatedSaving', this.value)"></div>
+        <div class="form-split-row">
+          <div><label class="form-label">วันหมดอายุ</label><input class="form-input" type="date" value="${esc(draft.expiryDate)}" oninput="App._updatePrivilegeDraft('expiryDate', this.value)"></div>
+          <div><label class="form-label">คาดว่าประหยัดได้</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.estimatedSaving)}" oninput="App._updatePrivilegeDraft('estimatedSaving', this.value)"></div>
+        </div>
+        <div class="privilege-advanced-toggle">
+          <button class="btn btn-secondary btn-sm" onclick="App.togglePrivilegeAdvanced('${esc(privilegeId)}')" style="width:auto">${showAdvanced ? 'ซ่อนรายละเอียดเพิ่มเติม' : 'รายละเอียดเพิ่มเติม'}</button>
+        </div>
+        ${showAdvanced ? `
+          <div class="card privilege-advanced-card">
+            <div class="form-split-row">
+              <div><label class="form-label">ร้านค้า</label><input class="form-input" value="${esc(draft.merchant)}" placeholder="ถ้ามี" oninput="App._updatePrivilegeDraft('merchant', this.value)"></div>
+              <div><label class="form-label">จำนวนสิทธิ์</label><input class="form-input" type="number" min="1" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
+            </div>
+            <div class="form-group"><label class="form-label">Value type</label><select class="form-input" onchange="App._updatePrivilegeDraft('valueType', this.value)">${valueTypeOpts}</select></div>
+            ${showValueFields ? `<div class="form-split-row">
+              <div><label class="form-label">มูลค่า</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.value)}" oninput="App._updatePrivilegeDraft('value', this.value)"></div>
+              <div><label class="form-label">ยอดขั้นต่ำ</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.minSpend)}" oninput="App._updatePrivilegeDraft('minSpend', this.value)"></div>
+            </div>` : ''}
+            <div class="form-group"><label class="form-label">${maxDiscountLabel}</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.maxDiscount)}" oninput="App._updatePrivilegeDraft('maxDiscount', this.value)"></div>
+          </div>
+        ` : ''}
         <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" rows="4" placeholder="เงื่อนไขเพิ่มเติม" oninput="App._updatePrivilegeDraft('note', this.value)">${esc(draft.note)}</textarea></div>
         ${existing ? `<button class="btn btn-outline privilege-delete-btn" onclick="App.deletePrivilege('${esc(existing.id)}')">ลบสิทธิพิเศษ</button>` : ''}
       </div>`
     App.openSubScreen(html)
+  }
+
+  App.togglePrivilegeAdvanced = function(privilegeId = '') {
+    S.privilegeFormExpanded = !S.privilegeFormExpanded
+    App.openPrivilegeForm(privilegeId, true)
   }
 
   App.savePrivilege = function(privilegeId = '') {
@@ -10600,6 +10668,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   App.openPrivilegeUsedDialog = function(privilegeId) {
     openPrivilegeUsedDialog(privilegeId)
+  }
+
+  App.openPrivilegeActions = function(privilegeId) {
+    openPrivilegeActionsSheet(privilegeId)
   }
 
   App.confirmPrivilegeUsed = function(privilegeId) {
