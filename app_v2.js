@@ -10234,9 +10234,23 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return !!String(privilege?.code || '').trim()
   }
 
+  function privilegeFreeItemValue(privilege) {
+    if (!privilege || privilege.type !== 'free_item') return 0
+    return Math.max(
+      0,
+      Number(privilege.maxDiscount || 0),
+      Number(privilege.estimatedSaving || 0),
+      Number(privilege.value || 0)
+    )
+  }
+
   function privilegeValueText(privilege) {
     if (!privilege) return ''
-    if (privilege.type === 'free_item' && privilege.freeItemName) return `ฟรี ${privilege.freeItemName}`
+    if (privilege.type === 'free_item') {
+      const itemName = privilege.freeItemName ? `ฟรี ${privilege.freeItemName}` : 'ฟรีสินค้า'
+      const itemValue = privilegeFreeItemValue(privilege)
+      return itemValue > 0 ? `${itemName} · มูลค่า ${money(itemValue)}` : itemName
+    }
     if (privilege.valueType === 'percent') return `${Number(privilege.value || 0)}%`
     if (privilege.valueType === 'amount') return money(privilege.value || 0)
     if (privilege.valueType === 'cashback') return `Cashback ${money(privilege.value || 0)}`
@@ -10523,6 +10537,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const valueTypeOpts = PRIVILEGE_VALUE_TYPES.map(([key, label]) => `<option value="${key}"${draft.valueType === key ? ' selected' : ''}>${label}</option>`).join('')
     const showValueFields = draft.type !== 'free_item'
     const showFreeItemName = draft.type === 'free_item'
+    const maxDiscountLabel = draft.type === 'free_item' ? 'มูลค่าสินค้า' : 'ส่วนลดสูงสุด'
     const html = `
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}')">←</button>
@@ -10548,7 +10563,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <div><label class="form-label">ยอดขั้นต่ำ</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.minSpend)}" oninput="App._updatePrivilegeDraft('minSpend', this.value)"></div>
         </div>` : ''}
         <div class="form-split-row">
-          <div><label class="form-label">ส่วนลดสูงสุด</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.maxDiscount)}" oninput="App._updatePrivilegeDraft('maxDiscount', this.value)"></div>
+          <div><label class="form-label">${maxDiscountLabel}</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.maxDiscount)}" oninput="App._updatePrivilegeDraft('maxDiscount', this.value)"></div>
           <div><label class="form-label">วันหมดอายุ</label><input class="form-input" type="date" value="${esc(draft.expiryDate)}" oninput="App._updatePrivilegeDraft('expiryDate', this.value)"></div>
         </div>
         ${showFreeItemName ? `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>` : ''}
