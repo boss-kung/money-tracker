@@ -5,6 +5,7 @@ const KEYS = {
   budgets:             'mt_budgets',
   settings:            'mt_settings',
   recurring:           'mt_recurring',
+  upcomingBills:       'mt_upcoming_bills',
   merchants:           'mt_merchants',
   ccBenefits:          'mt_cc_benefits',
   ccBenefitRules:      'mt_cc_benefit_rules',
@@ -20,6 +21,7 @@ const KEYS = {
   cryptoTransactions:  'mt_crypto_transactions',
   cryptoSyncMeta:      'mt_crypto_sync_meta',
   goals:               'mt_goals',
+  privileges:          'mt_privileges',
   migrations:          'mt_migrations',
 }
 
@@ -33,6 +35,7 @@ const BACKUP_SCHEMA_KEYS = [
   'budgets',
   'incomeBudgets',
   'recurring',
+  'upcomingBills',
   'merchants',
   'ccBenefits',
   'ccBenefitRules',
@@ -47,6 +50,7 @@ const BACKUP_SCHEMA_KEYS = [
   'cryptoTransactions',
   'cryptoSyncMeta',
   'goals',
+  'privileges',
   'migrations',
   'settings',
 ]
@@ -58,6 +62,7 @@ const BACKUP_DEFAULTS = {
   budgets: [],
   incomeBudgets: [],
   recurring: [],
+  upcomingBills: [],
   merchants: [],
   ccBenefits: {},
   ccBenefitRules: [],
@@ -72,6 +77,7 @@ const BACKUP_DEFAULTS = {
   cryptoTransactions: [],
   cryptoSyncMeta: {},
   goals: [],
+  privileges: [],
   migrations: { cryptoCentralizedV1: false },
   settings: {},
 }
@@ -79,9 +85,75 @@ const BACKUP_DEFAULTS = {
 const Storage = {
   lastLoadError: null,
   lastSaveError: null,
+  lastVerifyError: null,
   _lastStorageToastAt: 0,
 
+  isLocalStorageAvailable() {
+    try {
+      if (typeof localStorage === 'undefined') return false
+      const probeKey = '__mt_storage_probe__'
+      localStorage.setItem(probeKey, '1')
+      const ok = localStorage.getItem(probeKey) === '1'
+      localStorage.removeItem(probeKey)
+      return ok
+    } catch (_) {
+      return false
+    }
+  },
+
+  _stringify(data) {
+    return JSON.stringify(data)
+  },
+
+  triggerDownload(blob, filename = 'download.json') {
+    const downloadName = String(filename || 'download.json')
+    const downloadViaAnchor = () => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = downloadName
+      a.rel = 'noopener'
+      a.style.display = 'none'
+      document.body.appendChild(a)
+      a.click()
+
+      if (!('download' in HTMLAnchorElement.prototype)) {
+        try { window.open(url, '_blank', 'noopener') } catch (_) {}
+      }
+
+      setTimeout(() => {
+        try { a.remove() } catch (_) {}
+        try { URL.revokeObjectURL(url) } catch (_) {}
+      }, 1500)
+      return true
+    }
+
+    const canShareFile = typeof navigator !== 'undefined'
+      && typeof navigator.share === 'function'
+      && typeof File !== 'undefined'
+    if (canShareFile) {
+      try {
+        const file = new File([blob], downloadName, { type: blob?.type || 'application/octet-stream' })
+        const shareResult = navigator.share({ files: [file], title: downloadName })
+        if (shareResult && typeof shareResult.then === 'function') {
+          shareResult.catch(() => {
+            try { downloadViaAnchor() } catch (_) {}
+          })
+        }
+        return true
+      } catch (_) {
+        try { return downloadViaAnchor() } catch (_) { return false }
+      }
+    }
+
+    try { return downloadViaAnchor() } catch (_) { return false }
+  },
+
   load(key) {
+    if (!Storage.isLocalStorageAvailable()) {
+      Storage.lastLoadError = { key, message: 'localStorage unavailable', at: new Date().toISOString() }
+      return null
+    }
     try { return JSON.parse(localStorage.getItem(key)) } catch (e) {
       Storage.lastLoadError = { key, message: e?.message || 'JSON parse failed', at: new Date().toISOString() }
       setTimeout(() => {
@@ -92,9 +164,23 @@ const Storage = {
   },
 
   save(key, data) {
+    if (!Storage.isLocalStorageAvailable()) {
+      Storage.lastSaveError = { key, message: 'localStorage unavailable', at: new Date().toISOString() }
+      setTimeout(() => {
+        if (typeof toast === 'function') toast('อุปกรณ์นี้ไม่พร้อมบันทึก local storage กรุณาส่งออกข้อมูลสำรองไว้ก่อน', 'error')
+      }, 0)
+      return false
+    }
     try {
-      localStorage.setItem(key, JSON.stringify(data))
+      const payload = Storage._stringify(data)
+      localStorage.setItem(key, payload)
+      const readBack = localStorage.getItem(key)
+      if (readBack !== payload) {
+        Storage.lastSaveError = { key, message: 'readback mismatch after save', at: new Date().toISOString() }
+        return false
+      }
       if (Storage.lastSaveError?.key === key) Storage.lastSaveError = null
+      if (Storage.lastVerifyError?.key === key) Storage.lastVerifyError = null
       return true
     } catch (e) {
       Storage.lastSaveError = { key, message: e?.message || 'save failed', at: new Date().toISOString() }
@@ -119,15 +205,59 @@ const Storage = {
     }
   },
 
+  verifyKey(key, expectedData) {
+    if (!Storage.isLocalStorageAvailable()) {
+      Storage.lastVerifyError = { key, message: 'localStorage unavailable', at: new Date().toISOString() }
+      return false
+    }
+    try {
+      const actualRaw = localStorage.getItem(key)
+      const expectedRaw = Storage._stringify(expectedData)
+      const ok = actualRaw === expectedRaw
+      if (!ok) {
+        Storage.lastVerifyError = { key, message: 'stored payload does not match expected data', at: new Date().toISOString() }
+      } else if (Storage.lastVerifyError?.key === key) {
+        Storage.lastVerifyError = null
+      }
+      return ok
+    } catch (e) {
+      Storage.lastVerifyError = { key, message: e?.message || 'verify failed', at: new Date().toISOString() }
+      return false
+    }
+  },
+
+  verifyState(state, keys = []) {
+    const keyList = Array.isArray(keys) && keys.length
+      ? keys
+      : ['transactions', 'wallets', 'categories', 'settings', 'recurring', 'upcomingBills']
+    const failures = []
+    keyList.forEach(name => {
+      const storageKey = KEYS[name]
+      if (!storageKey) return
+      const expected = state?.[name]
+      if (!Storage.verifyKey(storageKey, expected === undefined ? BACKUP_DEFAULTS[name] : expected)) {
+        failures.push(name)
+      }
+    })
+    return { ok: failures.length === 0, failures }
+  },
+
   // Load all app data, seeding defaults on first run
   init() {
     const data = {}
+    const hasExistingPrimaryData = typeof localStorage !== 'undefined' && [
+      KEYS.transactions,
+      KEYS.wallets,
+      KEYS.categories,
+      KEYS.settings,
+    ].some(key => localStorage.getItem(key) !== null)
     data.transactions  = Storage.load(KEYS.transactions)  || JSON.parse(JSON.stringify(DEFAULT_TRANSACTIONS))
     data.wallets       = Storage.load(KEYS.wallets)        || JSON.parse(JSON.stringify(DEFAULT_WALLETS))
     data.categories    = Storage.load(KEYS.categories)     || JSON.parse(JSON.stringify(DEFAULT_CATEGORIES))
     data.budgets       = Storage.load(KEYS.budgets)        || JSON.parse(JSON.stringify(DEFAULT_BUDGETS))
     data.settings      = Storage.load(KEYS.settings)       || JSON.parse(JSON.stringify(DEFAULT_SETTINGS))
     data.recurring     = Storage.load(KEYS.recurring)      || JSON.parse(JSON.stringify(DEFAULT_RECURRING))
+    data.upcomingBills = Storage.load(KEYS.upcomingBills)  || JSON.parse(JSON.stringify(typeof DEFAULT_UPCOMING_BILLS !== 'undefined' ? DEFAULT_UPCOMING_BILLS : []))
     data.merchants     = Storage.load(KEYS.merchants)      || JSON.parse(JSON.stringify(DEFAULT_MERCHANTS))
     data.ccBenefits    = Storage.load(KEYS.ccBenefits)     || JSON.parse(JSON.stringify(typeof DEFAULT_CC_BENEFITS !== 'undefined' ? DEFAULT_CC_BENEFITS : {}))
     data.ccBenefitRules = Storage.load(KEYS.ccBenefitRules) || []
@@ -143,6 +273,12 @@ const Storage = {
     data.cryptoTransactions  = Storage.load(KEYS.cryptoTransactions)  || JSON.parse(JSON.stringify(typeof DEFAULT_CRYPTO_TRANSACTIONS !== 'undefined' ? DEFAULT_CRYPTO_TRANSACTIONS : []))
     data.cryptoSyncMeta      = Storage.load(KEYS.cryptoSyncMeta)      || {}
     data.goals               = Storage.load(KEYS.goals)               || JSON.parse(JSON.stringify(typeof DEFAULT_GOALS !== 'undefined' ? DEFAULT_GOALS : []))
+    const loadedPrivileges   = Storage.load(KEYS.privileges)
+    data.privileges          = loadedPrivileges || JSON.parse(JSON.stringify(
+      typeof DEFAULT_PRIVILEGES !== 'undefined'
+        ? (hasExistingPrimaryData ? [] : DEFAULT_PRIVILEGES)
+        : []
+    ))
     data.migrations          = Storage.load(KEYS.migrations)          || JSON.parse(JSON.stringify(typeof DEFAULT_MIGRATIONS !== 'undefined' ? DEFAULT_MIGRATIONS : { cryptoCentralizedV1: false }))
     return data
   },
@@ -155,6 +291,7 @@ const Storage = {
       Storage.save(KEYS.budgets,       state.budgets),
       Storage.save(KEYS.settings,      state.settings),
       Storage.save(KEYS.recurring,     state.recurring),
+      Storage.save(KEYS.upcomingBills, state.upcomingBills || []),
       Storage.save(KEYS.merchants,     state.merchants),
       Storage.save(KEYS.ccBenefits,    state.ccBenefits),
       Storage.save(KEYS.ccBenefitRules, state.ccBenefitRules || []),
@@ -170,9 +307,12 @@ const Storage = {
       Storage.save(KEYS.cryptoTransactions,  state.cryptoTransactions  || []),
       Storage.save(KEYS.cryptoSyncMeta,      state.cryptoSyncMeta      || {}),
       Storage.save(KEYS.goals,               state.goals               || []),
+      Storage.save(KEYS.privileges,          state.privileges          || []),
       Storage.save(KEYS.migrations,          state.migrations          || { cryptoCentralizedV1: false }),
     ]
-    return results.every(Boolean)
+    if (!results.every(Boolean)) return false
+    const verification = Storage.verifyState(state, ['transactions', 'wallets', 'settings', 'upcomingBills'])
+    return verification.ok
   },
 
   buildExportPayload(state) {
@@ -219,15 +359,10 @@ const Storage = {
     return normalized
   },
 
-  exportJSON(state) {
+  exportJSON(state, filename = '') {
     const data = Storage.buildExportPayload(state)
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
-    a.download = `money-tracker-${(typeof getTODAY === 'function' ? getTODAY() : TODAY)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    return Storage.triggerDownload(blob, filename || `money-tracker-${(typeof getTODAY === 'function' ? getTODAY() : TODAY)}.json`)
   },
 
   createLocalBackup(state, reason = 'manual') {

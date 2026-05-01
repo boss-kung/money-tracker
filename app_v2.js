@@ -80,6 +80,7 @@ window.__mountUpcomingBillsFeature = function() {
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const round2 = n => Math.round((Number(n) || 0) * 100) / 100
   const spendableWalletTypes = new Set(['bank', 'cash', 'ewallet', 'saving'])
+  window.__mtUpcomingBillsHydrated ||= false
 
   function ensureUpcomingBillsState() {
     if (!Array.isArray(S.upcomingBills)) S.upcomingBills = []
@@ -90,10 +91,36 @@ window.__mountUpcomingBillsFeature = function() {
 
   function ensureUpcomingBillsStorageKey() {
     try {
+      if (!window.__mtUpcomingBillsHydrated) return
       if (typeof localStorage === 'undefined' || typeof Storage?.save !== 'function' || typeof KEYS?.upcomingBills === 'undefined') return
       if (localStorage.getItem(KEYS.upcomingBills) !== null) return
       Storage.save(KEYS.upcomingBills, S.upcomingBills || [])
     } catch (_) {}
+  }
+
+  function persistUpcomingBillsKeyOnly() {
+    try {
+      ensureUpcomingBillsState()
+      if (typeof Storage?.save !== 'function' || typeof KEYS?.upcomingBills === 'undefined') return false
+      return Storage.save(KEYS.upcomingBills, S.upcomingBills || [])
+    } catch (_) {
+      return false
+    }
+  }
+
+  function persistUpcomingPaymentKeys() {
+    try {
+      ensureUpcomingBillsState()
+      const txSaved = typeof Storage?.save === 'function' && typeof KEYS?.transactions !== 'undefined'
+        ? Storage.save(KEYS.transactions, S.transactions || [])
+        : false
+      const billsSaved = typeof Storage?.save === 'function' && typeof KEYS?.upcomingBills !== 'undefined'
+        ? Storage.save(KEYS.upcomingBills, S.upcomingBills || [])
+        : false
+      return txSaved && billsSaved
+    } catch (_) {
+      return false
+    }
   }
 
   function normalizeUpcomingBill(raw = {}) {
@@ -294,8 +321,6 @@ window.__mountUpcomingBillsFeature = function() {
     document.getElementById('upcoming-bill-overlay')?.remove()
   }
 
-  App.ensureUpcomingBillsState = ensureUpcomingBillsState
-
   const prevBeforePersistV50 = App._beforePersistV50?.bind(App)
   App._beforePersistV50 = function() {
     prevBeforePersistV50?.()
@@ -417,10 +442,17 @@ window.__mountUpcomingBillsFeature = function() {
       merchantId: merchantNameToId(draft.merchant || ''),
       updatedAt: nowISO(),
     })
+    const previousBills = (S.upcomingBills || []).map(b => ({ ...b }))
     const idx = (S.upcomingBills || []).findIndex(b => b.id === normalized.id)
     if (idx >= 0) S.upcomingBills[idx] = normalized
     else S.upcomingBills.unshift(normalized)
-    persist()
+    const directSaved = persistUpcomingBillsKeyOnly()
+    const fullSaved = persist()
+    if (!directSaved && !fullSaved) {
+      S.upcomingBills = previousBills
+      toast('บันทึกรายการรอจ่ายไม่สำเร็จ', 'error')
+      return
+    }
     App.render?.()
     App.openUpcomingBillsScreen(S.upcomingBillsFilter || 'pending')
     toast(idx >= 0 ? 'แก้ไขรายการรอจ่ายแล้ว' : 'เพิ่มรายการรอจ่ายแล้ว', 'success')
@@ -441,9 +473,16 @@ window.__mountUpcomingBillsFeature = function() {
     const dueDate = document.getElementById('upcoming-reschedule-date')?.value || ''
     if (!bill) return
     if (!dueDate) return toast('กรุณาเลือกวันครบกำหนดใหม่', 'error')
+    const previousBill = { ...bill }
     bill.dueDate = dueDate
     bill.updatedAt = nowISO()
-    persist()
+    const directSaved = persistUpcomingBillsKeyOnly()
+    const fullSaved = persist()
+    if (!directSaved && !fullSaved) {
+      Object.assign(bill, previousBill)
+      toast('เลื่อนกำหนดจ่ายไม่สำเร็จ', 'error')
+      return
+    }
     App.closeUpcomingDialog()
     App.render?.()
     App.openUpcomingBillsScreen(S.upcomingBillsFilter || 'pending')
@@ -459,9 +498,16 @@ window.__mountUpcomingBillsFeature = function() {
       confirmLabel: 'ยกเลิกบิล',
       danger: true,
       onConfirm() {
+        const previousBill = { ...bill }
         bill.status = 'cancelled'
         bill.updatedAt = nowISO()
-        persist()
+        const directSaved = persistUpcomingBillsKeyOnly()
+        const fullSaved = persist()
+        if (!directSaved && !fullSaved) {
+          Object.assign(bill, previousBill)
+          toast('ยกเลิกรายการรอจ่ายไม่สำเร็จ', 'error')
+          return
+        }
         App.render?.()
         App.openUpcomingBillsScreen(S.upcomingBillsFilter || 'pending')
         toast('ยกเลิกรายการรอจ่ายแล้ว', 'success')
@@ -528,7 +574,9 @@ window.__mountUpcomingBillsFeature = function() {
       bill.note = note
       bill.updatedAt = nowISO()
       App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-      persist()
+      const directSaved = persistUpcomingPaymentKeys()
+      const fullSaved = persist()
+      if (!directSaved && !fullSaved) throw new Error('persist failed')
       App.closeUpcomingDialog()
       App.render?.()
       App.openUpcomingBillsScreen(S.upcomingBillsFilter || 'pending')
@@ -567,7 +615,13 @@ window.__mountUpcomingBillsFeature = function() {
           S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
           S.deleteConfirm = false
           App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-          try { persist() } catch (_) {}
+          try {
+            const directSaved = persistUpcomingPaymentKeys()
+            const fullSaved = persist()
+            if (!directSaved && !fullSaved) throw new Error('persist failed')
+          } catch (_) {
+            toast('ลบรายการแล้ว แต่บันทึกสถานะล่าสุดไม่สำเร็จ', 'warn')
+          }
           App.closeOverlay?.('overlay-tx-detail')
           App.render?.()
           toast('ลบรายการแล้ว และคืนสถานะรายการรอจ่ายแล้ว', 'success')
@@ -591,7 +645,13 @@ window.__mountUpcomingBillsFeature = function() {
           App._rollbackUpcomingBillPayment(tx)
           S.transactions = (S.transactions || []).filter(t => t.id !== id)
           App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-          try { persist() } catch (_) {}
+          try {
+            const directSaved = persistUpcomingPaymentKeys()
+            const fullSaved = persist()
+            if (!directSaved && !fullSaved) throw new Error('persist failed')
+          } catch (_) {
+            toast('ลบรายการแล้ว แต่บันทึกสถานะล่าสุดไม่สำเร็จ', 'warn')
+          }
           if (backType === 'cc' && backId) App.openCCDetail?.(backId)
           else if (backType === 'wallet' && backId) App.openWalletDetail?.(backId)
           else App.closeSubScreen?.()
@@ -676,6 +736,9 @@ window.__mountUpcomingBillsFeature = function() {
     injectDashboardUpcomingAlerts()
   }
 
+  App.ensureUpcomingBillsState = ensureUpcomingBillsState
+  App.ensureUpcomingBillsStorageKey = ensureUpcomingBillsStorageKey
+
   try { ensureUpcomingBillsState() } catch (_) {}
   try { ensureUpcomingBillsStorageKey() } catch (_) {}
   try { if (S.page === 'dashboard') App.renderDashboard?.() } catch (_) {}
@@ -687,7 +750,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.01-phase6'
+const APP_VERSION = '2026.05.01-phase7'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -707,6 +770,7 @@ let S = {
   cryptoAssets: [], cryptoHoldings: [], cryptoTransactions: [], cryptoSyncMeta: {}, migrations: { cryptoCentralizedV1: false },
   creditLimitGroups: [], rewardAccounts: [], rewardLedger: [], netWorthSnapshots: [], investmentSnapshots: [],
   goals: [],
+  privileges: [],
 
   // Add-transaction flow
   tx: {
@@ -741,6 +805,7 @@ let S = {
 function persist() {
   try { App._beforePersistV50?.() } catch (_) {}
   try { App._beforePersistV40?.() } catch (_) {}
+  try { App.ensurePrivilegesState?.() } catch (_) {}
   const ok = Storage.saveAll(S)
   if (!ok) {
     try { toast('บันทึกข้อมูลไม่สำเร็จ กรุณาส่งออก JSON สำรองไว้ก่อน', 'error') } catch (_) {}
@@ -1087,7 +1152,7 @@ Object.assign(Calc, {
 })
 
 Object.assign(App, {
-  _ensureV2State() { S.recurring ||= []; S.upcomingBills ||= []; S.merchants ||= []; S.ccBenefits ||= {}; S.incomeBudgets ||= []; S.marketPrices ||= {} },
+  _ensureV2State() { S.recurring ||= []; S.upcomingBills ||= []; S.merchants ||= []; S.ccBenefits ||= {}; S.incomeBudgets ||= []; S.marketPrices ||= {}; S.privileges ||= [] },
 
   openWalletForm(walletId) {
     S.editingWalletId = walletId
@@ -1274,6 +1339,7 @@ function init() {
   S.cryptoTransactions = data.cryptoTransactions || []
   S.cryptoSyncMeta = data.cryptoSyncMeta || {}
   S.goals = data.goals || []
+  S.privileges = data.privileges || []
   S.migrations = { cryptoCentralizedV1: false, ...(data.migrations || {}) }
   S.creditLimitGroups  = data.creditLimitGroups  || []
   S.rewardAccounts     = data.rewardAccounts     || []
@@ -1284,6 +1350,11 @@ function init() {
   S.settings ||= {}
   S.settings.storageMeta ||= {}
   S.settings.storageMeta.appVersion = APP_VERSION
+  try {
+    App.ensureUpcomingBillsState?.()
+    window.__mtUpcomingBillsHydrated = true
+    App.ensureUpcomingBillsStorageKey?.()
+  } catch (_) {}
 
   const route = parseAppHashRoute()
   if (route.page) {
@@ -2655,6 +2726,7 @@ App.render();
       recurring: [],
       upcomingBills: [],
       goals: [],
+      privileges: [],
       merchants: [],
       ccBenefits: {},
       incomeBudgets: [],
@@ -6306,6 +6378,7 @@ Calc.getUsableMoney = function(wallets) {
     const content = document.getElementById('more-content')
     if (!content) return
     const budgetCount  = (S.budgets||[]).length + (S.incomeBudgets||[]).length
+    const activePrivilegeCount = App.getPrivilegesSummary?.().activeCount ?? (S.privileges||[]).filter(p => p.status === 'active').length
     const meta         = S.settings?.storageMeta || {}
     const lastSaved    = meta.lastSavedAt    ? new Date(meta.lastSavedAt).toLocaleString('th-TH')    : 'ยังไม่บันทึก'
     const lastExport   = meta.lastExportedAt ? new Date(meta.lastExportedAt).toLocaleString('th-TH') : 'ยังไม่เคย Export'
@@ -6324,10 +6397,11 @@ Calc.getUsableMoney = function(wallets) {
         <div style="font-size:20px;font-weight:800;padding:12px 0 4px">เพิ่มเติม</div>
         <div class="sec-title">เครื่องมือหลัก</div>
         <div class="card card-pad">
-          ${row({ icon:'🎯', label:'ตั้งเป้าหมายทางการเงิน', value:`${(S.goals||[]).filter(g=>g.status!=='archived').length} เป้าหมาย`, onclick:'App.openGoalsScreen()' })}
-          ${row({ icon:'📅', label:'ปฏิทินบิล / รายการที่จะถึง', onclick:'App.openUpcomingScreen()' })}
+          ${row({ icon:'🎟️', label:'สิทธิพิเศษ', value:`${activePrivilegeCount} สิทธิ์`, onclick:"App.openPrivilegesScreen('active')" })}
           ${row({ icon:'🧾', label:'รายการรอจ่าย', value:`${((S.upcomingBills||[]).filter(b=>b.status==='pending').length).toLocaleString('en-US')} รอจ่าย`, onclick:'App.openUpcomingBillsScreen()' })}
           ${row({ icon:'🔁', label:'รายการประจำ', value:`${(S.recurring||[]).length} รายการ`, onclick:'App.openRecurringScreen()' })}
+          ${row({ icon:'📅', label:'ปฏิทินบิล / รายการที่จะถึง', onclick:'App.openUpcomingScreen()' })}
+          ${row({ icon:'🎯', label:'ตั้งเป้าหมายทางการเงิน', value:`${(S.goals||[]).filter(g=>g.status!=='archived').length} เป้าหมาย`, onclick:'App.openGoalsScreen()' })}
           ${row({ icon:'🧾', label:'ศูนย์ผ่อนชำระ', onclick:'App.openInstallmentCenter()' })}
           ${row({ icon:'🎁', label:'สมุดสิทธิประโยชน์', onclick:'App.openRewardLedgerScreen()' })}
           ${row({ icon:'💳', label:'กลุ่มวงเงินร่วม', value:`${(S.creditLimitGroups||[]).length} กลุ่ม`, onclick:'App.openCreditLimitGroupScreen()' })}
@@ -9025,6 +9099,7 @@ Calc.getUsableMoney = function(wallets) {
       if (key === 'settings') S.settings = { ...(S.settings || {}), ...(normalized.settings || {}) }
       else S[key] = normalized[key]
     })
+    App.ensurePrivilegesState?.()
     S.cryptoSyncMeta ||= {}
     if (normalizeCreditCardWallets()) {}
     App.ensureCryptoState?.()
@@ -9039,20 +9114,27 @@ Calc.getUsableMoney = function(wallets) {
 
   App.exportData = function() {
     normalizeCreditCardWallets()
-    const payload = Storage.buildExportPayload(S)
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `money-tracker-backup-${today()}.json`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-    if (S.settings?.storageMeta) S.settings.storageMeta.lastExportedAt = payload.exportedAt
-    persist()
+    App.ensurePrivilegesState?.()
+    const saved = persist()
+    if (!saved) {
+      notify('ยังส่งออกไม่ได้ เพราะบันทึกลง local storage ไม่สำเร็จ', 'error')
+      return
+    }
+    const verification = Storage.verifyState?.(S, ['transactions', 'wallets', 'settings', 'upcomingBills', 'goals', 'privileges']) || { ok: true, failures: [] }
+    if (!verification.ok) {
+      notify(`ยังส่งออกไม่ได้ เพราะข้อมูลบางส่วนยังไม่ตรงกับ local storage: ${verification.failures.join(', ')}`, 'error')
+      return
+    }
+    const exportedAt = new Date().toISOString()
+    if (S.settings?.storageMeta) S.settings.storageMeta.lastExportedAt = exportedAt
+    const exportOk = Storage.exportJSON(S, `money-tracker-backup-${today()}.json`)
+    if (!exportOk) {
+      notify('ส่งออกข้อมูลไม่สำเร็จบนอุปกรณ์นี้', 'error')
+      return
+    }
+    const exportMetaSaved = persist()
     App.renderMore?.()
-    notify('ส่งออกข้อมูลสำเร็จ', 'success')
+    notify(exportMetaSaved ? 'ส่งออกข้อมูลสำเร็จ' : 'ส่งออกข้อมูลสำเร็จ แต่บันทึกสถานะล่าสุดลงเครื่องไม่สมบูรณ์', exportMetaSaved ? 'success' : 'warn')
   }
 
   App.importData = function(input) {
@@ -9343,7 +9425,7 @@ Calc.getUsableMoney = function(wallets) {
 
   App._applyImportMergePayload = function(payload) {
     const stats = {}
-    ;['transactions','wallets','budgets','incomeBudgets','recurring','upcomingBills','merchants','ccBenefitRules','creditLimitGroups','rewardAccounts','rewardLedger','netWorthSnapshots','investmentSnapshots','cryptoAssets','cryptoHoldings','cryptoTransactions','goals'].forEach(key => {
+    ;['transactions','wallets','budgets','incomeBudgets','recurring','upcomingBills','merchants','ccBenefitRules','creditLimitGroups','rewardAccounts','rewardLedger','netWorthSnapshots','investmentSnapshots','cryptoAssets','cryptoHoldings','cryptoTransactions','goals','privileges'].forEach(key => {
       const result = mergeById(S[key] || [], payload[key] || [])
       S[key] = result.rows
       stats[key] = result
@@ -9356,6 +9438,7 @@ Calc.getUsableMoney = function(wallets) {
     S.marketPrices = mergeObjectByKey(S.marketPrices || {}, payload.marketPrices || {})
     S.cryptoSyncMeta = { ...(payload.cryptoSyncMeta || {}), ...(S.cryptoSyncMeta || {}) }
     S.migrations = { ...(payload.migrations || {}), ...(S.migrations || {}) }
+    App.ensurePrivilegesState?.()
     App.ensureCryptoState?.()
     App.ensureLedgerBaselines?.(true)
     App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
@@ -9365,7 +9448,7 @@ Calc.getUsableMoney = function(wallets) {
 
   App.openImportPreview = function(payload, checked = { warnings: [] }, input = null) {
     const rows = [
-      ['กระเป๋า', 'wallets'], ['รายการ', 'transactions'], ['รายการรอจ่าย', 'upcomingBills'], ['หมวดหมู่', 'categories'],
+      ['กระเป๋า', 'wallets'], ['รายการ', 'transactions'], ['รายการรอจ่าย', 'upcomingBills'], ['สิทธิพิเศษ', 'privileges'], ['หมวดหมู่', 'categories'],
       ['ร้านค้า', 'merchants'], ['รายการประจำ', 'recurring'], ['เป้าหมาย', 'goals'],
       ['ผ่อนชำระ', 'installments'], ['บัญชีคะแนน', 'rewardAccounts'], ['Crypto holdings', 'cryptoHoldings'],
       ['กฎสิทธิประโยชน์', 'ccBenefitRules'],
@@ -9996,3 +10079,620 @@ Calc.getUsableMoney = function(wallets) {
 })()
 
 try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upcoming bills feature failed to mount', err) }
+
+;(function() {
+  const esc = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch])))
+  const money = n => moneyFmt(Number(n) || 0)
+  const nowISO = () => new Date().toISOString()
+  const todayLocalISO = () => {
+    if (typeof Calc?.todayLocalISO === 'function') return Calc.todayLocalISO()
+    if (typeof getTODAY === 'function') return getTODAY()
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  const PRIVILEGE_TYPES = [
+    ['discount_code', 'โค้ดส่วนลด'],
+    ['voucher', 'Voucher'],
+    ['free_item', 'ฟรีสินค้า'],
+    ['free_shipping', 'ส่งฟรี'],
+    ['cashback', 'Cashback'],
+    ['points', 'แต้ม'],
+    ['other', 'อื่นๆ'],
+  ]
+  const PRIVILEGE_VALUE_TYPES = [
+    ['amount', 'จำนวนเงิน'],
+    ['percent', 'เปอร์เซ็นต์'],
+    ['free_shipping', 'ส่งฟรี'],
+    ['free_item', 'ฟรีสินค้า'],
+    ['cashback', 'Cashback'],
+    ['points', 'แต้ม'],
+    ['other', 'อื่นๆ'],
+  ]
+  const PRIVILEGE_FILTERS = [
+    ['active', 'ใช้ได้'],
+    ['expiring', 'ใกล้หมดอายุ'],
+    ['used', 'ใช้แล้ว'],
+    ['expired', 'หมดอายุ'],
+    ['all', 'ทั้งหมด'],
+  ]
+
+  function daysUntilDate(dateISO, refDate = todayLocalISO()) {
+    if (typeof Calc?.daysUntilDate === 'function') return Calc.daysUntilDate(dateISO, refDate)
+    const [y, m, d] = String(dateISO || '').split('-').map(Number)
+    const [ry, rm, rd] = String(refDate || todayLocalISO()).split('-').map(Number)
+    if (!y || !m || !d || !ry || !rm || !rd) return 0
+    const target = new Date(y, m - 1, d)
+    const base = new Date(ry, rm - 1, rd)
+    return Math.round((target - base) / 86400000)
+  }
+
+  function typeLabel(type) {
+    return PRIVILEGE_TYPES.find(([key]) => key === type)?.[1] || 'อื่นๆ'
+  }
+
+  function valueTypeLabel(type) {
+    return PRIVILEGE_VALUE_TYPES.find(([key]) => key === type)?.[1] || 'อื่นๆ'
+  }
+
+  function normalizeNumber(value, fallback = 0) {
+    const num = Number(value)
+    return Number.isFinite(num) ? num : fallback
+  }
+
+  function normalizePrivilege(raw = {}) {
+    const now = nowISO()
+    const status = ['active', 'used', 'archived'].includes(raw.status) ? raw.status : 'active'
+    const type = PRIVILEGE_TYPES.some(([key]) => key === raw.type) ? raw.type : 'other'
+    const inferredValueType = type === 'free_shipping' ? 'free_shipping' : type === 'free_item' ? 'free_item' : 'amount'
+    const valueType = PRIVILEGE_VALUE_TYPES.some(([key]) => key === raw.valueType) ? raw.valueType : inferredValueType
+    const quantity = Math.max(1, Math.floor(normalizeNumber(raw.quantity, 1) || 1))
+    const estimatedSaving = Math.max(0, normalizeNumber(raw.estimatedSaving, 0))
+    const actualSaving = raw.actualSaving === null || raw.actualSaving === undefined || raw.actualSaving === ''
+      ? null
+      : Math.max(0, normalizeNumber(raw.actualSaving, 0))
+    const expiryDate = /^\d{4}-\d{2}-\d{2}$/.test(String(raw.expiryDate || '')) ? String(raw.expiryDate) : todayLocalISO()
+    const usedAt = raw.usedAt && /^\d{4}-\d{2}-\d{2}$/.test(String(raw.usedAt).slice(0, 10)) ? String(raw.usedAt).slice(0, 10) : null
+    const tags = Array.isArray(raw.tags)
+      ? raw.tags.map(tag => String(tag || '').trim()).filter(Boolean).slice(0, 12)
+      : []
+    return {
+      id: String(raw.id || `priv_${Calc.genId()}`),
+      title: String(raw.title || '').trim(),
+      type,
+      platform: String(raw.platform || '').trim(),
+      merchant: String(raw.merchant || '').trim(),
+      code: String(raw.code || '').trim(),
+      valueType,
+      value: Math.max(0, normalizeNumber(raw.value, 0)),
+      minSpend: Math.max(0, normalizeNumber(raw.minSpend, 0)),
+      maxDiscount: Math.max(0, normalizeNumber(raw.maxDiscount, 0)),
+      freeItemName: String(raw.freeItemName || '').trim(),
+      quantity,
+      expiryDate,
+      estimatedSaving,
+      actualSaving,
+      status,
+      usedAt,
+      note: String(raw.note || '').trim(),
+      tags,
+      createdAt: raw.createdAt || now,
+      updatedAt: raw.updatedAt || raw.createdAt || now,
+    }
+  }
+
+  function ensurePrivilegesState() {
+    S.privileges = Array.isArray(S.privileges) ? S.privileges.map(normalizePrivilege) : []
+    S.privilegesFilter ||= 'active'
+    S.privilegeSearch ||= ''
+    return S.privileges
+  }
+
+  function ensurePrivilegesStorageKey() {
+    try {
+      ensurePrivilegesState()
+      if (typeof localStorage === 'undefined' || typeof Storage?.save !== 'function' || typeof KEYS?.privileges === 'undefined') return
+      if (localStorage.getItem(KEYS.privileges) !== null) return
+      Storage.save(KEYS.privileges, S.privileges || [])
+    } catch (_) {}
+  }
+
+  function isPrivilegeExpired(privilege, refDate = todayLocalISO()) {
+    return privilege?.status === 'active' && /^\d{4}-\d{2}-\d{2}$/.test(String(privilege?.expiryDate || '')) && String(privilege.expiryDate) < String(refDate)
+  }
+
+  function isPrivilegeExpiringSoon(privilege, refDate = todayLocalISO()) {
+    if (!privilege || privilege.status !== 'active' || isPrivilegeExpired(privilege, refDate)) return false
+    const diff = daysUntilDate(privilege.expiryDate, refDate)
+    return diff >= 0 && diff <= 7
+  }
+
+  function privilegeTypeIcon(privilege) {
+    const platform = String(privilege?.platform || '').trim().toLowerCase()
+    if (platform.includes('shopee')) return '🛍️'
+    if (platform.includes('lazada')) return '🎁'
+    if (platform.includes('line man')) return '🛵'
+    if (platform.includes('grab')) return '🚗'
+    if (privilege?.type === 'free_shipping') return '🚚'
+    if (privilege?.type === 'free_item') return '🍱'
+    if (privilege?.type === 'cashback') return '💸'
+    if (privilege?.type === 'points') return '⭐'
+    if (privilege?.type === 'voucher') return '🎟️'
+    return '🏷️'
+  }
+
+  function privilegeStatusMeta(privilege, refDate = todayLocalISO()) {
+    if (!privilege) return { key: 'active', label: 'ใช้ได้', className: 'status-pill info' }
+    if (privilege.status === 'used') return { key: 'used', label: 'ใช้แล้ว', className: 'status-pill info' }
+    if (privilege.status === 'archived') return { key: 'archived', label: 'เก็บถาวร', className: 'status-pill muted' }
+    if (isPrivilegeExpired(privilege, refDate)) return { key: 'expired', label: 'หมดอายุ', className: 'status-pill muted' }
+    if (isPrivilegeExpiringSoon(privilege, refDate)) return { key: 'expiring', label: 'ใกล้หมดอายุ', className: 'status-pill amber' }
+    return { key: 'active', label: 'ใช้ได้', className: 'status-pill info' }
+  }
+
+  function privilegeSupportsCopy(privilege) {
+    return !!String(privilege?.code || '').trim()
+  }
+
+  function privilegeValueText(privilege) {
+    if (!privilege) return ''
+    if (privilege.type === 'free_item' && privilege.freeItemName) return `ฟรี ${privilege.freeItemName}`
+    if (privilege.valueType === 'percent') return `${Number(privilege.value || 0)}%`
+    if (privilege.valueType === 'amount') return money(privilege.value || 0)
+    if (privilege.valueType === 'cashback') return `Cashback ${money(privilege.value || 0)}`
+    if (privilege.valueType === 'points') return `${Number(privilege.value || 0).toLocaleString('en-US')} แต้ม`
+    if (privilege.valueType === 'free_shipping') return privilege.maxDiscount > 0 ? `ส่งฟรี สูงสุด ${money(privilege.maxDiscount)}` : 'ส่งฟรี'
+    if (privilege.valueType === 'free_item') return privilege.freeItemName ? `ฟรี ${privilege.freeItemName}` : 'ฟรีสินค้า'
+    return valueTypeLabel(privilege.valueType)
+  }
+
+  function privilegeSecondaryText(privilege) {
+    const parts = []
+    const source = [privilege.platform, privilege.merchant].filter(Boolean).join(' · ')
+    if (source) parts.push(source)
+    const value = privilegeValueText(privilege)
+    if (value) parts.push(value)
+    if (Number(privilege.minSpend || 0) > 0) parts.push(`ขั้นต่ำ ${money(privilege.minSpend)}`)
+    if (Number(privilege.quantity || 1) > 1) parts.push(`เหลือ ${Number(privilege.quantity).toLocaleString('en-US')} สิทธิ์`)
+    return parts.join(' · ')
+  }
+
+  function getPrivilegeRows(filter = S.privilegesFilter || 'active', query = S.privilegeSearch || '', opts = {}) {
+    ensurePrivilegesState()
+    const includeArchived = !!opts.includeArchived
+    const q = String(query || '').trim().toLowerCase()
+    const rows = (S.privileges || []).filter(privilege => includeArchived || privilege.status !== 'archived')
+      .filter(privilege => {
+        const meta = privilegeStatusMeta(privilege)
+        if (filter === 'all') return true
+        if (filter === 'active') return privilege.status === 'active' && !isPrivilegeExpired(privilege)
+        if (filter === 'expiring') return meta.key === 'expiring'
+        if (filter === 'expired') return meta.key === 'expired'
+        if (filter === 'used') return meta.key === 'used'
+        return true
+      })
+      .filter(privilege => {
+        if (!q) return true
+        const hay = [privilege.title, privilege.platform, privilege.merchant, privilege.code, privilege.note, privilege.freeItemName]
+          .map(value => String(value || '').toLowerCase())
+          .join(' ')
+        return hay.includes(q)
+      })
+
+    const weight = privilege => {
+      if (privilege.status === 'used') return 3
+      if (isPrivilegeExpired(privilege)) return 2
+      if (isPrivilegeExpiringSoon(privilege)) return 0
+      return 1
+    }
+
+    return rows.sort((a, b) => {
+      const aw = weight(a)
+      const bw = weight(b)
+      if (aw !== bw) return aw - bw
+      if (aw <= 2) {
+        const diff = String(a.expiryDate || '').localeCompare(String(b.expiryDate || ''))
+        if (diff) return diff
+      }
+      if (aw === 3) {
+        const usedDiff = String(b.usedAt || '').localeCompare(String(a.usedAt || ''))
+        if (usedDiff) return usedDiff
+      }
+      return String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')) || String(a.title || '').localeCompare(String(b.title || ''))
+    })
+  }
+
+  function getPrivilegesSummary() {
+    ensurePrivilegesState()
+    const activeNow = (S.privileges || []).filter(row => row.status === 'active' && !isPrivilegeExpired(row))
+    const expiring = (S.privileges || []).filter(row => privilegeStatusMeta(row).key === 'expiring')
+    const expired = (S.privileges || []).filter(row => privilegeStatusMeta(row).key === 'expired')
+    const used = (S.privileges || []).filter(row => row.status === 'used')
+    return {
+      activeCount: activeNow.length,
+      expiringCount: expiring.length,
+      expiredCount: expired.length,
+      usedCount: used.length,
+      totalActualSaving: used.reduce((sum, row) => sum + Number(row.actualSaving || 0), 0),
+      totalPotentialSaving: activeNow.reduce((sum, row) => sum + Number(row.estimatedSaving || 0), 0),
+      expiringRows: getPrivilegeRows('expiring', '', { includeArchived: false }).slice(0, 3),
+    }
+  }
+
+  function privilegeDraftFromExisting(privilege = null) {
+    return normalizePrivilege(privilege || {
+      id: `priv_${Calc.genId()}`,
+      title: '',
+      type: 'discount_code',
+      platform: '',
+      merchant: '',
+      code: '',
+      valueType: 'amount',
+      value: 0,
+      minSpend: 0,
+      maxDiscount: 0,
+      freeItemName: '',
+      quantity: 1,
+      expiryDate: todayLocalISO(),
+      estimatedSaving: 0,
+      actualSaving: null,
+      status: 'active',
+      usedAt: null,
+      note: '',
+      tags: [],
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+    })
+  }
+
+  function setPrivilegeDraftField(field, value) {
+    ensurePrivilegesState()
+    S.privilegeDraft ||= privilegeDraftFromExisting()
+    if (['quantity'].includes(field)) {
+      S.privilegeDraft[field] = Math.max(1, Math.floor(normalizeNumber(value, 1) || 1))
+      return
+    }
+    if (['value', 'minSpend', 'maxDiscount', 'estimatedSaving'].includes(field)) {
+      S.privilegeDraft[field] = Math.max(0, normalizeNumber(value, 0))
+      return
+    }
+    S.privilegeDraft[field] = value
+    if (field === 'type') {
+      if (value === 'free_item') {
+        S.privilegeDraft.valueType = 'free_item'
+      } else if (value === 'free_shipping') {
+        S.privilegeDraft.valueType = 'free_shipping'
+      }
+    }
+  }
+
+  function persistPrivilegesAndRefresh(keepScreen = true) {
+    persist()
+    if (S.page === 'dashboard') App.renderDashboard?.()
+    if (S.page === 'more') App.renderMore?.()
+    if (keepScreen) App.openPrivilegesScreen(S.privilegesFilter || 'active', S.privilegeSearch || '')
+  }
+
+  function copyTextFallback(text) {
+    const input = document.createElement('textarea')
+    input.value = text
+    input.setAttribute('readonly', 'readonly')
+    input.style.position = 'fixed'
+    input.style.opacity = '0'
+    input.style.pointerEvents = 'none'
+    document.body.appendChild(input)
+    input.focus()
+    input.select()
+    let ok = false
+    try { ok = document.execCommand('copy') } catch (_) {}
+    input.remove()
+    return ok
+  }
+
+  function openPrivilegeUsedDialog(privilegeId) {
+    ensurePrivilegesState()
+    const privilege = (S.privileges || []).find(row => row.id === privilegeId)
+    if (!privilege || privilege.status !== 'active') return
+    document.getElementById('privilege-used-overlay')?.remove()
+    const defaultSaving = Math.max(0, Number(privilege.estimatedSaving || 0))
+    const defaultDate = todayLocalISO()
+    const el = document.createElement('div')
+    el.id = 'privilege-used-overlay'
+    el.className = 'overlay open'
+    el.innerHTML = `
+      <div class="overlay-backdrop" onclick="document.getElementById('privilege-used-overlay')?.remove()"></div>
+      <div class="sheet privilege-sheet privilege-used-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h2>ใช้สิทธิ์แล้ว</h2>
+          <button class="btn-icon" onclick="document.getElementById('privilege-used-overlay')?.remove()">✕</button>
+        </div>
+        <div class="sheet-body">
+          <div class="form-group">
+            <label class="form-label">ประหยัดไปเท่าไร</label>
+            <input class="form-input" id="privilege-used-saving" type="number" min="0" step="0.01" value="${esc(defaultSaving)}" inputmode="decimal">
+          </div>
+          <div class="form-group">
+            <label class="form-label">วันที่ใช้</label>
+            <input class="form-input" id="privilege-used-date" type="date" value="${esc(defaultDate)}">
+          </div>
+          <div class="privilege-sheet-actions">
+            <button class="btn btn-secondary" onclick="document.getElementById('privilege-used-overlay')?.remove()">ยกเลิก</button>
+            <button class="btn btn-primary" onclick="App.confirmPrivilegeUsed('${esc(privilege.id)}')">ยืนยัน</button>
+          </div>
+        </div>
+      </div>`
+    document.body.appendChild(el)
+  }
+
+  App.todayLocalISO = todayLocalISO
+  App.daysUntilDate = daysUntilDate
+  App.isPrivilegeExpired = isPrivilegeExpired
+  App.isPrivilegeExpiringSoon = isPrivilegeExpiringSoon
+  App.ensurePrivilegesState = ensurePrivilegesState
+  App.ensurePrivilegesStorageKey = ensurePrivilegesStorageKey
+  App.getPrivilegesSummary = getPrivilegesSummary
+
+  App._updatePrivilegeDraft = function(field, value) {
+    setPrivilegeDraftField(field, value)
+  }
+
+  App.openPrivilegesScreen = function(filter = S.privilegesFilter || 'active', query = S.privilegeSearch || '') {
+    ensurePrivilegesState()
+    S.privilegesFilter = PRIVILEGE_FILTERS.some(([key]) => key === filter) ? filter : 'active'
+    S.privilegeSearch = String(query || '')
+    const rows = getPrivilegeRows(S.privilegesFilter, S.privilegeSearch)
+    const summary = getPrivilegesSummary()
+    const chips = PRIVILEGE_FILTERS.map(([key, label]) => `<button class="chip${S.privilegesFilter === key ? ' active' : ''}" onclick="App.openPrivilegesScreen('${key}', document.getElementById('privilege-search')?.value || '')">${label}</button>`).join('')
+    const headerMeta = `${summary.activeCount} ใช้ได้ · ${summary.expiringCount} ใกล้หมดอายุ · ${summary.usedCount} ใช้แล้ว · ${summary.expiredCount} หมดอายุ`
+    const html = `
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>สิทธิพิเศษ</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.openPrivilegeForm()" style="width:auto">เพิ่ม</button>
+      </div>
+      <div class="sub-scroll privilege-screen">
+        <div class="card card-pad privilege-summary-card">
+          <div class="privilege-summary-grid">
+            <div class="privilege-summary-item"><span>ใช้ได้ตอนนี้</span><strong>${summary.activeCount.toLocaleString('en-US')}</strong></div>
+            <div class="privilege-summary-item privilege-summary-item-amber"><span>ใกล้หมดอายุ</span><strong>${summary.expiringCount.toLocaleString('en-US')}</strong></div>
+            <div class="privilege-summary-item privilege-summary-item-income"><span>ประหยัดแล้ว</span><strong>${money(summary.totalActualSaving)}</strong></div>
+            <div class="privilege-summary-item privilege-summary-item-primary"><span>อาจประหยัดได้</span><strong>${money(summary.totalPotentialSaving)}</strong></div>
+          </div>
+          <div class="privilege-summary-foot">${headerMeta}</div>
+        </div>
+        <div class="chips privilege-filter-row">${chips}</div>
+        <div class="privilege-search-wrap">
+          <input class="form-input search-input" id="privilege-search" placeholder="ค้นหาชื่อ Platform ร้านค้า โค้ด หรือโน้ต" value="${esc(S.privilegeSearch || '')}" oninput="App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}', this.value)">
+        </div>
+        <div class="privilege-list">
+          ${rows.length ? rows.map(privilege => App._renderPrivilegeCard(privilege)).join('') : App._emptyState?.(
+            S.privileges?.length ? '🔎' : '🎟️',
+            S.privileges?.length ? 'ไม่พบสิทธิ์ที่ตรงกัน' : 'ยังไม่มีสิทธิพิเศษ',
+            S.privileges?.length ? 'ลองเปลี่ยนตัวกรองหรือคำค้นหา' : 'แตะ เพิ่ม เพื่อบันทึกโค้ดส่วนลดหรือสิทธิ์ที่อยากเตือนตัวเอง'
+          ) || ''}
+        </div>
+      </div>`
+    App.openSubScreen(html)
+  }
+
+  App._renderPrivilegeCard = function(privilege) {
+    const meta = privilegeStatusMeta(privilege)
+    const valueLabel = privilege.status === 'used'
+      ? `ประหยัดจริง ${money(privilege.actualSaving || 0)}`
+      : `คาดว่าประหยัด ${money(privilege.estimatedSaving || 0)}`
+    const codeLine = privilege.code ? `<div class="privilege-card-code">โค้ด: <strong>${esc(privilege.code)}</strong></div>` : ''
+    const dateLabel = privilege.status === 'used' && privilege.usedAt
+      ? `ใช้เมื่อ ${esc(Calc.labelDate ? Calc.labelDate(privilege.usedAt) : privilege.usedAt)}`
+      : `หมดอายุ ${esc(Calc.labelDate ? Calc.labelDate(privilege.expiryDate) : privilege.expiryDate)}`
+    return `<div class="card privilege-card">
+      <div class="privilege-card-head">
+        <div class="privilege-card-icon">${esc(privilegeTypeIcon(privilege))}</div>
+        <div class="privilege-card-main">
+          <div class="privilege-card-title-row">
+            <div class="privilege-card-title">${esc(privilege.title || typeLabel(privilege.type))}</div>
+            <span class="${meta.className}">${meta.label}</span>
+          </div>
+          <div class="privilege-card-sub">${esc(privilegeSecondaryText(privilege) || typeLabel(privilege.type))}</div>
+          ${codeLine}
+        </div>
+      </div>
+      <div class="privilege-pill-row">
+        <span class="status-pill muted">${dateLabel}</span>
+        <span class="status-pill info privilege-saving-pill">${valueLabel}</span>
+      </div>
+      ${privilege.note ? `<div class="privilege-card-note">${esc(privilege.note)}</div>` : ''}
+      <div class="privilege-card-actions">
+        ${privilegeSupportsCopy(privilege) ? `<button class="btn btn-secondary btn-sm" onclick="App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอกโค้ด</button>` : ''}
+        ${privilege.status === 'active' ? `<button class="btn btn-primary btn-sm" onclick="App.openPrivilegeUsedDialog('${esc(privilege.id)}')">ใช้แล้ว</button>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>
+        ${privilege.status === 'used' ? `<button class="btn btn-outline btn-sm" onclick="App.deletePrivilege('${esc(privilege.id)}')">ลบ</button>` : privilege.status !== 'archived' ? `<button class="btn btn-outline btn-sm" onclick="App.archivePrivilege('${esc(privilege.id)}')">เก็บถาวร</button>` : `<button class="btn btn-outline btn-sm" onclick="App.deletePrivilege('${esc(privilege.id)}')">ลบ</button>`}
+      </div>
+    </div>`
+  }
+
+  App.openPrivilegeForm = function(privilegeId = '', preserveDraft = false) {
+    ensurePrivilegesState()
+    const existing = privilegeId ? (S.privileges || []).find(row => row.id === privilegeId) : null
+    S.editingPrivilegeId = privilegeId || ''
+    const reuseDraft = preserveDraft && S.privilegeDraft && String(S.privilegeDraft.id || '') === String(existing?.id || S.privilegeDraft.id || '')
+      && String(S.editingPrivilegeId || '') === String(privilegeId || '')
+    S.privilegeDraft = reuseDraft ? normalizePrivilege(S.privilegeDraft) : privilegeDraftFromExisting(existing)
+    const draft = S.privilegeDraft
+    const typeOpts = PRIVILEGE_TYPES.map(([key, label]) => `<option value="${key}"${draft.type === key ? ' selected' : ''}>${label}</option>`).join('')
+    const valueTypeOpts = PRIVILEGE_VALUE_TYPES.map(([key, label]) => `<option value="${key}"${draft.valueType === key ? ' selected' : ''}>${label}</option>`).join('')
+    const showValueFields = draft.type !== 'free_item'
+    const showFreeItemName = draft.type === 'free_item'
+    const html = `
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}')">←</button>
+        <h2>${existing ? 'แก้ไขสิทธิพิเศษ' : 'เพิ่มสิทธิพิเศษ'}</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.savePrivilege('${esc(privilegeId)}')" style="width:auto">บันทึก</button>
+      </div>
+      <div class="sub-scroll privilege-form-screen">
+        <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input class="form-input" value="${esc(draft.title)}" placeholder="เช่น Shopee 10% OFF" oninput="App._updatePrivilegeDraft('title', this.value)"></div>
+        <div class="form-split-row">
+          <div><label class="form-label">ประเภท</label><select class="form-input" onchange="App._updatePrivilegeDraft('type', this.value); App.openPrivilegeForm('${esc(privilegeId)}', true)">${typeOpts}</select></div>
+          <div><label class="form-label">Platform / Source</label><input class="form-input" value="${esc(draft.platform)}" placeholder="เช่น Shopee" oninput="App._updatePrivilegeDraft('platform', this.value)"></div>
+        </div>
+        <div class="form-split-row">
+          <div><label class="form-label">ร้านค้า</label><input class="form-input" value="${esc(draft.merchant)}" placeholder="ถ้ามี" oninput="App._updatePrivilegeDraft('merchant', this.value)"></div>
+          <div><label class="form-label">โค้ด</label><input class="form-input" value="${esc(draft.code)}" placeholder="เช่น PAYDAY10" oninput="App._updatePrivilegeDraft('code', this.value)"></div>
+        </div>
+        <div class="form-split-row">
+          <div><label class="form-label">Value type</label><select class="form-input" onchange="App._updatePrivilegeDraft('valueType', this.value)">${valueTypeOpts}</select></div>
+          <div><label class="form-label">จำนวนสิทธิ์</label><input class="form-input" type="number" min="1" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
+        </div>
+        ${showValueFields ? `<div class="form-split-row">
+          <div><label class="form-label">มูลค่า</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.value)}" oninput="App._updatePrivilegeDraft('value', this.value)"></div>
+          <div><label class="form-label">ยอดขั้นต่ำ</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.minSpend)}" oninput="App._updatePrivilegeDraft('minSpend', this.value)"></div>
+        </div>` : ''}
+        <div class="form-split-row">
+          <div><label class="form-label">ส่วนลดสูงสุด</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.maxDiscount)}" oninput="App._updatePrivilegeDraft('maxDiscount', this.value)"></div>
+          <div><label class="form-label">วันหมดอายุ</label><input class="form-input" type="date" value="${esc(draft.expiryDate)}" oninput="App._updatePrivilegeDraft('expiryDate', this.value)"></div>
+        </div>
+        ${showFreeItemName ? `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>` : ''}
+        <div class="form-group"><label class="form-label">คาดว่าประหยัดได้</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.estimatedSaving)}" oninput="App._updatePrivilegeDraft('estimatedSaving', this.value)"></div>
+        <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" rows="4" placeholder="เงื่อนไขเพิ่มเติม" oninput="App._updatePrivilegeDraft('note', this.value)">${esc(draft.note)}</textarea></div>
+        ${existing ? `<button class="btn btn-outline privilege-delete-btn" onclick="App.deletePrivilege('${esc(existing.id)}')">ลบสิทธิพิเศษ</button>` : ''}
+      </div>`
+    App.openSubScreen(html)
+  }
+
+  App.savePrivilege = function(privilegeId = '') {
+    ensurePrivilegesState()
+    const draft = normalizePrivilege({
+      ...(S.privilegeDraft || privilegeDraftFromExisting()),
+      id: privilegeId || S.privilegeDraft?.id || `priv_${Calc.genId()}`,
+      quantity: S.privilegeDraft?.quantity || 1,
+      updatedAt: nowISO(),
+    })
+    if (!draft.title) return toast('กรุณากรอกชื่อสิทธิพิเศษ', 'error')
+    if (!draft.expiryDate) return toast('กรุณาเลือกวันหมดอายุ', 'error')
+    if (!(Number(draft.quantity || 0) >= 1)) return toast('จำนวนสิทธิ์ต้องไม่น้อยกว่า 1', 'error')
+    if (Number(draft.estimatedSaving || 0) < 0 || Number(draft.value || 0) < 0 || Number(draft.minSpend || 0) < 0 || Number(draft.maxDiscount || 0) < 0) {
+      return toast('ค่าตัวเลขต้องเป็นจำนวนไม่ติดลบ', 'error')
+    }
+    const idx = (S.privileges || []).findIndex(row => row.id === draft.id)
+    if (idx >= 0) {
+      S.privileges[idx] = { ...S.privileges[idx], ...draft, createdAt: S.privileges[idx].createdAt || draft.createdAt }
+    } else {
+      S.privileges.unshift(draft)
+    }
+    persistPrivilegesAndRefresh(true)
+    toast(idx >= 0 ? 'แก้ไขสิทธิพิเศษแล้ว' : 'เพิ่มสิทธิพิเศษแล้ว', 'success')
+  }
+
+  App.openPrivilegeUsedDialog = function(privilegeId) {
+    openPrivilegeUsedDialog(privilegeId)
+  }
+
+  App.confirmPrivilegeUsed = function(privilegeId) {
+    ensurePrivilegesState()
+    const privilege = (S.privileges || []).find(row => row.id === privilegeId)
+    if (!privilege) return toast('ไม่พบสิทธิพิเศษ', 'error')
+    const actualSaving = Math.max(0, normalizeNumber(document.getElementById('privilege-used-saving')?.value, 0))
+    const usedAt = String(document.getElementById('privilege-used-date')?.value || todayLocalISO())
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(usedAt)) return toast('กรุณาเลือกวันที่ใช้', 'error')
+    privilege.status = 'used'
+    privilege.usedAt = usedAt
+    privilege.actualSaving = actualSaving
+    privilege.updatedAt = nowISO()
+    document.getElementById('privilege-used-overlay')?.remove()
+    persistPrivilegesAndRefresh(true)
+    toast('บันทึกการใช้สิทธิ์แล้ว', 'success')
+  }
+
+  App.copyPrivilegeCode = async function(privilegeId) {
+    ensurePrivilegesState()
+    const privilege = (S.privileges || []).find(row => row.id === privilegeId)
+    const code = String(privilege?.code || '').trim()
+    if (!code) return
+    let copied = false
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(code)
+        copied = true
+      }
+    } catch (_) {}
+    if (!copied) copied = copyTextFallback(code)
+    toast(copied ? 'คัดลอกโค้ดแล้ว' : 'คัดลอกโค้ดไม่สำเร็จ', copied ? 'success' : 'warn')
+  }
+
+  App.archivePrivilege = function(privilegeId) {
+    ensurePrivilegesState()
+    const privilege = (S.privileges || []).find(row => row.id === privilegeId)
+    if (!privilege) return
+    if (privilege.status === 'used') return App.deletePrivilege(privilegeId)
+    App.showConfirm?.({
+      title: 'เก็บถาวรสิทธิพิเศษ',
+      body: `ซ่อน “${privilege.title || 'สิทธิพิเศษ'}” ออกจากรายการหลัก`,
+      confirmLabel: 'เก็บถาวร',
+      onConfirm() {
+        privilege.status = 'archived'
+        privilege.updatedAt = nowISO()
+        persistPrivilegesAndRefresh(true)
+        toast('เก็บถาวรสิทธิพิเศษแล้ว', 'success')
+      },
+    })
+  }
+
+  App.deletePrivilege = function(privilegeId) {
+    ensurePrivilegesState()
+    const privilege = (S.privileges || []).find(row => row.id === privilegeId)
+    if (!privilege) return
+    App.showConfirm?.({
+      title: 'ลบสิทธิพิเศษ',
+      danger: true,
+      confirmLabel: 'ลบ',
+      body: `ลบ “${privilege.title || 'สิทธิพิเศษ'}”? การลบนี้ไม่กระทบธุรกรรมหรือยอดเงิน`,
+      onConfirm() {
+        S.privileges = (S.privileges || []).filter(row => row.id !== privilegeId)
+        persistPrivilegesAndRefresh(true)
+        toast('ลบสิทธิพิเศษแล้ว', 'success')
+      },
+    })
+  }
+
+  function injectDashboardPrivilegeAlerts() {
+    ensurePrivilegesState()
+    const container = document.getElementById('dashboard-content')
+    if (!container) return
+    container.querySelector('.dashboard-privilege-alerts')?.remove()
+    const summary = getPrivilegesSummary()
+    if (!summary.expiringCount) return
+    const anchor = container.querySelector('.dashboard-upcoming-alerts') || container.querySelector('.mt-alert-card') || container.querySelector('.mt-net-card')
+    if (!anchor) return
+    const block = document.createElement('div')
+    block.className = 'card card-pad dashboard-privilege-alerts'
+    block.innerHTML = `
+      <button class="dashboard-privilege-alert-head" onclick="App.openPrivilegesScreen('expiring')">
+        <div>
+          <div class="dashboard-privilege-alert-title">มี ${summary.expiringCount.toLocaleString('en-US')} สิทธิ์ใกล้หมดอายุ</div>
+          <div class="dashboard-privilege-alert-sub">เตือนก่อนลืมใช้ สิทธิ์นี้ไม่กระทบยอดเงินคงเหลือ</div>
+        </div>
+        <span class="dashboard-privilege-alert-arrow">›</span>
+      </button>
+      <div class="dashboard-privilege-alert-list">
+        ${summary.expiringRows.map(privilege => `<button class="dashboard-privilege-row" onclick="App.openPrivilegesScreen('expiring')">
+          <div>
+            <div class="dashboard-privilege-row-name">${esc(privilegeTypeIcon(privilege))} ${esc(privilege.title)}</div>
+            <div class="dashboard-privilege-row-sub">${esc(privilege.platform || privilege.merchant || typeLabel(privilege.type))} · หมดอายุ ${esc(Calc.shortDate ? Calc.shortDate(privilege.expiryDate) : privilege.expiryDate)}</div>
+          </div>
+          <strong>${money(privilege.estimatedSaving || 0)}</strong>
+        </button>`).join('')}
+      </div>`
+    anchor.insertAdjacentElement('afterend', block)
+  }
+
+  const prevRenderDashboard = App.renderDashboard?.bind(App)
+  App.renderDashboard = function() {
+    prevRenderDashboard?.()
+    injectDashboardPrivilegeAlerts()
+  }
+
+  ensurePrivilegesState()
+  ensurePrivilegesStorageKey()
+  try { if (S.page === 'dashboard') App.renderDashboard?.() } catch (_) {}
+  try { if (S.page === 'more') App.renderMore?.() } catch (_) {}
+})()

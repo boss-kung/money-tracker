@@ -15,6 +15,18 @@ const LAST_MONTH = (() => {
   const d = new Date(); d.setMonth(d.getMonth() - 1)
   return _localMonthStr(d)
 })()
+const TOMORROW = (() => {
+  const d = new Date(); d.setDate(d.getDate() + 1)
+  return _localDateStr(d)
+})()
+const IN_THREE_DAYS = (() => {
+  const d = new Date(); d.setDate(d.getDate() + 3)
+  return _localDateStr(d)
+})()
+const TWO_DAYS_AGO = (() => {
+  const d = new Date(); d.setDate(d.getDate() - 2)
+  return _localDateStr(d)
+})()
 
 function getTODAY()     { return _localDateStr(new Date()) }
 function getTHISMONTH() { return _localMonthStr(new Date()) }
@@ -75,6 +87,66 @@ const DEFAULT_SETTINGS = {
 
 const DEFAULT_RECURRING = []
 
+const DEFAULT_UPCOMING_BILLS = [
+  {
+    id: 'bill_sample_electric',
+    title: 'ค่าไฟ',
+    amount: 1250,
+    amountType: 'fixed',
+    dueDate: IN_THREE_DAYS,
+    categoryId: 'utility',
+    walletId: 'w1',
+    merchantId: null,
+    merchant: 'MEA',
+    status: 'pending',
+    reminderDaysBefore: [7, 3, 1],
+    note: 'บิลเดือนล่าสุด',
+    source: 'manual',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    paidAt: null,
+    transactionId: null,
+  },
+  {
+    id: 'bill_sample_rent',
+    title: 'ค่าเช่าห้อง',
+    amount: 8500,
+    amountType: 'fixed',
+    dueDate: TOMORROW,
+    categoryId: 'other_expense',
+    walletId: null,
+    merchantId: null,
+    merchant: '',
+    status: 'pending',
+    reminderDaysBefore: [3, 1],
+    note: 'ยังไม่เลือกกระเป๋า',
+    source: 'manual',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    paidAt: null,
+    transactionId: null,
+  },
+  {
+    id: 'bill_sample_phone',
+    title: 'ค่าโทรศัพท์',
+    amount: 699,
+    amountType: 'estimated',
+    dueDate: TWO_DAYS_AGO,
+    categoryId: 'utility',
+    walletId: 'w3',
+    merchantId: null,
+    merchant: 'True Move H',
+    status: 'pending',
+    reminderDaysBefore: [1],
+    note: '',
+    source: 'manual',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    paidAt: null,
+    transactionId: null,
+  },
+]
+
 const DEFAULT_MERCHANTS = [
   { id: 'ms1', name: 'Grab',         emoji: '🚗', color: '#10B981' },
   { id: 'ms2', name: 'Shopee',        emoji: '🛍', color: '#F97316' },
@@ -131,6 +203,100 @@ const DEFAULT_CRYPTO_ASSETS = []
 const DEFAULT_CRYPTO_HOLDINGS = []
 const DEFAULT_CRYPTO_TRANSACTIONS = []
 const DEFAULT_GOALS = []
+const DEFAULT_PRIVILEGES = [
+  {
+    id: 'priv_shopee_payday10',
+    title: 'Shopee 10% OFF',
+    type: 'discount_code',
+    platform: 'Shopee',
+    merchant: '',
+    code: 'PAYDAY10',
+    valueType: 'percent',
+    value: 10,
+    minSpend: 500,
+    maxDiscount: 80,
+    freeItemName: '',
+    quantity: 1,
+    expiryDate: IN_THREE_DAYS,
+    estimatedSaving: 80,
+    actualSaving: null,
+    status: 'active',
+    usedAt: null,
+    note: 'ใช้กับร้านที่ร่วมรายการ ช่วงเงินเดือนออก',
+    tags: ['shopping'],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'priv_lineman_free_delivery',
+    title: 'LINE MAN ส่งฟรี',
+    type: 'free_shipping',
+    platform: 'LINE MAN',
+    merchant: '',
+    code: 'LMFREE',
+    valueType: 'free_shipping',
+    value: 0,
+    minSpend: 0,
+    maxDiscount: 40,
+    freeItemName: '',
+    quantity: 1,
+    expiryDate: TOMORROW,
+    estimatedSaving: 40,
+    actualSaving: null,
+    status: 'active',
+    usedAt: null,
+    note: 'โค้ดค่าส่งฟรีสำหรับสั่งอาหารช่วงเย็น',
+    tags: ['food', 'delivery'],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'priv_lazada_bonus80',
+    title: 'Lazada Voucher ลด 80 บาท',
+    type: 'voucher',
+    platform: 'Lazada',
+    merchant: '',
+    code: 'LAZ80',
+    valueType: 'amount',
+    value: 80,
+    minSpend: 699,
+    maxDiscount: 80,
+    freeItemName: '',
+    quantity: 1,
+    expiryDate: `${THIS_MONTH}-28`,
+    estimatedSaving: 80,
+    actualSaving: null,
+    status: 'active',
+    usedAt: null,
+    note: '',
+    tags: ['shopping'],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'priv_cafe_bogo_used',
+    title: 'ซื้อ 1 แถม 1 กาแฟ',
+    type: 'free_item',
+    platform: 'Cafe Amazon',
+    merchant: 'Cafe Amazon',
+    code: '',
+    valueType: 'free_item',
+    value: 0,
+    minSpend: 0,
+    maxDiscount: 0,
+    freeItemName: 'อเมริกาโน่เย็น',
+    quantity: 1,
+    expiryDate: TWO_DAYS_AGO,
+    estimatedSaving: 65,
+    actualSaving: 70,
+    status: 'used',
+    usedAt: TWO_DAYS_AGO,
+    note: 'ใช้สิทธิ์ผ่านแอปสมาชิก',
+    tags: ['drink'],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+]
 const DEFAULT_MIGRATIONS = {
   cryptoCentralizedV1: false,
 }

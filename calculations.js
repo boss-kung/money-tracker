@@ -98,6 +98,21 @@ const Calc = {
     return Date.now().toString(36) + Math.random().toString(36).slice(2)
   },
 
+  todayLocalISO() {
+    if (typeof getTODAY === 'function') return getTODAY()
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  },
+
+  daysUntilDate(dateStr, refDate = null) {
+    const [y, m, d] = String(dateStr || '').split('-').map(Number)
+    const [ry, rm, rd] = String(refDate || Calc.todayLocalISO()).split('-').map(Number)
+    if (!y || !m || !d || !ry || !rm || !rd) return 0
+    const target = new Date(y, m - 1, d)
+    const base = new Date(ry, rm - 1, rd)
+    return Math.round((target - base) / 86400000)
+  },
+
   // ── Business logic ──────────────────────────────────────────
 
   // Returns true for transactions that have actually been posted (not future-scheduled).
@@ -375,6 +390,48 @@ const Calc = {
       else                debt   += Math.abs(w.balance)
     })
     return { assets, debt, net: assets - debt }
+  },
+
+  getPendingUpcomingBills(state) {
+    return (state?.upcomingBills || []).filter(b => b && b.status === 'pending')
+  },
+
+  getUpcomingReservedTotal(state) {
+    return Math.round(Calc.getPendingUpcomingBills(state)
+      .reduce((sum, bill) => sum + Number(bill.amount || 0), 0) * 100) / 100
+  },
+
+  getUpcomingReservedByWallet(state, walletId) {
+    if (!walletId) return 0
+    return Math.round(Calc.getPendingUpcomingBills(state)
+      .filter(bill => bill.walletId === walletId)
+      .reduce((sum, bill) => sum + Number(bill.amount || 0), 0) * 100) / 100
+  },
+
+  getSpendableCashWallets(state) {
+    const spendableTypes = new Set(['bank', 'cash', 'ewallet', 'saving'])
+    return (state?.wallets || []).filter(wallet =>
+      wallet &&
+      !wallet.hiddenFromWalletList &&
+      spendableTypes.has(String(wallet.type || '').toLowerCase())
+    )
+  },
+
+  getTotalActualSpendableCash(state) {
+    return Math.round(Calc.getSpendableCashWallets(state)
+      .reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0) * 100) / 100
+  },
+
+  getTotalAvailableCash(state) {
+    return Math.round((Calc.getTotalActualSpendableCash(state) - Calc.getUpcomingReservedTotal(state)) * 100) / 100
+  },
+
+  getWalletAvailableBalance(state, wallet) {
+    if (!wallet) return 0
+    const actual = Number(wallet.balance || 0)
+    const spendableTypes = new Set(['bank', 'cash', 'ewallet', 'saving'])
+    if (!spendableTypes.has(String(wallet.type || '').toLowerCase())) return Math.round(actual * 100) / 100
+    return Math.round((actual - Calc.getUpcomingReservedByWallet(state, wallet.id)) * 100) / 100
   },
 
   groupByDate(transactions) {
