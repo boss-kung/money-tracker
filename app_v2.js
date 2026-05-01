@@ -70,6 +70,620 @@
 })()
 
 /* ============================================================
+   Upcoming Bills / รายการรอจ่าย
+   Manual future payables that reserve available cash only
+   ============================================================ */
+window.__mountUpcomingBillsFeature = function() {
+  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch]))
+  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
+  const nowISO = () => new Date().toISOString()
+  const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
+  const round2 = n => Math.round((Number(n) || 0) * 100) / 100
+  const spendableWalletTypes = new Set(['bank', 'cash', 'ewallet', 'saving'])
+
+  function ensureUpcomingBillsState() {
+    if (!Array.isArray(S.upcomingBills)) S.upcomingBills = []
+    S.upcomingBills = S.upcomingBills.map(normalizeUpcomingBill)
+    S.upcomingBillsFilter ||= 'pending'
+    return S.upcomingBills
+  }
+
+  function ensureUpcomingBillsStorageKey() {
+    try {
+      if (typeof localStorage === 'undefined' || typeof Storage?.save !== 'function' || typeof KEYS?.upcomingBills === 'undefined') return
+      if (localStorage.getItem(KEYS.upcomingBills) !== null) return
+      Storage.save(KEYS.upcomingBills, S.upcomingBills || [])
+    } catch (_) {}
+  }
+
+  function normalizeUpcomingBill(raw = {}) {
+    const reminderDaysBefore = Array.isArray(raw.reminderDaysBefore)
+      ? [...new Set(raw.reminderDaysBefore.map(v => Number(v)).filter(v => [1, 3, 7].includes(v)))].sort((a, b) => a - b)
+      : []
+    return {
+      id: raw.id || `bill_${Calc.genId()}`,
+      title: String(raw.title || '').trim(),
+      amount: round2(Number(raw.amount || 0)),
+      amountType: raw.amountType === 'estimated' ? 'estimated' : 'fixed',
+      dueDate: String(raw.dueDate || today()),
+      categoryId: raw.categoryId || null,
+      walletId: raw.walletId || null,
+      merchantId: raw.merchantId || null,
+      merchant: String(raw.merchant || '').trim(),
+      status: ['pending', 'paid', 'cancelled'].includes(raw.status) ? raw.status : 'pending',
+      reminderDaysBefore,
+      note: String(raw.note || '').trim(),
+      source: raw.source || 'manual',
+      createdAt: raw.createdAt || nowISO(),
+      updatedAt: raw.updatedAt || raw.createdAt || nowISO(),
+      paidAt: raw.paidAt || null,
+      transactionId: raw.transactionId || null,
+    }
+  }
+
+  function merchantNameToId(name = '') {
+    const normalized = String(name || '').trim().toLowerCase()
+    if (!normalized) return null
+    return (S.merchants || []).find(m => String(m.name || '').trim().toLowerCase() === normalized)?.id || null
+  }
+
+  function upcomingWallets() {
+    return typeof Calc.getSpendableCashWallets === 'function'
+      ? Calc.getSpendableCashWallets(S)
+      : (S.wallets || []).filter(w => w && !w.hiddenFromWalletList && spendableWalletTypes.has(String(w.type || '').toLowerCase()))
+  }
+
+  function upcomingCategories() {
+    return S.categories?.expense || []
+  }
+
+  function walletById(id) {
+    return (S.wallets || []).find(w => w.id === id) || null
+  }
+
+  function categoryById(id) {
+    return (S.categories?.expense || []).find(c => c.id === id) || null
+  }
+
+  function getBillMerchantLabel(bill) {
+    if (!bill) return ''
+    if (bill.merchantId) {
+      const merchant = (S.merchants || []).find(m => m.id === bill.merchantId)
+      if (merchant?.name) return merchant.name
+    }
+    return String(bill.merchant || '').trim()
+  }
+
+  function daysDiff(dateStr, refDate = today()) {
+    const [dy, dm, dd] = String(dateStr || '').split('-').map(Number)
+    const [ry, rm, rd] = String(refDate || today()).split('-').map(Number)
+    if (!dy || !dm || !dd || !ry || !rm || !rd) return 0
+    const due = new Date(dy, dm - 1, dd)
+    const ref = new Date(ry, rm - 1, rd)
+    return Math.round((due - ref) / 86400000)
+  }
+
+  function formatThaiDate(dateStr) {
+    return Calc.labelDate ? Calc.labelDate(dateStr) : dateStr
+  }
+
+  function getBillDueMeta(bill) {
+    const diff = daysDiff(bill?.dueDate, today())
+    if (bill?.status !== 'pending') {
+      return { diff, kind: bill?.status || 'pending', label: bill?.status === 'paid' ? 'จ่ายแล้ว' : bill?.status === 'cancelled' ? 'ยกเลิกแล้ว' : '' }
+    }
+    if (diff < 0) return { diff, kind: 'overdue', label: `เลยกำหนด ${Math.abs(diff)} วัน` }
+    if (diff === 0) return { diff, kind: 'today', label: 'ครบกำหนดวันนี้' }
+    return { diff, kind: 'future', label: `เหลือ ${diff} วัน` }
+  }
+
+  function getPendingBillsSorted() {
+    ensureUpcomingBillsState()
+    const order = { overdue: 0, today: 1, future: 2, paid: 3, cancelled: 4 }
+    return [...(S.upcomingBills || [])]
+      .map(bill => ({ bill, meta: getBillDueMeta(bill) }))
+      .sort((a, b) => {
+        const ak = order[a.meta.kind] ?? 9
+        const bk = order[b.meta.kind] ?? 9
+        if (ak !== bk) return ak - bk
+        if (a.meta.kind === 'overdue') return String(a.bill.dueDate || '').localeCompare(String(b.bill.dueDate || ''))
+        if (a.meta.kind === 'paid' || a.meta.kind === 'cancelled') return String(b.bill.updatedAt || '').localeCompare(String(a.bill.updatedAt || ''))
+        return String(a.bill.dueDate || '').localeCompare(String(b.bill.dueDate || ''))
+      })
+      .map(row => row.bill)
+  }
+
+  function getBillsForFilter(filter = 'pending') {
+    const rows = getPendingBillsSorted()
+    if (filter === 'all') return rows
+    if (filter === 'overdue') return rows.filter(b => b.status === 'pending' && daysDiff(b.dueDate, today()) < 0)
+    if (filter === 'paid') return rows.filter(b => b.status === 'paid')
+    if (filter === 'cancelled') return rows.filter(b => b.status === 'cancelled')
+    return rows.filter(b => b.status === 'pending')
+  }
+
+  function getUpcomingSummary() {
+    const pending = typeof Calc.getPendingUpcomingBills === 'function' ? Calc.getPendingUpcomingBills(S) : (S.upcomingBills || []).filter(b => b.status === 'pending')
+    const overdue = pending.filter(b => daysDiff(b.dueDate, today()) < 0)
+    const dueSoon = pending.filter(b => {
+      const diff = daysDiff(b.dueDate, today())
+      return diff >= 0 && diff <= 7
+    })
+    return {
+      pendingTotal: typeof Calc.getUpcomingReservedTotal === 'function' ? Calc.getUpcomingReservedTotal(S) : pending.reduce((sum, b) => sum + Number(b.amount || 0), 0),
+      overdueCount: overdue.length,
+      overdueTotal: overdue.reduce((sum, b) => sum + Number(b.amount || 0), 0),
+      dueSoonCount: dueSoon.length,
+      dueSoonTotal: dueSoon.reduce((sum, b) => sum + Number(b.amount || 0), 0),
+      availableCash: typeof Calc.getTotalAvailableCash === 'function' ? Calc.getTotalAvailableCash(S) : 0,
+      actualSpendableCash: typeof Calc.getTotalActualSpendableCash === 'function' ? Calc.getTotalActualSpendableCash(S) : 0,
+    }
+  }
+
+  function billStatusPill(meta, amountType) {
+    const extra = amountType === 'estimated' ? '<span class="status-pill upcoming-bill-estimated">ประมาณการ</span>' : ''
+    const cls = meta.kind === 'overdue' ? 'warn' : meta.kind === 'today' ? 'amber' : meta.kind === 'paid' ? 'ok' : meta.kind === 'cancelled' ? 'muted' : 'info'
+    return `<div class="upcoming-pill-row"><span class="status-pill ${cls}">${esc(meta.label)}</span>${extra}</div>`
+  }
+
+  function buildUpcomingBillRow(bill) {
+    const meta = getBillDueMeta(bill)
+    const wallet = walletById(bill.walletId)
+    const cat = categoryById(bill.categoryId)
+    const merchantLabel = getBillMerchantLabel(bill)
+    const subParts = [
+      wallet ? `${esc(wallet.icon || '👛')} ${esc(wallet.name)}` : 'ยังไม่ระบุกระเป๋า',
+      cat ? `${esc(cat.icon || '📦')} ${esc(cat.label)}` : '',
+      merchantLabel ? `🏪 ${esc(merchantLabel)}` : '',
+    ].filter(Boolean)
+    const canPay = bill.status === 'pending'
+    const canReschedule = bill.status === 'pending'
+    const canCancel = bill.status === 'pending'
+    const metaLine = [formatThaiDate(bill.dueDate), ...subParts].filter(Boolean).join(' · ')
+    return `<div class="card card-pad upcoming-bill-card">
+      <div class="upcoming-bill-head">
+        <div>
+          <div class="upcoming-bill-title">${esc(bill.title || 'ไม่ระบุชื่อ')}</div>
+          <div class="upcoming-bill-meta">${esc(metaLine)}</div>
+        </div>
+        <div class="upcoming-bill-amount">${money(bill.amount)}</div>
+      </div>
+      ${billStatusPill(meta, bill.amountType)}
+      ${bill.note ? `<div class="upcoming-bill-note">${esc(bill.note)}</div>` : ''}
+      <div class="upcoming-bill-actions">
+        ${canPay ? `<button class="btn btn-primary btn-sm" onclick="App.openUpcomingBillPayment('${esc(bill.id)}')" style="width:auto">จ่ายแล้ว</button>` : ''}
+        ${canReschedule ? `<button class="btn btn-secondary btn-sm" onclick="App.openUpcomingBillReschedule('${esc(bill.id)}')" style="width:auto">เลื่อน</button>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="App.openUpcomingBillForm('${esc(bill.id)}')" style="width:auto">แก้ไข</button>
+        ${canCancel ? `<button class="btn btn-outline btn-sm" onclick="App.cancelUpcomingBill('${esc(bill.id)}')" style="width:auto">ยกเลิก</button>` : ''}
+      </div>
+    </div>`
+  }
+
+  function reminderChip(day) {
+    const selected = (S.upcomingBillDraft?.reminderDaysBefore || []).includes(day)
+    return `<button class="chip${selected ? ' active' : ''}" type="button" onclick="App.toggleUpcomingReminderDay(${day})">${day} วัน</button>`
+  }
+
+  function openUpcomingDialog(title, body, actionsHtml) {
+    App.closeUpcomingDialog?.()
+    const el = document.createElement('div')
+    el.id = 'upcoming-bill-overlay'
+    el.className = 'v23-confirm-overlay'
+    el.innerHTML = `<div class="v23-confirm-sheet upcoming-bill-dialog" role="dialog" aria-modal="true">
+      <div class="v23-confirm-title">${esc(title)}</div>
+      <div class="v23-confirm-body upcoming-bill-dialog-body">${body}</div>
+      <div class="v23-confirm-actions upcoming-bill-dialog-actions">${actionsHtml}</div>
+    </div>`
+    el.addEventListener('click', e => {
+      if (e.target === el) App.closeUpcomingDialog()
+    })
+    document.body.appendChild(el)
+  }
+
+  App.closeUpcomingDialog = function() {
+    document.getElementById('upcoming-bill-overlay')?.remove()
+  }
+
+  App.ensureUpcomingBillsState = ensureUpcomingBillsState
+
+  const prevBeforePersistV50 = App._beforePersistV50?.bind(App)
+  App._beforePersistV50 = function() {
+    prevBeforePersistV50?.()
+    ensureUpcomingBillsState()
+  }
+
+  App._updateUpcomingBillDraft = function(field, value) {
+    S.upcomingBillDraft ||= {}
+    S.upcomingBillDraft[field] = value
+  }
+
+  App.toggleUpcomingReminderDay = function(day) {
+    S.upcomingBillDraft ||= {}
+    S.upcomingBillDraft.reminderDaysBefore ||= []
+    const set = new Set(S.upcomingBillDraft.reminderDaysBefore)
+    if (set.has(day)) set.delete(day)
+    else set.add(day)
+    S.upcomingBillDraft.reminderDaysBefore = [...set].sort((a, b) => a - b)
+    App.openUpcomingBillForm(S.editingUpcomingBillId || '', true)
+  }
+
+  App.openUpcomingBillsScreen = function(filter = S.upcomingBillsFilter || 'pending') {
+    ensureUpcomingBillsState()
+    S.upcomingBillsFilter = filter
+    const rows = getBillsForFilter(filter)
+    const summary = getUpcomingSummary()
+    const chips = [
+      ['all', 'ทั้งหมด'],
+      ['pending', 'รอจ่าย'],
+      ['overdue', 'เลยกำหนด'],
+      ['paid', 'จ่ายแล้ว'],
+      ['cancelled', 'ยกเลิก'],
+    ].map(([key, label]) => `<button class="chip${filter === key ? ' active' : ''}" onclick="App.openUpcomingBillsScreen('${key}')">${label}</button>`).join('')
+    const html = `<div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>รายการรอจ่าย</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.openUpcomingBillForm()" style="width:auto">+ เพิ่ม</button>
+      </div>
+      <div class="sub-scroll upcoming-bills-screen">
+        <div class="card card-pad upcoming-summary-card">
+          <div class="upcoming-summary-title">กันไว้จ่าย</div>
+          <div class="upcoming-summary-total">${money(summary.pendingTotal)}</div>
+          <div class="upcoming-summary-grid">
+            <div><span>ใกล้ถึงกำหนด</span><strong>${summary.dueSoonCount} รายการ · ${money(summary.dueSoonTotal)}</strong></div>
+            <div><span>เลยกำหนด</span><strong>${summary.overdueCount} รายการ · ${money(summary.overdueTotal)}</strong></div>
+            <div><span>เงินสด/บัญชีที่ใช้จ่ายได้</span><strong>${money(summary.actualSpendableCash)}</strong></div>
+            <div><span>เงินใช้ได้จริง</span><strong>${money(summary.availableCash)}</strong></div>
+          </div>
+        </div>
+        <div class="chips upcoming-filter-row">${chips}</div>
+        <div class="upcoming-bills-list">
+          ${rows.length ? rows.map(buildUpcomingBillRow).join('') : (App._emptyState?.('🧾', 'ยังไม่มีรายการรอจ่าย', filter === 'pending' ? 'แตะ + เพื่อเพิ่มบิลที่ต้องกันเงินไว้จ่าย' : 'ยังไม่มีรายการในตัวกรองนี้') || '')}
+        </div>
+      </div>`
+    App.openSubScreen(html)
+  }
+
+  App.openUpcomingBillForm = function(billId = '', preserveDraft = false) {
+    ensureUpcomingBillsState()
+    S.editingUpcomingBillId = billId || ''
+    const existing = billId ? (S.upcomingBills || []).find(b => b.id === billId) : null
+    if (!preserveDraft) {
+      S.upcomingBillDraft = existing
+        ? { ...normalizeUpcomingBill(existing), merchant: getBillMerchantLabel(existing) }
+        : {
+            title: '',
+            amount: '',
+            amountType: 'fixed',
+            dueDate: today(),
+            walletId: null,
+            categoryId: null,
+            merchantId: null,
+            merchant: '',
+            reminderDaysBefore: [1, 3, 7],
+            note: '',
+          }
+    }
+    const wallets = upcomingWallets()
+    const categories = upcomingCategories()
+    App.openSubScreen(`<div class="sub-header">
+        <button class="btn-icon" onclick="App.openUpcomingBillsScreen('${esc(S.upcomingBillsFilter || 'pending')}')">←</button>
+        <h2>${existing ? 'แก้ไขรายการรอจ่าย' : 'เพิ่มรายการรอจ่าย'}</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.saveUpcomingBill('${esc(billId)}')" style="width:auto">บันทึก</button>
+      </div>
+      <div class="sub-scroll">
+        <div class="card card-pad">
+          <div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" value="${esc(S.upcomingBillDraft.title || '')}" oninput="App._updateUpcomingBillDraft('title', this.value)" placeholder="เช่น ค่าไฟ"></div>
+          <div class="form-group"><label class="form-label">จำนวนเงิน (฿)</label><input class="form-input" type="number" inputmode="decimal" value="${esc(S.upcomingBillDraft.amount || '')}" oninput="App._updateUpcomingBillDraft('amount', this.value)" placeholder="0"></div>
+          <div class="form-group"><label class="form-label">ประเภทจำนวนเงิน</label><select class="form-input" onchange="App._updateUpcomingBillDraft('amountType', this.value)"><option value="fixed"${S.upcomingBillDraft.amountType === 'fixed' ? ' selected' : ''}>คงที่</option><option value="estimated"${S.upcomingBillDraft.amountType === 'estimated' ? ' selected' : ''}>ประมาณการ</option></select></div>
+          <div class="form-group"><label class="form-label">วันครบกำหนด</label><input class="form-input" type="date" value="${esc(S.upcomingBillDraft.dueDate || '')}" onchange="App._updateUpcomingBillDraft('dueDate', this.value)"></div>
+          <div class="form-group"><label class="form-label">กระเป๋าที่จะจ่ายจาก (ไม่บังคับ)</label><select class="form-input" onchange="App._updateUpcomingBillDraft('walletId', this.value || null)"><option value="">ยังไม่ระบุ</option>${wallets.map(w => `<option value="${esc(w.id)}"${S.upcomingBillDraft.walletId === w.id ? ' selected' : ''}>${esc(w.icon || '👛')} ${esc(w.name)}</option>`).join('')}</select></div>
+          <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" onchange="App._updateUpcomingBillDraft('categoryId', this.value || null)"><option value="">ยังไม่ระบุ</option>${categories.map(c => `<option value="${esc(c.id)}"${S.upcomingBillDraft.categoryId === c.id ? ' selected' : ''}>${esc(c.icon || '📦')} ${esc(c.label)}</option>`).join('')}</select></div>
+          <div class="form-group"><label class="form-label">ร้านค้า / ผู้รับชำระ</label><input class="form-input" list="upcoming-merchant-list" value="${esc(S.upcomingBillDraft.merchant || '')}" oninput="App._updateUpcomingBillDraft('merchant', this.value)" placeholder="เช่น MEA, True Move H"><datalist id="upcoming-merchant-list">${(S.merchants || []).map(m => `<option value="${esc(m.name)}"></option>`).join('')}</datalist></div>
+          <div class="form-group"><label class="form-label">เตือนล่วงหน้า</label><div class="chips">${[1, 3, 7].map(reminderChip).join('')}</div></div>
+          <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" rows="3" oninput="App._updateUpcomingBillDraft('note', this.value)" placeholder="หมายเหตุเพิ่มเติม">${esc(S.upcomingBillDraft.note || '')}</textarea></div>
+        </div>
+      </div>`)
+  }
+
+  App.saveUpcomingBill = function(billId = '') {
+    ensureUpcomingBillsState()
+    const draft = { ...(S.upcomingBillDraft || {}) }
+    const title = String(draft.title || '').trim()
+    const amount = round2(Number(draft.amount || 0))
+    const dueDate = String(draft.dueDate || '')
+    if (!title) return toast('กรุณากรอกชื่อรายการรอจ่าย', 'error')
+    if (!(amount > 0)) return toast('กรุณาระบุจำนวนเงินมากกว่า 0', 'error')
+    if (!dueDate) return toast('กรุณาเลือกวันครบกำหนด', 'error')
+    const normalized = normalizeUpcomingBill({
+      ...(billId ? (S.upcomingBills || []).find(b => b.id === billId) : {}),
+      ...draft,
+      id: billId || undefined,
+      title,
+      amount,
+      dueDate,
+      walletId: draft.walletId || null,
+      categoryId: draft.categoryId || null,
+      merchant: String(draft.merchant || '').trim(),
+      merchantId: merchantNameToId(draft.merchant || ''),
+      updatedAt: nowISO(),
+    })
+    const idx = (S.upcomingBills || []).findIndex(b => b.id === normalized.id)
+    if (idx >= 0) S.upcomingBills[idx] = normalized
+    else S.upcomingBills.unshift(normalized)
+    persist()
+    App.render?.()
+    App.openUpcomingBillsScreen(S.upcomingBillsFilter || 'pending')
+    toast(idx >= 0 ? 'แก้ไขรายการรอจ่ายแล้ว' : 'เพิ่มรายการรอจ่ายแล้ว', 'success')
+  }
+
+  App.openUpcomingBillReschedule = function(billId) {
+    const bill = (S.upcomingBills || []).find(b => b.id === billId)
+    if (!bill) return
+    openUpcomingDialog(
+      'เลื่อนกำหนดจ่าย',
+      `<div class="form-group"><label class="form-label">วันครบกำหนดใหม่</label><input class="form-input" type="date" id="upcoming-reschedule-date" value="${esc(bill.dueDate || today())}"></div>`,
+      `<button class="btn btn-secondary" onclick="App.closeUpcomingDialog()">ยกเลิก</button><button class="btn btn-primary" onclick="App.confirmUpcomingBillReschedule('${esc(billId)}')">บันทึก</button>`
+    )
+  }
+
+  App.confirmUpcomingBillReschedule = function(billId) {
+    const bill = (S.upcomingBills || []).find(b => b.id === billId)
+    const dueDate = document.getElementById('upcoming-reschedule-date')?.value || ''
+    if (!bill) return
+    if (!dueDate) return toast('กรุณาเลือกวันครบกำหนดใหม่', 'error')
+    bill.dueDate = dueDate
+    bill.updatedAt = nowISO()
+    persist()
+    App.closeUpcomingDialog()
+    App.render?.()
+    App.openUpcomingBillsScreen(S.upcomingBillsFilter || 'pending')
+    toast('เลื่อนกำหนดจ่ายแล้ว', 'success')
+  }
+
+  App.cancelUpcomingBill = function(billId) {
+    const bill = (S.upcomingBills || []).find(b => b.id === billId)
+    if (!bill) return
+    App.showConfirm?.({
+      title: 'ยกเลิกรายการรอจ่าย',
+      body: `ต้องการยกเลิก “${bill.title}” ใช่หรือไม่?`,
+      confirmLabel: 'ยกเลิกบิล',
+      danger: true,
+      onConfirm() {
+        bill.status = 'cancelled'
+        bill.updatedAt = nowISO()
+        persist()
+        App.render?.()
+        App.openUpcomingBillsScreen(S.upcomingBillsFilter || 'pending')
+        toast('ยกเลิกรายการรอจ่ายแล้ว', 'success')
+      },
+    })
+  }
+
+  App.openUpcomingBillPayment = function(billId) {
+    const bill = (S.upcomingBills || []).find(b => b.id === billId)
+    if (!bill) return
+    const wallets = upcomingWallets()
+    const categories = upcomingCategories()
+    openUpcomingDialog(
+      `จ่ายแล้ว · ${bill.title}`,
+      `<div class="form-group"><label class="form-label">วันที่จ่ายจริง</label><input class="form-input" type="date" id="upcoming-pay-date" value="${esc(today())}"></div>
+       <div class="form-group"><label class="form-label">จำนวนที่จ่ายจริง (฿)</label><input class="form-input" type="number" inputmode="decimal" id="upcoming-pay-amount" value="${esc(bill.amount)}"></div>
+       <div class="form-group"><label class="form-label">เลือกกระเป๋าที่จะจ่าย</label><select class="form-input" id="upcoming-pay-wallet"><option value="">เลือกกระเป๋า</option>${wallets.map(w => `<option value="${esc(w.id)}"${bill.walletId === w.id ? ' selected' : ''}>${esc(w.icon || '👛')} ${esc(w.name)}</option>`).join('')}</select></div>
+       <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="upcoming-pay-category"><option value="">เลือกหมวดหมู่</option>${categories.map(c => `<option value="${esc(c.id)}"${bill.categoryId === c.id ? ' selected' : ''}>${esc(c.icon || '📦')} ${esc(c.label)}</option>`).join('')}</select></div>
+       <div class="form-group"><label class="form-label">ร้านค้า / ผู้รับชำระ</label><input class="form-input" list="upcoming-pay-merchants" id="upcoming-pay-merchant" value="${esc(getBillMerchantLabel(bill))}" placeholder="เช่น MEA"><datalist id="upcoming-pay-merchants">${(S.merchants || []).map(m => `<option value="${esc(m.name)}"></option>`).join('')}</datalist></div>
+       <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" id="upcoming-pay-note" rows="3">${esc(bill.note || '')}</textarea></div>`,
+      `<button class="btn btn-secondary" onclick="App.closeUpcomingDialog()">ยกเลิก</button><button class="btn btn-primary" onclick="App.confirmUpcomingBillPayment('${esc(billId)}')">ยืนยันการจ่าย</button>`
+    )
+  }
+
+  App.confirmUpcomingBillPayment = function(billId) {
+    const bill = (S.upcomingBills || []).find(b => b.id === billId)
+    if (!bill) return
+    const amount = round2(Number(document.getElementById('upcoming-pay-amount')?.value || 0))
+    const paidDate = document.getElementById('upcoming-pay-date')?.value || ''
+    const walletId = document.getElementById('upcoming-pay-wallet')?.value || ''
+    const categoryId = document.getElementById('upcoming-pay-category')?.value || ''
+    const merchant = String(document.getElementById('upcoming-pay-merchant')?.value || '').trim()
+    const note = String(document.getElementById('upcoming-pay-note')?.value || '').trim()
+    if (!paidDate) return toast('กรุณาเลือกวันที่จ่ายจริง', 'error')
+    if (!(amount > 0)) return toast('กรุณาระบุจำนวนที่จ่ายจริงมากกว่า 0', 'error')
+    if (!walletId) return toast('กรุณาเลือกกระเป๋าที่จะจ่าย', 'error')
+    const tx = {
+      id: Calc.genId(),
+      type: 'expense',
+      amount,
+      walletId,
+      categoryId,
+      merchant,
+      note,
+      date: paidDate,
+      upcomingBillId: bill.id,
+      sourceUpcomingBillId: bill.id,
+    }
+    tx.ledgerAmount = App.getLedgerAmountForTx?.(tx)
+    const err = App.validateTransactionDraft?.(tx)
+    if (err) return toast(err, 'error')
+
+    const previousBill = { ...bill }
+    try {
+      S.transactions.unshift(tx)
+      App._registerMerchantFromTx?.(tx)
+      bill.status = 'paid'
+      bill.paidAt = nowISO()
+      bill.transactionId = tx.id
+      bill.walletId = walletId || bill.walletId || null
+      bill.categoryId = categoryId || bill.categoryId || null
+      bill.merchant = merchant
+      bill.merchantId = merchantNameToId(merchant)
+      bill.note = note
+      bill.updatedAt = nowISO()
+      App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+      persist()
+      App.closeUpcomingDialog()
+      App.render?.()
+      App.openUpcomingBillsScreen(S.upcomingBillsFilter || 'pending')
+      toast('บันทึกการจ่ายและสร้างรายการรายจ่ายแล้ว', 'success')
+    } catch (errCaught) {
+      console.error('upcoming bill payment failed', errCaught)
+      S.transactions = (S.transactions || []).filter(row => row.id !== tx.id)
+      Object.assign(bill, previousBill)
+      App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+      toast('บันทึกการจ่ายไม่สำเร็จ', 'error')
+    }
+  }
+
+  App._rollbackUpcomingBillPayment = function(tx) {
+    const billId = tx?.upcomingBillId || tx?.sourceUpcomingBillId || ''
+    if (!billId) return
+    const bill = (S.upcomingBills || []).find(row => row.id === billId)
+    if (!bill || bill.status !== 'paid' || bill.transactionId !== tx.id) return
+    bill.status = 'pending'
+    bill.paidAt = null
+    bill.transactionId = null
+    bill.updatedAt = nowISO()
+  }
+
+  const prevConfirmDeleteTx = App.confirmDeleteTx?.bind(App)
+  App.confirmDeleteTx = function() {
+    const tx = (S.transactions || []).find(t => t.id === S.selectedTxId)
+    if (tx && (tx.upcomingBillId || tx.sourceUpcomingBillId) && !tx.installmentGroupId) {
+      App.showConfirm?.({
+        title:'ลบรายการ',
+        danger:true,
+        body:`ยืนยันลบรายการ ${money(tx.amount)}? รายการรอจ่ายที่เชื่อมไว้จะกลับมาเป็น “รอจ่าย”`,
+        confirmLabel:'ลบ',
+        onConfirm() {
+          App._rollbackUpcomingBillPayment(tx)
+          S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
+          S.deleteConfirm = false
+          App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+          try { persist() } catch (_) {}
+          App.closeOverlay?.('overlay-tx-detail')
+          App.render?.()
+          toast('ลบรายการแล้ว และคืนสถานะรายการรอจ่ายแล้ว', 'success')
+        }
+      })
+      return
+    }
+    prevConfirmDeleteTx?.()
+  }
+
+  const prevDeleteTxFromSub = App.deleteTxFromSub?.bind(App)
+  App.deleteTxFromSub = function(id, backType = '', backId = '') {
+    const tx = (S.transactions || []).find(t => t.id === id)
+    if (tx && (tx.upcomingBillId || tx.sourceUpcomingBillId)) {
+      App.showConfirm?.({
+        title:'ลบรายการ',
+        danger:true,
+        body:`ยืนยันลบรายการ ${money(tx.amount)}? รายการรอจ่ายที่เชื่อมไว้จะกลับมาเป็น “รอจ่าย”`,
+        confirmLabel:'ลบ',
+        onConfirm() {
+          App._rollbackUpcomingBillPayment(tx)
+          S.transactions = (S.transactions || []).filter(t => t.id !== id)
+          App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+          try { persist() } catch (_) {}
+          if (backType === 'cc' && backId) App.openCCDetail?.(backId)
+          else if (backType === 'wallet' && backId) App.openWalletDetail?.(backId)
+          else App.closeSubScreen?.()
+          toast('ลบรายการแล้ว และคืนสถานะรายการรอจ่ายแล้ว', 'success')
+        }
+      })
+      return
+    }
+    prevDeleteTxFromSub?.(id, backType, backId)
+  }
+
+  function injectWalletAvailabilityRows() {
+    document.querySelectorAll('#wallets-content .wallet-card[onclick*="App.openWalletDetail"]').forEach(card => {
+      const match = String(card.getAttribute('onclick') || '').match(/App\.openWalletDetail\('([^']+)'\)/)
+      if (!match) return
+      const wallet = walletById(match[1])
+      if (!wallet || !spendableWalletTypes.has(String(wallet.type || '').toLowerCase())) return
+      card.querySelector('.wallet-available-block')?.remove()
+      const reserved = typeof Calc.getUpcomingReservedByWallet === 'function' ? Calc.getUpcomingReservedByWallet(S, wallet.id) : 0
+      const available = typeof Calc.getWalletAvailableBalance === 'function' ? Calc.getWalletAvailableBalance(S, wallet) : Number(wallet.balance || 0)
+      const block = document.createElement('div')
+      block.className = 'wallet-available-block'
+      block.innerHTML = `<div><span>ยอดจริง</span><strong>${money(wallet.balance)}</strong></div><div><span>กันไว้จ่าย</span><strong>${money(reserved)}</strong></div><div><span>ใช้ได้จริง</span><strong>${money(available)}</strong></div>`
+      card.appendChild(block)
+    })
+  }
+
+  function injectWalletDetailAvailability(walletId) {
+    const wallet = walletById(walletId)
+    if (!wallet || !spendableWalletTypes.has(String(wallet.type || '').toLowerCase())) return
+    const hero = document.querySelector(`#sub-screen .wallet-detail-screen[data-wallet-id="${walletId}"] .wallet-detail-hero`)
+    if (!hero) return
+    hero.querySelector('.wallet-detail-availability')?.remove()
+    const reserved = typeof Calc.getUpcomingReservedByWallet === 'function' ? Calc.getUpcomingReservedByWallet(S, wallet.id) : 0
+    const available = typeof Calc.getWalletAvailableBalance === 'function' ? Calc.getWalletAvailableBalance(S, wallet) : Number(wallet.balance || 0)
+    const block = document.createElement('div')
+    block.className = 'wallet-detail-availability'
+    block.innerHTML = `<div><span>ยอดจริง</span><strong>${money(wallet.balance)}</strong></div><div><span>กันไว้จ่าย</span><strong>${money(reserved)}</strong></div><div><span>ใช้ได้จริง</span><strong>${money(available)}</strong></div>`
+    hero.appendChild(block)
+  }
+
+  function injectDashboardUpcomingCard() {
+    const container = document.getElementById('dashboard-content')
+    if (!container) return
+    container.querySelector('.dashboard-upcoming-card')?.remove()
+    const summary = getUpcomingSummary()
+    const nextBills = getPendingBillsSorted().filter(b => b.status === 'pending').slice(0, 3)
+    const overdueCount = nextBills.filter(b => daysDiff(b.dueDate, today()) < 0).length
+    const host = container.querySelector('.mt-net-card')
+    if (!host) return
+    const block = document.createElement('div')
+    block.className = 'card card-pad dashboard-upcoming-card'
+    block.innerHTML = `<div class="dashboard-upcoming-head">
+        <div>
+          <div class="report-category-title">รายการรอจ่าย</div>
+          <div class="list-item-sub">กันไว้จ่าย ${money(summary.pendingTotal)}</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="App.openUpcomingBillsScreen()" style="width:auto">จัดการ</button>
+      </div>
+      <div class="dashboard-upcoming-metrics">
+        <div><span>เงินใช้ได้จริง</span><strong>${money(summary.availableCash)}</strong></div>
+        <div><span>เงินสด/บัญชีที่ใช้จ่ายได้</span><strong>${money(summary.actualSpendableCash)}</strong></div>
+      </div>
+      ${summary.overdueCount ? `<div class="status-pill warn" style="margin-bottom:10px;display:inline-flex">เลยกำหนด ${summary.overdueCount} รายการ</div>` : ''}
+      <div class="dashboard-upcoming-list">
+        ${nextBills.length ? nextBills.map(bill => {
+          const meta = getBillDueMeta(bill)
+          const wallet = walletById(bill.walletId)
+          return `<button class="dashboard-upcoming-row" onclick="App.openUpcomingBillsScreen()">
+            <div><b>${esc(bill.title)}</b><div class="list-item-sub">${wallet ? esc(wallet.name) : 'ยังไม่ระบุกระเป๋า'}</div></div>
+            <div style="text-align:right"><strong>${money(bill.amount)}</strong><div class="list-item-sub">${esc(meta.label)}</div></div>
+          </button>`
+        }).join('') : `<div class="list-item-sub">ยังไม่มีรายการรอจ่าย</div>`}
+      </div>`
+    host.insertAdjacentElement('afterend', block)
+  }
+
+  const prevRenderWallets = App.renderWallets?.bind(App)
+  App.renderWallets = function() {
+    prevRenderWallets?.()
+    injectWalletAvailabilityRows()
+  }
+
+  const prevOpenWalletDetail = App.openWalletDetail?.bind(App)
+  App.openWalletDetail = function(id) {
+    prevOpenWalletDetail?.(id)
+    try { injectWalletDetailAvailability(id) } catch (_) {}
+  }
+
+  const prevRenderDashboard = App.renderDashboard?.bind(App)
+  App.renderDashboard = function() {
+    prevRenderDashboard?.()
+    injectDashboardUpcomingCard()
+  }
+
+  try { ensureUpcomingBillsState() } catch (_) {}
+  try { ensureUpcomingBillsStorageKey() } catch (_) {}
+  try { if (S.page === 'dashboard') App.renderDashboard?.() } catch (_) {}
+  try { if (S.page === 'wallets') App.renderWallets?.() } catch (_) {}
+}
+
+/* ============================================================
    Money Tracker — app_v2.js
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
@@ -90,7 +704,7 @@ let S = {
   categories: { expense: [], income: [] },
   budgets: [],
   settings: { darkMode: false, accentColor: '#2563EB' },
-  recurring: [], merchants: [], ccBenefits: {}, ccBenefitRules: [], incomeBudgets: [], marketPrices: {}, txMode: 'add', editingTxId: null,
+  recurring: [], upcomingBills: [], merchants: [], ccBenefits: {}, ccBenefitRules: [], incomeBudgets: [], marketPrices: {}, txMode: 'add', editingTxId: null,
   cryptoAssets: [], cryptoHoldings: [], cryptoTransactions: [], cryptoSyncMeta: {}, migrations: { cryptoCentralizedV1: false },
   creditLimitGroups: [], rewardAccounts: [], rewardLedger: [], netWorthSnapshots: [], investmentSnapshots: [],
   goals: [],
@@ -474,7 +1088,7 @@ Object.assign(Calc, {
 })
 
 Object.assign(App, {
-  _ensureV2State() { S.recurring ||= []; S.merchants ||= []; S.ccBenefits ||= {}; S.incomeBudgets ||= []; S.marketPrices ||= {} },
+  _ensureV2State() { S.recurring ||= []; S.upcomingBills ||= []; S.merchants ||= []; S.ccBenefits ||= {}; S.incomeBudgets ||= []; S.marketPrices ||= {} },
 
   openWalletForm(walletId) {
     S.editingWalletId = walletId
@@ -650,6 +1264,7 @@ function init() {
   S.budgets      = data.budgets
   S.settings     = data.settings
   S.recurring    = data.recurring || []
+  S.upcomingBills = data.upcomingBills || []
   S.merchants    = data.merchants || []
   S.ccBenefits   = data.ccBenefits || {}
   S.ccBenefitRules = data.ccBenefitRules || []
@@ -2969,6 +3584,7 @@ Calc.getUsableMoney = function(wallets) {
     S.transactions ||= []
     S.wallets ||= []
     S.recurring ||= []
+    S.upcomingBills ||= []
     S.ccBenefits ||= {}
     S.marketPrices ||= {}
   }
@@ -5707,8 +6323,9 @@ Calc.getUsableMoney = function(wallets) {
         <div style="font-size:20px;font-weight:800;padding:20px 0 4px">เพิ่มเติม</div>
         <div class="sec-title">เครื่องมือหลัก</div>
         <div class="card card-pad">
-          ${row({ icon:'🎯', label:'เป้าหมาย / Sinking Funds', value:`${(S.goals||[]).filter(g=>g.status!=='archived').length} เป้าหมาย`, onclick:'App.openGoalsScreen()' })}
+          ${row({ icon:'🎯', label:'ตั้งเป้าหมายทางการเงิน', value:`${(S.goals||[]).filter(g=>g.status!=='archived').length} เป้าหมาย`, onclick:'App.openGoalsScreen()' })}
           ${row({ icon:'📅', label:'ปฏิทินบิล / รายการที่จะถึง', onclick:'App.openUpcomingScreen()' })}
+          ${row({ icon:'🧾', label:'รายการรอจ่าย', value:`${((S.upcomingBills||[]).filter(b=>b.status==='pending').length).toLocaleString('en-US')} รอจ่าย`, onclick:'App.openUpcomingBillsScreen()' })}
           ${row({ icon:'🔁', label:'รายการประจำ', value:`${(S.recurring||[]).length} รายการ`, onclick:'App.openRecurringScreen()' })}
           ${row({ icon:'🧾', label:'ศูนย์ผ่อนชำระ', onclick:'App.openInstallmentCenter()' })}
           ${row({ icon:'🎁', label:'สมุดสิทธิประโยชน์', onclick:'App.openRewardLedgerScreen()' })}
@@ -8568,7 +9185,7 @@ Calc.getUsableMoney = function(wallets) {
         <div class="goal-foot"><span>เหลือ ${fmtHidden(p.remaining)}</span>${g.targetDate ? `<span>${p.daysLeft < 0 && p.remaining > 0 ? 'เลยวันเป้าหมายแล้ว' : `ควรออม ${fmtHidden(p.suggestedMonthly)}/เดือน`}</span>` : ''}</div>
       </div>`
     }
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>เป้าหมาย / Sinking Funds</h2><button class="btn btn-primary btn-sm" onclick="App.openGoalForm()" style="width:auto">+ เพิ่ม</button></div>
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ตั้งเป้าหมายทางการเงิน</h2><button class="btn btn-primary btn-sm" onclick="App.openGoalForm()" style="width:auto">+ เพิ่ม</button></div>
       <div class="sub-scroll">
         <div class="chips" style="padding:0 0 12px"><button class="chip ${showArchived ? '' : 'active'}" onclick="App.openGoalsScreen(false)">กำลังใช้งาน</button><button class="chip ${showArchived ? 'active' : ''}" onclick="App.openGoalsScreen(true)">เก็บถาวร</button></div>
         ${rows.length ? rows.map(card).join('') : App._emptyState?.('🎯', showArchived ? 'ยังไม่มีเป้าหมายที่เก็บถาวร' : 'ยังไม่มีเป้าหมาย', 'ใช้วางแผนเงินฉุกเฉิน ท่องเที่ยว ภาษี หรือรายจ่ายประจำปี') || ''}
@@ -8725,7 +9342,7 @@ Calc.getUsableMoney = function(wallets) {
 
   App._applyImportMergePayload = function(payload) {
     const stats = {}
-    ;['transactions','wallets','budgets','incomeBudgets','recurring','merchants','ccBenefitRules','creditLimitGroups','rewardAccounts','rewardLedger','netWorthSnapshots','investmentSnapshots','cryptoAssets','cryptoHoldings','cryptoTransactions','goals'].forEach(key => {
+    ;['transactions','wallets','budgets','incomeBudgets','recurring','upcomingBills','merchants','ccBenefitRules','creditLimitGroups','rewardAccounts','rewardLedger','netWorthSnapshots','investmentSnapshots','cryptoAssets','cryptoHoldings','cryptoTransactions','goals'].forEach(key => {
       const result = mergeById(S[key] || [], payload[key] || [])
       S[key] = result.rows
       stats[key] = result
@@ -8747,7 +9364,7 @@ Calc.getUsableMoney = function(wallets) {
 
   App.openImportPreview = function(payload, checked = { warnings: [] }, input = null) {
     const rows = [
-      ['กระเป๋า', 'wallets'], ['รายการ', 'transactions'], ['หมวดหมู่', 'categories'],
+      ['กระเป๋า', 'wallets'], ['รายการ', 'transactions'], ['รายการรอจ่าย', 'upcomingBills'], ['หมวดหมู่', 'categories'],
       ['ร้านค้า', 'merchants'], ['รายการประจำ', 'recurring'], ['เป้าหมาย', 'goals'],
       ['ผ่อนชำระ', 'installments'], ['บัญชีคะแนน', 'rewardAccounts'], ['Crypto holdings', 'cryptoHoldings'],
       ['กฎสิทธิประโยชน์', 'ccBenefitRules'],
@@ -9376,3 +9993,5 @@ Calc.getUsableMoney = function(wallets) {
   try { if (S.page === 'reports')       App.renderReports?.()       } catch (_) {}
 
 })()
+
+try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upcoming bills feature failed to mount', err) }
