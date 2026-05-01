@@ -2188,11 +2188,13 @@ App.render();
     const display = formatDraftAmount(S.tx.amount || '0')
     const color = typeColor(type)
     const INVEST_TYPES = new Set(['gold','crypto','fcd'])
+    const TRANSFERABLE_MONEY_TYPES = new Set(['bank', 'cash', 'ewallet', 'saving'])
     const isTransfer = type === 'transfer'
     const activeWallets = S.wallets.filter(w => !w.archived)
-    const pickableWallets = isTransfer ? activeWallets : activeWallets.filter(w => !INVEST_TYPES.has(w.type))
+    const transferWallets = activeWallets.filter(w => TRANSFERABLE_MONEY_TYPES.has(String(w.type || '').toLowerCase()))
+    const pickableWallets = isTransfer ? transferWallets : activeWallets.filter(w => !INVEST_TYPES.has(w.type))
     const walletOptions = pickableWallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
-    const toWalletOptions = activeWallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
+    const toWalletOptions = transferWallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
     const isExpense = type === 'expense'
     const box = document.getElementById('add-tx-content')
     if (!box) return
@@ -3613,6 +3615,7 @@ Calc.getUsableMoney = function(wallets) {
   const VERSION = APP_VERSION
   const INVEST_TYPES = new Set(['gold','crypto','fcd'])
   const CASH_TYPES = new Set(['bank','cash','ewallet','saving','credit'])
+  const TRANSFERABLE_MONEY_TYPES = new Set(['bank','cash','ewallet','saving'])
   const esc = App._esc
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const number = (n, digits = 4) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: digits })
@@ -3643,6 +3646,7 @@ Calc.getUsableMoney = function(wallets) {
   function catById(id) { return App._findCat?.(id) || null }
   function walletById(id) { return (S.wallets || []).find(w => w.id === id) || null }
   function isInvestWallet(w) { return INVEST_TYPES.has(w?.type) }
+  function isTransferableMoneyWallet(w) { return TRANSFERABLE_MONEY_TYPES.has(String(w?.type || '').toLowerCase()) }
   // ── Extra persisted state outside early Storage keys ───────
   function loadJSON(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback } catch { return fallback } }
 
@@ -5403,7 +5407,7 @@ Calc.getUsableMoney = function(wallets) {
       if (tx.toWalletId === tx.walletId) return 'กระเป๋าต้นทางและปลายทางต้องไม่เหมือนกัน'
       const to = walletById(tx.toWalletId)
       if (!to) return 'ไม่พบกระเป๋าปลายทาง'
-      if (w.type === 'credit' || to.type === 'credit') return 'บัตรเครดิตต้องใช้เมนูชำระบัตร ไม่ใช่โอนเงิน'
+      if (!isTransferableMoneyWallet(w) || !isTransferableMoneyWallet(to)) return 'โอนเงินได้เฉพาะบัญชีเงินเท่านั้น'
       if (effectiveBalance(tx.walletId) < amt) return 'ยอดเงินในกระเป๋าต้นทางไม่เพียงพอ'
     } else if (tx.type === 'expense') {
       if (!tx.categoryId) return 'กรุณาเลือกหมวดหมู่รายจ่าย'
@@ -10389,16 +10393,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (keepScreen) App.openPrivilegesScreen(S.privilegesFilter || 'active', S.privilegeSearch || '')
   }
 
-  function privilegeHasAdvancedDetails(privilege) {
-    if (!privilege) return false
-    return !!(
-      privilege.merchant
-      || privilege.code
-      || Number(privilege.quantity || 1) > 1
-      || (privilege.type === 'free_item' && privilege.freeItemName)
-    )
-  }
-
   function privilegeTemplateMeta(type = 'voucher') {
     if (type === 'discount_code') {
       return {
@@ -10524,6 +10518,67 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     document.body.appendChild(el)
   }
 
+  function openPrivilegeDetailSheet(privilegeId) {
+    ensurePrivilegesState()
+    const privilege = (S.privileges || []).find(row => row.id === privilegeId)
+    if (!privilege) return
+    document.getElementById('privilege-detail-overlay')?.remove()
+    const meta = privilegeStatusMeta(privilege)
+    const sourceLabel = privilege.platform || typeLabel(privilege.type)
+    const expiryLabel = privilege.expiryDate ? (Calc.labelDate ? Calc.labelDate(privilege.expiryDate) : privilege.expiryDate) : ''
+    const usedLabel = privilege.usedAt ? (Calc.labelDate ? Calc.labelDate(privilege.usedAt) : privilege.usedAt) : ''
+    const summaryItems = [
+      ['คาดว่าประหยัดได้', money(privilege.estimatedSaving || 0)],
+      ['ประหยัดแล้ว', money(privilege.actualSaving || 0)],
+      ['คงเหลือ', `${Number(privilege.quantity || 0).toLocaleString('en-US')} สิทธิ์`],
+    ]
+    const rows = [
+      ['ประเภท', typeLabel(privilege.type)],
+      ['Platform / Source', sourceLabel],
+      privilege.type === 'discount_code' && privilege.code ? ['โค้ด', privilege.code] : null,
+      privilege.type === 'free_item' && privilege.freeItemName ? ['ชื่อของฟรี', privilege.freeItemName] : null,
+      expiryLabel ? ['วันหมดอายุ', expiryLabel] : null,
+      usedLabel ? ['ใช้ล่าสุด', usedLabel] : null,
+      privilege.note ? ['หมายเหตุ', privilege.note] : null,
+    ].filter(Boolean)
+    const el = document.createElement('div')
+    el.id = 'privilege-detail-overlay'
+    el.className = 'overlay open'
+    el.innerHTML = `
+      <div class="overlay-backdrop" onclick="document.getElementById('privilege-detail-overlay')?.remove()"></div>
+      <div class="sheet privilege-sheet privilege-detail-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h2>${esc(privilege.title || 'สิทธิพิเศษ')}</h2>
+          <button class="btn-icon" onclick="document.getElementById('privilege-detail-overlay')?.remove()">✕</button>
+        </div>
+        <div class="sheet-body">
+          <div class="privilege-detail-hero">
+            <div class="privilege-detail-hero-top">
+              <div class="privilege-detail-icon">${esc(privilegeTypeIcon(privilege))}</div>
+              <div class="privilege-detail-hero-copy">
+                <div class="privilege-detail-source">${esc(sourceLabel)}</div>
+                <div class="privilege-detail-date">${esc(privilege.status === 'used' && usedLabel ? `ใช้เมื่อ ${usedLabel}` : expiryLabel ? `หมดอายุ ${expiryLabel}` : '')}</div>
+              </div>
+              <span class="${meta.className}">${meta.label}</span>
+            </div>
+            <div class="privilege-detail-summary">
+              ${summaryItems.map(([label, value]) => `<div class="privilege-detail-summary-item"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}
+            </div>
+          </div>
+          <div class="privilege-detail-list">
+            ${rows.map(([label, value]) => `<div class="privilege-detail-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}
+          </div>
+          <div class="privilege-sheet-actions-stack" style="margin-top:12px">
+            ${privilegeSupportsCopy(privilege) ? `<button class="btn btn-secondary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอกโค้ด</button>` : ''}
+            ${privilege.status === 'active' ? `<button class="btn btn-primary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.openPrivilegeUsedDialog('${esc(privilege.id)}')">ใช้แล้ว</button>` : ''}
+            <button class="btn btn-secondary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>
+          </div>
+        </div>
+      </div>`
+    document.body.appendChild(el)
+  }
+
   App.todayLocalISO = todayLocalISO
   App.daysUntilDate = daysUntilDate
   App.isPrivilegeExpired = isPrivilegeExpired
@@ -10579,16 +10634,19 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const dateLabel = privilege.status === 'used' && privilege.usedAt
       ? `ใช้เมื่อ ${esc(Calc.shortDate ? Calc.shortDate(privilege.usedAt) : privilege.usedAt)}`
       : `หมดอายุ ${esc(Calc.shortDate ? Calc.shortDate(privilege.expiryDate) : privilege.expiryDate)}`
-    const metaLine = `${esc(sourceLabel)} · ${dateLabel}`
+    const qtyLabel = privilege.status === 'active' && Number(privilege.quantity || 0) > 1
+      ? ` · ${Number(privilege.quantity || 0).toLocaleString('en-US')} สิทธิ์`
+      : ''
+    const metaLine = `${esc(sourceLabel)} · ${dateLabel}${qtyLabel}`
     const leadingAction = privilegeSupportsCopy(privilege)
-      ? `<button class="btn btn-secondary btn-sm" onclick="App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอก</button>`
+      ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอก</button>`
       : privilege.status === 'active'
-        ? `<button class="btn btn-secondary btn-sm" onclick="App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>`
-        : `<button class="btn btn-secondary btn-sm" onclick="App.openPrivilegeForm('${esc(privilege.id)}')">ดูรายละเอียด</button>`
+        ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>`
+        : `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeDetail('${esc(privilege.id)}')">ดูรายละเอียด</button>`
     const primaryAction = privilege.status === 'active'
-      ? `<button class="btn btn-primary btn-sm" onclick="App.openPrivilegeUsedDialog('${esc(privilege.id)}')">ใช้แล้ว</button>`
-      : `<button class="btn btn-secondary btn-sm" onclick="App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>`
-    return `<div class="card privilege-card">
+      ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeUsedDialog('${esc(privilege.id)}')">ใช้แล้ว</button>`
+      : `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>`
+    return `<div class="card privilege-card" onclick="App.openPrivilegeDetail('${esc(privilege.id)}')">
       <div class="privilege-card-head">
         <div class="privilege-card-icon">${esc(privilegeTypeIcon(privilege))}</div>
         <div class="privilege-card-main">
@@ -10602,7 +10660,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="privilege-card-actions">
         ${leadingAction}
         ${primaryAction}
-        <button class="btn btn-secondary btn-sm privilege-more-btn" aria-label="ตัวเลือกเพิ่มเติม" onclick="App.openPrivilegeActions('${esc(privilege.id)}')">⋯</button>
+        <button class="btn btn-secondary btn-sm privilege-more-btn" aria-label="ตัวเลือกเพิ่มเติม" onclick="event.stopPropagation(); App.openPrivilegeActions('${esc(privilege.id)}')">⋯</button>
       </div>
     </div>`
   }
@@ -10610,18 +10668,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   App.openPrivilegeForm = function(privilegeId = '', preserveDraft = false) {
     ensurePrivilegesState()
     const existing = privilegeId ? (S.privileges || []).find(row => row.id === privilegeId) : null
-    if (!preserveDraft) S.privilegeFormExpanded = undefined
     S.editingPrivilegeId = privilegeId || ''
     const reuseDraft = preserveDraft && S.privilegeDraft && String(S.privilegeDraft.id || '') === String(existing?.id || S.privilegeDraft.id || '')
       && String(S.editingPrivilegeId || '') === String(privilegeId || '')
     S.privilegeDraft = reuseDraft ? normalizePrivilege(S.privilegeDraft) : privilegeDraftFromExisting(existing)
     const draft = S.privilegeDraft
     const template = privilegeTemplateMeta(draft.type)
-    const typeOpts = PRIVILEGE_TYPES.map(([key, label]) => `<option value="${key}"${draft.type === key ? ' selected' : ''}>${label}</option>`).join('')
     const showFreeItemName = draft.type === 'free_item'
-    const showAdvanced = S.privilegeFormExpanded ?? privilegeHasAdvancedDetails(draft)
-    const advancedLabel = showAdvanced ? 'ซ่อนรายละเอียดเพิ่มเติม' : (existing ? 'รายละเอียดเพิ่มเติม' : 'ใส่รายละเอียดเพิ่ม')
-    const quantityMin = draft.status === 'used' ? 0 : 1
     const html = `
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}')">←</button>
@@ -10644,29 +10697,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <div><label class="form-label">วันหมดอายุ</label><input class="form-input" type="date" value="${esc(draft.expiryDate)}" oninput="App._updatePrivilegeDraft('expiryDate', this.value)"></div>
           <div><label class="form-label">คาดว่าประหยัดได้</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.estimatedSaving)}" oninput="App._updatePrivilegeDraft('estimatedSaving', this.value)"></div>
         </div>
-        <div class="privilege-advanced-toggle">
-          <button class="btn btn-secondary btn-sm" onclick="App.togglePrivilegeAdvanced('${esc(privilegeId)}')" style="width:auto">${advancedLabel}</button>
-        </div>
-        ${showAdvanced ? `
-          <div class="card privilege-advanced-card">
-            <div class="form-group"><label class="form-label">ประเภท</label><select class="form-input" onchange="App._updatePrivilegeDraft('type', this.value); App.openPrivilegeForm('${esc(privilegeId)}', true)">${typeOpts}</select></div>
-            ${draft.type === 'discount_code' && !template.showCodeQuick ? `<div class="form-group"><label class="form-label">โค้ด</label><input class="form-input" value="${esc(draft.code)}" placeholder="ถ้ามี เช่น PAYDAY10" oninput="App._updatePrivilegeDraft('code', this.value)"></div>` : ''}
-            ${template.showFreeItemQuick || !showFreeItemName ? '' : `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>`}
-            <div class="form-split-row">
-              <div><label class="form-label">ร้านค้า</label><input class="form-input" value="${esc(draft.merchant)}" placeholder="ถ้ามี" oninput="App._updatePrivilegeDraft('merchant', this.value)"></div>
-              <div><label class="form-label">จำนวนสิทธิ์</label><input class="form-input" type="number" min="${quantityMin}" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
-            </div>
-          </div>
-        ` : ''}
+        ${draft.type === 'discount_code' && !template.showCodeQuick ? `<div class="form-group"><label class="form-label">โค้ด</label><input class="form-input" value="${esc(draft.code)}" placeholder="ถ้ามี เช่น PAYDAY10" oninput="App._updatePrivilegeDraft('code', this.value)"></div>` : ''}
+        ${template.showFreeItemQuick || !showFreeItemName ? '' : `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>`}
+        <div class="form-group"><label class="form-label">จำนวนสิทธิ์</label><input class="form-input" type="number" min="${draft.status === 'used' ? 0 : 1}" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
         <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" rows="4" placeholder="เงื่อนไขเพิ่มเติม" oninput="App._updatePrivilegeDraft('note', this.value)">${esc(draft.note)}</textarea></div>
         ${existing ? `<button class="btn btn-outline privilege-delete-btn" onclick="App.deletePrivilege('${esc(existing.id)}')">ลบสิทธิพิเศษ</button>` : ''}
       </div>`
     App.openSubScreen(html)
-  }
-
-  App.togglePrivilegeAdvanced = function(privilegeId = '') {
-    S.privilegeFormExpanded = !S.privilegeFormExpanded
-    App.openPrivilegeForm(privilegeId, true)
   }
 
   App.savePrivilege = function(privilegeId = '') {
@@ -10700,6 +10737,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   App.openPrivilegeActions = function(privilegeId) {
     openPrivilegeActionsSheet(privilegeId)
+  }
+
+  App.openPrivilegeDetail = function(privilegeId) {
+    openPrivilegeDetailSheet(privilegeId)
   }
 
   App.confirmPrivilegeUsed = function(privilegeId) {
