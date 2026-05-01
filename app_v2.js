@@ -220,6 +220,16 @@ window.__mountUpcomingBillsFeature = function() {
     }
   }
 
+  function getUpcomingReminderAlerts(limit = 3) {
+    const pending = getPendingBillsSorted().filter(bill => bill.status === 'pending')
+    const rows = pending.filter(bill => {
+      const diff = daysDiff(bill.dueDate, today())
+      const reminders = Array.isArray(bill.reminderDaysBefore) ? bill.reminderDaysBefore : []
+      return diff < 0 || diff === 0 || reminders.includes(diff)
+    })
+    return rows.slice(0, Math.max(1, Number(limit || 3)))
+  }
+
   function billStatusPill(meta, amountType) {
     const extra = amountType === 'estimated' ? '<span class="status-pill upcoming-bill-estimated">ประมาณการ</span>' : ''
     const cls = meta.kind === 'overdue' ? 'warn' : meta.kind === 'today' ? 'amber' : meta.kind === 'paid' ? 'ok' : meta.kind === 'cancelled' ? 'muted' : 'info'
@@ -623,39 +633,28 @@ window.__mountUpcomingBillsFeature = function() {
     hero.appendChild(block)
   }
 
-  function injectDashboardUpcomingCard() {
+  function injectDashboardUpcomingAlerts() {
     const container = document.getElementById('dashboard-content')
     if (!container) return
-    container.querySelector('.dashboard-upcoming-card')?.remove()
-    const summary = getUpcomingSummary()
-    const nextBills = getPendingBillsSorted().filter(b => b.status === 'pending').slice(0, 3)
-    const overdueCount = nextBills.filter(b => daysDiff(b.dueDate, today()) < 0).length
+    container.querySelector('.dashboard-upcoming-alerts')?.remove()
+    const alertBills = getUpcomingReminderAlerts(3)
+    if (!alertBills.length) return
     const host = container.querySelector('.mt-net-card')
     if (!host) return
     const block = document.createElement('div')
-    block.className = 'card card-pad dashboard-upcoming-card'
-    block.innerHTML = `<div class="dashboard-upcoming-head">
-        <div>
-          <div class="report-category-title">รายการรอจ่าย</div>
-          <div class="list-item-sub">กันไว้จ่าย ${money(summary.pendingTotal)}</div>
-        </div>
-        <button class="btn btn-secondary btn-sm" onclick="App.openUpcomingBillsScreen()" style="width:auto">จัดการ</button>
-      </div>
-      <div class="dashboard-upcoming-metrics">
-        <div><span>เงินใช้ได้จริง</span><strong>${money(summary.availableCash)}</strong></div>
-        <div><span>เงินสด/บัญชีที่ใช้จ่ายได้</span><strong>${money(summary.actualSpendableCash)}</strong></div>
-      </div>
-      ${summary.overdueCount ? `<div class="status-pill warn" style="margin-bottom:10px;display:inline-flex">เลยกำหนด ${summary.overdueCount} รายการ</div>` : ''}
-      <div class="dashboard-upcoming-list">
-        ${nextBills.length ? nextBills.map(bill => {
-          const meta = getBillDueMeta(bill)
-          const wallet = walletById(bill.walletId)
-          return `<button class="dashboard-upcoming-row" onclick="App.openUpcomingBillsScreen()">
-            <div><b>${esc(bill.title)}</b><div class="list-item-sub">${wallet ? esc(wallet.name) : 'ยังไม่ระบุกระเป๋า'}</div></div>
-            <div style="text-align:right"><strong>${money(bill.amount)}</strong><div class="list-item-sub">${esc(meta.label)}</div></div>
-          </button>`
-        }).join('') : `<div class="list-item-sub">ยังไม่มีรายการรอจ่าย</div>`}
-      </div>`
+    block.className = 'mt-alert-card dashboard-upcoming-alerts'
+    block.innerHTML = `<div class="mt-alert-title">รายการรอจ่ายที่ต้องเตือน <em>${alertBills.length} รายการ</em></div>
+      ${alertBills.map(bill => {
+        const meta = getBillDueMeta(bill)
+        const wallet = walletById(bill.walletId)
+        return `<div class="mt-alert-row" onclick="App.openUpcomingBillsScreen()">
+          <div class="mt-alert-row-info">
+            <span class="mt-alert-row-name">${esc(bill.title)}</span>
+            <span class="list-item-sub">${esc(meta.label)} · ${wallet ? esc(wallet.name) : 'ยังไม่ระบุกระเป๋า'}</span>
+          </div>
+          <div class="mt-alert-row-amt">${money(bill.amount)}</div>
+        </div>`
+      }).join('')}`
     host.insertAdjacentElement('afterend', block)
   }
 
@@ -674,7 +673,7 @@ window.__mountUpcomingBillsFeature = function() {
   const prevRenderDashboard = App.renderDashboard?.bind(App)
   App.renderDashboard = function() {
     prevRenderDashboard?.()
-    injectDashboardUpcomingCard()
+    injectDashboardUpcomingAlerts()
   }
 
   try { ensureUpcomingBillsState() } catch (_) {}

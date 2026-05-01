@@ -1040,58 +1040,8 @@ html.dark .mt-alert-row-name { color: var(--text); }
   }
 }
 
-body.ios-standalone {
-  --app-bottom-gap: 10px !important;
-  --safe-b: 0px !important;
-  --safe-t: max(env(safe-area-inset-top, 0px), 12px) !important;
-}
-
-body.standalone {
-  --app-bottom-gap: 10px !important;
-  --safe-b: 0px !important;
-}
-
-body.ios-standalone,
-body.ios-standalone #app,
-body.ios-standalone #sub-screen {
-  height: 100lvh !important;
-  min-height: 100lvh !important;
-}
-
-body.ios-standalone #app,
-body.ios-standalone #sub-screen {
-  inset: 0 !important;
-  top: 0 !important;
-  bottom: 0 !important;
-}
-
-body.ios-standalone #more-content {
-  padding-top: max(8px, calc(var(--safe-t) + 8px)) !important;
-}
-
-body.ios-standalone #bottom-nav {
-  position: fixed !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: var(--app-bottom-gap) !important;
-  width: 100% !important;
-  margin: 0 !important;
-  height: var(--nav-h) !important;
-  padding-top: 2px !important;
-  padding-bottom: 0 !important;
-  padding-left: max(8px, var(--safe-l)) !important;
-  padding-right: max(8px, var(--safe-r)) !important;
-  margin-bottom: 0 !important;
-}
-
-body.ios-standalone #bottom-nav .nav-btn {
-  min-height: calc(var(--nav-h) - 2px) !important;
-  height: calc(var(--nav-h) - 2px) !important;
-  padding-top: 6px !important;
-  padding-bottom: 0 !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
+/* Keep standalone using the same visual rules as normal web.
+   Only runtime viewport sizing remains different in JS. */
 
 /* ============================================================
    iOS standalone shell and app tokens
