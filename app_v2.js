@@ -10567,16 +10567,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   App._renderPrivilegeCard = function(privilege) {
     const meta = privilegeStatusMeta(privilege)
-    const valueLabel = privilege.status === 'used'
-      ? `ประหยัดจริง ${money(privilege.actualSaving || 0)}`
-      : `คาดว่าประหยัด ${money(privilege.estimatedSaving || 0)}`
+    const sourceLabel = privilege.platform || privilege.merchant || typeLabel(privilege.type)
     const dateLabel = privilege.status === 'used' && privilege.usedAt
-      ? `ใช้เมื่อ ${esc(Calc.labelDate ? Calc.labelDate(privilege.usedAt) : privilege.usedAt)}`
-      : `หมดอายุ ${esc(Calc.labelDate ? Calc.labelDate(privilege.expiryDate) : privilege.expiryDate)}`
-    const metaLine = [
-      privilegeSecondaryText(privilege) || typeLabel(privilege.type),
-      privilege.type === 'discount_code' && privilege.code ? `โค้ด ${privilege.code}` : '',
-    ].filter(Boolean).join(' · ')
+      ? `ใช้เมื่อ ${esc(Calc.shortDate ? Calc.shortDate(privilege.usedAt) : privilege.usedAt)}`
+      : `หมดอายุ ${esc(Calc.shortDate ? Calc.shortDate(privilege.expiryDate) : privilege.expiryDate)}`
+    const metaLine = `${esc(sourceLabel)} · ${dateLabel}`
     const leadingAction = privilegeSupportsCopy(privilege)
       ? `<button class="btn btn-secondary btn-sm" onclick="App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอก</button>`
       : privilege.status === 'active'
@@ -10593,12 +10588,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             <div class="privilege-card-title">${esc(privilege.title || typeLabel(privilege.type))}</div>
             <span class="${meta.className}">${meta.label}</span>
           </div>
-          <div class="privilege-card-sub">${esc(metaLine)}</div>
+          <div class="privilege-card-sub">${metaLine}</div>
         </div>
-      </div>
-      <div class="privilege-pill-row">
-        <span class="status-pill muted">${dateLabel}</span>
-        <span class="status-pill info privilege-saving-pill">${valueLabel}</span>
       </div>
       <div class="privilege-card-actions">
         ${leadingAction}
