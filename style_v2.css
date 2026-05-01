@@ -4772,6 +4772,11 @@ html.dark .crypto-summary-item {
   margin-bottom: 12px;
 }
 
+.privilege-template-row {
+  padding: 0 0 4px;
+  margin-top: 6px;
+}
+
 .privilege-list {
   display: grid;
   gap: 10px;
