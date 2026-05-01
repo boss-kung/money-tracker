@@ -10152,7 +10152,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       : rawValueType
     const inferredValueType = type === 'free_item' ? 'free_item' : 'amount'
     const valueType = PRIVILEGE_VALUE_TYPES.some(([key]) => key === migratedValueType) ? migratedValueType : inferredValueType
-    const quantity = Math.max(1, Math.floor(normalizeNumber(raw.quantity, 1) || 1))
+    const rawQuantity = Math.max(0, Math.floor(normalizeNumber(raw.quantity, 1) || 0))
+    const quantity = status === 'active' ? Math.max(1, rawQuantity || 1) : Math.max(0, rawQuantity)
     const estimatedSaving = Math.max(0, normalizeNumber(raw.estimatedSaving, 0))
     const actualSaving = raw.actualSaving === null || raw.actualSaving === undefined || raw.actualSaving === ''
       ? null
@@ -10327,7 +10328,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       expiringCount: expiring.length,
       expiredCount: expired.length,
       usedCount: used.length,
-      totalActualSaving: used.reduce((sum, row) => sum + Number(row.actualSaving || 0), 0),
+      totalActualSaving: (S.privileges || []).reduce((sum, row) => sum + Number(row.actualSaving || 0), 0),
       totalPotentialSaving: activeNow.reduce((sum, row) => sum + Number(row.estimatedSaving || 0), 0),
       expiringRows: getPrivilegeRows('expiring', '', { includeArchived: false }).slice(0, 3),
     }
@@ -10363,7 +10364,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     ensurePrivilegesState()
     S.privilegeDraft ||= privilegeDraftFromExisting()
     if (['quantity'].includes(field)) {
-      S.privilegeDraft[field] = Math.max(1, Math.floor(normalizeNumber(value, 1) || 1))
+      const minQty = S.privilegeDraft.status === 'used' ? 0 : 1
+      S.privilegeDraft[field] = Math.max(minQty, Math.floor(normalizeNumber(value, minQty) || minQty))
       return
     }
     if (['value', 'minSpend', 'maxDiscount', 'estimatedSaving'].includes(field)) {
@@ -10451,6 +10453,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     document.getElementById('privilege-used-overlay')?.remove()
     const defaultSaving = Math.max(0, Number(privilege.estimatedSaving || 0))
     const defaultDate = todayLocalISO()
+    const currentQty = Math.max(1, Number(privilege.quantity || 1))
     const el = document.createElement('div')
     el.id = 'privilege-used-overlay'
     el.className = 'overlay open'
@@ -10463,6 +10466,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <button class="btn-icon" onclick="document.getElementById('privilege-used-overlay')?.remove()">✕</button>
         </div>
         <div class="sheet-body">
+          ${currentQty > 1 ? `<div class="form-group">
+            <label class="form-label">ใช้กี่สิทธิ์</label>
+            <input class="form-input" id="privilege-used-qty" type="number" min="1" max="${esc(currentQty)}" step="1" value="1" inputmode="numeric">
+            <div class="form-hint">เหลืออยู่ ${currentQty.toLocaleString('en-US')} สิทธิ์</div>
+          </div>` : ''}
           <div class="form-group">
             <label class="form-label">ประหยัดไปเท่าไร</label>
             <input class="form-input" id="privilege-used-saving" type="number" min="0" step="0.01" value="${esc(defaultSaving)}" inputmode="decimal">
@@ -10613,6 +10621,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const showFreeItemName = draft.type === 'free_item'
     const showAdvanced = S.privilegeFormExpanded ?? privilegeHasAdvancedDetails(draft)
     const advancedLabel = showAdvanced ? 'ซ่อนรายละเอียดเพิ่มเติม' : (existing ? 'รายละเอียดเพิ่มเติม' : 'ใส่รายละเอียดเพิ่ม')
+    const quantityMin = draft.status === 'used' ? 0 : 1
     const html = `
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}')">←</button>
@@ -10645,7 +10654,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             ${template.showFreeItemQuick || !showFreeItemName ? '' : `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>`}
             <div class="form-split-row">
               <div><label class="form-label">ร้านค้า</label><input class="form-input" value="${esc(draft.merchant)}" placeholder="ถ้ามี" oninput="App._updatePrivilegeDraft('merchant', this.value)"></div>
-              <div><label class="form-label">จำนวนสิทธิ์</label><input class="form-input" type="number" min="1" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
+              <div><label class="form-label">จำนวนสิทธิ์</label><input class="form-input" type="number" min="${quantityMin}" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
             </div>
           </div>
         ` : ''}
@@ -10670,7 +10679,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     })
     if (!draft.title) return toast('กรุณากรอกชื่อสิทธิพิเศษ', 'error')
     if (!draft.expiryDate) return toast('กรุณาเลือกวันหมดอายุ', 'error')
-    if (!(Number(draft.quantity || 0) >= 1)) return toast('จำนวนสิทธิ์ต้องไม่น้อยกว่า 1', 'error')
+    if (draft.status === 'active' && !(Number(draft.quantity || 0) >= 1)) return toast('จำนวนสิทธิ์ต้องไม่น้อยกว่า 1', 'error')
+    if (draft.status !== 'active' && Number(draft.quantity || 0) < 0) return toast('จำนวนสิทธิ์ต้องไม่ติดลบ', 'error')
     if (Number(draft.estimatedSaving || 0) < 0 || Number(draft.value || 0) < 0 || Number(draft.minSpend || 0) < 0 || Number(draft.maxDiscount || 0) < 0) {
       return toast('ค่าตัวเลขต้องเป็นจำนวนไม่ติดลบ', 'error')
     }
@@ -10696,16 +10706,23 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     ensurePrivilegesState()
     const privilege = (S.privileges || []).find(row => row.id === privilegeId)
     if (!privilege) return toast('ไม่พบสิทธิพิเศษ', 'error')
+    const currentQty = Math.max(1, Number(privilege.quantity || 1))
+    const usedQty = currentQty > 1
+      ? Math.max(1, Math.floor(normalizeNumber(document.getElementById('privilege-used-qty')?.value, 1) || 1))
+      : 1
     const actualSaving = Math.max(0, normalizeNumber(document.getElementById('privilege-used-saving')?.value, 0))
     const usedAt = String(document.getElementById('privilege-used-date')?.value || todayLocalISO())
+    if (usedQty > currentQty) return toast('จำนวนสิทธิ์ที่ใช้มากกว่าที่เหลืออยู่', 'error')
     if (!/^\d{4}-\d{2}-\d{2}$/.test(usedAt)) return toast('กรุณาเลือกวันที่ใช้', 'error')
-    privilege.status = 'used'
+    const remainingQty = Math.max(0, currentQty - usedQty)
+    privilege.quantity = remainingQty
+    privilege.status = remainingQty === 0 ? 'used' : 'active'
     privilege.usedAt = usedAt
-    privilege.actualSaving = actualSaving
+    privilege.actualSaving = Math.max(0, Number(privilege.actualSaving || 0) + actualSaving)
     privilege.updatedAt = nowISO()
     document.getElementById('privilege-used-overlay')?.remove()
     persistPrivilegesAndRefresh(true)
-    toast('บันทึกการใช้สิทธิ์แล้ว', 'success')
+    toast(remainingQty === 0 ? 'บันทึกการใช้สิทธิ์แล้ว' : `บันทึกแล้ว เหลือ ${remainingQty.toLocaleString('en-US')} สิทธิ์`, 'success')
   }
 
   App.copyPrivilegeCode = async function(privilegeId) {
