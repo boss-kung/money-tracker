@@ -4784,6 +4784,7 @@ html.dark .crypto-summary-item {
 
 .privilege-card {
   padding: 9px 11px;
+  cursor: pointer;
 }
 
 .privilege-card-head {
@@ -4865,26 +4866,124 @@ html.dark .crypto-summary-item {
   padding-bottom: calc(12px + var(--safe-b));
 }
 
+.privilege-detail-sheet .sheet-body {
+  padding-bottom: calc(12px + var(--safe-b));
+}
+
+.privilege-detail-hero {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: var(--surface);
+}
+
+.privilege-detail-hero-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.privilege-detail-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.privilege-detail-hero-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.privilege-detail-source {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.privilege-detail-date {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.privilege-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.privilege-detail-summary-item {
+  border-radius: 14px;
+  padding: 10px;
+  background: var(--bg);
+}
+
+.privilege-detail-summary-item span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.privilege-detail-summary-item strong {
+  display: block;
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.privilege-detail-list {
+  display: grid;
+  gap: 8px;
+}
+
+.privilege-detail-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.privilege-detail-row:last-child {
+  border-bottom: 0;
+}
+
+.privilege-detail-row span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.privilege-detail-row strong {
+  font-size: 13px;
+  color: var(--text);
+  text-align: right;
+  line-height: 1.35;
+}
+
 .privilege-sheet-actions-stack {
   display: grid;
   gap: 8px;
 }
 
-.privilege-delete-btn {
-  margin-top: 8px;
-}
-
-.privilege-advanced-toggle {
-  margin-bottom: 10px;
-}
-
-.privilege-advanced-card {
-  padding: 12px;
-  margin-bottom: 12px;
-}
-
 .privilege-sheet {
   max-height: min(92dvh, 760px);
+}
+
+.privilege-delete-btn {
+  margin-top: 8px;
 }
 
 .privilege-used-sheet .sheet-body {
