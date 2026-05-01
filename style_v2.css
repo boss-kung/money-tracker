@@ -845,7 +845,24 @@ html.dark .mt-alert-card { border-color: rgba(245,158,11,.28); }
   border-radius:14px;
   padding:0px 4px;
 }
-.mt-alert-title em { grid-column:2; font-size:12px; font-style:normal; font-weight:800; background:#d50000; color: white; padding:3px 7px; border-radius:999px; }
+.mt-alert-badges {
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mt-alert-title em,
+.mt-alert-badge-total {
+  font-size:12px;
+  font-style:normal;
+  font-weight:800;
+  color: white;
+  padding:3px 7px;
+  border-radius:999px;
+  white-space: nowrap;
+}
+.mt-alert-title em { background:#d50000; }
+.mt-alert-badge-total { background: var(--primary); }
 
 html.dark .mt-alert-title { color: #FDE68A; }
 .mt-alert-row {

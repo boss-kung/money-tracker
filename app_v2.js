@@ -2915,8 +2915,9 @@ Calc.getUsableMoney = function(wallets) {
       </div>`
 
     if (nearDueCards.length) {
+      const nearDueTotal = nearDueCards.reduce((sum, card) => sum + Number(card.used || 0), 0)
       html += `<div class="mt-alert-card">
-        <div class="mt-alert-title">ครบกำหนดชำระ ${ESC(nearDueCards[0].due.dueStr)} <em>อีก ${nearDueCards[0].due.daysLeft} วัน</em></div>
+        <div class="mt-alert-title">ครบกำหนดชำระ ${ESC(nearDueCards[0].due.dueStr)} <span class="mt-alert-badges"><em>อีก ${nearDueCards[0].due.daysLeft} วัน</em><span class="mt-alert-badge-total">${S.settings?.hideMoney ? '฿*****' : `รวม ${FMT(nearDueTotal)}`}</span></span></div>
         ${nearDueCards.map(card => `
           <div class="mt-alert-row" onclick="App.openCCDetail('${ESC(card.id)}')">
             <div class="mt-alert-row-info">
@@ -6319,7 +6320,7 @@ Calc.getUsableMoney = function(wallets) {
     }
     content.innerHTML = `
       <div style="padding:0 16px">
-        <div style="font-size:20px;font-weight:800;padding:20px 0 4px">เพิ่มเติม</div>
+        <div style="font-size:20px;font-weight:800;padding:12px 0 4px">เพิ่มเติม</div>
         <div class="sec-title">เครื่องมือหลัก</div>
         <div class="card card-pad">
           ${row({ icon:'🎯', label:'ตั้งเป้าหมายทางการเงิน', value:`${(S.goals||[]).filter(g=>g.status!=='archived').length} เป้าหมาย`, onclick:'App.openGoalsScreen()' })}
