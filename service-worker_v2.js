@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.04.29-phase5'
+const APP_VERSION = '2026.05.01-phase6'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 

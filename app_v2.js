@@ -687,7 +687,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.04.29-phase5'
+const APP_VERSION = '2026.05.01-phase6'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -1212,7 +1212,7 @@ function setupServiceWorkerUpdates() {
     location.reload()
   })
 
-  navigator.serviceWorker.register('./service-worker_v2.js').then(registration => {
+  navigator.serviceWorker.register(`./service-worker_v2.js?v=${encodeURIComponent(APP_VERSION)}`).then(registration => {
     if (registration.waiting && navigator.serviceWorker.controller) showUpdateBanner(registration)
     registration.addEventListener('updatefound', () => {
       const worker = registration.installing
@@ -2653,6 +2653,7 @@ App.render();
       budgets: [],
       settings: { ...JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), hideMoney: false },
       recurring: [],
+      upcomingBills: [],
       goals: [],
       merchants: [],
       ccBenefits: {},

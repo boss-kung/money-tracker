@@ -1450,7 +1450,7 @@ html.dark #bottom-nav {
   position: absolute !important;
   left: auto !important;
   right: max(16px, var(--safe-r)) !important;
-  bottom: calc(var(--nav-h) + var(--safe-b) + var(--app-bottom-gap) + 12px) !important;
+  bottom: calc(var(--nav-h) + var(--safe-b) + var(--app-bottom-gap) + 6px) !important;
   width: var(--fab-size) !important;
   height: var(--fab-size) !important;
   border-radius: 18px !important;
@@ -1800,14 +1800,14 @@ textarea {
   padding-left: max(var(--app-gutter), var(--safe-l)) !important;
   padding-right: max(var(--app-gutter), var(--safe-r)) !important;
   padding-top: 8px !important;
-  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 10px) !important;
-  scroll-padding-bottom: calc(var(--nav-h) + var(--safe-b) + 10px) !important;
+  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 4px) !important;
+  scroll-padding-bottom: calc(var(--nav-h) + var(--safe-b) + 4px) !important;
 }
 
 body.is-dashboard #dashboard-content {
   padding-top: max(10px, calc(var(--safe-t) + 8px)) !important;
-  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 64px) !important;
-  scroll-padding-bottom: calc(var(--nav-h) + var(--safe-b) + 64px) !important;
+  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 36px) !important;
+  scroll-padding-bottom: calc(var(--nav-h) + var(--safe-b) + 36px) !important;
 }
 
 .page-header {
@@ -2053,7 +2053,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   font-weight: 800 !important;
   letter-spacing: -.04em !important;
 }
-.sheet-body { padding: 0 16px calc(14px + var(--safe-b) + var(--app-bottom-gap)) !important; }
+.sheet-body { padding: 0 16px calc(8px + var(--safe-b) + var(--app-bottom-gap)) !important; }
 .sub-header {
   gap: 10px !important;
   padding: max(12px, calc(var(--safe-t) + 8px)) max(var(--app-gutter), var(--safe-r)) 12px max(var(--app-gutter), var(--safe-l)) !important;
@@ -2061,7 +2061,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 .sub-scroll {
   padding-left: max(var(--app-gutter), var(--safe-l)) !important;
   padding-right: max(var(--app-gutter), var(--safe-r)) !important;
-  padding-bottom: calc(16px + var(--safe-b) + var(--app-bottom-gap)) !important;
+  padding-bottom: calc(10px + var(--safe-b) + var(--app-bottom-gap)) !important;
 }
 .type-tabs { padding: 0 16px 10px !important; gap: 6px !important; }
 .quick-amount-row { padding: 0 16px 12px !important; }
@@ -2439,7 +2439,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   display:grid;
   grid-template-columns: .85fr 1.35fr;
   gap:8px;
-  padding:10px 16px calc(16px + var(--safe-b) + var(--app-bottom-gap));
+  padding:10px 16px calc(8px + var(--safe-b) + var(--app-bottom-gap));
   background:linear-gradient(to top, var(--surface) 78%, color-mix(in srgb, var(--surface) 0%, transparent));
   border-top:1px solid var(--border);
 }
@@ -4084,7 +4084,7 @@ html.dark .icon-btn {
     position: static !important;
     transform: none !important;
     bottom: auto !important;
-    padding-bottom: calc(16px + var(--safe-b) + var(--app-bottom-gap)) !important;
+    padding-bottom: calc(8px + var(--safe-b) + var(--app-bottom-gap)) !important;
   }
 }
 
