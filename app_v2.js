@@ -10095,19 +10095,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     ['discount_code', 'โค้ดส่วนลด'],
     ['voucher', 'Voucher'],
     ['free_item', 'ฟรีสินค้า'],
-    ['free_shipping', 'ส่งฟรี'],
-    ['cashback', 'Cashback'],
-    ['points', 'แต้ม'],
-    ['other', 'อื่นๆ'],
   ]
   const PRIVILEGE_VALUE_TYPES = [
     ['amount', 'จำนวนเงิน'],
     ['percent', 'เปอร์เซ็นต์'],
-    ['free_shipping', 'ส่งฟรี'],
     ['free_item', 'ฟรีสินค้า'],
-    ['cashback', 'Cashback'],
-    ['points', 'แต้ม'],
-    ['other', 'อื่นๆ'],
   ]
   const PRIVILEGE_FILTERS = [
     ['active', 'ใช้ได้'],
@@ -10143,9 +10135,23 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   function normalizePrivilege(raw = {}) {
     const now = nowISO()
     const status = ['active', 'used', 'archived'].includes(raw.status) ? raw.status : 'active'
-    const type = PRIVILEGE_TYPES.some(([key]) => key === raw.type) ? raw.type : 'other'
-    const inferredValueType = type === 'free_shipping' ? 'free_shipping' : type === 'free_item' ? 'free_item' : 'amount'
-    const valueType = PRIVILEGE_VALUE_TYPES.some(([key]) => key === raw.valueType) ? raw.valueType : inferredValueType
+    const rawType = String(raw.type || '').trim()
+    const migratedType =
+      rawType === 'free_shipping' ? 'voucher'
+      : rawType === 'cashback' ? 'voucher'
+      : rawType === 'points' ? 'voucher'
+      : rawType === 'other' ? 'voucher'
+      : rawType
+    const type = PRIVILEGE_TYPES.some(([key]) => key === migratedType) ? migratedType : 'voucher'
+    const rawValueType = String(raw.valueType || '').trim()
+    const migratedValueType =
+      rawValueType === 'free_shipping' ? 'amount'
+      : rawValueType === 'cashback' ? 'amount'
+      : rawValueType === 'points' ? 'amount'
+      : rawValueType === 'other' ? 'amount'
+      : rawValueType
+    const inferredValueType = type === 'free_item' ? 'free_item' : 'amount'
+    const valueType = PRIVILEGE_VALUE_TYPES.some(([key]) => key === migratedValueType) ? migratedValueType : inferredValueType
     const quantity = Math.max(1, Math.floor(normalizeNumber(raw.quantity, 1) || 1))
     const estimatedSaving = Math.max(0, normalizeNumber(raw.estimatedSaving, 0))
     const actualSaving = raw.actualSaving === null || raw.actualSaving === undefined || raw.actualSaving === ''
@@ -10213,10 +10219,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (platform.includes('lazada')) return '🎁'
     if (platform.includes('line man')) return '🛵'
     if (platform.includes('grab')) return '🚗'
-    if (privilege?.type === 'free_shipping') return '🚚'
     if (privilege?.type === 'free_item') return '🍱'
-    if (privilege?.type === 'cashback') return '💸'
-    if (privilege?.type === 'points') return '⭐'
     if (privilege?.type === 'voucher') return '🎟️'
     return '🏷️'
   }
@@ -10253,9 +10256,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
     if (privilege.valueType === 'percent') return `${Number(privilege.value || 0)}%`
     if (privilege.valueType === 'amount') return money(privilege.value || 0)
-    if (privilege.valueType === 'cashback') return `Cashback ${money(privilege.value || 0)}`
-    if (privilege.valueType === 'points') return `${Number(privilege.value || 0).toLocaleString('en-US')} แต้ม`
-    if (privilege.valueType === 'free_shipping') return privilege.maxDiscount > 0 ? `ส่งฟรี สูงสุด ${money(privilege.maxDiscount)}` : 'ส่งฟรี'
     if (privilege.valueType === 'free_item') return privilege.freeItemName ? `ฟรี ${privilege.freeItemName}` : 'ฟรีสินค้า'
     return valueTypeLabel(privilege.valueType)
   }
@@ -10374,8 +10374,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (field === 'type') {
       if (value === 'free_item') {
         S.privilegeDraft.valueType = 'free_item'
-      } else if (value === 'free_shipping') {
-        S.privilegeDraft.valueType = 'free_shipping'
+      } else {
+        S.privilegeDraft.valueType = 'amount'
       }
     }
   }
@@ -10595,6 +10595,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const showFreeItemName = draft.type === 'free_item'
     const maxDiscountLabel = draft.type === 'free_item' ? 'มูลค่าสินค้า' : 'ส่วนลดสูงสุด'
     const showAdvanced = S.privilegeFormExpanded ?? privilegeHasAdvancedDetails(draft)
+    const advancedLabel = showAdvanced ? 'ซ่อนรายละเอียดเพิ่มเติม' : (existing ? 'รายละเอียดเพิ่มเติม' : 'ใส่รายละเอียดเพิ่ม')
     const html = `
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}')">←</button>
@@ -10603,21 +10604,19 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>
       <div class="sub-scroll privilege-form-screen">
         <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input class="form-input" value="${esc(draft.title)}" placeholder="เช่น Shopee 10% OFF" oninput="App._updatePrivilegeDraft('title', this.value)"></div>
-        <div class="form-split-row">
-          <div><label class="form-label">ประเภท</label><select class="form-input" onchange="App._updatePrivilegeDraft('type', this.value); App.openPrivilegeForm('${esc(privilegeId)}', true)">${typeOpts}</select></div>
-          <div><label class="form-label">Platform / Source</label><input class="form-input" value="${esc(draft.platform)}" placeholder="เช่น Shopee" oninput="App._updatePrivilegeDraft('platform', this.value)"></div>
-        </div>
-        <div class="form-group"><label class="form-label">โค้ด</label><input class="form-input" value="${esc(draft.code)}" placeholder="ถ้ามี เช่น PAYDAY10" oninput="App._updatePrivilegeDraft('code', this.value)"></div>
-        ${showFreeItemName ? `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>` : ''}
+        <div class="form-group"><label class="form-label">Platform / Source</label><input class="form-input" value="${esc(draft.platform)}" placeholder="เช่น Shopee, Lazada, LINE MAN" oninput="App._updatePrivilegeDraft('platform', this.value)"></div>
         <div class="form-split-row">
           <div><label class="form-label">วันหมดอายุ</label><input class="form-input" type="date" value="${esc(draft.expiryDate)}" oninput="App._updatePrivilegeDraft('expiryDate', this.value)"></div>
           <div><label class="form-label">คาดว่าประหยัดได้</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.estimatedSaving)}" oninput="App._updatePrivilegeDraft('estimatedSaving', this.value)"></div>
         </div>
         <div class="privilege-advanced-toggle">
-          <button class="btn btn-secondary btn-sm" onclick="App.togglePrivilegeAdvanced('${esc(privilegeId)}')" style="width:auto">${showAdvanced ? 'ซ่อนรายละเอียดเพิ่มเติม' : 'รายละเอียดเพิ่มเติม'}</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.togglePrivilegeAdvanced('${esc(privilegeId)}')" style="width:auto">${advancedLabel}</button>
         </div>
         ${showAdvanced ? `
           <div class="card privilege-advanced-card">
+            <div class="form-group"><label class="form-label">ประเภท</label><select class="form-input" onchange="App._updatePrivilegeDraft('type', this.value); App.openPrivilegeForm('${esc(privilegeId)}', true)">${typeOpts}</select></div>
+            <div class="form-group"><label class="form-label">โค้ด</label><input class="form-input" value="${esc(draft.code)}" placeholder="ถ้ามี เช่น PAYDAY10" oninput="App._updatePrivilegeDraft('code', this.value)"></div>
+            ${showFreeItemName ? `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>` : ''}
             <div class="form-split-row">
               <div><label class="form-label">ร้านค้า</label><input class="form-input" value="${esc(draft.merchant)}" placeholder="ถ้ามี" oninput="App._updatePrivilegeDraft('merchant', this.value)"></div>
               <div><label class="form-label">จำนวนสิทธิ์</label><input class="form-input" type="number" min="1" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
