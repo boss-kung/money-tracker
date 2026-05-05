@@ -975,7 +975,12 @@ const App = {
     S.tx.type = type
     S.txSuggestedFields ||= {}
     S.tx.categoryId = ''
-    if (type !== 'expense') {
+    if (type === 'transfer') {
+      S.tx.merchant = ''
+      S.tx.isRecurring = false
+      S.tx.isInstallment = false
+      App._normalizeTransferDraft?.()
+    } else if (type !== 'expense') {
       S.tx.isRecurring = false
       S.tx.isInstallment = false
     }
@@ -999,6 +1004,7 @@ const App = {
 
   _goToDetail() {
     if (!parseFloat(S.tx.amount)) { toast('กรุณาระบุจำนวนเงิน', 'error'); return }
+    if (S.tx.type === 'transfer') App._normalizeTransferDraft?.()
     S.tx.step = 'detail'
     App._renderAddTxDetail()
   },
@@ -1968,6 +1974,26 @@ App.render();
   const EMOJIS = ['🍜','☕','🛒','🛍️','🚗','⛽','🏠','💡','📱','🎬','💊','🏥','🎁','💰','💼','📈','🍱','🥗','✈️','🚆','🐶','🎮','🧾','🏪','💳','🏦','🥇','₿','📦','✨','🔁','🛡️']
   const COLORS = ['#2563EB','#16A34A','#DC2626','#F59E0B','#7C3AED','#0891B2','#BE185D','#475569','#0F766E','#EA580C','#4F46E5','#111827']
 
+  // ── Transfer wallet helpers ─────────────────────────────────
+  const TRANSFERABLE_WALLET_TYPES = new Set(['cash', 'bank', 'ewallet', 'saving'])
+  function isTransferableWallet(w) {
+    return !!w && !w.archived && TRANSFERABLE_WALLET_TYPES.has(String(w.type || '').toLowerCase())
+  }
+  function getTransferableWallets() {
+    return (S.wallets || []).filter(isTransferableWallet)
+  }
+  function normalizeTransferDraft() {
+    if (!S.tx || S.tx.type !== 'transfer') return
+    const wallets = getTransferableWallets()
+    if (!wallets.length) { S.tx.walletId = ''; S.tx.toWalletId = ''; return }
+    if (!wallets.some(w => w.id === S.tx.walletId)) S.tx.walletId = wallets[0].id
+    const dests = wallets.filter(w => w.id !== S.tx.walletId)
+    if (!dests.some(w => w.id === S.tx.toWalletId)) S.tx.toWalletId = dests[0]?.id || ''
+  }
+  App._normalizeTransferDraft = normalizeTransferDraft
+  App._getTransferableWallets = getTransferableWallets
+  App._isTransferableWallet = isTransferableWallet
+
   function typeColor(type) {
     if (type === 'income') return 'var(--income)'
     if (type === 'transfer') return 'var(--primary)'
@@ -2119,22 +2145,12 @@ App.render();
     const display = formatDraftAmount(S.tx.amount || '0')
     const color = typeColor(type)
     const INVEST_TYPES = new Set(['gold','crypto','fcd'])
-    const TRANSFERABLE_MONEY_TYPES = new Set(['bank', 'cash', 'ewallet', 'saving'])
     const isTransfer = type === 'transfer'
     const activeWallets = S.wallets.filter(w => !w.archived)
-    const transferWallets = activeWallets.filter(w => TRANSFERABLE_MONEY_TYPES.has(String(w.type || '').toLowerCase()))
 
-    // Auto-correct walletId / toWalletId when switching to transfer mode
-    // so invalid (gold/crypto/fcd/credit) wallets are never sent to validation.
-    if (isTransfer && transferWallets.length > 0) {
-      if (!transferWallets.find(w => w.id === S.tx.walletId)) {
-        S.tx.walletId = transferWallets[0].id
-      }
-      const validDest = transferWallets.filter(w => w.id !== S.tx.walletId)
-      if (validDest.length > 0 && !validDest.find(w => w.id === S.tx.toWalletId)) {
-        S.tx.toWalletId = validDest[0].id
-      }
-    }
+    if (isTransfer) normalizeTransferDraft()
+    const transferWallets = getTransferableWallets()
+    const hasEnoughForTransfer = !isTransfer || transferWallets.length >= 2
 
     const pickableWallets = isTransfer ? transferWallets : activeWallets.filter(w => !INVEST_TYPES.has(w.type))
     const walletOptions = pickableWallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
@@ -2148,7 +2164,7 @@ App.render();
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div class="cat-grid cat-grid-compact" id="cat-grid">${shownCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}${hasMore ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.showAllTxCategories()"><span class="cat-icon">⋯</span><span>เพิ่มเติม</span></button>` : ''}${S.txShowAllCats && allCats.length > 5 ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.hideAllTxCategories()"><span class="cat-icon">⌃</span><span>ย่อ</span></button>` : ''}</div></div>` : ''}
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);App._renderAddTxDetail()">${walletOptions}</select></div>
-          ${type === 'transfer' ? `<div class="form-group"><label class="form-label">ไปบัญชี</label><select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)"><option value="">เลือกปลายทาง</option>${toWalletOptions}</select><div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class="form-group"><label class="form-label">ร้านค้า / แหล่งที่มา</label><input class="form-input" id="tx-merchant" placeholder="เช่น Grab, Netflix, เงินเดือน" value="${esc(S.tx.merchant)}" oninput="App._txField('merchant',this.value);App._showMerchantDropdown?.(this.value)" onfocus="App._showMerchantDropdown?.(this.value)" onblur="setTimeout(()=>{document.getElementById('mt-merchant-dropdown')?.classList.add('hidden');App._applyMerchantSuggestion?.(this.value)},180)">${S.tx.merchantSuggestionNote ? `<div class="form-hint">${esc(S.tx.merchantSuggestionNote)}</div>` : ''}</div>`}
+          ${type === 'transfer' ? (hasEnoughForTransfer ? `<div class=”form-group”><label class=”form-label”>ไปบัญชี</label><select class=”form-input” id=”tx-towallet” onchange=”App._txField('toWalletId',this.value)”>${toWalletOptions}</select><div class=”form-hint”>รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class=”form-group”><div class=”form-hint” style=”color:var(--expense);background:var(--elevated);border-radius:10px;padding:12px”>ต้องมีกระเป๋าเงินอย่างน้อย 2 ใบสำหรับโอนเงิน กรุณาเพิ่มกระเป๋าเงินก่อน</div></div>`) : `<div class=”form-group”><label class=”form-label”>ร้านค้า / แหล่งที่มา</label><input class=”form-input” id=”tx-merchant” placeholder=”เช่น Grab, Netflix, เงินเดือน” value=”${esc(S.tx.merchant)}” oninput=”App._txField('merchant',this.value);App._showMerchantDropdown?.(this.value)” onfocus=”App._showMerchantDropdown?.(this.value)” onblur=”setTimeout(()=>{document.getElementById('mt-merchant-dropdown')?.classList.add('hidden');App._applyMerchantSuggestion?.(this.value)},180)”>${S.tx.merchantSuggestionNote ? `<div class=”form-hint”>${esc(S.tx.merchantSuggestionNote)}</div>` : ''}</div>`}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value);App._renderAddTxDetail()"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
           ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? (App._recurringInlineHtml?.() || '') : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
           ${(() => {
@@ -2200,7 +2216,7 @@ App.render();
             }
           })()}
         </div>
-        <div class="add-detail-actions"><button class="btn btn-secondary" onclick="App._backToAmount()">← แก้จำนวน</button><button class="btn btn-primary" style="background:${color};box-shadow:0 4px 16px ${color}44" onclick="App.saveTx()">${S.txMode === 'edit' ? 'บันทึก' : `บันทึก ${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}`}</button></div>
+        <div class="add-detail-actions"><button class="btn btn-secondary" onclick="App._backToAmount()">← แก้จำนวน</button><button class="btn btn-primary" ${hasEnoughForTransfer ? `style="background:${color};box-shadow:0 4px 16px ${color}44"` : 'disabled style="opacity:.45;cursor:not-allowed"'} onclick="App.saveTx()">${S.txMode === 'edit' ? 'บันทึก' : `บันทึก ${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}`}</button></div>
       </div>`
   }
 
@@ -5184,6 +5200,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
   const notify = (msg, type = 'info') => { try { toast(msg, type) } catch { console.log(msg) } }
   const loadV5JSON = (key, def) => { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : def } catch { return def } }
   const saveV5JSON = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)) } catch (_) {} }
+
+  const TRANSFERABLE_MONEY_TYPES = new Set(['bank', 'cash', 'ewallet', 'saving'])
+  function isTransferableMoneyWallet(w) { return TRANSFERABLE_MONEY_TYPES.has(String(w?.type || '').toLowerCase()) }
 
   // Alias showToast → toast
   App.showToast = App.showToast || notify
