@@ -2221,7 +2221,7 @@ App.render();
     if (cat && top) insights.push({ icon:'🔍', title:'หมวดที่ควรจับตา', body:`หมวด ${cat.label} ใช้สูงสุดที่ ${fmt(top[1])} (${stats.expense ? (top[1]/stats.expense*100).toFixed(0) : 0}% ของรายจ่าย) แนะนำตั้งงบย่อยหรือ review รายการซ้ำ` })
     const over = budget.find(b => b.over)
     if (over) insights.push({ icon:'⚠️', title:'งบประมาณเกิน', body:`${over.label} เกินงบ ${fmt(over.spent - over.monthlyLimit)} แล้ว ควรหยุดใช้หมวดนี้ชั่วคราวจนจบรอบเดือน` })
-    const usable = Calc.getUsableMoney ? Calc.getUsableMoney(S.wallets || []) : null
+    const usable = Calc.getUsableMoney ? Calc.getUsableMoney(S.wallets || [], S) : null
     const upcoming = App.getUpcomingItems?.(14) || []
     const upcomingCommitted = upcoming.filter(row => ['credit_due', 'recurring', 'scheduled', 'installment'].includes(row.type)).reduce((sum, row) => sum + Number(row.amount || 0), 0)
     if (usable && upcomingCommitted > 0 && usable.liquid < upcomingCommitted) {
@@ -10189,8 +10189,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return { key: 'active', label: 'ใช้ได้', className: 'status-pill info' }
   }
 
+  function privilegeSupportsCode(type) {
+    return ['voucher', 'coupon', 'discount_code'].includes(String(type || '').toLowerCase())
+  }
+
   function privilegeSupportsCopy(privilege) {
-    return privilege?.type === 'discount_code' && !!String(privilege?.code || '').trim()
+    return privilegeSupportsCode(privilege?.type) && !!String(privilege?.code || '').trim()
   }
 
   function privilegeFreeItemValue(privilege) {
@@ -10370,7 +10374,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       hint: 'เหมาะกับคูปองหรือสิทธิ์ที่มีอยู่ในแอปอยู่แล้ว',
       titlePlaceholder: 'เช่น Lazada Voucher ลด 80 บาท',
       platformPlaceholder: 'เช่น Lazada, LINE MAN',
-      showCodeQuick: false,
+      showCodeQuick: true,
       showFreeItemQuick: false,
     }
   }
@@ -10440,6 +10444,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     document.getElementById('privilege-actions-overlay')?.remove()
     const actions = []
     actions.push(`<button class="btn btn-secondary" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>`)
+    actions.push(`<button class="btn btn-secondary" onclick="App.duplicatePrivilege('${esc(privilege.id)}')">ทำสำเนา</button>`)
     if (privilegeSupportsCopy(privilege)) {
       actions.push(`<button class="btn btn-secondary" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอกโค้ด</button>`)
     }
@@ -10486,7 +10491,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const rows = [
       ['ประเภท', typeLabel(privilege.type)],
       ['Platform / Source', sourceLabel],
-      privilege.type === 'discount_code' && privilege.code ? ['โค้ด', privilege.code] : null,
+      privilegeSupportsCode(privilege.type) && privilege.code ? ['โค้ด', privilege.code] : null,
       privilege.type === 'free_item' && privilege.freeItemName ? ['ชื่อของฟรี', privilege.freeItemName] : null,
       expiryLabel ? ['วันหมดอายุ', expiryLabel] : null,
       usedLabel ? ['ใช้ล่าสุด', usedLabel] : null,
@@ -10524,6 +10529,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             ${privilegeSupportsCopy(privilege) ? `<button class="btn btn-secondary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอกโค้ด</button>` : ''}
             ${privilege.status === 'active' ? `<button class="btn btn-primary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.openPrivilegeUsedDialog('${esc(privilege.id)}')">ใช้แล้ว</button>` : ''}
             <button class="btn btn-secondary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>
+            <button class="btn btn-secondary" onclick="App.duplicatePrivilege('${esc(privilege.id)}')">ทำสำเนา</button>
           </div>
         </div>
       </div>`
@@ -10766,6 +10772,28 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         toast('ลบสิทธิพิเศษแล้ว', 'success')
       },
     })
+  }
+
+  App.duplicatePrivilege = function(privilegeId) {
+    ensurePrivilegesState()
+    const original = (S.privileges || []).find(row => row.id === privilegeId)
+    if (!original) return toast('ไม่พบสิทธิพิเศษ', 'error')
+    const now = nowISO()
+    const copy = {
+      ...original,
+      id: `priv_${Calc.genId ? Calc.genId() : Date.now()}`,
+      status: 'active',
+      usedAt: null,
+      actualSaving: null,
+      quantity: Math.max(1, Number(original.quantity || 1)),
+      createdAt: now,
+      updatedAt: now,
+    }
+    S.privileges.unshift(copy)
+    document.getElementById('privilege-detail-overlay')?.remove()
+    document.getElementById('privilege-actions-overlay')?.remove()
+    persistPrivilegesAndRefresh(true)
+    toast('ทำสำเนาสิทธิ์แล้ว', 'success')
   }
 
   function injectDashboardPrivilegeAlerts() {
