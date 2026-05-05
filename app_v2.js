@@ -1167,7 +1167,25 @@ Object.assign(App, {
 
   openMerchantScreen(q='') { App._ensureV2State(); const usage = Calc.getMerchantUsage(S.transactions); const list = S.merchants.filter(m => !q || m.name.toLowerCase().includes(q.toLowerCase())); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${q}" oninput="App.openMerchantScreen(this.value)"><div class="card mt-12"><div style="padding:0 16px">${list.map(m => `<div class="list-item"><div class="list-item-icon" style="background:${m.color}20">${m.emoji || '🏪'}</div><div class="list-item-info"><div class="list-item-name">${m.name}</div><div class="list-item-sub">ใช้จ่าย ${usage[m.name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${m.id}')">✏️</button><button class="icon-btn" onclick="App.deleteMerchant('${m.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')}</div></div></div>`) },
   saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { toast('กรุณากรอกชื่อร้านค้า','error'); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
-  _registerMerchantFromTx(tx) { App._ensureV2State(); if (!tx.merchant) return; if (!S.merchants.some(m => m.name.toLowerCase() === tx.merchant.toLowerCase())) S.merchants.push({ id:Calc.genId(), name:tx.merchant, emoji:'🏪', color:'#64748B' }) },
+  _registerMerchantFromTx(tx) {
+  App._ensureV2State()
+
+  const name = String(tx?.merchant || '').trim()
+  if (!name) return
+
+  const exists = (S.merchants || []).some(m =>
+    String(m.name || '').trim().toLowerCase() === name.toLowerCase()
+  )
+
+  if (!exists) {
+    S.merchants.push({
+      id: Calc.genId(),
+      name,
+      emoji: '🏪',
+      color: '#64748B',
+    })
+  }
+},
 
 })
 
@@ -2164,7 +2182,30 @@ App.render();
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div class="cat-grid cat-grid-compact" id="cat-grid">${shownCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}${hasMore ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.showAllTxCategories()"><span class="cat-icon">⋯</span><span>เพิ่มเติม</span></button>` : ''}${S.txShowAllCats && allCats.length > 5 ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.hideAllTxCategories()"><span class="cat-icon">⌃</span><span>ย่อ</span></button>` : ''}</div></div>` : ''}
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);App._renderAddTxDetail()">${walletOptions}</select></div>
-          ${type === 'transfer' ? (hasEnoughForTransfer ? `<div class=”form-group”><label class=”form-label”>ไปบัญชี</label><select class=”form-input” id=”tx-towallet” onchange=”App._txField('toWalletId',this.value)”>${toWalletOptions}</select><div class=”form-hint”>รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : `<div class=”form-group”><div class=”form-hint” style=”color:var(--expense);background:var(--elevated);border-radius:10px;padding:12px”>ต้องมีกระเป๋าเงินอย่างน้อย 2 ใบสำหรับโอนเงิน กรุณาเพิ่มกระเป๋าเงินก่อน</div></div>`) : `<div class=”form-group”><label class=”form-label”>ร้านค้า / แหล่งที่มา</label><input class=”form-input” id=”tx-merchant” placeholder=”เช่น Grab, Netflix, เงินเดือน” value=”${esc(S.tx.merchant)}” oninput=”App._txField('merchant',this.value);App._showMerchantDropdown?.(this.value)” onfocus=”App._showMerchantDropdown?.(this.value)” onblur=”setTimeout(()=>{document.getElementById('mt-merchant-dropdown')?.classList.add('hidden');App._applyMerchantSuggestion?.(this.value)},180)”>${S.tx.merchantSuggestionNote ? `<div class=”form-hint”>${esc(S.tx.merchantSuggestionNote)}</div>` : ''}</div>`}
+          ${type === 'transfer'
+  ? `<div class="form-group">
+      <label class="form-label">ไปบัญชี</label>
+      <select class="form-input" id="tx-towallet" onchange="App._txField('toWalletId',this.value)">
+        <option value="">เลือกปลายทาง</option>${toWalletOptions}
+      </select>
+      <div class="form-hint">รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div>
+    </div>`
+  : `<div class="form-group">
+      <label class="form-label">ร้านค้า / แหล่งที่มา</label>
+      <input
+        class="form-input"
+        id="tx-merchant"
+        autocomplete="off"
+        autocapitalize="none"
+        placeholder="เช่น Grab, Netflix, เงินเดือน"
+        value="${esc(S.tx.merchant)}"
+        oninput="App._txField('merchant', this.value); App._showMerchantDropdown?.(this.value)"
+        onfocus="App._showMerchantDropdown?.(this.value)"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();App._confirmTypedMerchant?.()}"
+        onblur="App._merchantBlurTimer=setTimeout(()=>App._hideMerchantDropdown?.(true),260)"
+      >
+      ${S.tx.merchantSuggestionNote ? `<div class="form-hint">${esc(S.tx.merchantSuggestionNote)}</div>` : ''}
+    </div>`}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value);App._renderAddTxDetail()"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
           ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? (App._recurringInlineHtml?.() || '') : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
           ${(() => {
@@ -3765,7 +3806,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       walletId: S.tx.walletId,
       toWalletId: S.tx.toWalletId || undefined,
       categoryId: S.tx.categoryId || undefined,
-      merchant: S.tx.type === 'transfer' ? '' : (S.tx.merchant || ''),
+      merchant: S.tx.type === 'transfer' ? '' : String(S.tx.merchant || '').trim(),
       note: S.tx.note || '',
       date: S.tx.date || today(),
       isRecurring: !!S.tx.isRecurring,
@@ -4435,47 +4476,141 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   // ── 6. Robust merchant dropdown: pick existing or type a new merchant ──────
-  function ensureMerchantWrap(inp) {
-    if (!inp) return null
-    if (!inp.parentNode?.classList?.contains('mt-merchant-wrap')) {
-      const wrap = document.createElement('div')
-      wrap.className = 'mt-merchant-wrap'
-      inp.parentNode.insertBefore(wrap, inp)
-      wrap.appendChild(inp)
+function ensureMerchantWrap(inp) {
+  if (!inp) return null
+
+  if (!inp.parentNode?.classList?.contains('mt-merchant-wrap')) {
+    const wrap = document.createElement('div')
+    wrap.className = 'mt-merchant-wrap'
+    inp.parentNode.insertBefore(wrap, inp)
+    wrap.appendChild(inp)
+  }
+
+  let dd = document.getElementById('mt-merchant-dropdown')
+  if (!dd) {
+    dd = document.createElement('div')
+    dd.id = 'mt-merchant-dropdown'
+    dd.className = 'hidden'
+    inp.parentNode.appendChild(dd)
+
+    const handlePick = ev => {
+      const item = ev.target.closest('[data-merchant-index], [data-create-merchant]')
+      if (!item) return
+
+      ev.preventDefault()
+      ev.stopPropagation()
+
+      clearTimeout(App._merchantBlurTimer)
+
+      if (item.dataset.createMerchant === '1') {
+        App._pickMerchant(String(item.dataset.merchantName || ''), { create: true })
+        return
+      }
+
+      const index = Number(item.dataset.merchantIndex)
+      const merchant = App._merchantDropdownMatches?.[index]
+      if (merchant?.name) App._pickMerchant(merchant.name, { create: false })
     }
-    let dd = document.getElementById('mt-merchant-dropdown')
-    if (!dd) {
-      dd = document.createElement('div')
-      dd.id = 'mt-merchant-dropdown'
-      dd.className = 'hidden'
-      inp.parentNode.appendChild(dd)
-      dd.addEventListener('pointerdown', ev => {
-        const item = ev.target.closest('[data-merchant-name]')
-        if (!item) return
-        ev.preventDefault()
-        App._pickMerchant(item.dataset.merchantName || '')
+
+    dd.addEventListener('pointerdown', handlePick)
+    dd.addEventListener('mousedown', handlePick)
+    dd.addEventListener('touchstart', handlePick, { passive: false })
+  }
+
+  return dd
+}
+
+App._hideMerchantDropdown = function(applySuggestion = false) {
+  const inp = document.getElementById('tx-merchant')
+  document.getElementById('mt-merchant-dropdown')?.classList.add('hidden')
+
+  if (applySuggestion && inp) {
+    const typed = String(inp.value || '').trim()
+    S.tx.merchant = typed
+    App._applyMerchantSuggestion?.(typed)
+  }
+}
+
+App._showMerchantDropdown = function(q = '') {
+  App._ensureV2State?.()
+
+  const inp = document.getElementById('tx-merchant')
+  const dd = ensureMerchantWrap(inp)
+  if (!inp || !dd) return
+
+  clearTimeout(App._merchantBlurTimer)
+
+  const raw = String(q || '')
+  const norm = raw.trim().toLowerCase()
+
+  const matches = (S.merchants || [])
+    .filter(m => !norm || String(m.name || '').toLowerCase().includes(norm))
+    .slice(0, 8)
+
+  App._merchantDropdownMatches = matches
+
+  const exact = (S.merchants || [])
+    .some(m => String(m.name || '').trim().toLowerCase() === norm)
+
+  const matchRows = matches.map((m, index) => `
+    <div class="mt-merchant-item" data-merchant-index="${index}">
+      <span class="mmi-emoji">${esc(m.emoji || '🏪')}</span>
+      <span class="mmi-name">${esc(m.name)}</span>
+    </div>
+  `).join('')
+
+  const createRow = norm && !exact ? `
+    <div class="mt-merchant-item create" data-create-merchant="1" data-merchant-name="${esc(raw.trim())}">
+      <span class="mmi-emoji">＋</span>
+      <span class="mmi-name">สร้างร้านใหม่ “${esc(raw.trim())}”</span>
+    </div>
+  ` : ''
+
+  dd.innerHTML = matchRows + createRow
+  dd.classList.toggle('hidden', !matches.length && !createRow)
+}
+
+App._confirmTypedMerchant = function() {
+  const inp = document.getElementById('tx-merchant')
+  const name = String(inp?.value || '').trim()
+  if (!name) return
+
+  const exists = (S.merchants || [])
+    .some(m => String(m.name || '').trim().toLowerCase() === name.toLowerCase())
+
+  App._pickMerchant(name, { create: !exists })
+}
+
+App._pickMerchant = function(name, opts = {}) {
+  App._ensureV2State?.()
+
+  const cleanName = String(name || '').trim()
+  if (!cleanName) return
+
+  S.tx.merchant = cleanName
+
+  const inp = document.getElementById('tx-merchant')
+  if (inp) inp.value = cleanName
+
+  if (opts.create) {
+    const exists = (S.merchants || [])
+      .some(m => String(m.name || '').trim().toLowerCase() === cleanName.toLowerCase())
+
+    if (!exists) {
+      S.merchants.push({
+        id: Calc.genId(),
+        name: cleanName,
+        emoji: '🏪',
+        color: '#64748B',
       })
+      persist()
+      toast?.('เพิ่มร้านค้าใหม่แล้ว', 'success')
     }
-    return dd
   }
-  App._showMerchantDropdown = function(q = '') {
-    const inp = document.getElementById('tx-merchant')
-    const dd = ensureMerchantWrap(inp)
-    if (!inp || !dd) return
-    const norm = String(q || '').trim().toLowerCase()
-    const matches = (S.merchants || []).filter(m => !norm || String(m.name || '').toLowerCase().includes(norm)).slice(0, 8)
-    const exact = (S.merchants || []).some(m => String(m.name || '').toLowerCase() === norm)
-    const createRow = norm && !exact ? `<div class="mt-merchant-item create" data-merchant-name="${esc(q)}"><span class="mmi-emoji">＋</span><span class="mmi-name">ใช้ “${esc(q)}” เป็นร้านใหม่</span></div>` : ''
-    dd.innerHTML = matches.map(m => `<div class="mt-merchant-item" data-merchant-name="${esc(m.name)}"><span class="mmi-emoji">${esc(m.emoji || '🏪')}</span><span class="mmi-name">${esc(m.name)}</span></div>`).join('') + createRow
-    dd.classList.toggle('hidden', !matches.length && !createRow)
-  }
-  App._pickMerchant = function(name) {
-    S.tx.merchant = name || ''
-    const inp = document.getElementById('tx-merchant')
-    if (inp) inp.value = S.tx.merchant
-    document.getElementById('mt-merchant-dropdown')?.classList.add('hidden')
-    App._applyMerchantSuggestion?.(S.tx.merchant)
-  }
+
+  App._hideMerchantDropdown(false)
+  App._applyMerchantSuggestion?.(cleanName)
+}
 
   function sameValue(a, b) {
     return String(a ?? '') === String(b ?? '')
@@ -9687,17 +9822,19 @@ Calc.getUsableMoney = function(wallets, state = null) {
   // When user picks a merchant from dropdown, auto-suggest category and wallet
   // from the most recent transaction with that merchant for the same type.
   // Guards: never override a field the user has already manually changed.
-  const _prevPickMerchant = App._pickMerchant?.bind(App)
-  App._pickMerchant = function(name) {
-    if (_prevPickMerchant) _prevPickMerchant(name)
-    if (!name?.trim() || !S.tx) return
+const _prevPickMerchant = App._pickMerchant?.bind(App)
+App._pickMerchant = function(name, opts = {}) {
+  if (_prevPickMerchant) _prevPickMerchant(name, opts)
 
-    const norm = name.trim().toLowerCase()
-    const history = (S.transactions || [])
-      .filter(t => String(t.merchant || '').trim().toLowerCase() === norm
-                && t.type === (S.tx.type || 'expense'))
-      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
-    if (!history.length) return
+  const cleanName = String(name || '').trim()
+  if (!cleanName || !S.tx) return
+
+  const norm = cleanName.toLowerCase()
+  const history = (S.transactions || [])
+    .filter(t => String(t.merchant || '').trim().toLowerCase() === norm
+              && t.type === (S.tx.type || 'expense'))
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+  if (!history.length) return
 
     const best = history[0]
     let needsRerender = false
