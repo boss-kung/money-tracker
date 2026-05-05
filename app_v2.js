@@ -750,7 +750,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.01-phase7'
+const APP_VERSION = '2026.05.05-r1'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -1153,75 +1153,6 @@ Object.assign(Calc, {
 
 Object.assign(App, {
   _ensureV2State() { S.recurring ||= []; S.upcomingBills ||= []; S.merchants ||= []; S.ccBenefits ||= {}; S.incomeBudgets ||= []; S.marketPrices ||= {}; S.privileges ||= [] },
-
-  openWalletForm(walletId) {
-    S.editingWalletId = walletId
-    const w = walletId ? S.wallets.find(x => x.id === walletId) : null
-    const COLORS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
-    const TYPES = [['bank','🏦','ธนาคาร'],['cash','💵','เงินสด'],['ewallet','📱','TrueMoney'],['credit','💳','บัตรเครดิต'],['gold','🥇','ทอง'],['crypto','₿','Crypto'],['fcd','💱','FCD']]
-    document.getElementById('wallet-form-title').textContent = w ? 'แก้ไขกระเป๋า' : 'เพิ่มกระเป๋าเงิน'
-    document.getElementById('wallet-form-content').innerHTML = `<div class="form-group"><label class="form-label">ชื่อกระเป๋า</label><input class="form-input" id="wf-name" value="${w?.name||''}"></div><div class="form-group"><label class="form-label">ประเภท</label><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px" id="wf-type-grid">${TYPES.map(([v,icon,lbl]) => `<button class="cat-btn${(w?.type||'bank')===v?' active':''}" onclick="App._selectWalletType('${v}')" data-type="${v}">${icon}<br><small>${lbl}</small></button>`).join('')}</div><input type="hidden" id="wf-type" value="${w?.type||'bank'}"></div><div class="form-group"><label class="form-label">สี</label><div class="color-row" id="wf-color-row">${COLORS.map(c => `<div class="color-dot${(w?.color||'#2563EB')===c?' selected':''}" style="background:${c}" onclick="App._selectWalletColor('${c}')" data-color="${c}"></div>`).join('')}</div><input type="hidden" id="wf-color" value="${w?.color||'#2563EB'}"></div><div class="form-group"><label class="form-label" id="wf-balance-label">${w?.type==='credit'?'ยอดค้างชำระ (฿)':'มูลค่าปัจจุบัน (฿)'}</label><input class="form-input" type="number" id="wf-balance" value="${w ? Math.abs(w.balance) : ''}"></div><div id="wf-cc-fields" style="${(w?.type||'bank')==='credit'?'':'display:none'}"><div class="form-group"><label class="form-label">วงเงิน (฿)</label><input class="form-input" type="number" id="wf-limit" value="${w?.limit||''}"></div><div class="form-group"><label class="form-label">วันครบกำหนดชำระ</label><input class="form-input" type="number" id="wf-dueday" min="1" max="31" value="${w?.dueDay||''}"></div><div class="form-group"><label class="form-label">วันตัดรอบบัญชี</label><input class="form-input" type="number" id="wf-cycle-day" min="1" max="31" value="${w?.cycleDay||''}"></div></div><div id="wf-invest-fields" style="${['gold','crypto','fcd'].includes(w?.type||'bank')?'':'display:none'}"><div class="form-group"><label class="form-label">Symbol / สกุลเงิน</label><input class="form-input" id="wf-symbol" placeholder="BTC, ETH, USD, บาททอง" value="${w?.symbol||w?.currency||''}"></div><div class="form-group"><label class="form-label">จำนวน Asset</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${w?.units||''}" placeholder="เช่น 0.05, 2.5, 1000"></div><div class="form-group"><label class="form-label">ราคาต่อหน่วยสำรอง (บาท)</label><input class="form-input" type="number" step="0.01" id="wf-manual-price" value="${w?.manualPrice||''}" ></div></div><div class="flex-row">${w ? `<button class="btn btn-outline flex-1" onclick="App.deleteWallet('${w.id}')">ลบ</button>` : ''}<button class="btn btn-primary${w?'':' flex-1'}" onclick="App.saveWallet()" style="${w?'flex:2':''}">${w ? 'บันทึก' : 'เพิ่มกระเป๋า'}</button></div>`
-    App.openOverlay('overlay-wallet-form')
-  },
-  _selectWalletType(type) {
-    document.getElementById('wf-type').value = type
-    document.querySelectorAll('#wf-type-grid .cat-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type))
-    document.getElementById('wf-cc-fields').style.display = type === 'credit' ? '' : 'none'
-    document.getElementById('wf-invest-fields').style.display = ['gold','crypto','fcd'].includes(type) ? '' : 'none'
-    document.getElementById('wf-balance-label').textContent = type === 'credit' ? 'ยอดค้างชำระ (฿)' : ['gold','crypto','fcd'].includes(type) ? 'มูลค่าปัจจุบัน / ราคาสำรอง (฿)' : 'มูลค่าปัจจุบัน (฿)'
-    const symbol = document.getElementById('wf-symbol')
-    if (symbol && type === 'gold' && !symbol.value) symbol.value = 'บาททอง'
-    if (symbol && type === 'fcd' && !symbol.value) symbol.value = 'USD'
-  },
-  saveWallet() {
-    const name = document.getElementById('wf-name').value.trim()
-    const type = document.getElementById('wf-type').value
-    const color = document.getElementById('wf-color').value
-    const rawBalance = parseFloat(document.getElementById('wf-balance').value) || 0
-    const limit = parseFloat(document.getElementById('wf-limit')?.value) || 50000
-    const dueDay = parseInt(document.getElementById('wf-dueday')?.value) || 5
-    const cycleDay = parseInt(document.getElementById('wf-cycle-day')?.value) || 25
-    const isInvest = ['gold','crypto','fcd'].includes(type)
-    const symbol = document.getElementById('wf-symbol')?.value.trim().toUpperCase() || (type === 'gold' ? 'บาททอง' : type === 'fcd' ? 'USD' : '')
-    const units = isInvest ? (parseFloat(document.getElementById('wf-units')?.value) || 0) : undefined
-    const manualPrice = isInvest ? (parseFloat(document.getElementById('wf-manual-price')?.value) || 0) : undefined
-    const ICONS = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', saving:'🏦', gold:'🥇', crypto:'₿', fcd:'💱' }
-    if (!name) { toast('กรุณากรอกชื่อกระเป๋า', 'error'); return }
-
-    let balance = type === 'credit' ? -Math.abs(rawBalance) : rawBalance
-    const data = {
-      name, type, color, icon: ICONS[type] || '💳', balance,
-      ...(type === 'credit' && { limit, dueDay, cycleDay }),
-      ...(isInvest && { symbol, currency: type === 'fcd' ? (symbol || 'USD') : undefined, units, manualPrice })
-    }
-
-    // Ledger-based recalculation uses openingBalance/openingUnits as the source of truth.
-    // When editing a wallet directly, update the baseline too; otherwise recalculateWalletBalances()
-    // will overwrite the newly typed balance/asset units with the previous baseline.
-    const walletIdForFlow = S.editingWalletId || null
-    const flows = (typeof App._ledgerFlows === 'function') ? App._ledgerFlows() : { cash:{}, units:{} }
-    const round2 = n => Math.round((Number(n) || 0) * 100) / 100
-    const round8 = n => Math.round((Number(n) || 0) * 1e8) / 1e8
-
-    if (isInvest) {
-      const flowUnits = walletIdForFlow ? Number(flows.units?.[walletIdForFlow] || 0) : 0
-      data.openingUnits = round8(units - flowUnits)
-      const price = App._investmentUnitPriceTHB?.(data) || manualPrice || 0
-      if (price && units) data.balance = round2(units * price)
-    } else {
-      const flowCash = walletIdForFlow ? Number(flows.cash?.[walletIdForFlow] || 0) : 0
-      data.openingBalance = round2(balance - flowCash)
-    }
-
-    if (S.editingWalletId) {
-      const idx = S.wallets.findIndex(w => w.id === S.editingWalletId)
-      if (idx >= 0) S.wallets[idx] = { ...S.wallets[idx], ...data }
-    } else {
-      S.wallets.push({ id: Calc.genId(), ...data })
-    }
-    App.recalculateWalletBalances?.({ save:false, recordSnapshot:false })
-    persist(); App.closeOverlay('overlay-wallet-form'); App.render(); toast(S.editingWalletId ? 'แก้ไขกระเป๋าแล้ว' : 'เพิ่มกระเป๋าแล้ว', 'success')
-  },
 
   toggleRecurring(id) { const r = S.recurring.find(x => x.id === id); if (r) r.paused = !r.paused; persist(); App.openRecurringScreen() },
 
@@ -2192,6 +2123,19 @@ App.render();
     const isTransfer = type === 'transfer'
     const activeWallets = S.wallets.filter(w => !w.archived)
     const transferWallets = activeWallets.filter(w => TRANSFERABLE_MONEY_TYPES.has(String(w.type || '').toLowerCase()))
+
+    // Auto-correct walletId / toWalletId when switching to transfer mode
+    // so invalid (gold/crypto/fcd/credit) wallets are never sent to validation.
+    if (isTransfer && transferWallets.length > 0) {
+      if (!transferWallets.find(w => w.id === S.tx.walletId)) {
+        S.tx.walletId = transferWallets[0].id
+      }
+      const validDest = transferWallets.filter(w => w.id !== S.tx.walletId)
+      if (validDest.length > 0 && !validDest.find(w => w.id === S.tx.toWalletId)) {
+        S.tx.toWalletId = validDest[0].id
+      }
+    }
+
     const pickableWallets = isTransfer ? transferWallets : activeWallets.filter(w => !INVEST_TYPES.has(w.type))
     const walletOptions = pickableWallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
     const toWalletOptions = transferWallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
@@ -2840,7 +2784,7 @@ App.render();
     App.renderDashboard()
   }
 
-Calc.getUsableMoney = function(wallets) {
+Calc.getUsableMoney = function(wallets, state = null) {
     const usableTypes = new Set(['cash', 'bank', 'ewallet', 'saving', 'fcd'])
     let liquid = 0
     let creditDebt = 0
@@ -2871,10 +2815,16 @@ Calc.getUsableMoney = function(wallets) {
 
     const round2 = n => Math.round((Number(n) || 0) * 100) / 100
 
+    // Pending upcoming bills reserve cash but are NOT credit debt — no double-count.
+    const upcomingReserved = state && typeof Calc.getUpcomingReservedTotal === 'function'
+      ? Calc.getUpcomingReservedTotal(state)
+      : 0
+
     return {
       liquid: round2(liquid),
       creditDebt: round2(creditDebt),
-      net: round2(liquid - creditDebt),
+      upcomingReserved: round2(upcomingReserved),
+      net: round2(liquid - creditDebt - upcomingReserved),
     }
   }
 
@@ -2886,7 +2836,7 @@ Calc.getUsableMoney = function(wallets) {
 
     const stats = Calc.getMonthlyStats(S.transactions, dm)
     const usable = Calc.getUsableMoney
-      ? Calc.getUsableMoney(S.wallets)
+      ? Calc.getUsableMoney(S.wallets, S)
       : Calc.getNetWorth(S.wallets)
     const expBudgets = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, dm)
     const recent = [...S.transactions]
@@ -2905,17 +2855,12 @@ Calc.getUsableMoney = function(wallets) {
       .filter(Boolean)
       .filter(card => Number(card.due?.daysLeft) >= 0)
       .sort((a, b) => Number(a.due?.daysLeft || 9999) - Number(b.due?.daysLeft || 9999))
-    const todayStr = getTODAY()
-    const todayDay = Number(String(todayStr || '').slice(-2)) || 0
-    const dueTodayCards = alertCards.filter(card =>
-      String(card.due?.dateStr || '') === String(todayStr) ||
-      Number(card.due?.daysLeft || 9999) === 0 ||
-      Number(card.dueDay || 0) === todayDay
-    )
+    const CREDIT_ALERT_DAYS = 3
     const minDaysLeft = alertCards.length ? Number(alertCards[0].due.daysLeft || 0) : null
-    const nearDueCards = dueTodayCards.length
-      ? dueTodayCards
-      : (minDaysLeft === null ? [] : alertCards.filter(card => Number(card.due?.daysLeft || 0) === minDaysLeft))
+    const shouldShowCreditAlert = minDaysLeft !== null && minDaysLeft >= 0 && minDaysLeft <= CREDIT_ALERT_DAYS
+    const nearDueCards = shouldShowCreditAlert
+      ? alertCards.filter(card => Number(card.due?.daysLeft || 0) === minDaysLeft)
+      : []
     const transferTotal = S.transactions
       .filter(t => (t.date || '').startsWith(dm) && t.type === 'transfer')
       .reduce((s,t) => s + Number(t.amount || 0), 0)
@@ -2974,6 +2919,7 @@ Calc.getUsableMoney = function(wallets) {
       }
     }
 
+    const hasUsableBreakdown = (usable.creditDebt > 0 || usable.upcomingReserved > 0)
     html += `
       <div class="mt-net-card">
         <div class="mt-net-head">
@@ -2982,6 +2928,11 @@ Calc.getUsableMoney = function(wallets) {
             <div class="mt-net-value">${usable.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(usable.net))}</div>
           </div>
         </div>
+        ${hasUsableBreakdown ? `<div class="mt-net-split mt-net-split-3">
+          <div class="mt-net-metric"><small>เงินสด</small><strong>${FMT(usable.liquid)}</strong></div>
+          ${usable.creditDebt > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>หนี้บัตร</small><strong style="color:#F87171">-${FMT(usable.creditDebt)}</strong></div>` : ''}
+          ${usable.upcomingReserved > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>รายการรอจ่าย</small><strong style="color:#F59E0B">-${FMT(usable.upcomingReserved)}</strong></div>` : ''}
+        </div>` : ''}
         <div class="mt-net-split">
           <div class="mt-net-metric"><small>รายรับเดือนนี้</small><strong style="color:#4ADE80">+${FMT(stats.income)}</strong></div>
           <div class="mt-divider"></div>
@@ -5407,7 +5358,7 @@ Calc.getUsableMoney = function(wallets) {
       if (tx.toWalletId === tx.walletId) return 'กระเป๋าต้นทางและปลายทางต้องไม่เหมือนกัน'
       const to = walletById(tx.toWalletId)
       if (!to) return 'ไม่พบกระเป๋าปลายทาง'
-      if (!isTransferableMoneyWallet(w) || !isTransferableMoneyWallet(to)) return 'โอนเงินได้เฉพาะบัญชีเงินเท่านั้น'
+      if (!isTransferableMoneyWallet(w) || !isTransferableMoneyWallet(to)) return 'โอนเงินได้เฉพาะกระเป๋าเงินสด/ธนาคาร/e-wallet/ออมทรัพย์ หากเป็นทอง คริปโต หรือเงินต่างประเทศ ให้ใช้เมนูซื้อ/ขาย/ปรับจำนวนแทน'
       if (effectiveBalance(tx.walletId) < amt) return 'ยอดเงินในกระเป๋าต้นทางไม่เพียงพอ'
     } else if (tx.type === 'expense') {
       if (!tx.categoryId) return 'กรุณาเลือกหมวดหมู่รายจ่าย'

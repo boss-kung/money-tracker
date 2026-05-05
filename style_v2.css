@@ -5071,3 +5071,155 @@ html.dark .crypto-summary-item {
   color: var(--primary);
   white-space: nowrap;
 }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   UI consistency pass
+   Scoped fixes — no logic, no structural changes, no redesign.
+   Goal: uniform outer card frame, inner row rhythm, text hierarchy,
+   badge sizing, and right-side value alignment across the whole app.
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* ── 1. Outer alert cards: shared top margin + padding ───────── */
+/* Both "รายการรอจ่าย" and "สิทธิ์ใกล้หมดอายุ" sit between
+   the net card and the wallet mini-grid; give them identical rhythm. */
+.mt-alert-card {
+  padding: 12px 14px !important;
+}
+.dashboard-privilege-alerts {
+  margin: 12px 0 0 !important;
+  padding: 12px 14px !important;
+  border-radius: var(--radius-lg) !important;
+}
+
+/* ── 2. Privilege card header: match alert-title font metrics ── */
+.dashboard-privilege-alert-head {
+  gap: 10px !important;
+  padding: 0 !important;
+}
+.dashboard-privilege-alert-title {
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  line-height: 1.26 !important;
+}
+.dashboard-privilege-alert-sub {
+  font-size: 11.5px !important;
+  margin-top: 3px !important;
+  line-height: 1.28 !important;
+}
+.dashboard-privilege-alert-arrow {
+  font-size: 20px !important;
+  line-height: 1 !important;
+  align-self: center !important;
+  flex-shrink: 0 !important;
+}
+
+/* ── 3. Privilege rows: match .mt-alert-row visual rhythm ────── */
+/* Remove the "card-within-card" look; use separator lines instead */
+.dashboard-privilege-alert-list {
+  margin-top: 8px !important;
+  gap: 0 !important;
+}
+.dashboard-privilege-row {
+  min-height: 44px !important;
+  padding: 8px 10px !important;
+  gap: 12px !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--border) !important;
+  align-items: center !important;
+  transition: background .15s !important;
+}
+.dashboard-privilege-row:last-child {
+  border-bottom: none !important;
+}
+.dashboard-privilege-row:active {
+  background: var(--elevated) !important;
+}
+.dashboard-privilege-row > div {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+.dashboard-privilege-row-name {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1.24 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  color: var(--text) !important;
+}
+.dashboard-privilege-row-sub {
+  font-size: 11.5px !important;
+  color: var(--muted) !important;
+  margin-top: 2px !important;
+  line-height: 1.28 !important;
+}
+.dashboard-privilege-row strong {
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  letter-spacing: -.02em !important;
+}
+
+/* ── 4. Upcoming bills rows: subtitle font normalization ──────── */
+.dashboard-upcoming-alerts .mt-alert-row .list-item-sub {
+  font-size: 11.5px !important;
+  margin-top: 2px !important;
+  line-height: 1.28 !important;
+}
+
+/* ── 5. mt-alert-row amount: explicit nowrap + right-align ────── */
+.mt-alert-row-amt {
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  text-align: right !important;
+  letter-spacing: -.025em !important;
+}
+
+/* ── 6. mt-alert-title: vertical-align badges and bottom gap ─── */
+.mt-alert-card .mt-alert-title {
+  padding: 0 2px 4px !important;
+  margin: 0 !important;
+  align-items: center !important;
+}
+.mt-alert-title em,
+.mt-alert-badge-total {
+  display: inline-flex !important;
+  align-items: center !important;
+  min-height: 22px !important;
+  font-size: 11.5px !important;
+  line-height: 1 !important;
+  vertical-align: middle !important;
+}
+
+/* ── 7. Form-group spacing inside sheets ─────────────────────── */
+.sheet-body .form-group {
+  margin-bottom: 12px !important;
+}
+.sheet-body .form-group:last-child {
+  margin-bottom: 2px !important;
+}
+
+/* ── 8. Right-side values: always nowrap + right-aligned ──────── */
+.detail-row .detail-value,
+.settings-row .s-value,
+.mt-alert-row-amt,
+.dashboard-privilege-row strong {
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  text-align: right !important;
+}
+
+/* ── 9. Dashboard section headers: uniform vertical rhythm ────── */
+#dashboard-content .section-header {
+  margin-top: 14px !important;
+  margin-bottom: 6px !important;
+}
+
+/* ── 10. Transaction page summary cards: label size parity ────── */
+.tx-summary-card span {
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+}
