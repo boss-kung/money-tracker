@@ -1071,10 +1071,10 @@ html.dark .mt-alert-row-name { color: var(--text); }
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --app-bottom-gap: 0px;
-  --app-height: 97dvh;
+  --app-height: 9คdvh;
   --app-max-w: 430px;
   --app-gutter: 16px;
-  --nav-h: 50px;
+  --nav-h: 40px;
   --fab-size: 56px;
   --radius: 18px;
   --radius-lg: 26px;
