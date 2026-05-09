@@ -4469,10 +4469,10 @@ html.dark .crypto-summary-item {
     bottom: var(--app-bottom-gap) !important;
     width: 100% !important;
     margin: 0 !important;
-    height: calc(var(--nav-h) + var(--safe-b) -3px) !important;
+    height: calc(var(--nav-h) + var(--safe-b) -7px) !important;
     padding-top: 6px !important;
     padding-right: max(8px, var(--safe-r)) !important;
-    padding-bottom: 0px !important;
+    padding-bottom: 4px !important;
     padding-left: max(8px, var(--safe-l)) !important;
     border-radius: 0 !important;
     transform: none !important;
