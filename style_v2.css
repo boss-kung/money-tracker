@@ -1074,7 +1074,7 @@ html.dark .mt-alert-row-name { color: var(--text); }
   --app-height: 97dvh;
   --app-max-w: 430px;
   --app-gutter: 16px;
-  --nav-h: 68px;
+  --nav-h: 50px;
   --fab-size: 56px;
   --radius: 18px;
   --radius-lg: 26px;
