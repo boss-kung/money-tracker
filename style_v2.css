@@ -503,7 +503,7 @@ select.form-input  { appearance: none; cursor: pointer; }
   letter-spacing: .01em;
 }
 .form-input {
-  min-height: 48px;
+  min-height: 36px;
   background: var(--surface-soft);
   border-color: var(--border);
   border-radius: 14px;
@@ -710,7 +710,7 @@ html.dark {
 
 
 .btn {
-  min-height: 48px;
+  min-height: 36px;
   border-radius: 16px;
   font-weight: 800;
   letter-spacing: -.01em;
@@ -736,7 +736,7 @@ html.dark {
 
 
 .form-input {
-  min-height: 48px;
+  min-height: 36px;
   border-radius: 16px;
   border: 1.5px solid var(--border);
   background: var(--surface-soft);
@@ -1391,7 +1391,7 @@ html.dark #bottom-nav {
 #bottom-nav .nav-btn {
   height: 100% !important;
   min-width: 0 !important;
-  min-height: 48px !important;
+  min-height: 36px !important;
   width: 100% !important;
   display: flex !important;
   align-items: center !important;
