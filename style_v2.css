@@ -832,7 +832,7 @@ html.dark .mt-hide-btn {
   background: var(--amber-soft);
   border: 1px solid #FDE68A;
   border-radius: 16px;
-  padding: 12px 16px;
+  padding: 9px 10px !important;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -900,7 +900,6 @@ html.dark .mt-alert-row-name { color: var(--text); }
 .mt-stat-card.saving { background: var(--purple-soft); color: var(--purple); border: 1px solid rgb(126, 34, 206,0.2); }
 .mt-stat-card small { display:block; font-size:11px; font-weight:700; }
 .mt-stat-card strong { display:block; font-size:16px; font-weight: 800; margin-top:2px; letter-spacing:-.05em; }
-.section-header { }
 .section-header h3 { font-size: 15px; font-weight: 800; letter-spacing: -.03em; }
 .section-header button { color: var(--primary); font-weight: 800; }
 
@@ -1918,7 +1917,7 @@ body.is-dashboard #dashboard-content {
   border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-sm) !important;
 }
-.card-pad { padding: 8px; }
+.card-pad { padding: 10px; }
 .form-group { margin-bottom: 10px !important; }
 .chips,
 .wallet-summary-grid,
@@ -2198,8 +2197,8 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   gap:10px;
   margin:12px 0 2px;
   color:var(--muted);
-  font-size:13.5px;
-  font-weight: 800;
+  font-size:13px;
+  font-weight: 600;
 }
 .tx-date-header div { display:flex; gap:10px; align-items:center; font-size:13px; font-weight:950; }
 .tx-group-card {
@@ -3204,7 +3203,7 @@ body {
    "รายจ่าย/รายรับตามหมวด".
    ============================================================ */
 #reports-content .report-category-card{
-  padding:26px 28px 22px !important;
+  padding:16px !important;
   border-radius:28px !important;
   background:var(--surface) !important;
   border:1px solid rgba(226,232,240,.72) !important;
@@ -3320,9 +3319,6 @@ html.dark #reports-content .report-cat-bar{
 }
 
 @media (max-width:430px){
-  #reports-content .report-category-card{
-    padding:22px 26px 20px !important;
-  }
 
   .report-category-title{
     font-size:19px !important;
@@ -4058,7 +4054,7 @@ html.dark .icon-btn {
   body.keyboard-open .overlay.open {
     align-items: flex-end !important;
   }
-
+/* 
   body.keyboard-open .sheet {
     max-height: var(--app-height) !important;
   }
@@ -4067,13 +4063,12 @@ html.dark .icon-btn {
   body.keyboard-open #overlay-add-tx .sheet {
     height: var(--app-height) !important;
     max-height: var(--app-height) !important;
-  }
+  } */
 
   body.keyboard-open #sheet-add-tx #add-tx-content,
   body.keyboard-open #overlay-add-tx #add-tx-content,
   body.keyboard-open .add-detail-shell {
     min-height: 0 !important;
-    height: 100% !important;
   }
 
   body.keyboard-open .add-detail-scroll {
@@ -4529,6 +4524,10 @@ html.dark .crypto-summary-item {
   margin-bottom: 4px;
 }
 
+.wallet-available-block span{
+  color: rgba(255,255,255,.8);
+}
+
 .upcoming-summary-grid strong,
 .dashboard-upcoming-metrics strong,
 .wallet-available-block strong,
@@ -4695,7 +4694,7 @@ html.dark .crypto-summary-item {
 
 .wallet-available-block,
 .wallet-detail-availability {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid rgba(255,255,255,.18);
@@ -4704,6 +4703,7 @@ html.dark .crypto-summary-item {
 .wallet-available-block strong,
 .wallet-detail-availability strong {
   color: #fff;
+  font-weight: 500;
 }
 
 .wallet-detail-availability {
@@ -5082,9 +5082,6 @@ html.dark .crypto-summary-item {
 /* ── 1. Outer alert cards: shared top margin + padding ───────── */
 /* Both "รายการรอจ่าย" and "สิทธิ์ใกล้หมดอายุ" sit between
    the net card and the wallet mini-grid; give them identical rhythm. */
-.mt-alert-card {
-  padding: 12px 14px !important;
-}
 .dashboard-privilege-alerts {
   margin: 12px 0 0 !important;
   padding: 12px 14px !important;

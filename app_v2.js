@@ -674,7 +674,7 @@ window.__mountUpcomingBillsFeature = function() {
       const available = typeof Calc.getWalletAvailableBalance === 'function' ? Calc.getWalletAvailableBalance(S, wallet) : Number(wallet.balance || 0)
       const block = document.createElement('div')
       block.className = 'wallet-available-block'
-      block.innerHTML = `<div><span>ยอดจริง</span><strong>${money(wallet.balance)}</strong></div><div><span>กันไว้จ่าย</span><strong>${money(reserved)}</strong></div><div><span>ใช้ได้จริง</span><strong>${money(available)}</strong></div>`
+      block.innerHTML = `<div><span>กันไว้จ่าย</span><strong>${money(reserved)}</strong></div><div><span>ใช้ได้จริง</span><strong>${money(available)}</strong></div>`
       card.appendChild(block)
     })
   }
@@ -689,7 +689,7 @@ window.__mountUpcomingBillsFeature = function() {
     const available = typeof Calc.getWalletAvailableBalance === 'function' ? Calc.getWalletAvailableBalance(S, wallet) : Number(wallet.balance || 0)
     const block = document.createElement('div')
     block.className = 'wallet-detail-availability'
-    block.innerHTML = `<div><span>ยอดจริง</span><strong>${money(wallet.balance)}</strong></div><div><span>กันไว้จ่าย</span><strong>${money(reserved)}</strong></div><div><span>ใช้ได้จริง</span><strong>${money(available)}</strong></div>`
+    block.innerHTML = `<div><span>กันไว้จ่าย</span><strong>${money(reserved)}</strong></div><div><span>ใช้ได้จริง</span><strong>${money(available)}</strong></div>`
     hero.appendChild(block)
   }
 
@@ -4312,7 +4312,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const renderMerchantCard = () => {
       if (!merchantBreakdown.length) return merchantEmpty
       const totalExpense = Math.max(0, Number(monthly.expense || 0))
-      return `<div class="card card-pad" style="margin-bottom:12px">
+      return `<div class="card card-pad" style="margin-bottom:12px ; padding:16px">
         <div class="report-category-title">ร้านค้าที่ใช้เงินมากที่สุด</div>
         ${merchantBreakdown.slice(0, 6).map(row => `
           <div class="report-cat-row">
