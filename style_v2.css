@@ -4472,7 +4472,7 @@ html.dark .crypto-summary-item {
     height: calc(var(--nav-h) + var(--safe-b)) !important;
     padding-top: 6px !important;
     padding-right: max(8px, var(--safe-r)) !important;
-    padding-bottom: max(4px, var(--safe-b)) !important;
+    padding-bottom: 0px !important;
     padding-left: max(8px, var(--safe-l)) !important;
     border-radius: 0 !important;
     transform: none !important;
