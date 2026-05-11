@@ -1126,11 +1126,17 @@ Object.assign(Calc, {
   },
   getStatementPeriod(cycleDay = 25) {
     const now = new Date()
-    let end = new Date(now.getFullYear(), now.getMonth(), cycleDay)
-    if (now.getDate() <= cycleDay) end = new Date(now.getFullYear(), now.getMonth() - 1, cycleDay)
-    const start = new Date(end); start.setMonth(start.getMonth() - 1); start.setDate(start.getDate() + 1)
+    const yr = now.getFullYear(), mo = now.getMonth(), day = now.getDate()
+    let endY = yr, endM = mo
+    if (day <= cycleDay) { const prev = new Date(yr, mo - 1, 1); endY = prev.getFullYear(); endM = prev.getMonth() }
+    const endD = Calc.clampDay(endY, endM, cycleDay)
+    // Start = day after the previous cycle's end (avoids setMonth+setDate rollover for high cycleDays)
+    const prevM = new Date(endY, endM - 1, 1)
+    const startY = prevM.getFullYear(), startM = prevM.getMonth()
+    const prevEndD = Calc.clampDay(startY, startM, cycleDay)
+    const startDate = new Date(startY, startM, prevEndD + 1)
     const localStr = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-    return { start: localStr(start), end: localStr(end) }
+    return { start: localStr(startDate), end: `${endY}-${String(endM+1).padStart(2,'0')}-${String(endD).padStart(2,'0')}` }
   },
   getCardRewards(txns, benefit) {
     if (!benefit?.enabled) return { points: 0, cashback: 0 }
@@ -4356,7 +4362,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       ${buildSummaryCard('อัตราออม', monthly.savingsRate === null ? '—' : `${monthly.savingsRate.toFixed(1)}%`, monthly.savingsRate === null ? 'var(--muted)' : monthly.savingsRate >= 0 ? 'var(--income)' : 'var(--expense)', monthly.income > 0 ? 'รายรับหลังหักรายจ่าย' : 'ยังไม่มีรายรับในเดือนนี้')}
     </div>`
 
-    html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><div><strong>AI Financial Coach</strong></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${
+    html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><strong>AI Financial Coach</strong></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${
       smartInsights.length
         ? smartInsights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')
         : `<div class="list-item-sub">ข้อมูลเดือนนี้ยังไม่พอสำหรับสรุปแนวโน้มเพิ่มเติม</div>`
@@ -9095,9 +9101,10 @@ App._pickMerchant = function(name, opts = {}) {
     const [ry, rm, rd] = String(refDate).split('-').map(Number)
     let end = new Date(ry, (rm || 1) - 1, Calc.clampDay(ry, (rm || 1) - 1, cycleDay))
     if ((rd || 1) <= cycleDay) end = new Date(ry, (rm || 1) - 2, Calc.clampDay(new Date(ry, (rm || 1) - 2, 1).getFullYear(), new Date(ry, (rm || 1) - 2, 1).getMonth(), cycleDay))
-    const start = new Date(end)
-    start.setMonth(start.getMonth() - 1)
-    start.setDate(start.getDate() + 1)
+    // Use explicit previous-month construction to avoid setMonth+setDate rollover for high cycleDays
+    const prevOfEnd = new Date(end.getFullYear(), end.getMonth() - 1, 1)
+    const prevEndD = Calc.clampDay(prevOfEnd.getFullYear(), prevOfEnd.getMonth(), cycleDay)
+    const start = new Date(prevOfEnd.getFullYear(), prevOfEnd.getMonth(), prevEndD + 1)
     const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}`
     const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2,'0')}-${String(start.getDate()).padStart(2,'0')}`
     const dueStr = Calc.getCreditCardDueDate(endStr, dueAfterCycleDays)
@@ -10983,4 +10990,969 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   ensurePrivilegesStorageKey()
   try { if (S.page === 'dashboard') App.renderDashboard?.() } catch (_) {}
   try { if (S.page === 'more') App.renderMore?.() } catch (_) {}
+})()
+
+/* ============================================================
+   Feature Pack: Filter Fix · Quick Amounts · Trend Chart ·
+                 Card Picker · More Page Grouping
+   ============================================================ */
+;(function(){
+  'use strict'
+  const esc = App._esc || (s => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const money = n => '฿' + Math.abs(Number(n||0)).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})
+  const today = () => (typeof getTODAY==='function' ? getTODAY() : typeof TODAY!=='undefined' ? TODAY : new Date().toISOString().slice(0,10))
+
+  // ── 3.2 Filter State Bug ──────────────────────────────────
+  // Reset transaction filters when navigating away from transactions tab
+  const _prevShowPage = App.showPage?.bind(App)
+  App.showPage = function(page) {
+    if (S.page === 'transactions' && page !== 'transactions') {
+      S.txWalletFilter = ''
+      S.txCategoryFilter = ''
+      S.txAmtMin = ''
+      S.txAmtMax = ''
+      S.txFilterOpen = false
+    }
+    _prevShowPage?.(page)
+  }
+
+  // ── 3.1 Quick Amounts — customizable + haptic ─────────────
+  const DEFAULT_QUICK_AMOUNTS = [50, 100, 200, 500, 1000]
+
+  const _prevRenderAddTxAmount = App._renderAddTxAmount?.bind(App)
+  App._renderAddTxAmount = function() {
+    _prevRenderAddTxAmount?.()
+    const row = document.getElementById('add-tx-content')?.querySelector('.quick-amount-row')
+    if (!row) return
+    const amounts = (Array.isArray(S.settings?.quickAmounts) && S.settings.quickAmounts.length)
+      ? S.settings.quickAmounts.map(Number).filter(n => n > 0)
+      : DEFAULT_QUICK_AMOUNTS
+    // Only replace if the amounts differ from what's rendered
+    const current = [...row.querySelectorAll('[data-quick-amount]')].map(b => Number(b.dataset.quickAmount))
+    if (JSON.stringify(current) !== JSON.stringify(amounts)) {
+      row.innerHTML = amounts.map(n => `<button type="button" data-quick-amount="${n}">฿${n.toLocaleString('en-US')}</button>`).join('')
+    }
+  }
+
+  // Haptic feedback on every numpad key press
+  const _prevNumpad = App._numpad?.bind(App)
+  App._numpad = function(key) {
+    try { navigator.vibrate?.(6) } catch(_) {}
+    _prevNumpad?.(key)
+  }
+
+  // ── 3.6 Reports — Trend Chart ─────────────────────────────
+  const _prevRenderReports = App.renderReports?.bind(App)
+  App.renderReports = function() {
+    const VALID_VIEWS = ['expense','income','cashflow','assets','credit','budget','trend']
+    if (!VALID_VIEWS.includes(S.rptView)) S.rptView = 'assets'
+
+    if (S.rptView !== 'trend') {
+      // Let original handle non-trend views, then append the trend chip
+      if (!VALID_VIEWS.slice(0,6).includes(S.rptView)) S.rptView = 'assets'
+      _prevRenderReports?.()
+      const viewEl = document.getElementById('report-view-chips')
+      if (viewEl && !viewEl.querySelector('[data-view="trend"]')) {
+        const btn = document.createElement('button')
+        btn.className = 'chip'
+        btn.dataset.view = 'trend'
+        btn.textContent = 'แนวโน้ม'
+        btn.onclick = () => App.setRptView('trend')
+        viewEl.appendChild(btn)
+      }
+      return
+    }
+
+    // ── Render trend view ────────────────────────────────────
+    const months6 = Calc.getMonths(6)
+    const monthEl = document.getElementById('report-month-chips')
+    const viewEl  = document.getElementById('report-view-chips')
+    if (monthEl) monthEl.innerHTML = months6.map(m => `<button class="chip${m===S.rptMonth?' active':''}" onclick="App.setRptMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`).join('')
+    if (viewEl) viewEl.innerHTML = [
+      ['assets','สินทรัพย์'],['expense','ใช้จ่าย'],['income','รายรับ'],
+      ['cashflow','กระแสเงินสด'],['credit','บัตร/หนี้'],['budget','งบประมาณ'],['trend','แนวโน้ม'],
+    ].map(([v,l]) => `<button class="chip${S.rptView===v?' active':''}" data-view="${v}" onclick="App.setRptView('${v}')">${l}</button>`).join('')
+
+    // Oldest-first 6-month data
+    const displayMonths = Calc.getMonths(6).reverse()
+    const data = displayMonths.map(m => {
+      const s = Calc.getMonthlyIncomeExpense(S.transactions, m)
+      return { month: m, income: s.income, expense: s.expense, net: s.netCashflow, rate: s.savingsRate }
+    })
+
+    const maxVal = Math.max(...data.flatMap(d => [d.income, d.expense]), 1)
+    const chartH = 120, barW = 26, gap = 6, groupW = barW * 2 + gap, colW = groupW + 14
+
+    const svgW = data.length * colW
+    const bars = data.map((d, i) => {
+      const x = i * colW
+      const incH = Math.max(4, Math.round((d.income / maxVal) * chartH))
+      const expH = Math.max(4, Math.round((d.expense / maxVal) * chartH))
+      const lbl = Calc.monthLabel(d.month).split(' ')
+      return `<g>
+        <rect x="${x}" y="${chartH-incH}" width="${barW}" height="${incH}" rx="3" fill="var(--income)" opacity="0.85"/>
+        <rect x="${x+barW+gap}" y="${chartH-expH}" width="${barW}" height="${expH}" rx="3" fill="var(--expense)" opacity="0.85"/>
+        <text x="${x+barW+gap/2}" y="${chartH+13}" text-anchor="middle" font-size="9" fill="var(--muted)">${esc(lbl[0])}</text>
+        <text x="${x+barW+gap/2}" y="${chartH+23}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lbl[1]||'')}</text>
+      </g>`
+    }).join('')
+
+    // Savings-rate dashed line
+    const validRates = data.filter(d => d.rate !== null)
+    const rateLine = validRates.length > 1
+      ? `<polyline points="${data.map((d,i)=>`${i*colW+barW+gap/2},${chartH-Math.max(0,Math.min(100,d.rate||0))*chartH/100}`).join(' ')}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-dasharray="4,2" opacity="0.7"/>`
+      : ''
+
+    const totalIncome  = data.reduce((s,d)=>s+d.income,0)
+    const totalExpense = data.reduce((s,d)=>s+d.expense,0)
+    const rateArr = data.filter(d=>d.rate!==null).map(d=>d.rate)
+    const avgRate = rateArr.length ? rateArr.reduce((s,r)=>s+r,0)/rateArr.length : 0
+    const bestM  = [...data].sort((a,b)=>b.net-a.net)[0]
+    const worstM = [...data].sort((a,b)=>a.net-b.net)[0]
+
+    const html = `
+      <div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+          <div class="card report-summary-card"><div class="report-summary-label">รายรับ 6 เดือน</div><div class="report-summary-value" style="color:var(--income)">${money(totalIncome)}</div></div>
+          <div class="card report-summary-card"><div class="report-summary-label">รายจ่าย 6 เดือน</div><div class="report-summary-value" style="color:var(--expense)">${money(totalExpense)}</div></div>
+          <div class="card report-summary-card"><div class="report-summary-label">อัตราออมเฉลี่ย</div><div class="report-summary-value" style="color:${avgRate>=0?'var(--income)':'var(--expense)'}">${avgRate.toFixed(1)}%</div></div>
+          <div class="card report-summary-card"><div class="report-summary-label">กระแสเงินสดสุทธิ</div><div class="report-summary-value" style="color:${(totalIncome-totalExpense)>=0?'var(--income)':'var(--expense)'}">${money(totalIncome-totalExpense)}</div></div>
+        </div>
+
+        <div class="card card-pad" style="margin-bottom:12px">
+          <div style="font-weight:700;margin-bottom:12px;font-size:15px">แนวโน้มรายรับ-รายจ่าย 6 เดือน</div>
+          <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+            <svg width="${Math.max(svgW,280)}" height="${chartH+30}" viewBox="0 0 ${Math.max(svgW,280)} ${chartH+30}" style="display:block">
+              ${bars}${rateLine}
+            </svg>
+          </div>
+          <div style="display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--muted)">
+            <span><span style="display:inline-block;width:10px;height:10px;background:var(--income);border-radius:2px;opacity:.85;vertical-align:middle;margin-right:3px"></span>รายรับ</span>
+            <span><span style="display:inline-block;width:10px;height:10px;background:var(--expense);border-radius:2px;opacity:.85;vertical-align:middle;margin-right:3px"></span>รายจ่าย</span>
+            <span><span style="display:inline-block;width:16px;height:0;border-top:2px dashed var(--primary);opacity:.7;vertical-align:middle;margin-right:3px"></span>อัตราออม</span>
+          </div>
+        </div>
+
+        <div class="card card-pad" style="margin-bottom:12px">
+          <div style="font-weight:700;margin-bottom:10px;font-size:15px">สรุปรายเดือน</div>
+          ${data.map(d => {
+            const netColor = d.net>=0?'var(--income)':'var(--expense)'
+            const rateText = d.rate!==null ? `${d.rate.toFixed(1)}%` : 'N/A'
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+              <div><div style="font-weight:600;font-size:14px">${esc(Calc.monthLabel(d.month))}</div><div style="font-size:12px;color:var(--muted)">รายรับ ${money(d.income)} · รายจ่าย ${money(d.expense)}</div></div>
+              <div style="text-align:right"><div style="font-weight:700;color:${netColor}">${d.net>=0?'+':''}${money(d.net)}</div><div style="font-size:12px;color:var(--muted)">ออม ${rateText}</div></div>
+            </div>`
+          }).join('')}
+        </div>
+
+        ${bestM && data.length > 1 ? `<div class="card card-pad" style="margin-bottom:12px">
+          <div style="font-weight:700;margin-bottom:8px;font-size:15px">ข้อสังเกต</div>
+          <div style="font-size:14px;padding:4px 0">เดือนที่ดีที่สุด: <strong>${esc(Calc.monthLabel(bestM.month))}</strong> <span style="color:var(--income)">${money(bestM.net)}</span></div>
+          ${worstM&&worstM.month!==bestM.month?`<div style="font-size:14px;padding:4px 0">เดือนที่ใช้มากสุด: <strong>${esc(Calc.monthLabel(worstM.month))}</strong> <span style="color:var(--expense)">${money(worstM.net)}</span></div>`:''}
+          <div style="font-size:14px;padding:4px 0">อัตราออมเฉลี่ย: <strong style="color:${avgRate>=0?'var(--income)':'var(--expense)'}">${avgRate.toFixed(1)}%</strong></div>
+        </div>` : ''}
+      </div>`
+
+    const content = document.getElementById('reports-content')
+    if (content) content.innerHTML = html
+  }
+
+  // ── 4.15 Pre-Transaction Card Picker ─────────────────────
+  const _prevRenderAddTxDetail = App._renderAddTxDetail?.bind(App)
+  App._renderAddTxDetail = function() {
+    _prevRenderAddTxDetail?.()
+    _injectCardPicker()
+  }
+
+  function _injectCardPicker() {
+    if (!S.tx || S.tx.type !== 'expense') return
+    const amount = Number(S.tx.amount || 0)
+    if (!amount) return
+    const creditCards = (S.wallets || []).filter(w => w.type === 'credit' && !w.archived)
+    if (creditCards.length < 2) return
+
+    const box = document.getElementById('add-tx-content')
+    if (!box) return
+    box.querySelector('.card-picker-widget')?.remove()
+
+    const draftBase = {
+      id: S.editingTxId || '',
+      type: 'expense', amount,
+      categoryId: S.tx.categoryId, merchant: S.tx.merchant,
+      note: S.tx.note, date: S.tx.date || today(), channel: S.tx.channel || ''
+    }
+
+    const estimates = creditCards.map(card => {
+      try {
+        const draft = { ...draftBase, walletId: card.id }
+        const rules = App.getSuggestedBenefitRules?.(draft) || []
+        const ruleIds = rules.map(r => r.id)
+        const est = App.calculateSelectedRewardEstimate?.(draft, ruleIds) || { cashback:0, points:0, discount:0 }
+        return { card, est, value: Number(est.cashback||0) + Number(est.discount||0), pts: Number(est.points||0) }
+      } catch(_) {
+        return { card, est:{cashback:0,points:0,discount:0}, value:0, pts:0 }
+      }
+    }).sort((a,b) => (b.value+b.pts*0.001) - (a.value+a.pts*0.001))
+
+    if (!estimates.some(e => e.value > 0 || e.pts > 0)) return
+
+    const currentId = S.tx.walletId
+    const rows = estimates.map((item, idx) => {
+      const isSel = item.card.id === currentId
+      const isBest = idx === 0 && (item.value > 0 || item.pts > 0)
+      const parts = [
+        item.est.cashback > 0 ? `เงินคืน ฿${Number(item.est.cashback).toFixed(2)}` : '',
+        item.est.discount  > 0 ? `ส่วนลด ฿${Number(item.est.discount).toFixed(2)}`  : '',
+        item.est.points    > 0 ? `${Number(item.est.points).toLocaleString('en-US')} คะแนน` : '',
+      ].filter(Boolean).join(' · ')
+      const rewardHtml = parts
+        ? `<span style="font-size:11px;color:var(--income)">${esc(parts)}</span>`
+        : `<span style="font-size:11px;color:var(--muted)">ไม่มีสิทธิประโยชน์</span>`
+      const bestBadge = isBest ? `<span style="font-size:9px;font-weight:700;background:var(--income);color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px">ดีสุด</span>` : ''
+      return `<button type="button"
+        onclick="App._txField('walletId','${esc(item.card.id)}');App._renderAddTxDetail()"
+        style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:10px;border:1.5px solid ${isSel?'var(--primary)':'var(--border)'};background:${isSel?'color-mix(in srgb,var(--primary) 8%,transparent)':'transparent'};text-align:left;cursor:pointer;width:100%;margin-bottom:0">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:18px">${esc(item.card.icon||'💳')}</span>
+          <div>
+            <div style="font-size:13px;font-weight:${isSel?700:500}">${esc(item.card.name)}${bestBadge}</div>
+            ${rewardHtml}
+          </div>
+        </div>
+        ${isSel?`<span style="color:var(--primary);font-size:16px;font-weight:700">✓</span>`:''}
+      </button>`
+    }).join('')
+
+    const widget = `<div class="card-picker-widget" style="padding:12px 14px;background:var(--card);border-radius:14px;border:1px solid var(--border);margin-bottom:0">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">ถือบัตรไหนดีสุด?</div>
+      <div style="display:flex;flex-direction:column;gap:6px">${rows}</div>
+    </div>`
+
+    const walletGroup = box.querySelector('#tx-wallet')?.closest('.form-group')
+    walletGroup?.insertAdjacentHTML('afterend', widget)
+  }
+
+  // ── 5.5 More Page — Section Grouping ─────────────────────
+  const _prevRenderMore = App.renderMore?.bind(App)
+  App.renderMore = function() {
+    const content = document.getElementById('more-content')
+    if (!content) return
+
+    const budgetCount = (S.budgets||[]).length + (S.incomeBudgets||[]).length
+    const activePrivCount = App.getPrivilegesSummary?.().activeCount
+      ?? (S.privileges||[]).filter(p=>p.status==='active').length
+    const meta = S.settings?.storageMeta || {}
+    const lastSaved  = meta.lastSavedAt    ? new Date(meta.lastSavedAt).toLocaleString('th-TH')    : 'ยังไม่บันทึก'
+    const lastExport = meta.lastExportedAt ? new Date(meta.lastExportedAt).toLocaleString('th-TH') : 'ยังไม่เคย Export'
+    const ACCENTS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
+
+    function row({ icon, label, value='', onclick='', danger=false, toggle='' }) {
+      return `<div class="settings-row"${onclick?` onclick="${onclick}"`:''}>
+        <div class="s-icon">${icon}</div>
+        <div class="s-label"${danger?' style="color:var(--expense)"':''}>${label}</div>
+        ${value?`<div class="s-value">${value}</div>`:''}
+        ${toggle||`<div class="s-arrow"${danger?' style="color:var(--expense)"':''}>›</div>`}
+      </div>`
+    }
+
+    content.innerHTML = `<div style="padding:0 16px">
+      <div style="font-size:20px;font-weight:800;padding:12px 0 4px">เพิ่มเติม</div>
+
+      <div class="sec-title">วางแผน</div>
+      <div class="card card-pad">
+        ${row({ icon:'🎯', label:'ตั้งเป้าหมายทางการเงิน', value:`${(S.goals||[]).filter(g=>g.status!=='archived').length} เป้าหมาย`, onclick:'App.openGoalsScreen()' })}
+        ${row({ icon:'💰', label:'งบประมาณรายรับ/รายจ่าย', value:budgetCount?`${budgetCount} หมวด`:'ยังไม่ตั้ง', onclick:'App.openBudgetScreen()' })}
+        ${row({ icon:'🧾', label:'รายการรอจ่าย', value:`${(S.upcomingBills||[]).filter(b=>b.status==='pending').length} รอจ่าย`, onclick:'App.openUpcomingBillsScreen()' })}
+        ${row({ icon:'🔁', label:'รายการประจำ', value:`${(S.recurring||[]).length} รายการ`, onclick:'App.openRecurringScreen()' })}
+        ${row({ icon:'📅', label:'ปฏิทินบิล / รายการที่จะถึง', onclick:'App.openUpcomingScreen()' })}
+      </div>
+
+      <div class="sec-title">บัตรและสิทธิ์</div>
+      <div class="card card-pad">
+        ${row({ icon:'🎟️', label:'สิทธิพิเศษ', value:`${activePrivCount} สิทธิ์`, onclick:"App.openPrivilegesScreen('active')" })}
+        ${row({ icon:'🎁', label:'สมุดสิทธิประโยชน์', onclick:'App.openRewardLedgerScreen()' })}
+        ${row({ icon:'💳', label:'กลุ่มวงเงินร่วม', value:`${(S.creditLimitGroups||[]).length} กลุ่ม`, onclick:'App.openCreditLimitGroupScreen()' })}
+        ${row({ icon:'🧾', label:'ศูนย์ผ่อนชำระ', onclick:'App.openInstallmentCenter()' })}
+      </div>
+
+      <div class="sec-title">จัดการ</div>
+      <div class="card card-pad">
+        ${row({ icon:'🏷️', label:'จัดการหมวดหมู่', value:'รายรับ/รายจ่าย', onclick:"App.openCategoryScreen('expense')" })}
+        ${row({ icon:'🏪', label:'ร้านค้า / Platform', value:`${(S.merchants||[]).length} ร้าน`, onclick:'App.openMerchantScreen()' })}
+        ${row({ icon:'🔧', label:'ตรวจสอบยอดคงเหลือ', onclick:'App.openBalanceRepairScreen()' })}
+        ${row({ icon:'🩺', label:'ตรวจสอบความถูกต้องของข้อมูล', onclick:'App.runDataHealthCheck()' })}
+      </div>
+
+      <div class="sec-title">ข้อมูล</div>
+      <div class="card card-pad">
+        ${row({ icon:'📤', label:'ส่งออกข้อมูล (JSON)', onclick:'App.exportData()' })}
+        ${row({ icon:'📊', label:'ส่งออก CSV', onclick:'App.exportCSV()' })}
+        ${row({ icon:'📥', label:'นำเข้าข้อมูล (JSON)', value:'Preview ก่อนนำเข้า', onclick:"document.getElementById('import-file-v5b').click()" })}
+        <input type="file" id="import-file-v5b" accept=".json" style="display:none" onchange="App.importData(this)">
+        ${row({ icon:'🧯', label:'กู้คืน Backup ก่อน Import', onclick:'App.restorePreImportBackup?.()' })}
+        <div class="settings-row"><div class="s-icon">💾</div><div class="s-label">สถานะข้อมูล<br><div class="s-value" style="font-weight:400;text-align:left !important">บันทึกเมื่อ: ${esc(lastSaved)}<br>Export ข้อมูล: ${esc(lastExport)}</div></div></div>
+      </div>
+
+      <div class="sec-title">การแสดงผล</div>
+      <div class="card card-pad">
+        ${row({ icon:'🌙', label:'โหมดมืด', onclick:'App.toggleDark()', toggle:`<button class="toggle${S.settings.darkMode?' on':''}" onclick="event.stopPropagation();App.toggleDark()" aria-label="สลับโหมดมืด" aria-pressed="${S.settings.darkMode?'true':'false'}"></button>` })}
+        <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:15px;font-weight:600;margin-bottom:12px">🎨 สีธีม</div>
+          <div class="color-row">${ACCENTS.map(c=>`<div class="color-dot${S.settings.accentColor===c?' selected':''}" style="background:${c}" onclick="App.setAccent('${c}')"></div>`).join('')}</div>
+        </div>
+      </div>
+
+      <div class="sec-title">ระบบ</div>
+      <div class="card card-pad">
+        ${row({ icon:'🧹', label:'ล้างแคชแอป', value:'ไม่ลบข้อมูลการเงิน', onclick:'App.resetAppCache?.()' })}
+        ${row({ icon:'🔄', label:'รีเซ็ตข้อมูลทั้งหมด', danger:true, onclick:'App.resetData()' })}
+      </div>
+
+      <div style="text-align:center;padding:32px 0 8px">
+        <div style="font-size:40px">💰</div>
+        <div style="font-size:16px;font-weight:700;margin-top:8px">Money Tracker</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(window.MT_APP_VERSION||(typeof APP_VERSION!=='undefined'?APP_VERSION:''))}</div>
+      </div>
+    </div>`
+  }
+
+  // ── Apply ─────────────────────────────────────────────────
+  try { if (S.page === 'more')    App.renderMore()    } catch(_) {}
+  try { if (S.page === 'reports') App.renderReports() } catch(_) {}
+})()
+
+/* ============================================================
+   Phase 2: AI Insight Cards UI
+   Dashboard "วันนี้ต้องรู้" · Reports upgrade · Add-tx budget chip
+   ============================================================ */
+;(function(){
+  'use strict'
+  if (typeof InsightEngine === 'undefined') return
+
+  const esc = App._esc || (s => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const SEV_ICON = { critical:'🔴', warning:'🟡', info:'💡', positive:'🟢' }
+
+  // ── Insight action handlers (global) ─────────────────────
+  App.insightDismiss = function(id) {
+    InsightEngine.markDismissed(id)
+    document.getElementById('ins-' + id)?.remove()
+    const section = document.querySelector('.ins-dashboard-section')
+    if (section && !section.querySelector('.ins-card')) section.remove()
+  }
+
+  App.insightSnooze = function(id, days) {
+    InsightEngine.snooze(id, days)
+    document.getElementById('ins-' + id)?.remove()
+    const section = document.querySelector('.ins-dashboard-section')
+    if (section && !section.querySelector('.ins-card')) section.remove()
+  }
+
+  App.insightAct = function(id, fn) {
+    InsightEngine.markActed(id)
+    try { const f = new Function(fn); f() } catch(_) { try { eval(fn) } catch(__) {} }
+  }
+
+  App.insightRate = function(id, rating) {
+    InsightEngine.rate(id, rating)
+    const btn = document.querySelector(`[data-ins-rate="${id}"]`)
+    if (btn) btn.textContent = rating === 'helpful' ? '👍' : '👎'
+  }
+
+  // ── Card HTML builder ─────────────────────────────────────
+  function insightCardHtml(ins) {
+    const icon = SEV_ICON[ins.severity] || '💡'
+    const actionHtml = ins.action
+      ? `<button class="ins-action-primary" onclick="App.insightAct('${esc(ins.id)}','${esc(ins.action.fn)}')">${esc(ins.action.label)}</button>`
+      : ''
+    const snoozeHtml = `<button class="ins-snooze-btn" onclick="App.insightSnooze('${esc(ins.id)}',1)">เตือนพรุ่งนี้</button>`
+    return `<div class="ins-card severity-${esc(ins.severity)}" id="ins-${esc(ins.id)}">
+      <div class="ins-card-top">
+        <span class="ins-icon">${icon}</span>
+        <div class="ins-text">
+          <div class="ins-title">${esc(ins.title)}</div>
+          <div class="ins-body">${esc(ins.body)}</div>
+        </div>
+        <button class="ins-dismiss-btn" onclick="App.insightDismiss('${esc(ins.id)}')" aria-label="ปิด">✕</button>
+      </div>
+      <div class="ins-card-actions">
+        ${actionHtml}
+        ${snoozeHtml}
+      </div>
+    </div>`
+  }
+
+  // ── Dashboard: inject insight section ────────────────────
+  const _prevRenderDashboard = App.renderDashboard?.bind(App)
+  App.renderDashboard = function() {
+    _prevRenderDashboard?.()
+    _injectDashboardInsights()
+  }
+
+  function _injectDashboardInsights() {
+    const content = document.getElementById('dashboard-content')
+    if (!content) return
+
+    content.querySelector('.ins-dashboard-section')?.remove()
+
+    let insights = []
+    try { insights = InsightEngine.getTopN(3, 'dashboard', S) } catch(_) { return }
+    if (!insights.length) return
+
+    insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
+
+    const section = document.createElement('div')
+    section.className = 'ins-dashboard-section'
+    section.innerHTML = `<div class="sec-title" style="margin-top:14px">💡 วันนี้ต้องรู้</div>${insights.map(insightCardHtml).join('')}`
+
+    const statRow = content.querySelector('.mt-stat-row')
+    if (statRow) statRow.insertAdjacentElement('afterend', section)
+    else {
+      const netCard = content.querySelector('.mt-net-card')
+      if (netCard) netCard.insertAdjacentElement('afterend', section)
+      else content.insertAdjacentElement('afterbegin', section)
+    }
+  }
+
+  // ── Reports: upgrade AI Financial Coach section ───────────
+  const _prevRenderReports = App.renderReports?.bind(App)
+  App.renderReports = function() {
+    _prevRenderReports?.()
+    _upgradeReportsAI()
+  }
+
+  function _upgradeReportsAI() {
+    const content = document.getElementById('reports-content')
+    if (!content) return
+
+    const advisorCard = content.querySelector('.ai-advisor-card')
+    if (!advisorCard) return
+
+    let insights = []
+    try { insights = InsightEngine.getTopN(5, 'reports', S) } catch(_) { return }
+    if (!insights.length) return
+
+    insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
+
+    // Replace the "วิเคราะห์ใหม่" button with insight cards
+    const reloadBtn = advisorCard.querySelector('button.btn-secondary, button.btn')
+    if (reloadBtn) {
+      reloadBtn.outerHTML = `<button class="btn btn-secondary btn-sm" onclick="InsightEngine.invalidate();App.renderReports()" style="width:auto;font-size:11px">↻ รีเฟรช</button>`
+    }
+
+    advisorCard.querySelector('.ins-reports-list')?.remove()
+    const listEl = document.createElement('div')
+    listEl.className = 'ins-reports-list'
+    listEl.innerHTML = insights.map(insightCardHtml).join('')
+    advisorCard.appendChild(listEl)
+  }
+
+  // ── Add-tx detail: budget impact chip ────────────────────
+  const _prevRenderDetail = App._renderAddTxDetail?.bind(App)
+  App._renderAddTxDetail = function() {
+    _prevRenderDetail?.()
+    _injectBudgetChip()
+  }
+
+  function _injectBudgetChip() {
+    try {
+      if (!S.tx || S.tx.type !== 'expense') return
+      const catId  = S.tx.categoryId
+      const amount = Number(S.tx.amount || 0)
+      if (!catId || !amount) return
+
+      const month = typeof THIS_MONTH !== 'undefined' ? THIS_MONTH
+        : (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` })()
+      const bItems = Calc.getBudgetProgress(S.transactions||[], S.budgets||[], S.categories||[], month) || []
+      const b = bItems.find(b => b.categoryId === catId)
+      if (!b || !b.monthlyLimit) return
+
+      const box = document.getElementById('add-tx-content')
+      if (!box) return
+      box.querySelector('.ins-budget-chip')?.remove()
+
+      const remaining   = b.monthlyLimit - b.spent
+      const afterSpend  = remaining - amount
+      const willExceed  = afterSpend < 0
+      const nearLimit   = !willExceed && afterSpend < b.monthlyLimit * 0.15
+
+      const color = willExceed ? 'var(--expense)' : nearLimit ? 'var(--amber)' : 'var(--income)'
+      const text  = willExceed
+        ? `⚠️ เกินงบ ${b.label} ฿${Math.round(Math.abs(afterSpend)).toLocaleString('en-US')}`
+        : `งบ ${b.label} คงเหลือ ฿${Math.round(afterSpend).toLocaleString('en-US')}`
+
+      const chip = document.createElement('div')
+      chip.className = 'ins-budget-chip'
+      chip.style.cssText = `font-size:12px;padding:5px 10px;border-radius:8px;background:color-mix(in srgb,${color} 12%,transparent);color:${color};font-weight:600;margin:0 0 8px`
+      chip.textContent = text
+
+      const catGroup = box.querySelector('#cat-grid')?.closest('.form-group')
+        || box.querySelector('.cat-grid')?.closest('.form-group')
+      if (catGroup) catGroup.insertAdjacentElement('afterend', chip)
+    } catch(_) {}
+  }
+
+  // ── Invalidate cache on data mutation ────────────────────
+  const _prevSaveAll = App.saveAll?.bind(App)
+  App.saveAll = function() {
+    _prevSaveAll?.()
+    try { InsightEngine.invalidate() } catch(_) {}
+  }
+
+  // ── Init ─────────────────────────────────────────────────
+  try { if (S.page === 'dashboard') App.renderDashboard?.() } catch(_) {}
+  try { if (S.page === 'reports')   App.renderReports?.()   } catch(_) {}
+})()
+
+/* ============================================================
+   Phase 3: Monthly Review  |  Phase 4: Ask My Money
+   ============================================================ */
+;(function(){
+  'use strict'
+
+  const esc = App._esc || (s => String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const fmt  = n => '฿' + Math.round(Math.abs(Number(n)||0)).toLocaleString('en-US')
+  const mlbl = m => Calc.monthLabel?.(m) || m
+  const now  = () => (typeof THIS_MONTH !== 'undefined' ? THIS_MONTH : new Date().toISOString().slice(0,7))
+  const prevM = m => {
+    if (Calc.getPreviousMonth) return Calc.getPreviousMonth(m)
+    const d = new Date(m+'-01'); d.setMonth(d.getMonth()-1)
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+  }
+  const nextM = m => {
+    const d = new Date(m+'-01'); d.setMonth(d.getMonth()+1)
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // PHASE 3 — Monthly Review
+  // ─────────────────────────────────────────────────────────────
+
+  function calcGrade(sr, overruns) {
+    const s = Number(sr) || 0
+    const o = Number(overruns) || 0
+    if (s >= 25 && o === 0) return { grade:'A+', color:'#059669', label:'ยอดเยี่ยม 🏆' }
+    if (s >= 20 && o <= 1)  return { grade:'A',  color:'#059669', label:'ดีมาก' }
+    if (s >= 15 && o <= 2)  return { grade:'B+', color:'#0891B2', label:'ดี' }
+    if (s >= 10 && o <= 3)  return { grade:'B',  color:'#0891B2', label:'ดี' }
+    if (s >=  5 && o <= 4)  return { grade:'C+', color:'#D97706', label:'พอใช้' }
+    if (s >=  0)            return { grade:'C',  color:'#D97706', label:'ควรปรับปรุง' }
+    if (s >= -10)           return { grade:'D',  color:'#DC2626', label:'ระวัง' }
+    return                         { grade:'F',  color:'#DC2626', label:'วิกฤต' }
+  }
+
+  App.openMonthlyReview = function(month) {
+    month = month || now()
+    const today = new Date().toISOString().slice(0,7)
+    const isCurrent    = month === today
+    const prev         = prevM(month)
+    const next         = nextM(month)
+    const isNextFuture = next > today
+
+    const txs  = S.transactions || []
+    const cats = S.categories || {}
+    const bds  = S.budgets || []
+    const gls  = (S.goals||[]).filter(g => g.status === 'active')
+
+    let monthly = { income:0, expense:0, netCashflow:0, savingsRate:null }
+    let prevMon = { income:0, expense:0 }
+    let budProg = [], expCats = []
+    try { monthly = Calc.getMonthlyIncomeExpense(txs, month) }                         catch(_) {}
+    try { prevMon = Calc.getMonthlyIncomeExpense(txs, prev) }                          catch(_) {}
+    try { budProg = Calc.getBudgetProgress(txs, bds, cats, month) || [] }              catch(_) {}
+    try { expCats = Calc.getCategoryBreakdown(txs, month, { type:'expense', categories: cats.expense||[] }) || [] } catch(_) {}
+
+    const income   = Number(monthly.income)  || 0
+    const expense  = Number(monthly.expense) || 0
+    const net      = income - expense
+    const sr       = income > 0 ? net/income*100 : null
+    const overruns = budProg.filter(b => (b.monthlyLimit||0) > 0 && (b.spent||0) > (b.monthlyLimit||0))
+    const grade    = (income > 0 || expense > 0) ? calcGrade(sr, overruns.length) : null
+
+    const expDelta = (prevMon.expense||0) > 0 ? (expense - prevMon.expense) / prevMon.expense * 100 : null
+    const incDelta = (prevMon.income||0)  > 0 ? (income  - prevMon.income)  / prevMon.income  * 100 : null
+    const totBdg   = budProg.reduce((s,b) => s+(b.monthlyLimit||0), 0)
+    const totSpent = budProg.reduce((s,b) => s+(b.spent||0), 0)
+
+    // ── Grade card ──────────────────────────────────────────────
+    const gradeHtml = grade ? `
+      <div style="background:${grade.color}18;border:1.5px solid ${grade.color}40;border-radius:16px;padding:18px 20px;margin-bottom:12px;display:flex;align-items:center;gap:16px">
+        <div style="font-size:52px;font-weight:900;color:${grade.color};line-height:1;min-width:68px;text-align:center">${esc(grade.grade)}</div>
+        <div>
+          <div style="font-size:17px;font-weight:700;color:${grade.color}">${esc(grade.label)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">
+            ${sr !== null ? `อัตราออม ${sr.toFixed(1)}%` : 'ไม่มีรายรับ'}
+            ${overruns.length > 0 ? ` · เกินงบ ${overruns.length} หมวด` : budProg.length > 0 ? ' · งบอยู่ในเกณฑ์' : ''}
+          </div>
+        </div>
+      </div>` : `
+      <div style="background:var(--card-2,#f1f5f9);border-radius:16px;padding:24px;text-align:center;margin-bottom:12px;color:var(--muted)">
+        ยังไม่มีรายการในเดือนนี้
+      </div>`
+
+    // ── Stats row ───────────────────────────────────────────────
+    const statsHtml = `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+        ${[['รายรับ',income,'var(--income)'],['รายจ่าย',expense,'var(--expense)'],['สุทธิ',net,net>=0?'var(--income)':'var(--expense)']].map(([lbl,val,col]) => `
+          <div class="card" style="text-align:center;padding:12px 8px">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${lbl}</div>
+            <div style="font-size:14px;font-weight:700;color:${col}">${lbl==='สุทธิ'&&net<0?'-':''}${fmt(val)}</div>
+          </div>`).join('')}
+      </div>`
+
+    // ── Budget ──────────────────────────────────────────────────
+    let budgetHtml = ''
+    const budRows = budProg.filter(b => (b.monthlyLimit||0) > 0)
+    if (budRows.length > 0) {
+      const barPct   = totBdg > 0 ? Math.min(100, totSpent/totBdg*100) : 0
+      const barColor = barPct >= 100 ? 'var(--expense)' : barPct >= 85 ? '#D97706' : 'var(--income)'
+      budgetHtml = `
+        <div class="card" style="padding:14px 16px;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:10px">งบประมาณ</div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:5px">
+            <span>${fmt(totSpent)} / ${fmt(totBdg)}</span>
+            <span style="color:${barColor};font-weight:600">${barPct.toFixed(0)}%</span>
+          </div>
+          <div style="height:6px;background:var(--border,#e2e8f0);border-radius:3px;overflow:hidden;margin-bottom:12px">
+            <div style="height:100%;width:${barPct}%;background:${barColor};border-radius:3px"></div>
+          </div>
+          ${budRows.slice(0,8).map(b => {
+            const p = (b.spent||0)/(b.monthlyLimit||1)
+            const dot = p >= 1.0 ? '🔴' : p >= 0.85 ? '🟡' : '🟢'
+            return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border,#e2e8f0)">
+              <span style="font-size:12px">${dot}</span>
+              <span style="flex:1;font-size:13px">${esc(b.label)}</span>
+              <span style="font-size:12px;color:${p>=1?'var(--expense)':'var(--muted)'};font-weight:${p>=1?'600':'400'}">${fmt(b.spent)}/${fmt(b.monthlyLimit)}</span>
+            </div>`
+          }).join('')}
+        </div>`
+    }
+
+    // ── Top categories ──────────────────────────────────────────
+    let catHtml = ''
+    if (expCats.length > 0 && expense > 0) {
+      catHtml = `
+        <div class="card" style="padding:14px 16px;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:10px">หมวดรายจ่ายสูงสุด</div>
+          ${expCats.slice(0,5).map(row => {
+            const p = expense > 0 ? (Number(row.amount)||0)/expense*100 : 0
+            return `<div style="margin-bottom:9px">
+              <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+                <span>${esc(row.icon||'📦')} ${esc(row.label)}</span>
+                <span><strong>${fmt(row.amount)}</strong> <span style="color:var(--muted)">${p.toFixed(0)}%</span></span>
+              </div>
+              <div style="height:4px;background:var(--border,#e2e8f0);border-radius:2px;overflow:hidden">
+                <div style="height:100%;width:${Math.min(100,p)}%;background:${esc(row.color||'var(--primary)')};border-radius:2px"></div>
+              </div>
+            </div>`
+          }).join('')}
+        </div>`
+    }
+
+    // ── Month comparison ────────────────────────────────────────
+    let compHtml = ''
+    if ((prevMon.income||0) > 0 || (prevMon.expense||0) > 0) {
+      const prevLbl = mlbl(prev)
+      const fmtDelta = (delta, goodIfDown) => {
+        if (delta === null) return { txt:'ไม่มีข้อมูล', col:'var(--muted)' }
+        if (Math.abs(delta) < 5) return { txt:'ใกล้เคียงเดือนก่อน', col:'var(--muted)' }
+        const up = delta > 0
+        const good = goodIfDown ? !up : up
+        return { txt:(up?'↑ เพิ่ม ':'↓ ลด ')+Math.abs(delta).toFixed(0)+'%', col:good?'var(--income)':'var(--expense)' }
+      }
+      const exp = fmtDelta(expDelta, true)
+      const inc = fmtDelta(incDelta, false)
+      compHtml = `
+        <div class="card" style="padding:14px 16px;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:10px">เทียบกับ ${esc(prevLbl)}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="background:var(--card-2,#f8fafc);border-radius:10px;padding:10px">
+              <div style="font-size:11px;color:var(--muted)">รายจ่าย</div>
+              <div style="font-size:13px;font-weight:600;color:${exp.col};margin-top:2px">${esc(exp.txt)}</div>
+            </div>
+            <div style="background:var(--card-2,#f8fafc);border-radius:10px;padding:10px">
+              <div style="font-size:11px;color:var(--muted)">รายรับ</div>
+              <div style="font-size:13px;font-weight:600;color:${inc.col};margin-top:2px">${esc(inc.txt)}</div>
+            </div>
+          </div>
+        </div>`
+    }
+
+    // ── Goals ───────────────────────────────────────────────────
+    let goalsHtml = ''
+    if (gls.length > 0 && typeof App.getGoalProgress === 'function') {
+      const rows = gls.map(g => {
+        let p = null
+        try { p = App.getGoalProgress(g) } catch(_) {}
+        if (!p) return ''
+        const saved  = Number(p.saved || p.currentAmount || 0)
+        const target = Number(g.targetAmount || g.target || 0)
+        const pv     = target > 0 ? Math.min(100, saved/target*100) : (Number(p.percent)||0)
+        const bc     = pv >= 100 ? 'var(--income)' : pv >= 50 ? 'var(--primary)' : '#D97706'
+        return `<div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+            <span style="font-weight:600">${esc(g.name)}</span>
+            <span style="color:var(--muted)">${pv.toFixed(0)}%</span>
+          </div>
+          <div style="height:6px;background:var(--border,#e2e8f0);border-radius:3px;overflow:hidden;margin-bottom:3px">
+            <div style="height:100%;width:${pv}%;background:${bc};border-radius:3px"></div>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${fmt(saved)} / ${fmt(target)}${g.targetDate ? ' · ถึง '+esc(g.targetDate) : ''}</div>
+        </div>`
+      }).filter(Boolean)
+      if (rows.length) {
+        goalsHtml = `
+          <div class="card" style="padding:14px 16px;margin-bottom:12px">
+            <div style="font-size:14px;font-weight:700;margin-bottom:10px">เป้าหมายการออม</div>
+            ${rows.join('')}
+          </div>`
+      }
+    }
+
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>สรุปรายเดือน</h2>
+        <div style="display:flex;gap:2px">
+          <button class="btn-icon" onclick="App.openMonthlyReview('${esc(prev)}')" title="${esc(mlbl(prev))}">‹</button>
+          <button class="btn-icon" ${isNextFuture?'disabled style="opacity:.35;pointer-events:none"':`onclick="App.openMonthlyReview('${esc(next)}')" title="${esc(mlbl(next))}"`}>›</button>
+        </div>
+      </div>
+      <div class="sub-scroll" style="padding:12px 16px 40px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span style="font-size:18px;font-weight:800">${esc(mlbl(month))}</span>
+          ${isCurrent?'<span style="font-size:11px;background:var(--primary);color:#fff;border-radius:6px;padding:2px 8px;font-weight:600">ปัจจุบัน</span>':''}
+        </div>
+        ${gradeHtml}
+        ${statsHtml}
+        ${budgetHtml}
+        ${catHtml}
+        ${compHtml}
+        ${goalsHtml}
+      </div>`)
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // PHASE 4 — Ask My Money
+  // ─────────────────────────────────────────────────────────────
+
+  function buildAskAnswer(query) {
+    const q    = (query||'').trim().toLowerCase()
+    const txs  = S.transactions || []
+    const wals = S.wallets || []
+    const bds  = S.budgets || []
+    const cats = S.categories || {}
+    const gls  = (S.goals||[]).filter(g => g.status === 'active')
+    const mo   = now()
+
+    let monthly = { income:0, expense:0, netCashflow:0 }
+    let budProg = [], expCats = []
+    try { monthly = Calc.getMonthlyIncomeExpense(txs, mo) }                           catch(_) {}
+    try { budProg = Calc.getBudgetProgress(txs, bds, cats, mo) || [] }                catch(_) {}
+    try { expCats = Calc.getCategoryBreakdown(txs, mo, { type:'expense', categories:cats.expense||[] }) || [] } catch(_) {}
+
+    const ml      = mlbl(mo)
+    const income  = Number(monthly.income)  || 0
+    const expense = Number(monthly.expense) || 0
+    const net     = income - expense
+    const sr      = income > 0 ? net/income*100 : null
+    const ans     = (icon, title, body) => ({ icon, title, body })
+
+    // ── Expense ──────────────────────────────────────────────────
+    if (/ใช้ไป|รายจ่าย|ใช้จ่าย|ค่าใช้จ่าย|จ่ายไป/.test(q)) {
+      const top = expCats[0]
+      return ans('💸', 'รายจ่ายเดือน'+ml,
+        `ใช้จ่ายไป <strong>${fmt(expense)}</strong> ในเดือน${ml}`
+        + (top ? `<br>หมวดสูงสุด: ${esc(top.icon||'📦')} ${esc(top.label)} ${fmt(top.amount)}` : '')
+        + (income > 0 ? `<br>คิดเป็น ${(expense/income*100).toFixed(0)}% ของรายรับ` : ''))
+    }
+
+    // ── Income ───────────────────────────────────────────────────
+    if (/รายรับ|ได้เงิน|รับเงิน|เงินเดือน/.test(q)) {
+      return ans('💰', 'รายรับเดือน'+ml,
+        `รายรับทั้งหมด <strong>${fmt(income)}</strong> ในเดือน${ml}`
+        + (net >= 0 ? `<br>หักรายจ่ายแล้วเหลือ ${fmt(net)}` : `<br>รายจ่ายเกินรายรับ ${fmt(Math.abs(net))}`))
+    }
+
+    // ── Cash balance ────────────────────────────────────────────
+    if (/เงินเหลือ|เงินสด|เงินพร้อมใช้|คงเหลือ|มีเงิน/.test(q)) {
+      let liquid = 0
+      try { if (typeof Calc.getUsableMoney === 'function') { const u = Calc.getUsableMoney(wals, S); liquid = u.liquid||0 } } catch(_) {}
+      const cash = wals.filter(w => ['cash','bank'].includes(w.type) && !w.archived)
+        .sort((a,b) => (b.balance||0)-(a.balance||0)).slice(0,4)
+      return ans('🏦', 'เงินพร้อมใช้',
+        `เงินพร้อมใช้รวม <strong>${fmt(liquid)}</strong>`
+        + (cash.length ? '<br>'+cash.map(w => `${esc(w.icon||'💳')} ${esc(w.name)}: ${fmt(w.balance||0)}`).join('<br>') : ''))
+    }
+
+    // ── Goals (before savings to avoid "ออม" prefix match) ──────
+    if (/เป้าหมาย|goal/.test(q)) {
+      if (!gls.length) return ans('🎯', 'เป้าหมาย', 'ยังไม่มีเป้าหมาย — ไปตั้งได้ที่เมนูวางแผน')
+      const rows = gls.map(g => {
+        let p = null
+        try { if (typeof App.getGoalProgress === 'function') p = App.getGoalProgress(g) } catch(_) {}
+        const saved  = Number(p?.saved || p?.currentAmount || 0)
+        const target = Number(g.targetAmount || g.target || 0)
+        const pv     = target > 0 ? Math.min(100, saved/target*100) : 0
+        return `${esc(g.name)}: ${pv.toFixed(0)}% (${fmt(saved)}/${fmt(target)})`
+      })
+      return ans('🎯', 'เป้าหมายการออม', rows.join('<br>'))
+    }
+
+    // ── Savings ──────────────────────────────────────────────────
+    if (/ออมได้|อัตราออม|เงินออม/.test(q)) {
+      const msg = income > 0
+        ? `ออมได้ <strong>${fmt(Math.max(0,net))}</strong> อัตราออม ${(sr||0).toFixed(1)}%`
+          + (net < 0 ? '<br>⚠️ รายจ่ายเกินรายรับ ควรทบทวนรายจ่าย'
+            : (sr||0) >= 20 ? '<br>✅ อัตราออมอยู่ในเกณฑ์ดี'
+            : '<br>💡 เป้าหมายออม 20%+ ต่อเดือน')
+        : 'ยังไม่มีรายรับในเดือนนี้'
+      return ans('🐖', 'การออมเดือน'+ml, msg)
+    }
+
+    // ── Budget ───────────────────────────────────────────────────
+    if (/งบ|เกินงบ|งบเหลือ/.test(q)) {
+      const totL = budProg.reduce((s,b) => s+(b.monthlyLimit||0), 0)
+      const totS = budProg.reduce((s,b) => s+(b.spent||0), 0)
+      const over = budProg.filter(b => (b.monthlyLimit||0)>0 && (b.spent||0)>(b.monthlyLimit||0))
+      if (!totL) return ans('📊', 'งบประมาณ', 'ยังไม่ได้ตั้งงบประมาณ — ไปตั้งได้ที่เมนูงบประมาณ')
+      return ans('📊', 'งบประมาณเดือน'+ml,
+        `ใช้ไป <strong>${fmt(totS)}</strong> / ${fmt(totL)}<br>เหลือ ${fmt(Math.max(0,totL-totS))}`
+        + (over.length ? `<br>⚠️ เกินงบ: ${over.map(b=>esc(b.label)).join(', ')}` : '<br>✅ ทุกหมวดอยู่ในงบ'))
+    }
+
+    // ── Credit card ──────────────────────────────────────────────
+    if (/บัตรเครดิต|ค้างชำระ/.test(q)) {
+      const ccs = wals.filter(w => w.type === 'credit' && !w.archived)
+      if (!ccs.length) return ans('💳', 'บัตรเครดิต', 'ไม่พบบัตรเครดิตในระบบ')
+      const total = ccs.reduce((s,w) => s+Math.abs(w.balance||0), 0)
+      return ans('💳', 'ยอดบัตรเครดิต',
+        `ค้างชำระรวม <strong>${fmt(total)}</strong><br>`
+        + ccs.map(w => `${esc(w.icon||'💳')} ${esc(w.name)}: ${fmt(Math.abs(w.balance||0))}`).join('<br>'))
+    }
+
+    // ── Top merchant ─────────────────────────────────────────────
+    if (/ร้านค้า|ร้านไหน|ใช้เงินมาก/.test(q)) {
+      let ms = []
+      try { ms = Calc.getMerchantBreakdown?.(txs, mo) || [] } catch(_) {}
+      if (!ms.length) return ans('🏪', 'ร้านค้า', 'ยังไม่มีข้อมูลร้านค้าในเดือนนี้')
+      return ans('🏪', 'ร้านค้าที่ใช้เงินมากสุด',
+        ms.slice(0,5).map((m,i) => `${i+1}. ${esc(m.merchant||m.name||'')}: <strong>${fmt(m.amount||0)}</strong>`).join('<br>'))
+    }
+
+    // ── Top category ─────────────────────────────────────────────
+    if (/หมวดไหน|ใช้มากสุด|หมวดหมู่/.test(q)) {
+      if (!expCats.length) return ans('📦', 'หมวดรายจ่าย', 'ยังไม่มีข้อมูลในเดือนนี้')
+      return ans('📦', 'หมวดรายจ่ายสูงสุดเดือน'+ml,
+        expCats.slice(0,5).map((c,i) => `${i+1}. ${esc(c.icon||'📦')} ${esc(c.label)}: <strong>${fmt(c.amount)}</strong>`).join('<br>'))
+    }
+
+    // ── Recent transactions ──────────────────────────────────────
+    if (/ล่าสุด|recent/.test(q)) {
+      const recent = [...txs].sort((a,b) => (b.date||'').localeCompare(a.date||'')).slice(0,5)
+      if (!recent.length) return ans('📋', 'รายการล่าสุด', 'ยังไม่มีรายการ')
+      return ans('📋', 'รายการล่าสุด 5 รายการ',
+        recent.map(t => {
+          const sign = t.type==='expense'?'-':t.type==='income'?'+':''
+          return `${esc(t.date||'')} <strong>${sign}${fmt(t.amount)}</strong> ${esc(t.merchant||t.note||t.type||'')}`
+        }).join('<br>'))
+    }
+
+    // ── Health / overview ────────────────────────────────────────
+    if (/สุขภาพ|ภาพรวม|สรุป|overview/.test(q)) {
+      const g = (income>0||expense>0) ? calcGrade(sr, budProg.filter(b=>(b.monthlyLimit||0)>0&&(b.spent||0)>(b.monthlyLimit||0)).length) : null
+      return ans('📈', 'ภาพรวมเดือน'+ml,
+        g ? `เกรด <strong style="color:${g.color}">${esc(g.grade)} — ${esc(g.label)}</strong><br>`
+            + `รายรับ ${fmt(income)} · รายจ่าย ${fmt(expense)}<br>`
+            + `สุทธิ ${net>=0?'+':'-'}${fmt(net)}`
+            + (sr !== null ? ` · ออม ${sr.toFixed(1)}%` : '')
+          : 'ยังไม่มีข้อมูลในเดือนนี้')
+    }
+
+    // ── Fallback ─────────────────────────────────────────────────
+    return ans('🤔', 'ไม่เข้าใจคำถาม',
+      'ลองถามเช่น:<br>• เดือนนี้ใช้จ่ายเท่าไร<br>• มีเงินสดเหลือเท่าไร<br>• งบประมาณเหลือเท่าไร<br>• บัตรเครดิตค้างเท่าไร<br>• ออมได้เท่าไร<br>• เป้าหมายการออม')
+  }
+
+  App.openAskMyMoney = function() {
+    const presets = [
+      'เดือนนี้ใช้จ่ายเท่าไร','มีเงินสดเหลือเท่าไร','งบประมาณเหลือเท่าไร',
+      'ออมได้เท่าไร','บัตรเครดิตค้างเท่าไร','ร้านไหนใช้เงินมากสุด',
+      'หมวดไหนใช้มากสุด','สรุปภาพรวม',
+    ]
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>ถามการเงินของคุณ</h2>
+      </div>
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <p style="font-size:13px;color:var(--muted);margin:0 0 14px">ถามข้อมูลการเงินของคุณได้เลย ไม่ต้องเชื่อมอินเทอร์เน็ต</p>
+        <div style="display:grid;grid-template-columns: 4fr 1fr;gap:8px;margin-bottom:12px">
+          <input id="ask-q-input" class="form-input" placeholder="เช่น เดือนนี้ใช้จ่ายเท่าไร..." style="flex:1;padding:10px 12px;font-size:14px"
+            onkeydown="if(event.key==='Enter')App.submitAskQuery()">
+          <button class="btn btn-primary" onclick="App.submitAskQuery()" style="padding:10px 16px;white-space:nowrap;min-width:60px">ถาม</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+          ${presets.map(p => `<button class="chip" onclick="App._askPreset(${esc(JSON.stringify(p))})" style="font-size:12px;padding:5px 10px">${esc(p)}</button>`).join('')}
+        </div>
+        <div id="ask-answer-box">
+          <div style="text-align:center;padding:24px 0;color:var(--muted);font-size:13px">เลือกคำถามด้านบน หรือพิมพ์คำถามของคุณ</div>
+        </div>
+      </div>`)
+    setTimeout(() => document.getElementById('ask-q-input')?.focus(), 80)
+  }
+
+  App._askPreset = function(q) {
+    const inp = document.getElementById('ask-q-input')
+    if (inp) inp.value = q
+    App.submitAskQuery(q)
+  }
+
+  App.submitAskQuery = function(q) {
+    q = q || document.getElementById('ask-q-input')?.value || ''
+    if (!q.trim()) return
+    const box = document.getElementById('ask-answer-box')
+    if (!box) return
+    try {
+      const r = buildAskAnswer(q)
+      box.innerHTML = `
+        <div class="card" style="padding:14px 16px;border-left:3px solid var(--primary)">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">${esc(r.icon)} ${esc(r.title)}</div>
+          <div style="font-size:14px;line-height:1.7">${r.body}</div>
+        </div>`
+    } catch(_) {
+      box.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px">ไม่สามารถประมวลผลได้</div>`
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Inject "วิเคราะห์" section into More page
+  // ─────────────────────────────────────────────────────────────
+  const _prevRenderMore_p3 = App.renderMore?.bind(App)
+  App.renderMore = function() {
+    _prevRenderMore_p3?.()
+    try {
+      const content = document.getElementById('more-content')
+      if (!content) return
+      const inner = content.firstElementChild
+      if (!inner) return
+      inner.querySelector('.p3-analyze-section')?.remove()
+
+      const mkRow = (icon, lbl, fn) =>
+        `<div class="settings-row" onclick="${fn}"><div class="s-icon">${icon}</div><div class="s-label">${lbl}</div><div class="s-arrow">›</div></div>`
+      const sec = document.createElement('div')
+      sec.className = 'p3-analyze-section'
+      sec.innerHTML = `
+        <div class="sec-title">วิเคราะห์</div>
+        <div class="card card-pad">
+          ${mkRow('📋','สรุปรายเดือน','App.openMonthlyReview()')}
+          ${mkRow('💬','ถามการเงินของคุณ','App.openAskMyMoney()')}
+        </div>`
+      const firstTitle = inner.querySelector('.sec-title')
+      if (firstTitle) inner.insertBefore(sec, firstTitle)
+      else inner.appendChild(sec)
+    } catch(_) {}
+  }
+
+  // ── Init ─────────────────────────────────────────────────────
+  try { if (S.page === 'more') App.renderMore?.() } catch(_) {}
 })()
