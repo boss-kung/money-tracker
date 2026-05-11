@@ -2399,7 +2399,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 .cc-due-strip {
   margin-top:10px;
   display:grid;
-  grid-template-columns:1fr auto;
+  grid-template-columns:1.5fr 2.5fr 1fr;
   gap:3px 8px;
   align-items:center;
   border-radius:14px;
@@ -2478,7 +2478,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   max-width: 100%;
   min-width: 0;
   min-inline-size: 0;
-  max-inline-size: 100%;
+  max-inline-size: 99.99%;
   overflow: hidden;
 }
 #tx-date::-webkit-date-and-time-value {
@@ -3247,7 +3247,7 @@ body {
   gap:10px !important;
   color:var(--text) !important;
   font-size:18px !important;
-  font-weight:950 !important;
+  font-weight:800 !important;
   line-height:1.2 !important;
   letter-spacing:-.02em !important;
 }
@@ -4010,7 +4010,6 @@ html.dark .icon-btn {
   button,
   a,
   input,
-  select,
   textarea,
   label,
   .btn,
@@ -4065,7 +4064,7 @@ html.dark .icon-btn {
     max-height: var(--app-height) !important;
   } */
 
-  body.keyboard-open #sheet-add-tx #add-tx-content,
+  /* body.keyboard-open #sheet-add-tx #add-tx-content,
   body.keyboard-open #overlay-add-tx #add-tx-content,
   body.keyboard-open .add-detail-shell {
     min-height: 0 !important;
@@ -4073,15 +4072,15 @@ html.dark .icon-btn {
 
   body.keyboard-open .add-detail-scroll {
     padding-bottom: calc(18px + var(--safe-b) + var(--app-bottom-gap)) !important;
-  }
+  } */
 
-  body.keyboard-open .add-detail-actions {
+  /* body.keyboard-open .add-detail-actions {
     position: static !important;
     transform: none !important;
     bottom: auto !important;
     padding-bottom: calc(8px + var(--safe-b) + var(--app-bottom-gap)) !important;
-  }
-}
+  }*/
+} 
 
 /* ============================================================
    Add-transaction recurring fields and decimal input UI

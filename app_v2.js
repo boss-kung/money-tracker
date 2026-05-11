@@ -3073,16 +3073,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
     App._bindTxRows?.('dashboard-content')
   }
 
-  // ── 5. More page: CSV export row + Thai gold proxy setting ──
-
-  App.saveGoldProxyUrl = function() {
-    const url = (document.getElementById('gold-proxy-input')?.value || '').trim()
-    localStorage.setItem('MT_GOLD_PROXY_URL', url)
-    window.MT_GOLD_PROXY_URL = url
-    toast(url ? 'บันทึก Gold Proxy URL แล้ว' : 'ล้าง Gold Proxy URL แล้ว', 'success')
-    App.renderMore()
-  }
-
   // Apply to current page immediately
   try { if (S.page === 'dashboard') App.renderDashboard() } catch (_) {}
   try { if (S.page === 'more') App.renderMore() } catch (_) {}
@@ -3166,8 +3156,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         </div>
         <div class="wc-balance">-${MONEY(totalOwed)}</div>
         ${installmentNote}
-        ${sharedBadge}
-        ${due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em><strong>${ESC(due.dueStr)}</strong></div>` : ''}
+        ${due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${ESC(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}
         ${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : ''}
       </div>`
     }
@@ -4367,7 +4356,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       ${buildSummaryCard('อัตราออม', monthly.savingsRate === null ? '—' : `${monthly.savingsRate.toFixed(1)}%`, monthly.savingsRate === null ? 'var(--muted)' : monthly.savingsRate >= 0 ? 'var(--income)' : 'var(--expense)', monthly.income > 0 ? 'รายรับหลังหักรายจ่าย' : 'ยังไม่มีรายรับในเดือนนี้')}
     </div>`
 
-    html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><div><strong>AI Financial Coach</strong><span>สรุปเชิงกฎจากข้อมูลในเครื่อง ไม่ใช้ API ภายนอก</span></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${
+    html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><div><strong>AI Financial Coach</strong></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${
       smartInsights.length
         ? smartInsights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')
         : `<div class="list-item-sub">ข้อมูลเดือนนี้ยังไม่พอสำหรับสรุปแนวโน้มเพิ่มเติม</div>`
@@ -6530,7 +6519,7 @@ App._pickMerchant = function(name, opts = {}) {
           ${row({ icon:'📥', label:'นำเข้าข้อมูล (JSON)', value:'Preview ก่อนนำเข้า', onclick:"document.getElementById('import-file-v5').click()" })}
           <input type="file" id="import-file-v5" accept=".json" style="display:none" onchange="App.importData(this)">
           ${row({ icon:'🧯', label:'กู้คืน Backup ก่อน Import', onclick:'App.restorePreImportBackup?.()' })}
-          <div class="settings-row"><div class="s-icon">💾</div><div class="s-label">สถานะข้อมูล<br><div class="s-value" style="font-weight:400">บันทึกเมื่อ: ${esc(lastSaved)}<br>Export ข้อมูล: ${esc(lastExport)}</div></div></div>
+          <div class="settings-row"><div class="s-icon">💾</div><div class="s-label">สถานะข้อมูล<br><div class="s-value" style="font-weight:400; text-align:left !important">บันทึกเมื่อ: ${esc(lastSaved)}<br>Export ข้อมูล: ${esc(lastExport)}</div></div></div>
         </div>
         <div class="sec-title">การแสดงผล</div>
         <div class="card card-pad">
@@ -6543,12 +6532,6 @@ App._pickMerchant = function(name, opts = {}) {
         <div class="sec-title">ระบบ</div>
         <div class="card card-pad">
           ${row({ icon:'🧹', label:'ล้างแคชแอป', value:'ไม่ลบข้อมูลการเงิน', onclick:'App.resetAppCache?.()' })}
-          <div style="padding:14px 0;border-bottom:1px solid var(--border)">
-            <div style="font-size:15px;font-weight:700;margin-bottom:8px">Thai Gold API Proxy</div>
-            <input class="form-input" id="gold-proxy-input" placeholder="https://script.google.com/macros/s/.../exec" value="${esc(currentProxy)}" style="margin-bottom:10px">
-            <button class="btn btn-primary" onclick="App.saveGoldProxyUrl()">บันทึก Proxy URL</button>
-            ${currentProxy ? `<div style="font-size:11px;color:var(--income);margin-top:8px">✓ ตั้งค่าแล้ว</div>` : ''}
-          </div>
           ${row({ icon:'🔄', label:'รีเซ็ตข้อมูลทั้งหมด', danger:true, onclick:'App.resetData()' })}
         </div>
         <div style="text-align:center;padding:32px 0 8px">
@@ -7621,6 +7604,13 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   const LIVE_CRYPTO_THB_DISCOUNT_FACTOR = 0.97
+  const cryptoPriceTHBFmt = n => {
+  const value = Number(n || 0)
+  if (!Number.isFinite(value)) return '0.00'
+  if (value >= 1000) return value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (value >= 1) return value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+  return value.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 8 })
+}
 
   App.getCryptoPriceTHB = function(assetOrHolding) {
     ensureCryptoState()
@@ -7628,7 +7618,7 @@ App._pickMerchant = function(name, opts = {}) {
     const asset = holding ? App.getCryptoAsset(holding.assetId) : assetOrHolding
     const marketId = normalizeCoinGeckoId(asset?.coinGeckoId)
     const live = marketId ? Number(S.marketPrices?.crypto?.[marketId]?.thb || 0) : 0
-    if (live > 0) return round2(live * LIVE_CRYPTO_THB_DISCOUNT_FACTOR)
+    if (live > 0) return Number((live * LIVE_CRYPTO_THB_DISCOUNT_FACTOR).toFixed(8))
     const manual = Number(holding?.manualPriceTHB || assetOrHolding?.manualPriceTHB || 0)
     if (manual > 0) return manual
     return 0
@@ -7912,8 +7902,8 @@ App._pickMerchant = function(name, opts = {}) {
           <div class="form-hint">ถ้าไม่มี CoinGecko ID ระบบจะใช้ราคาสำรองอย่างเดียว</div>
         </div>
         <div class="form-group"><label class="form-label">จำนวนเหรียญ</label><input class="form-input" type="number" step="0.00000001" min="0" id="crypto-units" value="${holding ? esc(holding.units) : ''}"></div>
-        <div class="form-group"><label class="form-label">ต้นทุนเฉลี่ยต่อเหรียญ (THB)</label><input class="form-input" type="number" step="0.01" min="0" id="crypto-avg-cost" value="${holding ? esc(holding.averageCostTHB) : ''}"></div>
-        <div class="form-group"><label class="form-label">ราคาสำรองต่อเหรียญ (THB)</label><input class="form-input" type="number" step="0.01" min="0" id="crypto-manual-price" value="${holding ? esc(holding.manualPriceTHB) : ''}"></div>
+        <div class="form-group"><label class="form-label">ต้นทุนเฉลี่ยต่อเหรียญ (THB)</label><input class="form-input" type="number" step="0.00000001" min="0" id="crypto-avg-cost" value="${holding ? esc(holding.averageCostTHB) : ''}"></div>
+        <div class="form-group"><label class="form-label">ราคาสำรองต่อเหรียญ (THB)</label><input class="form-input" type="number" step="0.00000001" min="0" id="crypto-manual-price" value="${holding ? esc(holding.manualPriceTHB) : ''}"></div>
         <div class="form-group">
           <label class="form-label">Location</label>
           <input class="form-input" id="crypto-location" list="crypto-location-list" value="${esc(locationValue)}" placeholder="เช่น Binance, Bitkub, Ledger, Wallet" oninput="App._refreshCryptoLocationControls()">
@@ -8111,7 +8101,7 @@ App._pickMerchant = function(name, opts = {}) {
             <div style="min-width:0">
               <div class="list-item-name">${esc(selectedAsset.symbol)} · ${esc(selectedAsset.name)}</div>
               <div class="list-item-sub">CoinGecko ID: ${esc(selectedAsset.coinGeckoId || '-')} · Rank ${selectedAsset.marketCapRank || '-'} · ${esc(selectedAsset.sourceLabel || 'CoinGecko')}</div>
-              ${(Number(selectedPrice?.thb || 0) > 0 || Number(selectedPrice?.usd || 0) > 0) ? `<div class="list-item-sub">THB ${plainMoney(Number(selectedPrice?.thb || 0))}${Number(selectedPrice?.usd || 0) > 0 ? ` · USD ${Number(selectedPrice.usd).toLocaleString('en-US', { maximumFractionDigits: 6 })}` : ''}</div>` : `<div class="list-item-sub">ยังไม่มีราคาล่าสุด ระบบจะดึงอีกครั้งตอนบันทึก/refresh</div>`}
+              ${(Number(selectedPrice?.thb || 0) > 0 || Number(selectedPrice?.usd || 0) > 0) ? `<div class="list-item-sub">THB ${cryptoPriceTHBFmt(Number(selectedPrice?.thb || 0))}${Number(selectedPrice?.usd || 0) > 0 ? ` · USD ${Number(selectedPrice.usd).toLocaleString('en-US', { maximumFractionDigits: 6 })}` : ''}</div>` : `<div class="list-item-sub">ยังไม่มีราคาล่าสุด ระบบจะดึงอีกครั้งตอนบันทึก/refresh</div>`}
             </div>
           </div>
         </div>`
@@ -8282,8 +8272,8 @@ App._pickMerchant = function(name, opts = {}) {
           <div class="list-item-sub">ถืออยู่ ${unitFmt(holding?.units || 0, asset?.decimals || 8)} ${esc(asset?.symbol || '')}${location ? ` · ${esc(location)}` : ''}</div>
         </div>
         <div class="form-group"><label class="form-label">${type === 'adjust' ? 'จำนวนใหม่ทั้งหมด' : 'จำนวนเหรียญ'}</label><input class="form-input" type="number" step="0.00000001" min="0" id="crypto-tx-units" value="${esc(targetUnits)}"></div>
-        ${type !== 'adjust' ? `<div class="form-group"><label class="form-label">ราคาต่อเหรียญ (THB)</label><input class="form-input" type="number" step="0.01" min="0" id="crypto-tx-price" value="${esc(App.getCryptoPriceTHB(holding) || holding?.averageCostTHB || '')}"></div>` : ''}
-        ${type !== 'adjust' ? `<div class="form-group"><label class="form-label">ค่าธรรมเนียม (THB)</label><input class="form-input" type="number" step="0.01" min="0" id="crypto-tx-fee" value=""></div>` : ''}
+        ${type !== 'adjust' ? `<div class="form-group"><label class="form-label">ราคาต่อเหรียญ (THB)</label><input class="form-input" type="number" step="0.00000001" min="0" id="crypto-tx-price" value="${esc(App.getCryptoPriceTHB(holding) || holding?.averageCostTHB || '')}"></div>` : ''}
+        ${type !== 'adjust' ? `<div class="form-group"><label class="form-label">ค่าธรรมเนียม (THB)</label><input class="form-input" type="number" step="0.00000001" min="0" id="crypto-tx-fee" value=""></div>` : ''}
         ${type !== 'adjust' ? `<div class="form-group"><label class="form-label">${type === 'buy' ? 'จ่ายจากกระเป๋า' : 'รับเงินเข้ากระเป๋า'}</label><select class="form-input" id="crypto-tx-wallet"><option value="">ไม่ระบุ</option>${sourceWallets.map(w => `<option value="${esc(w.id)}">${esc(w.icon || '')} ${esc(w.name)} · ${money(w.balance)}</option>`).join('')}</select></div>` : ''}
         <div class="form-group"><label class="form-label">วันที่</label><input class="form-input" type="date" id="crypto-tx-date" value="${today()}"></div>
         <div class="form-group"><label class="form-label">หมายเหตุ</label><input class="form-input" id="crypto-tx-note" placeholder="${type === 'adjust' ? 'จำเป็นสำหรับการปรับจำนวน' : 'เช่น DCA, Take profit'}"></div>
