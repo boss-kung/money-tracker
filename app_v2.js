@@ -11576,7 +11576,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     // ── Grade card ──────────────────────────────────────────────
     const gradeHtml = grade ? `
       <div style="background:${grade.color}18;border:1.5px solid ${grade.color}40;border-radius:16px;padding:18px 20px;margin-bottom:12px;display:flex;align-items:center;gap:16px">
-        <div style="font-size:52px;font-weight:900;color:${grade.color};line-height:1;min-width:68px;text-align:center">${esc(grade.grade)}</div>
+        <div style="font-size:52px;font-weight: 800;color:${grade.color};line-height:1;min-width:68px;text-align:center">${esc(grade.grade)}</div>
         <div>
           <div style="font-size:17px;font-weight:700;color:${grade.color}">${esc(grade.label)}</div>
           <div style="font-size:12px;color:var(--muted);margin-top:4px">

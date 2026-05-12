@@ -1,4 +1,28 @@
-/* System font stack only: Apple/SF stack; no external font import. */
+/* LINE Seed Sans TH typography. No external font import. */
+
+@font-face {
+  font-family: "LINE Seed Sans TH";
+  src: local("LINE Seed Sans TH Regular"), local("LINESeedSansTH-Regular"), local("LINE Seed Sans TH");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "LINE Seed Sans TH";
+  src: local("LINE Seed Sans TH Bold"), local("LINESeedSansTH-Bold");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "LINE Seed Sans TH";
+  src: local("LINE Seed Sans TH ExtraBold"), local("LINESeedSansTH-ExtraBold"), local("LINE Seed Sans TH Heavy"), local("LINESeedSansTH-Heavy");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* ── CSS Variables ───────────────────────────────────────── */
 
@@ -1065,7 +1089,8 @@ html.dark .mt-alert-row-name { color: var(--text); }
    and polish spacing/touch targets.
    ============================================================ */
 :root {
-  --font-ios: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  --font-line: "LINE Seed Sans TH", "LINESeedSansTH", "LINE Seed Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, system-ui, sans-serif;
+  --font-ios: var(--font-line);
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -1619,7 +1644,8 @@ textarea.form-input:focus {
    visible wallet cards, budget tabs, and tappable color picker.
    ============================================================ */
 :root {
-  --font-ios: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, system-ui, sans-serif;
+  --font-line: "LINE Seed Sans TH", "LINESeedSansTH", "LINE Seed Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, system-ui, sans-serif;
+  --font-ios: var(--font-line);
   --label-fs: 13.5px;
   --small-fs: 12.5px;
   --nav-label-fs: 10.5px;
@@ -2163,7 +2189,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   display:block;
   font-size:22px;
   line-height:1.05;
-  font-weight:950;
+  font-weight: 800;
   letter-spacing:-.05em;
   font-variant-numeric:tabular-nums;
   white-space:nowrap;
@@ -2200,7 +2226,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   font-size:13px;
   font-weight: 600;
 }
-.tx-date-header div { display:flex; gap:10px; align-items:center; font-size:13px; font-weight:950; }
+.tx-date-header div { display:flex; gap:10px; align-items:center; font-size:13px; font-weight: 800; }
 .tx-group-card {
   background:transparent;
   border:0;
@@ -2228,7 +2254,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 .tx-row-modern .tx-amount {
   font-size:17px !important;
   line-height:1.1 !important;
-  font-weight:950 !important;
+  font-weight: 800 !important;
   letter-spacing:-.045em !important;
 }
 .tx-row-modern .tx-sub {
@@ -2242,7 +2268,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   padding:0 !important;
   color:var(--muted) !important;
   font-size:12px !important;
-  font-weight:800 !important;
+  font-weight: 800 !important;
 }
 .tx-row-modern .tx-meta-pill + .tx-meta-pill::before {
   content:'·';
@@ -2331,7 +2357,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   z-index:1;
   color:#fff;
   font-size:18px;
-  font-weight:950;
+  font-weight: 800;
   text-shadow:0 1px 2px rgba(0,0,0,.35);
 }
 /* Benefits tabs */
@@ -2351,7 +2377,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   border-radius:14px;
   background:transparent;
   color:var(--muted);
-  font-weight:950;
+  font-weight: 800;
   cursor:pointer;
 }
 .benefit-tab.active {
@@ -2408,8 +2434,8 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   color:#fff;
 }
 .cc-due-strip span { font-size:11px; opacity:.86; font-weight:800; }
-.cc-due-strip strong { font-size:16px; line-height:1; font-weight:950; letter-spacing:-.03em; }
-.cc-due-strip em { grid-column:2; font-size:11px; font-style:normal; font-weight:950; background:rgba(255,255,255,.22); padding:3px 7px; border-radius:999px; }
+.cc-due-strip strong { font-size:16px; line-height:1; font-weight: 800; letter-spacing:-.03em; }
+.cc-due-strip em { grid-column:2; font-size:11px; font-style:normal; font-weight: 800; background:rgba(255,255,255,.22); padding:3px 7px; border-radius:999px; }
 .cc-due-strip.urgent { background:rgba(254,226,226,.24); }
 @media (max-width: 360px) { .wallet-grid-2 { grid-template-columns:1fr; } }
 
@@ -2502,7 +2528,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   gap:10px;
   margin-bottom:10px;
 }
-#reports-content .ai-card-head strong { display:block; font-size:15px; font-weight:950; letter-spacing:-.02em; }
+#reports-content .ai-card-head strong { display:block; font-size:15px; font-weight: 800; letter-spacing:-.02em; }
 #reports-content .ai-card-head span { display:block; margin-top:2px; font-size:11.5px; color:var(--muted); font-weight:750; }
 #reports-content .ai-insight {
   background:linear-gradient(135deg, rgba(37,99,235,.08), rgba(124,58,237,.07)) !important;
@@ -2603,7 +2629,7 @@ label.color-swatch {
   border-radius:999px !important;
   min-height:32px !important;
   min-width:48px !important;
-  font-weight:800 !important;
+  font-weight: 800 !important;
 }
 .wallet-market-note.compact { margin-top:10px !important; margin-bottom:0 !important; }
 
@@ -3213,7 +3239,7 @@ body {
 
 .report-category-title{
   font-size:20px !important;
-  font-weight:950 !important;
+  font-weight: 800 !important;
   line-height:1.25 !important;
   letter-spacing:-.03em !important;
   color:var(--text) !important;
@@ -3247,7 +3273,7 @@ body {
   gap:10px !important;
   color:var(--text) !important;
   font-size:18px !important;
-  font-weight:800 !important;
+  font-weight: 800 !important;
   line-height:1.2 !important;
   letter-spacing:-.02em !important;
 }
@@ -3282,7 +3308,7 @@ body {
 #reports-content .report-cat-value strong{
   color:var(--text) !important;
   font-size:20px !important;
-  font-weight:950 !important;
+  font-weight: 800 !important;
   line-height:1 !important;
   letter-spacing:-.055em !important;
 }
@@ -5333,4 +5359,39 @@ html.dark .ins-card.severity-positive  { border-color: rgba(52,211,153,.3);  bac
 }
 .ins-reports-list .ins-card {
   border-radius: 10px;
+}
+
+/* Typography lock: LINE Seed Sans TH everywhere, max weight 800. */
+html,
+body,
+#app,
+button,
+input,
+select,
+textarea,
+summary,
+svg text {
+  font-family: var(--font-line) !important;
+}
+
+*,
+*::before,
+*::after {
+  font-family: inherit;
+}
+
+b,
+strong,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.amount-display,
+.mt-net-value,
+.nw-value,
+.tx-amount,
+.report-summary-value {
+  font-weight: 800 !important;
 }
