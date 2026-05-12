@@ -2041,8 +2041,8 @@ textarea.form-input { min-height: 72px !important; }
 .installment-month-grid button,
 .budget-tab {
   min-height: var(--touch-h-sm) !important;
-  font-size: 12.5px !important;
-  padding: 7px 11px !important;
+  font-size: 12px !important;
+  padding: 3px 11px !important;
   border-radius: 999px !important;
 }
 .type-tab,
@@ -2211,7 +2211,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   flex:0 0 auto;
   min-width:72px;
   border-radius:18px !important;
-  font-weight: 800 !important;
+  font-weight: 600 !important;
 }
 .tx-month-row {
   padding:0 !important;
