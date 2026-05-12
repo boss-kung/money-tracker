@@ -2,7 +2,11 @@
 
 @font-face {
   font-family: "LINE Seed Sans TH";
-  src: local("LINE Seed Sans TH Regular"), local("LINESeedSansTH-Regular"), local("LINE Seed Sans TH");
+  src:
+    url("./assets/fonts/LINESeedSansTH_Rg.ttf") format("truetype"),
+    local("LINE Seed Sans TH Regular"),
+    local("LINESeedSansTH-Regular"),
+    local("LINE Seed Sans TH");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -10,7 +14,10 @@
 
 @font-face {
   font-family: "LINE Seed Sans TH";
-  src: local("LINE Seed Sans TH Bold"), local("LINESeedSansTH-Bold");
+  src:
+    url("./assets/fonts/LINESeedSansTH_Bd.ttf") format("truetype"),
+    local("LINE Seed Sans TH Bold"),
+    local("LINESeedSansTH-Bold");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -18,7 +25,10 @@
 
 @font-face {
   font-family: "LINE Seed Sans TH";
-  src: local("LINE Seed Sans TH ExtraBold"), local("LINESeedSansTH-ExtraBold"), local("LINE Seed Sans TH Heavy"), local("LINESeedSansTH-Heavy");
+  src:
+    url("./assets/fonts/LINESeedSansTH_XBd.ttf") format("truetype"),
+    local("LINE Seed Sans TH ExtraBold"),
+    local("LINESeedSansTH-ExtraBold");
   font-weight: 800;
   font-style: normal;
   font-display: swap;

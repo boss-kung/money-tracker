@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.05.11-r1'
+const APP_VERSION = '2026.05.13-line-seed2'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 
@@ -12,6 +12,9 @@ const STATIC_ASSETS = [
   './sample-data_v2.js',
   './ai_insights.js',
   './manifest.json',
+  './assets/fonts/LINESeedSansTH_Rg.ttf',
+  './assets/fonts/LINESeedSansTH_Bd.ttf',
+  './assets/fonts/LINESeedSansTH_XBd.ttf',
 ]
 
 function isSameOrigin(request) {
@@ -88,7 +91,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url)
   const path = url.pathname.split('/').pop()
   const acceptsHtml = request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html')
-  const isCoreCode = ['app_v2.js', 'storage_v2.js', 'calculations.js', 'sample-data_v2.js', 'style_v2.css'].includes(path)
+  const isCoreCode = ['app_v2.js', 'storage_v2.js', 'calculations.js', 'sample-data_v2.js', 'style_v2.css', 'LINESeedSansTH_Rg.ttf', 'LINESeedSansTH_Bd.ttf', 'LINESeedSansTH_XBd.ttf'].includes(path)
 
   if (acceptsHtml) {
     event.respondWith(networkFirst(request, './index.html'))
