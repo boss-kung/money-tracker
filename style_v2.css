@@ -2258,7 +2258,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 .tx-row-modern .tx-title {
   font-size:16px !important;
   line-height:1.16 !important;
-  font-weight: 800 !important;
+  font-weight: 700 !important;
   letter-spacing:-.025em !important;
 }
 .tx-row-modern .tx-amount {
@@ -2278,7 +2278,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   padding:0 !important;
   color:var(--muted) !important;
   font-size:12px !important;
-  font-weight: 800 !important;
+  font-weight: 500 !important;
 }
 .tx-row-modern .tx-meta-pill + .tx-meta-pill::before {
   content:'·';
@@ -2755,7 +2755,7 @@ label.color-swatch {
 }
 #reports-content .report-summary-card {
   min-height: 66px !important;
-  padding: 12px !important;
+  padding: 6px 10px !important;
   display: flex !important;
   flex-direction: column !important;
   justify-content: center !important;
@@ -2767,7 +2767,7 @@ label.color-swatch {
 }
 #reports-content .report-summary-value {
   font-size: 14px !important;
-  font-weight: 800 !important;
+  font-weight: 600 !important;
   margin-top: 4px !important;
   word-break: break-word !important;
   font-variant-numeric: tabular-nums !important;
@@ -3283,7 +3283,7 @@ body {
   gap:10px !important;
   color:var(--text) !important;
   font-size:18px !important;
-  font-weight: 800 !important;
+  font-weight: 600 !important;
   line-height:1.2 !important;
   letter-spacing:-.02em !important;
 }
@@ -4067,11 +4067,6 @@ html.dark .icon-btn {
     -ms-touch-action: manipulation !important;
   }
 
-  input,
-  select,
-  textarea {
-    font-size: 16px !important;
-  }
 }
 
 
@@ -5344,7 +5339,7 @@ html.dark .ins-card.severity-positive  { border-color: rgba(52,211,153,.3);  bac
   flex-wrap: wrap;
 }
 .ins-action-primary {
-  font-size: 12px;
+  font-size: 12px !important;
   font-weight: 700;
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 10%, transparent);
@@ -5354,7 +5349,7 @@ html.dark .ins-card.severity-positive  { border-color: rgba(52,211,153,.3);  bac
   cursor: pointer;
 }
 .ins-snooze-btn {
-  font-size: 12px;
+  font-size: 12px !important;
   color: var(--muted);
   background: var(--bg);
   border: 1px solid var(--border);

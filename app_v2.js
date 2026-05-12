@@ -11362,7 +11362,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   function insightCardHtml(ins) {
     const icon = SEV_ICON[ins.severity] || '💡'
     const actionHtml = ins.action
-      ? `<button class="ins-action-primary" onclick="App.insightAct('${esc(ins.id)}','${esc(ins.action.fn)}')">${esc(ins.action.label)}</button>`
+      ? `<button class="ins-action-primary" data-ins-fn="${esc(ins.action.fn)}" onclick="App.insightAct('${esc(ins.id)}', this.dataset.insFn)">${esc(ins.action.label)}</button>`
       : ''
     const snoozeHtml = `<button class="ins-snooze-btn" onclick="App.insightSnooze('${esc(ins.id)}',1)">เตือนพรุ่งนี้</button>`
     return `<div class="ins-card severity-${esc(ins.severity)}" id="ins-${esc(ins.id)}">
