@@ -22,6 +22,8 @@ const KEYS = {
   cryptoSyncMeta:      'mt_crypto_sync_meta',
   goals:               'mt_goals',
   privileges:          'mt_privileges',
+  creditCardPromoSearches: 'mt_credit_card_promo_searches',
+  creditCardPromotions:    'mt_credit_card_promotions',
   migrations:          'mt_migrations',
 }
 
@@ -51,6 +53,8 @@ const BACKUP_SCHEMA_KEYS = [
   'cryptoSyncMeta',
   'goals',
   'privileges',
+  'creditCardPromoSearches',
+  'creditCardPromotions',
   'migrations',
   'settings',
 ]
@@ -78,6 +82,8 @@ const BACKUP_DEFAULTS = {
   cryptoSyncMeta: {},
   goals: [],
   privileges: [],
+  creditCardPromoSearches: [],
+  creditCardPromotions: [],
   migrations: { cryptoCentralizedV1: false },
   settings: {},
 }
@@ -273,6 +279,8 @@ const Storage = {
     data.cryptoTransactions  = Storage.load(KEYS.cryptoTransactions)  || JSON.parse(JSON.stringify(typeof DEFAULT_CRYPTO_TRANSACTIONS !== 'undefined' ? DEFAULT_CRYPTO_TRANSACTIONS : []))
     data.cryptoSyncMeta      = Storage.load(KEYS.cryptoSyncMeta)      || {}
     data.goals               = Storage.load(KEYS.goals)               || JSON.parse(JSON.stringify(typeof DEFAULT_GOALS !== 'undefined' ? DEFAULT_GOALS : []))
+    data.creditCardPromoSearches = Storage.load(KEYS.creditCardPromoSearches) || []
+    data.creditCardPromotions    = Storage.load(KEYS.creditCardPromotions)    || []
     const loadedPrivileges   = Storage.load(KEYS.privileges)
     data.privileges          = loadedPrivileges || JSON.parse(JSON.stringify(
       typeof DEFAULT_PRIVILEGES !== 'undefined'
@@ -308,6 +316,8 @@ const Storage = {
       Storage.save(KEYS.cryptoSyncMeta,      state.cryptoSyncMeta      || {}),
       Storage.save(KEYS.goals,               state.goals               || []),
       Storage.save(KEYS.privileges,          state.privileges          || []),
+      Storage.save(KEYS.creditCardPromoSearches, state.creditCardPromoSearches || []),
+      Storage.save(KEYS.creditCardPromotions,    state.creditCardPromotions    || []),
       Storage.save(KEYS.migrations,          state.migrations          || { cryptoCentralizedV1: false }),
     ]
     if (!results.every(Boolean)) return false
