@@ -2956,12 +2956,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
     let html = `
       <div class="mt-topbar">
         <div>
-          <div class="mt-title">Money Tracker</div>
-          <div class="mt-subtitle">${ESC(Calc.monthLabel(dm))}</div>
+          <div class="mt-title">Financial Tracker</div>
+          <div class="mt-subtitle">ศูนย์รวมการเงินและสิทธิพิเศษ</div>
         </div>
         <div class="mt-topbar-actions">
           <button class="mt-hide-btn" onclick="App.refreshDashboard()">↻</button>
-          <button class="mt-hide-btn" onclick="App.toggleHideMoney()">${S.settings.hideMoney ? '👁 แสดงตัวเลข' : '🙈 ซ่อนตัวเลข'}</button>
+          <button class="mt-hide-btn" onclick="App.toggleHideMoney()">${S.settings.hideMoney ? '👁' : '🙈'}</button>
         </div>
       </div>
       <div class="dash-month-nav">${months.map(m =>
@@ -4992,7 +4992,7 @@ App._pickMerchant = function(name, opts = {}) {
           </div>
         </div>`).join('')
       : App._emptyState?.('🎁', 'ยังไม่มีกฎสิทธิประโยชน์', 'เพิ่มสิทธิ์พื้นฐานหรือแคมเปญของบัตรใบนี้') || ''
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitRuleCopyDialog('${esc(cardId)}')" style="width:auto">คัดลอกกฎ</button><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog('${esc(cardId)}')" style="width:auto">วิเคราะห์ลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div></div>
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog('${esc(cardId)}')" style="width:auto">วางลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div></div>
       <div class="sub-scroll">
         ${statementCard}
         <div class="sec-title">กฎของบัตรใบนี้</div>
