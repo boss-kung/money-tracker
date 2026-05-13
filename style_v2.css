@@ -2501,30 +2501,46 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   min-width: 0;
 }
 .form-split-row input[type="date"] {
+  box-sizing: border-box;
   display: block;
   width: 100%;
+  inline-size: 100%;
   min-width: 0;
   max-width: 100%;
   min-inline-size: 0;
   max-inline-size: 100%;
+  -webkit-appearance: none;
+  appearance: none;
 }
 #tx-date.form-input {
+  box-sizing: border-box !important;
   display: block;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  min-inline-size: 0;
-  max-inline-size: 99.99%;
+  width: 100% !important;
+  inline-size: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  min-inline-size: 0 !important;
+  max-inline-size: 100% !important;
   overflow: hidden;
+  -webkit-appearance: none;
+  appearance: none;
 }
 #tx-date::-webkit-date-and-time-value {
+  display: block;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
+  text-align: center;
 }
 #tx-date::-webkit-datetime-edit {
+  display: block;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
   padding: 0;
 }
 #tx-date::-webkit-calendar-picker-indicator {
+  flex: 0 0 auto;
   margin-left: 6px;
 }
 
