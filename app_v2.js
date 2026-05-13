@@ -2245,7 +2245,14 @@ App.render();
                 </button>`
               }).join('')
               const _warnings = (_estimate.warnings || []).map(msg => `<div class="form-hint" style="color:var(--expense)">${esc(msg)}</div>`).join('')
-              const _caps = (_estimate.rules || []).filter(row => row.capApplied).map(row => `<div class="form-hint">${esc(row.ruleName)}: จำกัดโดย ${esc(row.capReason || 'cap')}</div>`).join('')
+              const _caps = (_estimate.rules || [])
+                .filter(row => row.capApplied)
+                .map(row => {
+                  const _text = buildBenefitCapAppliedText(row)
+                  return _text ? `<div class="form-hint">${esc(row.ruleName)}: ${esc(_text)}</div>` : ''
+                })
+                .filter(Boolean)
+                .join('')
               return `<div class="tx-cc-reward-section">
                 <div class="form-label" style="margin-bottom:6px">สิทธิประโยชน์ที่ใช้กับรายการนี้</div>
                 ${_rules.length ? `<div class="reward-rule-results">${_rows}</div>` : `<div class="card card-pad" style="margin-top:10px; padding:12px; border-radius:12px !important;"><div class="list-item-name">บัตรนี้ยังไม่มีสิทธิประโยชน์</div><div class="list-item-sub">ไปที่รายละเอียดบัตรเครดิต แล้วกด ตั้งค่า เพื่อเพิ่มสิทธิประโยชน์</div></div>`}
@@ -9793,6 +9800,46 @@ App._pickMerchant = function(name, opts = {}) {
     if (rule.type === 'cashback') return Number(result.cashback || 0)
     if (rule.type === 'discount') return Number(result.discount || 0)
     return Number(result.cashback || 0) + Number(result.points || 0) + Number(result.discount || 0)
+  }
+
+  function formatBenefitCapValue(ruleType = '', amount = 0) {
+    if (ruleType === 'points') return `${Math.floor(Number(amount || 0)).toLocaleString('en-US')} คะแนน`
+    return money(Number(amount || 0))
+  }
+
+  function describeBenefitCapReason(capReason = '') {
+    const labels = {
+      maxEligibleSpendPerTx: 'ยอดใช้จ่ายที่นำมาคิดต่อรายการ',
+      maxEligibleSpendPerCycle: 'ยอดใช้จ่ายที่นำมาคิดต่อรอบบิล',
+      maxRewardAmountPerTx: 'สิทธิประโยชน์สูงสุดต่อรายการ',
+      maxRewardAmountPerCycle: 'สิทธิประโยชน์สูงสุดต่อรอบบิล',
+    }
+    return String(capReason || '')
+      .split(',')
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+      .map(v => labels[v] || v)
+      .join(', ')
+  }
+
+  function buildBenefitCapAppliedText(row = {}) {
+    if (!row?.capApplied) return ''
+    const remainingBefore = row.cycleRewardRemainingBefore
+    const rawValue = Number(row.rawReward || 0)
+    const finalValue = Number(row.finalReward || 0)
+    const diffValue = Math.max(0, rawValue - finalValue)
+    const parts = []
+    if (remainingBefore != null) {
+      if (Number(remainingBefore || 0) <= 0) parts.push('ใช้สิทธิ์รอบนี้ครบแล้ว')
+      else parts.push(`เหลือใช้ได้อีก ${formatBenefitCapValue(row.type, remainingBefore)}`)
+    }
+    if (diffValue > 0) {
+      parts.push(`ควรได้ ${formatBenefitCapValue(row.type, rawValue)} แต่หลังติด cap ได้จริง ${formatBenefitCapValue(row.type, finalValue)}`)
+      parts.push(`ถูกตัดออก ${formatBenefitCapValue(row.type, diffValue)}`)
+    }
+    const reasonText = describeBenefitCapReason(row.capReason)
+    if (reasonText) parts.push(`จำกัดโดย ${reasonText}`)
+    return parts.join(' · ')
   }
 
   function ruleIsInActiveWindow(rule = {}, refDate = today()) {
