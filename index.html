@@ -173,7 +173,10 @@
   // Optional but recommended for reliable Thai gold-price sync.
   // Paste your Google Apps Script Web App URL here after deploying the Gold Traders proxy.
   window.MT_GOLD_PROXY_URL = "";
-  window.MT_PROMO_SEARCH_ENDPOINT = "";
+  // AI Credit Card Promo Search backend (Google Apps Script).
+  // Source: promo-search-appscript.js — deployed at script.google.com
+  // To update: re-deploy the script and paste the new Web App URL here.
+  window.MT_PROMO_SEARCH_ENDPOINT = "https://script.google.com/macros/s/AKfycbyWvCBqJrvtq9CBz3z-B0z6NohyT6MEYNxTMpuI43RYMFBSBmTQ9Hukclr_1EaL91b9lQ/exec";
 
   // Avoid Chrome manifest CORS errors when the app is opened via file://
   if (location.protocol !== 'file:') {

@@ -1,0 +1,16 @@
+name = "money-tracker-promo-search"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+# MOCK_MODE = "true"   # Uncomment for local dev only. NEVER set true in production.
+CACHE_TTL_HOURS = "6"
+
+# ANTHROPIC_API_KEY must be set via:
+#   wrangler secret put ANTHROPIC_API_KEY
+# Never put API keys in this file.
+
+[[routes]]
+# Uncomment and fill in after deploying to a custom domain if needed.
+# pattern = "promo-search.yourdomain.com/*"
+# zone_name = "yourdomain.com"
