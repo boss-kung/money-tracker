@@ -3711,6 +3711,30 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return round2(Math.max(0, baseAmount - discount))
   }
 
+  App._expectedLedgerAmountForTx = function(tx) {
+    const baseAmount = round2(Number(tx?.amount || 0))
+    if (!tx || tx.type !== 'expense') return baseAmount
+    const wallet = walletById(tx.walletId)
+    if (!wallet || wallet.type !== 'credit') return baseAmount
+    const discount = Math.max(0, round2(Number(tx.rewardEstimate?.discount || 0)))
+    if (!(discount > 0)) return baseAmount
+    return round2(Math.max(0, baseAmount - discount))
+  }
+
+  App._repairInstallmentLedgerAmounts = function() {
+    let repaired = 0
+    ;(S.transactions || []).forEach(tx => {
+      if (!tx || !tx.installmentGroupId || tx.type !== 'expense') return
+      const expected = App._expectedLedgerAmountForTx(tx)
+      const current = Number(tx.ledgerAmount)
+      if (!Number.isFinite(current) || Math.abs(round2(current) - expected) > 0.0001) {
+        tx.ledgerAmount = expected
+        repaired++
+      }
+    })
+    return repaired
+  }
+
   App._ledgerFlows = function() {
     const cash = {}, units = {}
     ;(S.transactions || []).forEach(tx => {
@@ -3780,8 +3804,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
     S.netWorthSnapshots = list.sort((a,b) => String(a.date).localeCompare(String(b.date))).slice(-370)
   }
 
+  const repairedInstallmentLedgerAmounts = App._repairInstallmentLedgerAmounts()
   App.ensureLedgerBaselines(false)
   App.recalculateWalletBalances({ save:false, recordSnapshot:true })
+  if (repairedInstallmentLedgerAmounts > 0) persist()
 
   const baseRender = App.render?.bind(App)
 
@@ -3872,6 +3898,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
           })
           const reward = App._rewardEstimateForTx(tx)
           if (reward) tx.rewardEstimate = reward
+          // cleanTxFromDraft computes ledgerAmount from the original full amount.
+          // Recompute it after splitting the installment so each row uses its own month amount.
+          delete tx.ledgerAmount
           tx.ledgerAmount = App.getLedgerAmountForTx?.(tx)
           txs.push(tx)
         }
