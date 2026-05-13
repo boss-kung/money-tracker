@@ -2248,7 +2248,7 @@ App.render();
               const _caps = (_estimate.rules || [])
                 .filter(row => row.capApplied || row.cycleRewardRemainingBefore != null)
                 .map(row => {
-                  const _text = buildBenefitCapAppliedText(row)
+                  const _text = App.buildBenefitCapAppliedText?.(row) || ''
                   return _text ? `<div class="form-hint">${esc(row.ruleName)}: ${esc(_text)}</div>` : ''
                 })
                 .filter(Boolean)
@@ -10181,6 +10181,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (row?.capApplied && reasonText) parts.push(`จำกัดโดย ${reasonText}`)
     return parts.join(' · ')
   }
+  App.buildBenefitCapAppliedText = buildBenefitCapAppliedText
 
   function ruleIsInActiveWindow(rule = {}, refDate = today()) {
     const validity = rule.validity || {}
