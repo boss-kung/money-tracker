@@ -2246,7 +2246,7 @@ App.render();
               }).join('')
               const _warnings = (_estimate.warnings || []).map(msg => `<div class="form-hint" style="color:var(--expense)">${esc(msg)}</div>`).join('')
               const _caps = (_estimate.rules || [])
-                .filter(row => row.capApplied)
+                .filter(row => row.capApplied || row.cycleRewardRemainingBefore != null)
                 .map(row => {
                   const _text = buildBenefitCapAppliedText(row)
                   return _text ? `<div class="form-hint">${esc(row.ruleName)}: ${esc(_text)}</div>` : ''
@@ -5063,6 +5063,7 @@ App._pickMerchant = function(name, opts = {}) {
             <div class="form-group"><label class="form-label">วันเริ่มใช้</label><input class="form-input" type="date" id="ccbr-validity-start" value="${esc(rule.validity?.startDate || '')}"></div>
             <div class="form-group"><label class="form-label">วันสิ้นสุด</label><input class="form-input" type="date" id="ccbr-validity-end" value="${esc(rule.validity?.endDate || '')}"></div>
           </div>
+          <div class="form-group"><label class="form-label">วิธีนับเพดานรอบสะสม</label><select class="form-input" id="ccbr-validity-cycle-hint"><option value="statement_cycle"${(rule.validity?.statementCycleHint || 'statement_cycle') === 'statement_cycle' ? ' selected' : ''}>ตามรอบบิลบัตร</option><option value="calendar_month"${rule.validity?.statementCycleHint === 'calendar_month' ? ' selected' : ''}>ตามเดือนปฏิทิน</option></select></div>
         `)}
         ${accordion('ccbr-suggest-acc', 'เงื่อนไขสำหรับแนะนำสิทธิ์', `
           <div class="form-hint" style="margin-bottom:8px">ส่วนนี้มีไว้ช่วยจัดลำดับคำแนะนำตอนบันทึกรายการ ผู้ใช้ยังต้องกดเลือกเอง</div>
@@ -5129,6 +5130,7 @@ App._pickMerchant = function(name, opts = {}) {
         mode: document.getElementById('ccbr-validity-mode')?.value === 'range' ? 'range' : 'always',
         startDate: String(document.getElementById('ccbr-validity-start')?.value || ''),
         endDate: String(document.getElementById('ccbr-validity-end')?.value || ''),
+        statementCycleHint: String(document.getElementById('ccbr-validity-cycle-hint')?.value || 'statement_cycle'),
       },
       cashback: {
         mode: document.getElementById('ccbr-cb-mode')?.value || 'percent',
@@ -5799,6 +5801,7 @@ App._pickMerchant = function(name, opts = {}) {
         mode: promotion.validity.startDate || promotion.validity.endDate ? 'range' : 'always',
         startDate: promotion.validity.startDate || '',
         endDate: promotion.validity.endDate || '',
+        statementCycleHint: promotion.limits.maxRewardPerMonth ? 'calendar_month' : 'statement_cycle',
       },
       cashback: {
         mode: promotion.reward.cashbackFixedAmount && !promotion.reward.cashbackRate ? 'fixed' : 'percent',
@@ -9664,6 +9667,16 @@ App._pickMerchant = function(name, opts = {}) {
     const points = rule.points || {}
     const limits = rule.limits || {}
     const validity = rule.validity || {}
+    const hasExistingCycleHint = !!(validity.statementCycleHint || rule.cycleMode || limits.cycleMode)
+    const hasCycleRewardCap = Number(limits.maxRewardAmountPerCycle || 0) > 0
+    const cycleHintText = normalizeCompareText(`${rule.name || ''} ${rule.description || ''}`)
+    const cycleHint = validity.statementCycleHint === 'calendar_month'
+      || rule.cycleMode === 'calendar_month'
+      || limits.cycleMode === 'calendar_month'
+      || /(เดือนปฏิทิน|ต่อเดือน|\/เดือน|รอบเดือน|calendar month|per month|monthly)/i.test(cycleHintText)
+      || (!hasExistingCycleHint && hasCycleRewardCap && rule.isBaseRule !== true && rule.source !== 'legacy')
+      ? 'calendar_month'
+      : 'statement_cycle'
     return {
       id: String(rule.id || genId()),
       cardId: String(rule.cardId || cardId || ''),
@@ -9681,6 +9694,7 @@ App._pickMerchant = function(name, opts = {}) {
         mode: validity.mode === 'range' ? 'range' : 'always',
         startDate: String(validity.startDate || '').trim(),
         endDate: String(validity.endDate || '').trim(),
+        statementCycleHint: cycleHint,
       },
       cashback: {
         mode: cashback.mode === 'fixed' ? 'fixed' : 'percent',
@@ -9787,7 +9801,17 @@ App._pickMerchant = function(name, opts = {}) {
   }
   App.ensureCCBenefitRulesState = ensureCCBenefitRulesState
 
-  function getCyclePeriodForDate(cardId, refDate = today()) {
+  function getCyclePeriodForDate(cardId, refDate = today(), rule = null) {
+    const cycleHint = String(rule?.validity?.statementCycleHint || 'statement_cycle').trim()
+    if (cycleHint === 'calendar_month') {
+      const [year, month] = String(refDate || today()).split('-').map(Number)
+      const lastDay = new Date(year, month, 0).getDate()
+      return {
+        start: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`,
+        end: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+        statementId: '',
+      }
+    }
     const st = App.getCardStatement?.(cardId, refDate)
     if (st?.start && st?.end) return { start: st.start, end: st.end, statementId: st.id || '' }
     const card = walletById(cardId) || {}
@@ -9823,22 +9847,22 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   function buildBenefitCapAppliedText(row = {}) {
-    if (!row?.capApplied) return ''
     const remainingBefore = row.cycleRewardRemainingBefore
     const rawValue = Number(row.rawReward || 0)
     const finalValue = Number(row.finalReward || 0)
     const diffValue = Math.max(0, rawValue - finalValue)
+    const cycleLabel = row.cycleMode === 'calendar_month' ? 'ในเดือนปฏิทินนี้' : 'ในรอบบิลนี้'
     const parts = []
     if (remainingBefore != null) {
       if (Number(remainingBefore || 0) <= 0) parts.push('ใช้สิทธิ์รอบนี้ครบแล้ว')
-      else parts.push(`เหลือใช้ได้อีก ${formatBenefitCapValue(row.type, remainingBefore)}`)
+      else parts.push(`เหลือใช้ได้อีก ${formatBenefitCapValue(row.type, remainingBefore)} ${cycleLabel}`)
     }
     if (diffValue > 0) {
       parts.push(`ควรได้ ${formatBenefitCapValue(row.type, rawValue)} แต่หลังติด cap ได้จริง ${formatBenefitCapValue(row.type, finalValue)}`)
       parts.push(`ถูกตัดออก ${formatBenefitCapValue(row.type, diffValue)}`)
     }
     const reasonText = describeBenefitCapReason(row.capReason)
-    if (reasonText) parts.push(`จำกัดโดย ${reasonText}`)
+    if (row?.capApplied && reasonText) parts.push(`จำกัดโดย ${reasonText}`)
     return parts.join(' · ')
   }
 
@@ -10075,15 +10099,18 @@ App._pickMerchant = function(name, opts = {}) {
     if (!card || card.type !== 'credit' || txDraft.type !== 'expense') return null
     const normalizedIds = [...new Set((selectedRuleIds || []).map(v => String(v || '')).filter(Boolean))]
     const rules = App.getCreditCardBenefitRules(card.id).filter(rule => normalizedIds.includes(rule.id))
-    const cycle = getCyclePeriodForDate(card.id, txDraft.date || today())
     const results = []
     const warnings = []
     let cashback = 0
     let discount = 0
     let points = 0
     rules.forEach(rule => {
+      const cycle = getCyclePeriodForDate(card.id, txDraft.date || today(), rule)
       const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '')
       const result = App.applyBenefitRule(txDraft, rule, usage)
+      result.cycleStart = cycle.start
+      result.cycleEnd = cycle.end
+      result.cycleMode = String(rule?.validity?.statementCycleHint || 'statement_cycle')
       results.push(result)
       cashback += Number(result.cashback || 0)
       discount += Number(result.discount || 0)
@@ -10097,8 +10124,6 @@ App._pickMerchant = function(name, opts = {}) {
       points: Math.floor(points),
       rules: results,
       warnings,
-      cycleStart: cycle.start,
-      cycleEnd: cycle.end,
       calculatedAt: new Date().toISOString(),
       source: 'manual-selected-rules',
     }
