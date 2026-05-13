@@ -249,7 +249,7 @@ function buildExtractionPrompt(rawText, groundingSources, issuers, month) {
     + 'ธนาคารที่ต้องการ: ' + issuers.join(', ') + '\n'
     + 'เดือน: ' + month + '\n\n'
     + '=== ข้อมูลที่ค้นพบ ===\n'
-    + rawText.slice(0, 15000) + '\n\n'
+    + rawText.slice(0, 4000) + '\n\n'
     + '=== URL แหล่งข้อมูล ===\n'
     + sourcesText + '\n\n'
     + 'กฎสำคัญ:\n'
@@ -259,7 +259,8 @@ function buildExtractionPrompt(rawText, groundingSources, issuers, month) {
     + '- id ให้ใช้รูปแบบ promo_<issuer>_<4chars> เช่น promo_KTC_ab12\n'
     + '- mechanicSummary ต้องเป็นภาษาไทย 2-3 ประโยค\n'
     + '- ถ้าไม่พบโปรใดเลยสำหรับธนาคารนั้น ไม่ต้องใส่เข้ามา\n'
-    + '- ถ้าไม่พบโปรเลย ตอบ []';
+    + '- ถ้าไม่พบโปรเลย ตอบ []\n'
+    + '- สูงสุด 3 โปรต่อธนาคาร เลือกเฉพาะที่สำคัญที่สุด';
 }
 
 function callGeminiJsonSchema(prompt, apiKey) {
@@ -270,7 +271,7 @@ function callGeminiJsonSchema(prompt, apiKey) {
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: PROMO_RESPONSE_SCHEMA,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 16384,
       temperature: 0.1,
     },
   });

@@ -70,429 +70,6 @@
 })()
 
 /* ============================================================
-   Phase 1 correction: Credit Card Promo AI Search
-   Search-first promo discovery from official issuer sources.
-   ============================================================ */
-window.addEventListener('DOMContentLoaded', function(){
-  'use strict'
-
-  const esc = App._esc || (s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
-  const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
-  const nowISO = () => new Date().toISOString()
-  const todayStr = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
-  const monthStr = () => todayStr().slice(0, 7)
-  const genId = () => (typeof Calc?.genId === 'function' ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2)))
-
-  const ISSUER_ALIASES = [
-    ['First Choice', /\b(first\s*choice|เฟิร์สช้อยส์)\b/i],
-    ['Bangkok Bank', /\b(bangkok\s*bank|bbl|ธนาคารกรุงเทพ|กรุงเทพ)\b/i],
-    ['Krungsri', /\b(krungsri|กรุงศรี|ayudhya)\b/i],
-    ['KBank', /\b(kbank|kasikorn|กสิกร)\b/i],
-    ['SCB', /\b(scb|scb\s*m|ไทยพาณิชย์|cardx|card x)\b/i],
-    ['KTC', /\b(ktc|กรุงไทยคาร์ด)\b/i],
-    ['UOB', /\b(uob)\b/i],
-    ['TTB', /\b(ttb|tmb|ธนชาต)\b/i],
-    ['AEON', /\b(aeon|อิออน)\b/i],
-    ['Citi', /\b(citi|citibank|ซิตี้)\b/i],
-    ['Amex', /\b(amex|american express)\b/i],
-    ['CIMB', /\b(cimb)\b/i],
-  ]
-
-  function ensurePromoState() {
-    if (!Array.isArray(S.creditCardPromoSearches)) S.creditCardPromoSearches = []
-    if (!Array.isArray(S.creditCardPromotions)) S.creditCardPromotions = []
-    if (!S.creditCardPromoMode) S.creditCardPromoMode = 'monthly'
-    if (!Array.isArray(S.creditCardPromoSelectedIssuers)) {
-      S.creditCardPromoSelectedIssuers = App.getCreditCardPromoIssuersFromWallets().map(row => row.issuer)
-    }
-  }
-
-  function thaiMonthLabel(month = monthStr()) {
-    try { return Calc.monthLabel?.(month) || month } catch (_) { return month }
-  }
-
-  function thaiDate(date = '') {
-    if (!date) return ''
-    try { return new Date(`${date}T00:00:00`).toLocaleDateString('th-TH', { day:'numeric', month:'short', year:'numeric' }) } catch (_) { return date }
-  }
-
-  function thaiDateTime(value = '') {
-    if (!value) return ''
-    try { return new Date(value).toLocaleString('th-TH', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) } catch (_) { return value }
-  }
-
-  function stableHash(value = '') {
-    let h = 0
-    for (let i = 0; i < value.length; i++) h = ((h << 5) - h + value.charCodeAt(i)) | 0
-    return Math.abs(h).toString(36)
-  }
-
-  function normalizeIssuerName(value = '') {
-    const text = String(value || '').trim()
-    if (!text) return ''
-    const hit = ISSUER_ALIASES.find(([, re]) => re.test(text))
-    if (hit) return hit[0]
-    return text.replace(/\s+/g, ' ').slice(0, 40)
-  }
-
-  function isCreditCardLikeWallet(wallet = {}) {
-    const hay = [wallet.type, wallet.kind, wallet.walletType, wallet.category, wallet.name].map(v => String(v || '').toLowerCase()).join(' ')
-    return wallet.type === 'credit'
-      || /\bcredit\b|creditcard|credit_card|บัตรเครดิต|เครดิต/.test(hay)
-  }
-
-  function inferIssuerFromWallet(wallet = {}) {
-    const fields = [wallet.issuer, wallet.cardIssuer, wallet.bank, wallet.brand, wallet.name].filter(Boolean)
-    for (const field of fields) {
-      const issuer = normalizeIssuerName(field)
-      if (issuer) return issuer
-    }
-    return ''
-  }
-
-  App.getCreditCardPromoIssuersFromWallets = function() {
-    const map = new Map()
-    ;(S.wallets || [])
-      .filter(wallet => wallet && !wallet.archived && !wallet.hiddenFromWalletList && isCreditCardLikeWallet(wallet))
-      .forEach(wallet => {
-        const issuer = inferIssuerFromWallet(wallet)
-        if (!issuer) return
-        const row = map.get(issuer) || { issuer, cardNames: [], walletIds: [] }
-        if (wallet.name && !row.cardNames.includes(wallet.name)) row.cardNames.push(wallet.name)
-        if (wallet.id && !row.walletIds.includes(wallet.id)) row.walletIds.push(wallet.id)
-        map.set(issuer, row)
-      })
-    return [...map.values()].sort((a, b) => a.issuer.localeCompare(b.issuer))
-  }
-
-  App.openCreditCardPromos = function() {
-    ensurePromoState()
-    App.renderCreditCardPromos()
-  }
-
-  App.renderCreditCardPromos = function() {
-    ensurePromoState()
-    const latest = App.getLatestCreditCardPromoSearch()
-    const html = `
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
-        <h2>โปรบัตรเครดิต</h2>
-      </div>
-      <div class="sub-scroll cc-promo-screen">
-        <div class="cc-promo-title-card card card-pad">
-          <div class="report-category-title">โปรบัตรเครดิต</div>
-          <div class="list-item-sub">ให้ AI ค้นหาโปรจากเว็บทางการของธนาคารตามบัตรที่คุณถืออยู่</div>
-        </div>
-        ${App.renderCreditCardPromoSearchControls()}
-        <div id="cc-promo-state">${App.renderCreditCardPromoSearchResults(latest)}</div>
-      </div>`
-    App.openSubScreen(html)
-  }
-
-  App.renderCreditCardPromoSearchControls = function() {
-    ensurePromoState()
-    const detected = App.getCreditCardPromoIssuersFromWallets()
-    const selected = new Set(S.creditCardPromoSelectedIssuers || [])
-    const allIssuers = [...new Set([...detected.map(row => row.issuer), ...selected])].filter(Boolean)
-    const chips = allIssuers.length
-      ? allIssuers.map(issuer => `<button class="chip${selected.has(issuer) ? ' active' : ''}" onclick="App.toggleCreditCardPromoIssuer('${esc(issuer)}')">${esc(issuer)}</button>`).join('')
-      : `<div class="form-hint">ยังไม่พบบัตรเครดิตที่ระบุธนาคารไว้ เพิ่มธนาคารเองได้ก่อนค้นหา</div>`
-    const mode = S.creditCardPromoMode === 'ongoing' ? 'ongoing' : 'monthly'
-    const endpointEmpty = !String(window.MT_PROMO_SEARCH_ENDPOINT || '').trim()
-    return `
-      <div class="card card-pad cc-promo-control-card">
-        <div class="form-label">ธนาคารจากบัตรเครดิตที่พบ</div>
-        <div class="chip-row cc-promo-chip-row">${chips}<button class="chip" onclick="App.addCreditCardPromoIssuer()">+ เพิ่มธนาคาร</button></div>
-        <div class="form-label" style="margin-top:14px">โหมดค้นหา</div>
-        <div class="chip-row cc-promo-chip-row">
-          <button class="chip${mode === 'monthly' ? ' active' : ''}" onclick="App.setCreditCardPromoMode('monthly')">โปรเดือนนี้</button>
-          <button class="chip${mode === 'ongoing' ? ' active' : ''}" onclick="App.setCreditCardPromoMode('ongoing')">โปร ongoing</button>
-        </div>
-        <button class="btn btn-primary cc-promo-primary" onclick="App.handleCreditCardPromoSearch()">ค้นหาโปรเดือนนี้</button>
-        <div class="form-hint">เดือนที่ใช้ค้นหา: ${esc(thaiMonthLabel(monthStr()))}</div>
-        ${endpointEmpty ? `<div class="cc-promo-endpoint-inline">${App.renderPromoEndpointMissingState()}</div>` : ''}
-      </div>`
-  }
-
-  App.renderPromoEndpointMissingState = function() {
-    return `<div class="card card-pad cc-promo-state-card cc-promo-warning">
-      <div class="list-item-name">ยังไม่ได้เชื่อม AI Promo Search Endpoint</div>
-      <div class="list-item-sub">ต้องตั้งค่า window.MT_PROMO_SEARCH_ENDPOINT ก่อน จึงจะให้ AI ค้นหาโปรจากเว็บธนาคารได้</div>
-    </div>`
-  }
-
-  App.toggleCreditCardPromoIssuer = function(issuer) {
-    ensurePromoState()
-    const selected = new Set(S.creditCardPromoSelectedIssuers || [])
-    selected.has(issuer) ? selected.delete(issuer) : selected.add(issuer)
-    S.creditCardPromoSelectedIssuers = [...selected]
-    App.renderCreditCardPromos()
-  }
-
-  App.addCreditCardPromoIssuer = function() {
-    ensurePromoState()
-    const value = normalizeIssuerName(prompt('เพิ่มธนาคาร / ผู้ออกบัตร เช่น KTC, UOB, SCB') || '')
-    if (!value) return
-    S.creditCardPromoSelectedIssuers = [...new Set([...(S.creditCardPromoSelectedIssuers || []), value])]
-    App.renderCreditCardPromos()
-  }
-
-  App.setCreditCardPromoMode = function(mode) {
-    S.creditCardPromoMode = mode === 'ongoing' ? 'ongoing' : 'monthly'
-    App.renderCreditCardPromos()
-  }
-
-  App.handleCreditCardPromoSearch = async function() {
-    ensurePromoState()
-    const selected = new Set(S.creditCardPromoSelectedIssuers || [])
-    const detected = App.getCreditCardPromoIssuersFromWallets()
-    const issuers = [...selected].map(issuer => {
-      const found = detected.find(row => row.issuer === issuer)
-      return found || { issuer, cardNames: [], walletIds: [] }
-    })
-    if (!issuers.length) return notify('เลือกหรือเพิ่มธนาคารอย่างน้อย 1 แห่งก่อนค้นหา', 'warn')
-    const stateEl = document.getElementById('cc-promo-state')
-    if (!String(window.MT_PROMO_SEARCH_ENDPOINT || '').trim()) {
-      if (stateEl) stateEl.innerHTML = App.renderPromoEndpointMissingState()
-      return
-    }
-    if (stateEl) stateEl.innerHTML = `<div class="card card-pad cc-promo-state-card"><div class="list-item-name">กำลังค้นหาโปรจากเว็บทางการ...</div><div class="list-item-sub">กำลังอ่านเงื่อนไขและสรุป mechanic...</div></div>`
-    try {
-      const payload = {
-        month: monthStr(),
-        mode: S.creditCardPromoMode === 'ongoing' ? 'ongoing' : 'monthly',
-        issuers,
-        locale: 'th-TH',
-        officialSourcesOnly: true,
-        sourcesRequired: true,
-      }
-      const data = await App.searchCreditCardPromosWithAI(payload)
-      if (data && data.ok === false) throw new Error(data.message || 'ค้นหาโปรไม่สำเร็จ')
-      const saved = App.saveCreditCardPromoSearchResults(data, payload)
-      if (stateEl) stateEl.innerHTML = App.renderCreditCardPromoSearchResults(saved)
-      notify('ค้นหาโปรบัตรเครดิตแล้ว', 'success')
-    } catch (err) {
-      if (stateEl) stateEl.innerHTML = `<div class="card card-pad cc-promo-state-card cc-promo-error"><div class="list-item-name">ค้นหาไม่สำเร็จ</div><div class="list-item-sub">${esc(err?.message || 'เกิดข้อผิดพลาดจาก endpoint')}</div></div>`
-      notify(err?.message || 'ค้นหาโปรไม่สำเร็จ', 'error')
-    }
-  }
-
-  App.searchCreditCardPromosWithAI = async function(payload) {
-    const endpoint = String(window.MT_PROMO_SEARCH_ENDPOINT || '').trim()
-    if (!endpoint) throw new Error('ยังไม่ได้เชื่อม AI Promo Search Endpoint')
-    /*
-      Backend contract:
-      - The browser app does not scrape bank websites directly.
-      - The endpoint must search official bank sources and return structured JSON.
-      - Every promo should include official source URLs.
-      - Missing or uncertain data must be marked with needsReview / missingFields.
-      - The frontend must never fabricate missing promotion details.
-
-      Optional backend prompt:
-      "Search official credit card promotion pages for the given issuers and month. Use official bank websites and official PDF terms first. Return only promotions supported by official source URLs. Summarize in Thai. Do not invent missing fields. Mark needsReview when terms are unclear."
-    */
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      // text/plain avoids CORS preflight (Google Apps Script doesn't handle OPTIONS)
-      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: JSON.stringify(payload),
-    })
-    let data = null
-    try { data = await res.json() } catch (_) {}
-    if (!res.ok) throw new Error(data?.message || `Promo endpoint HTTP ${res.status}`)
-    return data || { ok: false, message: 'endpoint ไม่ได้ส่ง JSON กลับมา' }
-  }
-
-  App.normalizeCreditCardPromoSearchResults = function(raw = {}, request = {}) {
-    const sourceResults = Array.isArray(raw?.results) ? raw.results : []
-    const results = sourceResults.map(item => {
-      const sourceUrls = Array.isArray(item?.sourceUrls)
-        ? item.sourceUrls.map(src => ({
-            label: String(src?.label || 'Official source'),
-            url: String(src?.url || '').trim(),
-          })).filter(src => /^https?:\/\//i.test(src.url))
-        : []
-      const title = String(item?.title || '').trim() || 'โปรที่ต้องตรวจสอบ'
-      const baseId = String(item?.id || '').trim()
-      return {
-        id: baseId || `promo_${stableHash([item?.issuer, title, sourceUrls[0]?.url || ''].join('|'))}`,
-        issuer: normalizeIssuerName(item?.issuer || request.issuers?.[0]?.issuer || 'ไม่ระบุธนาคาร'),
-        cardNames: Array.isArray(item?.cardNames) ? item.cardNames.filter(Boolean).map(String) : [],
-        title,
-        mechanicSummary: String(item?.mechanicSummary || '').trim() || 'ยังไม่มีสรุป mechanic',
-        registrationRequired: item?.registrationRequired === true,
-        registrationChannel: String(item?.registrationChannel || ''),
-        registrationDeadline: String(item?.registrationDeadline || ''),
-        campaignStartDate: String(item?.campaignStartDate || ''),
-        campaignEndDate: String(item?.campaignEndDate || ''),
-        rewardType: String(item?.rewardType || ''),
-        rewardValueText: String(item?.rewardValueText || ''),
-        minSpendText: String(item?.minSpendText || ''),
-        capText: String(item?.capText || ''),
-        quotaText: String(item?.quotaText || ''),
-        categories: Array.isArray(item?.categories) ? item.categories.filter(Boolean).map(String) : [],
-        importantConditions: Array.isArray(item?.importantConditions) ? item.importantConditions.filter(Boolean).map(String) : [],
-        exclusions: Array.isArray(item?.exclusions) ? item.exclusions.filter(Boolean).map(String) : [],
-        sourceUrls,
-        confidence: String(item?.confidence || 'unknown'),
-        needsReview: item?.needsReview === true || sourceUrls.length === 0 || !item?.mechanicSummary,
-        missingFields: [...new Set([...(Array.isArray(item?.missingFields) ? item.missingFields.map(String) : []), ...(sourceUrls.length ? [] : ['sourceUrls'])])],
-      }
-    })
-    return {
-      id: `promo_search_${String(raw?.month || request.month || monthStr()).replace('-', '_')}_${raw?.mode || request.mode || 'monthly'}`,
-      month: String(raw?.month || request.month || monthStr()),
-      mode: raw?.mode === 'ongoing' || request.mode === 'ongoing' ? 'ongoing' : 'monthly',
-      issuers: Array.isArray(raw?.issuers) ? raw.issuers.map(normalizeIssuerName).filter(Boolean) : (request.issuers || []).map(row => row.issuer),
-      searchedAt: String(raw?.searchedAt || nowISO()),
-      results,
-      warnings: Array.isArray(raw?.warnings) ? raw.warnings.filter(Boolean).map(String) : [],
-      source: 'ai_official_search',
-    }
-  }
-
-  App.saveCreditCardPromoSearchResults = function(raw, request) {
-    ensurePromoState()
-    const normalized = App.normalizeCreditCardPromoSearchResults(raw, request)
-    const idx = S.creditCardPromoSearches.findIndex(row => row.id === normalized.id)
-    if (idx >= 0) S.creditCardPromoSearches[idx] = normalized
-    else S.creditCardPromoSearches.unshift(normalized)
-    S.creditCardPromoSearches = S.creditCardPromoSearches.slice(0, 24)
-    persist()
-    return normalized
-  }
-
-  App.getLatestCreditCardPromoSearch = function(mode = S.creditCardPromoMode) {
-    ensurePromoState()
-    const rows = (S.creditCardPromoSearches || []).filter(row => !mode || row.mode === mode)
-    return rows.sort((a, b) => String(b.searchedAt || '').localeCompare(String(a.searchedAt || '')))[0] || null
-  }
-
-  function promoDateRange(promo) {
-    const start = promo.campaignStartDate ? thaiDate(promo.campaignStartDate) : ''
-    const end = promo.campaignEndDate ? thaiDate(promo.campaignEndDate) : ''
-    if (start && end) return `${start} - ${end}`
-    return start || end || ''
-  }
-
-  function isExpired(promo) {
-    return promo.campaignEndDate && String(promo.campaignEndDate) < todayStr()
-  }
-
-  function promoCardHtml(promo, searchId) {
-    const badges = [
-      promo.registrationRequired ? 'ต้องลงทะเบียน' : 'ไม่ต้องลงทะเบียน',
-      promo.needsReview ? 'ข้อมูลไม่ครบ' : '',
-      promo.sourceUrls?.length ? 'Official source' : '',
-      isExpired(promo) ? 'หมดอายุแล้ว' : '',
-    ].filter(Boolean)
-    const facts = [promo.rewardValueText, promo.minSpendText, promo.capText, promo.quotaText].filter(Boolean)
-    return `<div class="card card-pad cc-promo-result-card">
-      <div class="cc-promo-card-head">
-        <div>
-          <div class="list-item-name">${esc(promo.title)}</div>
-          <div class="list-item-sub">${esc(promo.mechanicSummary)}</div>
-        </div>
-      </div>
-      <div class="cc-promo-badges">${badges.map(label => `<span>${esc(label)}</span>`).join('')}</div>
-      ${promoDateRange(promo) ? `<div class="list-item-sub">ระยะเวลา: ${esc(promoDateRange(promo))}</div>` : ''}
-      ${facts.length ? `<div class="list-item-sub">${esc(facts.join(' · '))}</div>` : ''}
-      ${promo.importantConditions?.length ? `<div class="list-item-sub">${esc(promo.importantConditions.slice(0, 2).join(' · '))}</div>` : ''}
-      <div class="cc-promo-actions">
-        <button class="btn btn-secondary btn-sm" onclick="App.openCreditCardPromoResultDetail('${esc(searchId)}','${esc(promo.id)}')">ดูรายละเอียด</button>
-        <button class="btn btn-primary btn-sm" onclick="App.openCreditCardPromoSource('${esc(searchId)}','${esc(promo.id)}')">ดูแหล่งข้อมูล</button>
-      </div>
-    </div>`
-  }
-
-  App.renderCreditCardPromoSearchResults = function(search) {
-    if (!search) {
-      return `<div class="card card-pad cc-promo-state-card"><div class="list-item-name">ยังไม่เคยค้นหา</div><div class="list-item-sub">กดค้นหาเพื่อให้ AI รวบรวมโปรบัตรเครดิตจากเว็บทางการของธนาคารที่คุณถืออยู่</div></div>`
-    }
-    const results = Array.isArray(search.results) ? search.results : []
-    const regCount = results.filter(row => row.registrationRequired).length
-    const issuerCount = new Set(search.issuers || results.map(row => row.issuer)).size
-    const grouped = results.reduce((map, promo) => {
-      const key = promo.issuer || 'ไม่ระบุธนาคาร'
-      ;(map[key] ||= []).push(promo)
-      return map
-    }, {})
-    const warnings = (search.warnings || []).length
-      ? `<div class="card card-pad cc-promo-warning">${search.warnings.map(w => `<div class="list-item-sub">${esc(w)}</div>`).join('')}</div>`
-      : ''
-    const summary = `<div class="card card-pad cc-promo-summary">
-      <div class="list-item-name">พบ ${results.length} โปรจาก ${issuerCount} ธนาคาร</div>
-      <div class="list-item-sub">ต้องลงทะเบียน ${regCount}${search.mode === 'ongoing' ? ` · Ongoing ${results.length}` : ''}</div>
-      <div class="list-item-sub">อัปเดตล่าสุด ${esc(thaiDateTime(search.searchedAt))}</div>
-    </div>`
-    if (!results.length) {
-      return `${summary}${warnings}<div class="card card-pad cc-promo-state-card"><div class="list-item-name">ไม่พบโปรในเงื่อนไขนี้</div><div class="list-item-sub">endpoint ตอบกลับสำเร็จ แต่ไม่มีโปรที่มีแหล่งข้อมูลทางการสำหรับธนาคาร/เดือนนี้</div></div>`
-    }
-    const groupsHtml = Object.keys(grouped).sort().map(issuer => `
-      <div class="sec-title">${esc(issuer)}</div>
-      <div class="cc-promo-group">${grouped[issuer].map(promo => promoCardHtml(promo, search.id)).join('')}</div>
-    `).join('')
-    return `${summary}${warnings}${groupsHtml}`
-  }
-
-  function findPromo(searchId, promoId) {
-    const search = (S.creditCardPromoSearches || []).find(row => row.id === searchId) || App.getLatestCreditCardPromoSearch()
-    const promo = (search?.results || []).find(row => row.id === promoId)
-    return { search, promo }
-  }
-
-  App.openCreditCardPromoSource = function(searchId, promoId) {
-    const { search, promo } = findPromo(searchId, promoId)
-    if (!promo) return notify('ไม่พบโปรนี้', 'error')
-    const sources = Array.isArray(promo.sourceUrls) ? promo.sourceUrls.filter(src => src.url) : []
-    if (!sources.length) return notify('ไม่มีแหล่งข้อมูลทางการสำหรับโปรนี้', 'warn')
-    if (sources.length === 1) {
-      window.open(sources[0].url, '_blank', 'noopener')
-      return
-    }
-    App.openCreditCardPromoResultDetail(search?.id || searchId, promo.id)
-  }
-
-  App.openCreditCardPromoResultDetail = function(searchId, promoId) {
-    const { search, promo } = findPromo(searchId, promoId)
-    if (!promo) return notify('ไม่พบโปรนี้', 'error')
-    const section = (title, body) => body ? `<div class="card card-pad cc-promo-detail-section"><div class="report-category-title">${esc(title)}</div><div class="list-item-sub">${body}</div></div>` : ''
-    const list = arr => (arr || []).length ? `<ul>${arr.map(v => `<li>${esc(v)}</li>`).join('')}</ul>` : ''
-    const sources = (promo.sourceUrls || []).map(src => `<a class="cc-promo-source-link" href="${esc(src.url)}" target="_blank" rel="noopener">${esc(src.label || src.url)}</a>`).join('')
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.renderCreditCardPromos()">←</button><h2>${esc(promo.issuer || 'โปรบัตรเครดิต')}</h2></div>
-      <div class="sub-scroll cc-promo-detail">
-        <div class="card card-pad"><div class="list-item-name">${esc(promo.title)}</div><div class="list-item-sub">${esc(promo.mechanicSummary)}</div></div>
-        ${section('สรุปโปร', esc(promo.mechanicSummary))}
-        ${section('ต้องลงทะเบียนไหม', esc(promo.registrationRequired ? 'ต้องลงทะเบียน' : 'ไม่ต้องลงทะเบียน'))}
-        ${section('วิธีลงทะเบียน', esc([promo.registrationChannel, promo.registrationDeadline ? `ภายใน ${thaiDate(promo.registrationDeadline)}` : ''].filter(Boolean).join(' · ')))}
-        ${section('ระยะเวลาโปร', esc(promoDateRange(promo) || '-'))}
-        ${section('ได้อะไร', esc(promo.rewardValueText || promo.rewardType || '-'))}
-        ${section('ขั้นต่ำ / เพดาน / quota', esc([promo.minSpendText, promo.capText, promo.quotaText].filter(Boolean).join(' · ') || '-'))}
-        ${section('เงื่อนไขสำคัญ', list(promo.importantConditions))}
-        ${section('ข้อยกเว้น', list(promo.exclusions))}
-        ${section('แหล่งข้อมูลทางการ', sources || esc('ไม่มีแหล่งข้อมูลทางการสำหรับโปรนี้'))}
-        ${section('วันที่ AI ตรวจข้อมูลล่าสุด', esc(thaiDateTime(search?.searchedAt)))}
-        ${section('สถานะข้อมูล', esc([`confidence: ${promo.confidence || 'unknown'}`, promo.needsReview ? 'needsReview' : '', promo.missingFields?.length ? `missingFields: ${promo.missingFields.join(', ')}` : ''].filter(Boolean).join(' · ')))}
-      </div>`)
-  }
-
-  const _prevRenderMorePromo = App.renderMore?.bind(App)
-  App.renderMore = function() {
-    _prevRenderMorePromo?.()
-    try {
-      const inner = document.getElementById('more-content')?.firstElementChild
-      if (!inner || inner.querySelector('.cc-promo-more-row')) return
-      const cardSection = [...inner.querySelectorAll('.sec-title')].find(el => el.textContent.trim() === 'บัตรและสิทธิ์')
-      const card = cardSection?.nextElementSibling
-      if (!card) return
-      card.insertAdjacentHTML('beforeend', `<div class="settings-row cc-promo-more-row" onclick="App.openCreditCardPromos()"><div class="s-icon">🔎</div><div class="s-label">โปรบัตรเครดิต</div><div class="s-arrow">›</div></div>`)
-    } catch (_) {}
-  }
-
-  try { ensurePromoState(); if (S.page === 'more') App.renderMore?.() } catch (_) {}
-}, { once: true })
-
-/* ============================================================
    Upcoming Bills / รายการรอจ่าย
    Manual future payables that reserve available cash only
    ============================================================ */
@@ -1194,8 +771,6 @@ let S = {
   creditLimitGroups: [], rewardAccounts: [], rewardLedger: [], netWorthSnapshots: [], investmentSnapshots: [],
   goals: [],
   privileges: [],
-  creditCardPromoSearches: [],
-  creditCardPromotions: [],
 
   // Add-transaction flow
   tx: {
@@ -6631,14 +6206,28 @@ App._pickMerchant = function(name, opts = {}) {
     }
     const diagnostics = [...(preview.sourceDocument?.diagnostics || []), ...(preview.diagnostics || [])].filter(Boolean)
     const doc = preview.sourceDocument || {}
+    const cardId = preview.cardId || ''
     const ruleRows = (preview.ruleDrafts || []).map((draft, idx) => {
       const rule = draft.rule || {}
       const cond = rule.suggestedConditions || {}
+      const conf = Number(draft.confidence || 0)
+      const isLowConf = conf < 0.7
       const reviewText = (draft.reviewFields || []).join(', ')
       const diagnosticsText = [...new Set((draft.diagnostics || []).filter(Boolean))].join(' · ')
-      return `<div class="card card-pad" style="margin-top:10px">
-        <div class="list-item-name">${idx + 1}. ${esc(draft.campaignTitle || rule.name || 'Draft rule')}</div>
-        <div class="list-item-sub">ความมั่นใจ ${(Number(draft.confidence || 0) * 100).toFixed(0)}% · ${esc(rule.type || '-')}</div>
+      const cardStyle = isLowConf
+        ? 'margin-top:10px;border-color:rgba(217,119,6,.45)!important;background:color-mix(in srgb,#F59E0B 8%,var(--surface))!important;'
+        : 'margin-top:10px;'
+      const confBadge = isLowConf
+        ? `<span style="color:#D97706;font-size:11px;font-weight:700">⚠ ตรวจสอบ (${(conf * 100).toFixed(0)}%)</span>`
+        : `<span style="color:var(--ok,#16a34a);font-size:11px;font-weight:700">✓ ${(conf * 100).toFixed(0)}%</span>`
+      return `<div class="card card-pad" style="${cardStyle}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="min-width:0;flex:1">
+            <div class="list-item-name">${idx + 1}. ${esc(draft.campaignTitle || rule.name || 'Draft rule')}</div>
+            <div class="list-item-sub">${confBadge} · ${esc(rule.type || '-')}</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" style="flex-shrink:0;width:auto" onclick="App._editCCBenefitDraftAtIndex('${esc(cardId)}',${idx})">แก้ไข</button>
+        </div>
         ${humanizeRuleReward(rule) ? `<div class="list-item-sub">${esc(humanizeRuleReward(rule))}</div>` : ''}
         ${(cond.merchants || []).length ? `<div class="list-item-sub">ร้าน: ${esc(cond.merchants.slice(0, 12).join(', '))}</div>` : ''}
         ${(cond.channels || []).length || cond.minSpend || rule.validity?.startDate || rule.validity?.endDate ? `<div class="list-item-sub">${esc([
@@ -6648,12 +6237,13 @@ App._pickMerchant = function(name, opts = {}) {
         ].filter(Boolean).join(' · '))}</div>` : ''}
         ${(draft.warnings || []).length ? `<div class="form-hint" style="color:var(--expense);margin-top:6px">${esc(draft.warnings.join(' · '))}</div>` : ''}
         ${diagnosticsText ? `<div class="form-hint">${esc(diagnosticsText)}</div>` : ''}
-        ${reviewText ? `<div class="form-hint">ควรตรวจ: ${esc(reviewText)}</div>` : ''}
+        ${reviewText ? `<div class="form-hint" style="color:#D97706">⚠ ควรตรวจ: ${esc(reviewText)}</div>` : ''}
       </div>`
     }).join('')
     const diagHtml = diagnostics.length
       ? `<div class="card card-pad" style="margin-top:10px"><div class="list-item-name">Diagnostics</div>${diagnostics.map(msg => `<div class="form-hint">${esc(msg)}</div>`).join('')}</div>`
       : ''
+    const aiLabel = preview.usedAI ? `<div class="form-hint" style="margin-top:8px;margin-bottom:4px">✨ วิเคราะห์ด้วย Claude AI</div>` : ''
     resultEl.innerHTML = `
       <div class="card card-pad">
         <div class="list-item-name">${esc(doc.title || 'ผลการวิเคราะห์')}</div>
@@ -6661,13 +6251,29 @@ App._pickMerchant = function(name, opts = {}) {
         <div class="list-item-sub">เว็บ: ${esc(doc.siteKey || 'unknown')} · วิธีดึง: ${esc(doc.fetchMode || '-')} · สถานะ: ${esc(doc.status || '-')}</div>
         ${doc.description ? `<div class="list-item-sub" style="margin-top:4px">${esc(doc.description)}</div>` : ''}
       </div>
+      ${aiLabel}
       ${ruleRows || `<div class="card card-pad" style="margin-top:10px"><div class="list-item-name">ยังไม่พร้อมสร้างกฎอัตโนมัติ</div><div class="list-item-sub">ระบบดึงหน้าเว็บได้ แต่ยังไม่สามารถแปลงเป็น draft rule ที่มั่นใจพอ</div></div>`}
       ${diagHtml}
       <div style="display:flex;gap:10px;margin-top:12px">
-        <button class="btn btn-secondary" onclick="App.openCCBenefitRuleForm('${esc(preview.cardId || '')}')">เพิ่มเอง</button>
-        ${preview.ruleDrafts?.length ? `<button class="btn btn-primary" onclick="App.saveImportedCCBenefitRules('${esc(preview.cardId || '')}')">บันทึก ${preview.ruleDrafts.length} กฎ</button>` : ''}
+        <button class="btn btn-secondary" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')">เพิ่มเอง</button>
+        ${preview.ruleDrafts?.length ? `<button class="btn btn-primary" onclick="App.saveImportedCCBenefitRules('${esc(cardId)}')">บันทึก ${preview.ruleDrafts.length} กฎ</button>` : ''}
       </div>
       <div class="form-hint" style="margin-top:10px">ก่อนบันทึกควรตรวจร้านค้า ช่วงเวลา และข้อยกเว้นของแต่ละ rule อีกครั้ง</div>`
+  }
+
+  App._editCCBenefitDraftAtIndex = function(cardId, draftIdx) {
+    const preview = App._ccBenefitImportPreview
+    if (!preview || !preview.ruleDrafts?.[draftIdx]) return
+    const draft = preview.ruleDrafts[draftIdx]
+    const rule = App.normalizeBenefitRule?.({ ...(draft.rule || {}), cardId }, cardId)
+    if (!rule) return
+    App.ensureCCBenefitRulesState?.()
+    const existing = (S.ccBenefitRules || []).find(r => r.id === rule.id)
+    if (!existing) {
+      S.ccBenefitRules.push(rule)
+      persist()
+    }
+    App.openCCBenefitRuleForm(cardId, rule.id)
   }
 
   App.analyzeCCBenefitLink = async function(cardId) {
@@ -6677,16 +6283,77 @@ App._pickMerchant = function(name, opts = {}) {
     if (resultEl) resultEl.innerHTML = `<div class="card card-pad">กำลังวิเคราะห์ลิงก์...</div>`
     try {
       const sourceDocument = await App._fetchBenefitSourceDocument(url)
-      const parsed = App._parseBenefitSourceDocument(sourceDocument)
-      const promotions = Array.isArray(parsed.promotions) ? parsed.promotions : []
-      const ruleDrafts = promotions.flatMap(promotion => App._promotionDraftToRuleDrafts(cardId, promotion))
+      if (resultEl) resultEl.innerHTML = `<div class="card card-pad">กำลังให้ AI วิเคราะห์สิทธิประโยชน์...</div>`
+
+      let ruleDrafts = []
+      let diagnostics = []
+      let usedAI = false
+
+      try {
+        const content = String(sourceDocument.mainContentText || '').trim().slice(0, 4000)
+        const prompt = `URL: ${sourceDocument.normalizedUrl || url}\n\nเนื้อหาหน้าเว็บ:\n${content}\n\n---\nสกัดสิทธิประโยชน์บัตรเครดิตจากเนื้อหาข้างต้น ตอบเป็น JSON array เท่านั้น ห้ามมี markdown หรือข้อความอื่น\n\nแต่ละ object ใน array:\n- name: ชื่อกฎภาษาไทย สั้น กระชับ\n- type: "cashback" | "discount" | "points" | "mixed"\n- cashback: { "mode": "percent"|"fixed", "rate": number|null, "fixedAmount": number|null }\n- discount: { "mode": "percent"|"fixed", "rate": number|null, "fixedAmount": number|null }\n- points: { "bahtPerPoint": number|null, "multiplier": number }\n- suggestedConditions: { "categories": [], "merchants": [], "channels": [], "minSpend": number|null }\n- limits: { "maxRewardAmountPerCycle": number|null, "maxRewardAmountPerTx": number|null, "maxEligibleSpendPerCycle": number|null }\n- validity: { "startDate": "YYYY-MM-DD"|null, "endDate": "YYYY-MM-DD"|null }\n- confidence: 0-1\n- warnings: [] ข้อความภาษาไทย เช่น "ไม่พบวันหมดอายุ"\n\nถ้าหาข้อมูลบางฟิลด์ไม่ได้ ให้ใส่ null ถ้าไม่พบสิทธิประโยชน์ใดเลย ตอบ []`
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1000,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        })
+        const data = await res.json()
+        const text = (data.content || []).map(b => b.text || '').join('')
+        const jsonText = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
+        const items = JSON.parse(jsonText)
+        if (Array.isArray(items)) {
+          ruleDrafts = items.map(item => {
+            const type = item.type === 'mixed' ? 'both' : (['cashback','discount','points','both'].includes(item.type) ? item.type : 'cashback')
+            const reviewFields = []
+            const hasReward = item.cashback?.rate || item.cashback?.fixedAmount || item.discount?.rate || item.discount?.fixedAmount || item.points?.bahtPerPoint || (Number(item.points?.multiplier) > 1)
+            if (!hasReward) reviewFields.push('reward')
+            if (!item.validity?.startDate && !item.validity?.endDate) reviewFields.push('validity')
+            if (!(item.suggestedConditions?.merchants?.length) && !(item.suggestedConditions?.categories?.length)) reviewFields.push('merchants')
+            return {
+              rule: {
+                id: genId(),
+                name: String(item.name || '').trim() || 'Unnamed rule',
+                type,
+                cashback: item.cashback || { mode: 'percent', rate: null, fixedAmount: null },
+                discount: item.discount || { mode: 'percent', rate: null, fixedAmount: null },
+                points: item.points || { bahtPerPoint: null, multiplier: 1 },
+                suggestedConditions: item.suggestedConditions || { categories: [], merchants: [], channels: [], minSpend: null },
+                limits: item.limits || { maxRewardAmountPerCycle: null, maxRewardAmountPerTx: null, maxEligibleSpendPerCycle: null },
+                validity: {
+                  mode: (item.validity?.startDate || item.validity?.endDate) ? 'range' : 'always',
+                  startDate: item.validity?.startDate || '',
+                  endDate: item.validity?.endDate || '',
+                },
+                source: sourceDocument.normalizedUrl || url,
+              },
+              sourceUrl: sourceDocument.normalizedUrl || url,
+              campaignTitle: String(item.name || '').trim() || 'Draft rule',
+              confidence: Number(item.confidence) || 0,
+              warnings: Array.isArray(item.warnings) ? item.warnings.filter(Boolean) : [],
+              reviewFields,
+              diagnostics: [],
+            }
+          })
+          usedAI = true
+        }
+      } catch (_aiErr) {
+        const parsed = App._parseBenefitSourceDocument(sourceDocument)
+        const promotions = Array.isArray(parsed.promotions) ? parsed.promotions : []
+        ruleDrafts = promotions.flatMap(promotion => App._promotionDraftToRuleDrafts(cardId, promotion))
+        diagnostics = [...(parsed.diagnostics || []), 'ใช้การวิเคราะห์แบบ regex เนื่องจาก AI ไม่พร้อมใช้งาน']
+      }
+
       App._ccBenefitImportPreview = {
         cardId,
         url: sourceDocument.normalizedUrl,
         sourceDocument,
-        promotions,
         ruleDrafts,
-        diagnostics: parsed.diagnostics || [],
+        diagnostics,
+        usedAI,
       }
       App._renderBenefitImportPreview(App._ccBenefitImportPreview)
     } catch (err) {
@@ -11468,7 +11135,7 @@ App._pickMerchant = function(name, opts = {}) {
 
   App._applyImportMergePayload = function(payload) {
     const stats = {}
-    ;['transactions','wallets','budgets','incomeBudgets','recurring','upcomingBills','merchants','ccBenefitRules','creditLimitGroups','rewardAccounts','rewardLedger','netWorthSnapshots','investmentSnapshots','cryptoAssets','cryptoHoldings','cryptoTransactions','goals','privileges','creditCardPromoSearches','creditCardPromotions'].forEach(key => {
+    ;['transactions','wallets','budgets','incomeBudgets','recurring','upcomingBills','merchants','ccBenefitRules','creditLimitGroups','rewardAccounts','rewardLedger','netWorthSnapshots','investmentSnapshots','cryptoAssets','cryptoHoldings','cryptoTransactions','goals','privileges'].forEach(key => {
       const result = mergeById(S[key] || [], payload[key] || [])
       S[key] = result.rows
       stats[key] = result
@@ -11494,7 +11161,7 @@ App._pickMerchant = function(name, opts = {}) {
       ['กระเป๋า', 'wallets'], ['รายการ', 'transactions'], ['รายการรอจ่าย', 'upcomingBills'], ['สิทธิพิเศษ', 'privileges'], ['หมวดหมู่', 'categories'],
       ['ร้านค้า', 'merchants'], ['รายการประจำ', 'recurring'], ['เป้าหมาย', 'goals'],
       ['ผ่อนชำระ', 'installments'], ['บัญชีคะแนน', 'rewardAccounts'], ['Crypto holdings', 'cryptoHoldings'],
-      ['กฎสิทธิประโยชน์', 'ccBenefitRules'], ['ผลค้นหาโปรบัตร', 'creditCardPromoSearches'],
+      ['กฎสิทธิประโยชน์', 'ccBenefitRules'],
     ]
     const counts = rows.map(([label, key]) => `<div class="reward-tile"><span>${esc(label)}</span><strong>${previewCount(payload, key).toLocaleString('en-US')}</strong></div>`).join('')
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen();${input ? "document.getElementById('import-file-v5').value=''" : ''}">←</button><h2>Preview นำเข้า</h2></div>
