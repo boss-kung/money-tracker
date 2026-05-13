@@ -293,7 +293,8 @@ window.addEventListener('DOMContentLoaded', function(){
     */
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // text/plain avoids CORS preflight (Google Apps Script doesn't handle OPTIONS)
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body: JSON.stringify(payload),
     })
     let data = null
