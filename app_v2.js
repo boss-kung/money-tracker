@@ -4987,11 +4987,12 @@ App._pickMerchant = function(name, opts = {}) {
           </div>
           <div class="flex-row" style="margin-top:10px">
             <button class="btn btn-outline" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">แก้ไข</button>
+            <button class="btn btn-outline" onclick="App.openCCBenefitRuleCopyDialog('${esc(cardId)}','${esc(rule.id)}')">คัดลอก</button>
             <button class="btn btn-outline" onclick="App.deleteCCBenefitRule('${esc(rule.id)}')">ลบ</button>
           </div>
         </div>`).join('')
       : App._emptyState?.('🎁', 'ยังไม่มีกฎสิทธิประโยชน์', 'เพิ่มสิทธิ์พื้นฐานหรือแคมเปญของบัตรใบนี้') || ''
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog('${esc(cardId)}')" style="width:auto">วิเคราะห์ลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div></div>
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitRuleCopyDialog('${esc(cardId)}')" style="width:auto">คัดลอกกฎ</button><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog('${esc(cardId)}')" style="width:auto">วิเคราะห์ลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div></div>
       <div class="sub-scroll">
         ${statementCard}
         <div class="sec-title">กฎของบัตรใบนี้</div>
@@ -5164,6 +5165,91 @@ App._pickMerchant = function(name, opts = {}) {
     persist()
     App.openCCBenefitScreen(cardId)
     notify('บันทึกกฎสิทธิประโยชน์แล้ว', 'success')
+  }
+
+  App.openCCBenefitRuleCopyDialog = function(cardId, ruleId = '') {
+    App.ensureCCBenefitRulesState?.()
+    const sourceCard = walletById(cardId) || {}
+    const sourceRules = (ruleId
+      ? (S.ccBenefitRules || []).filter(rule => rule.cardId === cardId && rule.id === ruleId)
+      : App.getCreditCardBenefitRules(cardId)
+    ).map(rule => App.normalizeBenefitRule?.(rule, cardId) || rule)
+    if (!sourceRules.length) {
+      notify('ยังไม่มีกฎให้คัดลอก', 'error')
+      return
+    }
+    const targetCards = (S.wallets || []).filter(w => w.type === 'credit' && !w.archived && w.id !== cardId)
+    const dialogId = 'cc-benefit-rule-copy-dialog'
+    document.getElementById(dialogId)?.remove()
+    const ruleSummary = sourceRules.length === 1
+      ? `<strong>${esc(sourceRules[0].name || 'ไม่ระบุชื่อ')}</strong>`
+      : `<strong>${sourceRules.length} กฎทั้งหมดของบัตรนี้</strong>`
+    const targetHtml = targetCards.length
+      ? targetCards.map(card => `<label class="tx-reward-toggle-row" style="cursor:pointer">
+          <span>${esc(card.icon || '💳')} ${esc(card.name || 'บัตรเครดิต')}</span>
+          <input type="checkbox" class="ccbr-copy-target" value="${esc(card.id)}">
+        </label>`).join('')
+      : `<div class="empty"><div class="empty-title">ยังไม่มีบัตรปลายทาง</div><div class="empty-sub">เพิ่มบัตรเครดิตอีกใบก่อน แล้วค่อยคัดลอกกฎไปใช้ร่วมกัน</div></div>`
+    document.getElementById('app')?.insertAdjacentHTML('beforeend', `
+      <div id="${dialogId}" class="overlay open" role="dialog" aria-modal="true">
+        <div class="overlay-backdrop" onclick="document.getElementById('${dialogId}')?.remove()"></div>
+        <div class="sheet">
+          <div class="sheet-header">
+            <h2>คัดลอกกฎสิทธิประโยชน์</h2>
+            <button class="btn-icon" onclick="document.getElementById('${dialogId}')?.remove()">×</button>
+          </div>
+          <div class="sheet-body">
+            <div class="card card-pad" style="margin-bottom:12px">
+              <div class="form-label">ต้นทาง</div>
+              <div class="list-item-name">${esc(sourceCard.icon || '💳')} ${esc(sourceCard.name || 'บัตรต้นทาง')}</div>
+              <div class="list-item-sub">จะคัดลอก ${ruleSummary} โดยสร้างกฎใหม่บนบัตรปลายทาง ไม่ทับกฎเดิม</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">เลือกบัตรปลายทาง</label>
+              <div class="card card-pad" style="display:grid;gap:8px">${targetHtml}</div>
+            </div>
+            <div class="flex-row" style="margin-top:12px">
+              <button class="btn btn-secondary" onclick="document.getElementById('${dialogId}')?.remove()">ยกเลิก</button>
+              <button class="btn btn-primary" ${targetCards.length ? '' : 'disabled'} onclick="App.copyCCBenefitRulesToCards('${esc(cardId)}','${esc(sourceRules.map(rule => rule.id).join(','))}')">คัดลอก</button>
+            </div>
+          </div>
+        </div>
+      </div>`)
+  }
+
+  App.copyCCBenefitRulesToCards = function(sourceCardId, ruleIdsCsv = '') {
+    App.ensureCCBenefitRulesState?.()
+    const dialog = document.getElementById('cc-benefit-rule-copy-dialog')
+    const targetIds = Array.from(dialog?.querySelectorAll('.ccbr-copy-target:checked') || []).map(input => input.value).filter(Boolean)
+    if (!targetIds.length) {
+      notify('เลือกบัตรปลายทางอย่างน้อย 1 ใบ', 'error')
+      return
+    }
+    const ruleIds = String(ruleIdsCsv || '').split(',').map(s => s.trim()).filter(Boolean)
+    const sourceRules = (S.ccBenefitRules || [])
+      .filter(rule => rule.cardId === sourceCardId && ruleIds.includes(rule.id))
+      .map(rule => App.normalizeBenefitRule?.(rule, sourceCardId) || rule)
+    if (!sourceRules.length) {
+      notify('ไม่พบกฎต้นทาง', 'error')
+      return
+    }
+    let created = 0
+    targetIds.forEach(targetCardId => {
+      sourceRules.forEach(sourceRule => {
+        const clone = JSON.parse(JSON.stringify(sourceRule))
+        clone.id = genId()
+        clone.cardId = targetCardId
+        clone.copiedFromCardId = sourceCardId
+        clone.copiedFromRuleId = sourceRule.id
+        clone.copiedAt = new Date().toISOString()
+        S.ccBenefitRules.push(App.normalizeBenefitRule?.(clone, targetCardId) || clone)
+        created += 1
+      })
+    })
+    persist()
+    dialog?.remove()
+    App.openCCBenefitScreen(sourceCardId)
+    notify(`คัดลอกกฎแล้ว ${created} รายการ`, 'success')
   }
 
   App.openCCBenefitImportDialog = function(cardId) {
