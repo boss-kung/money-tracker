@@ -625,7 +625,7 @@ select.form-input  { appearance: none; cursor: pointer; }
 }
 .wallet-detail-hero .big,
 .cc-hero .big { margin-top: 4px; }
-.wallet-filter-custom { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-bottom: 12px; }
+.wallet-filter-custom { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 8px; margin-bottom: 12px; }
 
 /* Add transaction */
 .type-tabs {
@@ -2500,6 +2500,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 .form-split-row > div {
   min-width: 0;
 }
+.form-input[type="date"],
 .form-split-row input[type="date"] {
   box-sizing: border-box;
   display: block;
@@ -2512,7 +2513,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   -webkit-appearance: none;
   appearance: none;
 }
-#tx-date.form-input {
+.form-input[type="date"] {
   box-sizing: border-box !important;
   display: block;
   width: 100% !important;
@@ -2525,21 +2526,21 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   -webkit-appearance: none;
   appearance: none;
 }
-#tx-date::-webkit-date-and-time-value {
+.form-input[type="date"]::-webkit-date-and-time-value {
   display: block;
   width: 100%;
   min-width: 0;
   max-width: 100%;
   text-align: center;
 }
-#tx-date::-webkit-datetime-edit {
+.form-input[type="date"]::-webkit-datetime-edit {
   display: block;
   width: 100%;
   min-width: 0;
   max-width: 100%;
   padding: 0;
 }
-#tx-date::-webkit-calendar-picker-indicator {
+.form-input[type="date"]::-webkit-calendar-picker-indicator {
   flex: 0 0 auto;
   margin-left: 6px;
 }
@@ -3213,7 +3214,7 @@ body {
 @media (max-width: 480px){
   .form-split-row{grid-template-columns:1fr!important;gap:10px!important}
   input.form-input, select.form-input, textarea.form-input{font-size:16px}
-  #tx-date.form-input{
+  .form-input[type="date"]{
     font-size:15px!important;
   }
 }
