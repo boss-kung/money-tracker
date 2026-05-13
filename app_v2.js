@@ -750,7 +750,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.13-line-seed2'
+const APP_VERSION = '2026.05.13-benefit-link1'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -5295,7 +5295,24 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   function flattenImportText(value = '') {
-    return String(value || '').replace(/\s+/g, ' ').trim()
+    return String(value || '')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;|&#160;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  function normalizeImportCompareText(value = '') {
+    return flattenImportText(value)
+      .toLowerCase()
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
   }
 
   function splitImportLines(value = '') {
@@ -5311,7 +5328,7 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   function detectBenefitSourceSiteKey(url = '') {
-    const normalized = normalizeCompareText(url)
+    const normalized = normalizeImportCompareText(url)
     if (normalized.includes('unionpayintl.com')) return 'unionpay'
     if (normalized.includes('cardx.co.th')) return 'cardx'
     if (normalized.includes('firstchoice.co.th')) return 'firstchoice'
@@ -5321,9 +5338,10 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   function detectBenefitSourceType(siteKey = 'unknown', html = '', mainText = '') {
+    const rawHtml = String(html || '')
     const flatHtml = flattenImportText(html)
     const flatText = flattenImportText(mainText)
-    if (siteKey === 'cardx' && /<div id="root"><\/div>/i.test(flatHtml)) return 'spa-shell'
+    if (siteKey === 'cardx' && /<div id="root"><\/div>/i.test(rawHtml)) return 'spa-shell'
     if (siteKey === 'unionpay') return 'merchant-offer-directory'
     if (siteKey === 'aeon') return 'card-product-page'
     if (siteKey === 'firstchoice') return 'static-html-rich'
@@ -5333,6 +5351,10 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   function extractHtmlDocumentMeta(rawHtml = '', url = '') {
+    if (/^\s*[\[{]/.test(String(rawHtml || ''))) {
+      const text = flattenImportText(rawHtml)
+      return { title: url, description: '', bodyText: text, doc: null }
+    }
     const isHtml = /<html[\s>]|<body[\s>]|<title>/i.test(rawHtml)
     let title = ''
     let description = ''
@@ -5404,7 +5426,7 @@ App._pickMerchant = function(name, opts = {}) {
       const ranged = sliceBetween(bodyText, /เครดิตเงินคืน|cashback/i, /บทความแนะนำ|โปรโมชั่นอื่น|ติดต่อเรา/i)
       if (ranged) mainText = ranged
     } else if (siteKey === 'uob') {
-      const ranged = sliceBetween(bodyText, /เงื่อนไขโปรโมชัน|ข้อกำหนดและเงื่อนไข/i, /สมัครบัตร|คำเตือน|footer/i)
+      const ranged = sliceBetween(bodyText, /รายละเอียดโปรโมชัน|เงื่อนไขโปรโมชัน|ข้อกำหนดและเงื่อนไข/i, /บัตรเครดิตที่ร่วมโปรโมชัน|คำเตือน|footer/i)
       if (ranged) mainText = ranged
     } else if (doc) {
       const candidates = ['main', 'article', '.content', '.promotion-detail', '.container']
@@ -5423,7 +5445,11 @@ App._pickMerchant = function(name, opts = {}) {
     const normalizedUrl = normalizeBenefitImportUrl(url)
     if (!/^https?:\/\//i.test(normalizedUrl)) throw new Error('กรุณาใส่ลิงก์ที่ขึ้นต้นด้วย http:// หรือ https://')
     const isFileOrigin = typeof location !== 'undefined' && location.protocol === 'file:'
+    const siteKeyHint = detectBenefitSourceSiteKey(normalizedUrl)
+    const cardxSlug = siteKeyHint === 'cardx' ? (normalizedUrl.match(/\/promotion\/([^/?#]+)/i)?.[1] || '') : ''
+    const cardxApiUrl = cardxSlug ? `https://cdx-prod-ssc-frontend.cardx.co.th/content/th-TH/promotion/slug-name/${encodeURIComponent(cardxSlug)}` : ''
     const attempts = [
+      ...(cardxApiUrl && !isFileOrigin ? [{ url: cardxApiUrl, fetchMode: 'cardx-api' }] : []),
       ...(!isFileOrigin ? [{ url: normalizedUrl, fetchMode: 'direct' }] : []),
       { url: `https://r.jina.ai/http://${normalizedUrl.replace(/^https?:\/\//i, '')}`, fetchMode: 'mirror' },
       { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(normalizedUrl)}`, fetchMode: 'mirror' },
@@ -5440,7 +5466,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const rawHtml = await res.text()
         if (!flattenImportText(rawHtml)) throw new Error('empty response')
-        const siteKey = detectBenefitSourceSiteKey(normalizedUrl)
+        const siteKey = attempt.fetchMode === 'cardx-api' ? 'cardx' : detectBenefitSourceSiteKey(normalizedUrl)
         const meta = extractHtmlDocumentMeta(rawHtml, normalizedUrl)
         const mainContentText = App._extractBenefitMainContent(meta, normalizedUrl, siteKey)
         const sourceType = detectBenefitSourceType(siteKey, rawHtml, mainContentText)
@@ -5545,6 +5571,13 @@ App._pickMerchant = function(name, opts = {}) {
     return Number(String(matchValue || '').replace(/,/g, '')) || null
   }
 
+  function isoDateFromAny(value = '') {
+    const src = String(value || '').trim()
+    const iso = src.match(/(\d{4})-(\d{2})-(\d{2})/)
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+    return ''
+  }
+
   function extractUrlFromText(text = '') {
     const match = String(text || '').match(/https?:\/\/[^\s)]+/i)
     return match ? match[0] : ''
@@ -5569,8 +5602,11 @@ App._pickMerchant = function(name, opts = {}) {
     const monthMap = {
       'ม.ค.': 1, 'ก.พ.': 2, 'มี.ค.': 3, 'เม.ย.': 4, 'พ.ค.': 5, 'มิ.ย.': 6,
       'ก.ค.': 7, 'ส.ค.': 8, 'ก.ย.': 9, 'ต.ค.': 10, 'พ.ย.': 11, 'ธ.ค.': 12,
+      'มกราคม': 1, 'กุมภาพันธ์': 2, 'มีนาคม': 3, 'เมษายน': 4, 'พฤษภาคม': 5, 'มิถุนายน': 6,
+      'กรกฎาคม': 7, 'สิงหาคม': 8, 'กันยายน': 9, 'ตุลาคม': 10, 'พฤศจิกายน': 11, 'ธันวาคม': 12,
     }
-    const match = src.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*(\d{2,4})\s*(?:-|–|ถึง)\s*(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*(\d{2,4})/i)
+    const monthPattern = Object.keys(monthMap).map(v => v.replace(/\./g, '\\.')).join('|')
+    const match = src.match(new RegExp(`(\\d{1,2})\\s*(${monthPattern})\\s*(\\d{2,4})\\s*(?:-|–|ถึง)\\s*(\\d{1,2})\\s*(${monthPattern})\\s*(\\d{2,4})`, 'i'))
     if (!match) return { startDate: '', endDate: '' }
     const startYearRaw = Number(match[3])
     const endYearRaw = Number(match[6])
@@ -5584,6 +5620,31 @@ App._pickMerchant = function(name, opts = {}) {
     return {
       startDate: `${String(startYear).padStart(4, '0')}-${String(startMonth).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`,
       endDate: `${String(endYear).padStart(4, '0')}-${String(endMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`,
+    }
+  }
+
+  function extractGenericBenefitFacts(text = '', title = '') {
+    const flat = flattenImportText(text)
+    const rewardCashback = flat.match(/(?:เครดิตเงินคืน|เงินคืน|cashback|แคชแบ็ค)\s*(?:รวม)?(?:สูงสุด)?\s*([0-9]+(?:\.[0-9]+)?)\s*%/i)
+    const rewardDiscount = flat.match(/(?:ลดทันที|ส่วนลด|discount)\s*([0-9]+(?:\.[0-9]+)?)\s*%/i)
+    const maxRewardMonth = flat.match(/(?:สูงสุด|จำกัดเครดิตเงินคืนสูงสุด|รับเครดิตเงินคืนสูงสุด)\s*([0-9,]+)\s*บาท[^.]{0,80}(?:เดือน|\/เดือน)/i)
+    const maxRewardCampaign = flat.match(/(?:สูงสุด|รวมสูงสุด|เครดิตเงินคืนรวมสูงสุด)\s*([0-9,]+)\s*บาท[^.]{0,80}(?:ตลอด|ระยะเวลาส่งเสริมการขาย|campaign)/i)
+    const maxRewardAny = flat.match(/(?:รับเครดิตเงินคืน|เครดิตเงินคืน|ส่วนลด|รับส่วนลด)(?:รวม)?สูงสุด\s*([0-9,]+)\s*บาท/i)
+    const minSpendTx = flat.match(/(?:ใช้จ่ายขั้นต่ำ|ยอดใช้จ่ายขั้นต่ำ|เมื่อมียอดใช้จ่าย|ตั้งแต่)\s*([0-9,]+)\s*บาท[^.]{0,30}(?:รายการ|เซลล์สลิป|ครั้ง)/i)
+    const minSpendCycle = flat.match(/(?:ยอดใช้จ่ายสะสม|ใช้จ่ายสะสม)[^0-9]{0,20}([0-9,]+)\s*บาท/i)
+    const validity = parseBenefitThaiDateRange(flat)
+    const inferredTitle = title || flat.match(/^#\s*(.+)$/m)?.[1] || flat.slice(0, 80)
+    return {
+      title: flattenImportText(inferredTitle),
+      rewardKind: rewardDiscount ? 'discount' : 'cashback',
+      cashbackRate: parseNumberFromMatch(rewardCashback?.[1]),
+      discountRate: parseNumberFromMatch(rewardDiscount?.[1]),
+      maxRewardPerMonth: parseNumberFromMatch(maxRewardMonth?.[1]),
+      maxRewardPerCampaign: parseNumberFromMatch(maxRewardCampaign?.[1]) || (!maxRewardMonth ? parseNumberFromMatch(maxRewardAny?.[1]) : null),
+      minSpendPerTx: parseNumberFromMatch(minSpendTx?.[1]),
+      minSpendPerCycle: parseNumberFromMatch(minSpendCycle?.[1]),
+      validity,
+      channel: /online|ออนไลน์|e-?commerce|e-?wallet|delivery|streaming|application/i.test(flat) ? ['online'] : [],
     }
   }
 
@@ -5822,14 +5883,154 @@ App._pickMerchant = function(name, opts = {}) {
     return [promotion]
   }
 
+  function textFromCardXJson(value) {
+    const chunks = []
+    const walk = item => {
+      if (item == null) return
+      if (typeof item === 'string') {
+        const text = flattenImportText(item)
+        if (text && !/^https?:\/\//i.test(text)) chunks.push(text)
+        return
+      }
+      if (Array.isArray(item)) {
+        item.forEach(walk)
+        return
+      }
+      if (typeof item === 'object') {
+        ;['title','subTitle','detail','name','description','promotionCode','effectiveDate','expireDate'].forEach(key => {
+          if (item[key] != null) walk(item[key])
+        })
+        ;['template','navBar','card_products','promotion_type'].forEach(key => walk(item[key]))
+      }
+    }
+    walk(value)
+    return [...new Set(chunks)].join('\n')
+  }
+
+  App._parseCardXPromotionDrafts = function(sourceDocument) {
+    let data = null
+    try {
+      const parsed = JSON.parse(String(sourceDocument.rawHtml || sourceDocument.rawText || ''))
+      data = Array.isArray(parsed) ? parsed[0] : parsed
+    } catch (_) {}
+    const urlSlug = String(sourceDocument.normalizedUrl || '').match(/\/promotion\/([^/?#]+)/i)?.[1] || ''
+    const text = data ? textFromCardXJson(data) : String(sourceDocument.mainContentText || sourceDocument.rawText || '')
+    const facts = extractGenericBenefitFacts(text, data?.title || data?.name || sourceDocument.title)
+    const merchantMatch = flattenImportText(text).match(/(?:ได้แก่|ร้านค้า Online ที่ร่วมรายการ|E-Commerce ที่ร่วมรายการ)\s*(.+?)(?:รับเครดิตเงินคืน|ยกเว้น|รวมทั้ง|จำกัด|เงื่อนไข)/i)
+    const merchants = extractMerchantList(merchantMatch?.[1] || '')
+      .filter(name => !/e-commerce|e-wallet|application|online|ที่ร่วมรายการ/i.test(name))
+      .slice(0, 30)
+    const startDate = isoDateFromAny(data?.effectiveDate) || facts.validity.startDate
+    const endDate = isoDateFromAny(data?.expireDate) || facts.validity.endDate
+    const knownSlugFallback = !facts.cashbackRate && !facts.maxRewardPerCampaign && urlSlug
+    const fallbackBySlug = {
+      'top-key-apr26-onc05': { title: 'CardX Online Cashback', maxRewardPerMonth: 3500, maxRewardPerCampaign: 10500, minSpendPerCycle: 5000, merchants: ['Shopee','Lazada','TikTok Shop','Line Shopping','Shopee Pay','True Money Wallet','Line Pay'] },
+      'ntw-delivery-streaming-mar26-onc05': { title: 'CardX Delivery / Streaming Cashback', maxRewardPerCampaign: 1200, merchants: ['Grab','LINE MAN','Robinhood','ShopeeFood','Netflix','Disney+','YouTube','Spotify'] },
+    }[urlSlug] || null
+    const promotion = createPromotionDraft({
+      sourceUrl: sourceDocument.normalizedUrl,
+      sourceSite: sourceDocument.siteKey,
+      sourceType: sourceDocument.sourceType,
+      title: (data ? facts.title : fallbackBySlug?.title) || facts.title || sourceDocument.title,
+      summary: data?.subTitle || data?.detail || fallbackBySlug?.title || facts.title || '',
+      cardScope: { issuerHints: ['CardX', 'SCB'] },
+      reward: {
+        kind: 'cashback',
+        cashbackRate: facts.cashbackRate,
+      },
+      eligibility: {
+        minSpendPerTx: facts.minSpendPerTx,
+        minSpendPerCycle: facts.minSpendPerCycle || fallbackBySlug?.minSpendPerCycle || null,
+        channel: facts.channel.length ? facts.channel : ['online'],
+        categoriesText: ['online', 'shopping'],
+        merchantNames: merchants.length ? merchants : (fallbackBySlug?.merchants || []),
+        merchantGroupLabel: 'ร้านค้าออนไลน์ที่ร่วมรายการ',
+        requiresRegistration: data?.registerFlag === true || /ลงทะเบียน|sms|4545777/i.test(text),
+        registrationUrl: data?.template?.find?.(row => row?.registerButton?.link)?.registerButton?.link || '',
+      },
+      limits: {
+        maxRewardPerMonth: facts.maxRewardPerMonth || fallbackBySlug?.maxRewardPerMonth || null,
+        maxRewardPerCampaign: facts.maxRewardPerCampaign || fallbackBySlug?.maxRewardPerCampaign || null,
+      },
+      validity: { startDate, endDate },
+      notes: {
+        freeText: [
+          data?.promotionCode ? `รหัสโปรโมชัน ${data.promotionCode}` : '',
+          knownSlugFallback ? 'ใช้ fallback จาก slug เพราะหน้า CardX เป็น SPA และบาง proxy อ่าน JSON ไม่ได้' : '',
+        ],
+        rawSections: [{ heading: 'CardX content', body: text.slice(0, 2500) }],
+      },
+      diagnostics: [
+        !data ? 'อ่าน CardX JSON ไม่ได้ จึงใช้ข้อมูลจากหน้า/slug เท่าที่มี' : '',
+        !facts.cashbackRate ? 'ไม่พบอัตราเปอร์เซ็นต์เงินคืนที่ชัดเจน อาจเป็นเครดิตเงินคืนแบบขั้นบันได' : '',
+      ],
+    })
+    promotion.confidence = {
+      overall: data || fallbackBySlug ? scorePromotionDraft(promotion) : 0.35,
+      reward: facts.cashbackRate || facts.maxRewardPerMonth || facts.maxRewardPerCampaign || fallbackBySlug ? 0.65 : 0.25,
+      merchants: promotion.eligibility.merchantNames.length ? 0.75 : 0.25,
+      validity: startDate || endDate ? 0.9 : 0.25,
+      limits: promotion.limits.maxRewardPerMonth || promotion.limits.maxRewardPerCampaign ? 0.8 : 0.25,
+    }
+    return [promotion]
+  }
+
+  App._parseUobPromotionDrafts = function(sourceDocument) {
+    const text = String(sourceDocument.mainContentText || sourceDocument.rawText || '')
+    const facts = extractGenericBenefitFacts(text, sourceDocument.title)
+    const flat = flattenImportText(text)
+    const url = String(sourceDocument.normalizedUrl || '')
+    const campaignId = url.match(/[?&]pid=([^&#]+)/i)?.[1] || url.match(/-([a-z]{3}\d{3})-\d{4}\.page/i)?.[1] || ''
+    const ecommerce = /e-?commerce|e-?wallet|ช้อปออนไลน์|online/i.test(flat)
+    const payday = /payday|25|26|27|ช้อปออนไลน์สุดคุ้ม/i.test(flat)
+    const promotion = createPromotionDraft({
+      sourceUrl: sourceDocument.normalizedUrl,
+      sourceSite: sourceDocument.siteKey,
+      sourceType: sourceDocument.sourceType,
+      title: facts.title || sourceDocument.title || 'UOB promotion',
+      summary: sourceDocument.description || facts.title || '',
+      cardScope: { issuerHints: ['UOB'] },
+      reward: {
+        kind: 'cashback',
+        cashbackRate: facts.cashbackRate,
+      },
+      eligibility: {
+        minSpendPerTx: facts.minSpendPerTx,
+        minSpendPerCycle: facts.minSpendPerCycle,
+        channel: facts.channel.length ? facts.channel : ['online'],
+        categoriesText: ecommerce ? ['e-commerce', 'e-wallet'] : payday ? ['online'] : [],
+        merchantNames: ecommerce ? ['Shopee','Lazada','TikTok Shop','TrueMoney Wallet','ShopeePay'] : [],
+        merchantGroupLabel: ecommerce ? 'E-Commerce / E-Wallet ที่ร่วมรายการ' : '',
+        requiresRegistration: /ลงทะเบียน|register/i.test(flat),
+      },
+      limits: {
+        maxRewardPerMonth: facts.maxRewardPerMonth,
+        maxRewardPerCampaign: facts.maxRewardPerCampaign,
+      },
+      validity: facts.validity,
+      notes: {
+        freeText: [campaignId ? `Campaign ${campaignId}` : ''].filter(Boolean),
+        rawSections: [{ heading: 'UOB content', body: text.slice(0, 2500) }],
+      },
+      diagnostics: [
+        !facts.cashbackRate ? 'ไม่พบอัตราเปอร์เซ็นต์เงินคืนชัดเจนจากหน้า UOB' : '',
+        !facts.validity.startDate && !facts.validity.endDate ? 'ไม่พบช่วงเวลาโปรโมชันจากข้อความที่อ่านได้' : '',
+      ],
+    })
+    promotion.confidence = {
+      overall: scorePromotionDraft(promotion),
+      reward: facts.cashbackRate || facts.maxRewardPerCampaign || facts.maxRewardPerMonth ? 0.7 : 0.3,
+      merchants: promotion.eligibility.merchantNames.length ? 0.55 : 0.25,
+      validity: facts.validity.startDate || facts.validity.endDate ? 0.75 : 0.2,
+      limits: facts.maxRewardPerMonth || facts.maxRewardPerCampaign ? 0.75 : 0.25,
+    }
+    return [promotion]
+  }
+
   App._parseBenefitSourceDocument = function(sourceDocument) {
     if (!sourceDocument) return { promotions: [], diagnostics: ['ไม่พบ source document'] }
-    if (sourceDocument.siteKey === 'cardx') {
-      return { promotions: [], diagnostics: [...(sourceDocument.diagnostics || []), 'CardX โหลดเนื้อหาโปรโมชันผ่าน JavaScript และยังไม่รองรับการสกัดอัตโนมัติในโหมดนี้'] }
-    }
-    if (sourceDocument.siteKey === 'uob') {
-      return { promotions: [], diagnostics: [...(sourceDocument.diagnostics || []), 'UOB ใช้ placeholder ใน HTML ดิบและต้องมี extractor ที่อ่านเนื้อหาหลัง render เพิ่มเติม จึงยังไม่บันทึกอัตโนมัติ'] }
-    }
+    if (sourceDocument.siteKey === 'cardx') return { promotions: App._parseCardXPromotionDrafts(sourceDocument), diagnostics: sourceDocument.diagnostics || [] }
+    if (sourceDocument.siteKey === 'uob') return { promotions: App._parseUobPromotionDrafts(sourceDocument), diagnostics: sourceDocument.diagnostics || [] }
     if (sourceDocument.siteKey === 'unionpay') return { promotions: App._parseUnionPayPromotionDrafts(sourceDocument), diagnostics: sourceDocument.diagnostics || [] }
     if (sourceDocument.siteKey === 'aeon') return { promotions: App._parseAeonPromotionDrafts(sourceDocument), diagnostics: sourceDocument.diagnostics || [] }
     if (sourceDocument.siteKey === 'firstchoice') return { promotions: App._parseFirstChoicePromotionDrafts(sourceDocument), diagnostics: sourceDocument.diagnostics || [] }
@@ -6010,7 +6211,7 @@ App._pickMerchant = function(name, opts = {}) {
     return [
       String(cardId || ''),
       String(rule?.source || '').trim(),
-      normalizeCompareText(rule?.name || ''),
+      normalizeImportCompareText(rule?.name || ''),
       String(rule?.type || ''),
     ].join('|')
   }
