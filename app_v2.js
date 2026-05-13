@@ -1573,7 +1573,7 @@ App.render();
     if (!tx) return
     S.txMode = 'edit'
     S.editingTxId = id
-    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxDetail()
     App.openOverlay('overlay-add-tx')
@@ -1584,7 +1584,7 @@ App.render();
     if (!tx) return
     S.txMode = 'duplicate'
     S.editingTxId = null
-    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
@@ -1812,7 +1812,7 @@ App.render();
   App.openAddTx = function() {
     S.txMode = 'add'
     S.editingTxId = null
-    S.tx = { step:'amount', type:'expense', amount:'0', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', note:'', date:txToday(), isRecurring:false, isInstallment:false, installmentMonths:'', rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
+    S.tx = { step:'amount', type:'expense', amount:'0', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', channel:'', note:'', date:txToday(), isRecurring:false, isInstallment:false, installmentMonths:'', rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
   }
@@ -2187,6 +2187,7 @@ App.render();
         <div class="add-detail-scroll">
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div class="cat-grid cat-grid-compact" id="cat-grid">${shownCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}${hasMore ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.showAllTxCategories()"><span class="cat-icon">⋯</span><span>เพิ่มเติม</span></button>` : ''}${S.txShowAllCats && allCats.length > 5 ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.hideAllTxCategories()"><span class="cat-icon">⌃</span><span>ย่อ</span></button>` : ''}</div></div>` : ''}
+          ${isExpense ? `<div class="form-group"><label class="form-label">ช่องทางการใช้จ่าย</label><select class="form-input" id="tx-channel" onchange="App._txField('channel',this.value);App._renderAddTxDetail()"><option value=""${!S.tx.channel ? ' selected' : ''}>ไม่ระบุ</option><option value="online"${S.tx.channel === 'online' ? ' selected' : ''}>ออนไลน์</option><option value="offline"${S.tx.channel === 'offline' ? ' selected' : ''}>หน้าร้าน / ออฟไลน์</option></select></div>` : ''}
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);App._renderAddTxDetail()">${walletOptions}</select></div>
           ${type === 'transfer'
   ? `<div class="form-group">
@@ -2226,11 +2227,12 @@ App.render();
               S.tx.rewardRuleIds = Array.isArray(S.tx.rewardRuleIds) ? S.tx.rewardRuleIds : []
               const _estimate = App.calculateSelectedRewardEstimate?.(_draftTx, S.tx.rewardRuleIds) || { cashback:0, points:0, rules:[], warnings:[] }
               S.tx.rewardEstimate = _estimate
-              const _selectedNames = _rules.filter(rule => S.tx.rewardRuleIds.includes(rule.id)).map(rule => rule.name)
+              const _selectedRules = _rules.filter(rule => S.tx.rewardRuleIds.includes(rule.id))
+              const _selectedNames = _selectedRules.map(rule => rule.name)
               const _rows = _rules.map(rule => {
                 const _selected = S.tx.rewardRuleIds.includes(rule.id)
                 const _typeText = rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : 'ส่วนลดทันที'
-                const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.allowStacking ? '' : 'ไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
+                const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.allowStacking ? '' : 'อาจไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
                 return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}" onclick="App._toggleTxRewardRule('${esc(rule.id)}')" aria-pressed="${_selected ? 'true' : 'false'}">
                   <span class="csr-main">
                     <span>
@@ -3802,6 +3804,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       toWalletId: S.tx.toWalletId || undefined,
       categoryId: S.tx.categoryId || undefined,
       merchant: S.tx.type === 'transfer' ? '' : String(S.tx.merchant || '').trim(),
+      channel: S.tx.type === 'expense' ? String(S.tx.channel || '').trim() : '',
       note: S.tx.note || '',
       date: S.tx.date || today(),
       isRecurring: !!S.tx.isRecurring,
@@ -4630,8 +4633,7 @@ App._pickMerchant = function(name, opts = {}) {
       type: latest.type || '',
       categoryId: latest.categoryId || '',
       walletId: latest.walletId || '',
-      rewardRuleIds,
-      hint: `แนะนำจากประวัติเดิม: ${App._txTypeLabel?.(latest.type) || latest.type}${latest.categoryId ? ` · ${(App._findCat?.(latest.categoryId)?.label || latest.categoryId)}` : ''}${latest.walletId ? ` · ${(walletById(latest.walletId)?.name || latest.walletId)}` : ''}`,
+      rewardRuleIds
     }
   }
   App._applyMerchantSuggestion = function(name) {
@@ -4966,6 +4968,7 @@ App._pickMerchant = function(name, opts = {}) {
               <div class="list-item-name">${esc(rule.name)}</div>
               <div class="list-item-sub">${esc(rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : 'ส่วนลดทันที')}${rule.isBaseRule ? ' · สิทธิ์พื้นฐาน' : ''}${rule.active ? '' : ' · ปิดใช้งาน'}</div>
               ${rule.description ? `<div class="list-item-sub">${esc(rule.description)}</div>` : ''}
+              ${rule.source ? `<div class="list-item-sub">ที่มา: ${esc(rule.source)}</div>` : ''}
             </div>
             <button class="toggle${rule.active ? ' on' : ''}" onclick="event.stopPropagation();App.toggleCCBenefitRule('${esc(rule.id)}')"></button>
           </div>
@@ -4981,7 +4984,7 @@ App._pickMerchant = function(name, opts = {}) {
           </div>
         </div>`).join('')
       : App._emptyState?.('🎁', 'ยังไม่มีกฎสิทธิประโยชน์', 'เพิ่มสิทธิ์พื้นฐานหรือแคมเปญของบัตรใบนี้') || ''
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div>
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog('${esc(cardId)}')" style="width:auto">วิเคราะห์ลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div></div>
       <div class="sub-scroll">
         ${statementCard}
         <div class="sec-title">กฎของบัตรใบนี้</div>
@@ -5152,6 +5155,802 @@ App._pickMerchant = function(name, opts = {}) {
     persist()
     App.openCCBenefitScreen(cardId)
     notify('บันทึกกฎสิทธิประโยชน์แล้ว', 'success')
+  }
+
+  App.openCCBenefitImportDialog = function(cardId) {
+    const dialogId = 'cc-benefit-import-dialog'
+    document.getElementById(dialogId)?.remove()
+    App._ccBenefitImportPreview = null
+    document.getElementById('app')?.insertAdjacentHTML('beforeend', `
+      <div id="${dialogId}" class="overlay open" role="dialog" aria-modal="true">
+        <div class="overlay-backdrop" onclick="document.getElementById('${dialogId}')?.remove()"></div>
+        <div class="sheet" style="max-height:92dvh">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <h2>วิเคราะห์สิทธิประโยชน์จากลิงก์</h2>
+            <button class="btn-icon" onclick="document.getElementById('${dialogId}')?.remove()">✕</button>
+          </div>
+          <div class="sheet-body" style="overflow-y:auto">
+            <div class="form-group">
+              <label class="form-label">ลิงก์เว็บไซต์สิทธิประโยชน์</label>
+              <input class="form-input" id="cc-benefit-import-url" placeholder="https://..." onkeydown="if(event.key==='Enter'){event.preventDefault();App.analyzeCCBenefitLink('${esc(cardId)}')}">
+              <div class="form-hint">ระบบจะพยายามอ่านเงื่อนไขสิทธิประโยชน์จากหน้าเว็บ แล้วเตรียมกฎให้ตรวจสอบก่อนบันทึก</div>
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:12px">
+              <button class="btn btn-secondary" onclick="document.getElementById('${dialogId}')?.remove()">ยกเลิก</button>
+              <button class="btn btn-primary" onclick="App.analyzeCCBenefitLink('${esc(cardId)}')">วิเคราะห์ลิงก์</button>
+            </div>
+            <div id="cc-benefit-import-result"></div>
+          </div>
+        </div>
+      </div>`)
+    setTimeout(() => document.getElementById('cc-benefit-import-url')?.focus(), 80)
+  }
+
+  function normalizeBenefitImportUrl(url = '') {
+    const trimmed = String(url || '').trim()
+    if (!trimmed) return ''
+    try {
+      const parsed = new URL(trimmed)
+      parsed.hash = ''
+      return parsed.toString()
+    } catch (_) {
+      return trimmed
+    }
+  }
+
+  function flattenImportText(value = '') {
+    return String(value || '').replace(/\s+/g, ' ').trim()
+  }
+
+  function splitImportLines(value = '') {
+    return String(value || '')
+      .split(/\r?\n+/)
+      .map(line => flattenImportText(line))
+      .filter(Boolean)
+  }
+
+  function clampConfidence(value) {
+    const n = Number(value || 0)
+    return Math.max(0, Math.min(1, Math.round(n * 100) / 100))
+  }
+
+  function detectBenefitSourceSiteKey(url = '') {
+    const normalized = normalizeCompareText(url)
+    if (normalized.includes('unionpayintl.com')) return 'unionpay'
+    if (normalized.includes('cardx.co.th')) return 'cardx'
+    if (normalized.includes('firstchoice.co.th')) return 'firstchoice'
+    if (normalized.includes('aeon.co.th')) return 'aeon'
+    if (normalized.includes('uob.co.th')) return 'uob'
+    return 'unknown'
+  }
+
+  function detectBenefitSourceType(siteKey = 'unknown', html = '', mainText = '') {
+    const flatHtml = flattenImportText(html)
+    const flatText = flattenImportText(mainText)
+    if (siteKey === 'cardx' && /<div id="root"><\/div>/i.test(flatHtml)) return 'spa-shell'
+    if (siteKey === 'unionpay') return 'merchant-offer-directory'
+    if (siteKey === 'aeon') return 'card-product-page'
+    if (siteKey === 'firstchoice') return 'static-html-rich'
+    if (siteKey === 'uob') return 'static-html-noisy'
+    if (flatText.length < 400) return 'partial'
+    return 'static-html-rich'
+  }
+
+  function extractHtmlDocumentMeta(rawHtml = '', url = '') {
+    const isHtml = /<html[\s>]|<body[\s>]|<title>/i.test(rawHtml)
+    let title = ''
+    let description = ''
+    let bodyText = String(rawHtml || '')
+    let doc = null
+    if (isHtml && typeof DOMParser !== 'undefined') {
+      try {
+        doc = new DOMParser().parseFromString(rawHtml, 'text/html')
+        title = flattenImportText(doc.querySelector('title')?.textContent || doc.querySelector('h1')?.textContent || '')
+        description = flattenImportText(doc.querySelector('meta[name="description"]')?.getAttribute('content') || '')
+        bodyText = String(doc.body?.innerText || doc.documentElement?.innerText || rawHtml)
+      } catch (_) {}
+    }
+    return { title: title || url, description, bodyText, doc }
+  }
+
+  function sliceBetween(text = '', startPattern, endPattern = null) {
+    const src = String(text || '')
+    const start = src.search(startPattern)
+    if (start < 0) return ''
+    const tail = src.slice(start)
+    if (!endPattern) return tail.trim()
+    const end = tail.search(endPattern)
+    return (end > 0 ? tail.slice(0, end) : tail).trim()
+  }
+
+  function buildSourceDocument({
+    url,
+    normalizedUrl,
+    fetchMode,
+    siteKey,
+    sourceType,
+    title,
+    description,
+    rawHtml,
+    rawText,
+    mainContentText,
+    diagnostics,
+    status,
+  }) {
+    return {
+      url,
+      normalizedUrl,
+      fetchedAt: new Date().toISOString(),
+      fetchMode,
+      siteKey,
+      sourceType,
+      status,
+      title: title || normalizedUrl,
+      description: description || '',
+      rawHtml: rawHtml || '',
+      rawText: rawText || '',
+      mainContentText: mainContentText || '',
+      diagnostics: diagnostics || [],
+    }
+  }
+
+  App._extractBenefitMainContent = function(docMeta = {}, url = '', siteKey = 'unknown') {
+    const bodyText = String(docMeta.bodyText || '')
+    const doc = docMeta.doc
+    let mainText = bodyText
+    if (siteKey === 'unionpay') {
+      const ranged = sliceBetween(bodyText, /เวลากิจกรรม[:：]|หัวข้อกิจกรรม[:：]/i, /บทความที่เกี่ยวข้อง|ข่าวสารอื่นๆ|Copyright/i)
+      if (ranged) mainText = ranged
+    } else if (siteKey === 'aeon') {
+      const ranged = sliceBetween(bodyText, /\*ข้อกำหนดและเงื่อนไขสิทธิประโยชน์/i, /สมัครบัตร|เอกสารประกอบการสมัคร|สิทธิประโยชน์อื่น/i)
+      if (ranged) mainText = ranged
+    } else if (siteKey === 'firstchoice') {
+      const ranged = sliceBetween(bodyText, /เครดิตเงินคืน|cashback/i, /บทความแนะนำ|โปรโมชั่นอื่น|ติดต่อเรา/i)
+      if (ranged) mainText = ranged
+    } else if (siteKey === 'uob') {
+      const ranged = sliceBetween(bodyText, /เงื่อนไขโปรโมชัน|ข้อกำหนดและเงื่อนไข/i, /สมัครบัตร|คำเตือน|footer/i)
+      if (ranged) mainText = ranged
+    } else if (doc) {
+      const candidates = ['main', 'article', '.content', '.promotion-detail', '.container']
+      for (const selector of candidates) {
+        const text = flattenImportText(doc.querySelector(selector)?.innerText || '')
+        if (text.length > flattenImportText(mainText).length / 2 && text.length > 300) {
+          mainText = text
+          break
+        }
+      }
+    }
+    return String(mainText || '').trim()
+  }
+
+  App._fetchBenefitSourceDocument = async function(url) {
+    const normalizedUrl = normalizeBenefitImportUrl(url)
+    if (!/^https?:\/\//i.test(normalizedUrl)) throw new Error('กรุณาใส่ลิงก์ที่ขึ้นต้นด้วย http:// หรือ https://')
+    const isFileOrigin = typeof location !== 'undefined' && location.protocol === 'file:'
+    const attempts = [
+      ...(!isFileOrigin ? [{ url: normalizedUrl, fetchMode: 'direct' }] : []),
+      { url: `https://r.jina.ai/http://${normalizedUrl.replace(/^https?:\/\//i, '')}`, fetchMode: 'mirror' },
+      { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(normalizedUrl)}`, fetchMode: 'mirror' },
+      { url: `https://corsproxy.io/?${encodeURIComponent(normalizedUrl)}`, fetchMode: 'mirror' },
+    ]
+    const diagnostics = []
+    let lastError = null
+    for (const attempt of attempts) {
+      try {
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+        const timeoutId = controller ? setTimeout(() => controller.abort(), attempt.fetchMode === 'direct' ? 10000 : 16000) : null
+        const res = await fetch(attempt.url, { cache: 'no-store', signal: controller?.signal })
+        if (timeoutId) clearTimeout(timeoutId)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const rawHtml = await res.text()
+        if (!flattenImportText(rawHtml)) throw new Error('empty response')
+        const siteKey = detectBenefitSourceSiteKey(normalizedUrl)
+        const meta = extractHtmlDocumentMeta(rawHtml, normalizedUrl)
+        const mainContentText = App._extractBenefitMainContent(meta, normalizedUrl, siteKey)
+        const sourceType = detectBenefitSourceType(siteKey, rawHtml, mainContentText)
+        const status = sourceType === 'spa-shell' ? 'partial' : flattenImportText(mainContentText).length > 300 ? 'ok' : 'partial'
+        const docDiagnostics = [...diagnostics]
+        if (siteKey === 'cardx' && sourceType === 'spa-shell') docDiagnostics.push('หน้าเว็บนี้เป็น SPA ต้อง render JavaScript ก่อนจึงจะอ่านเนื้อหาโปรโมชันได้')
+        if (siteKey === 'uob' && flattenImportText(mainContentText).length < 600) docDiagnostics.push('หน้า UOB ถูกดึงมาได้ แต่ยังมี boilerplate สูง ต้องใช้ extractor เฉพาะ section เพิ่มเติม')
+        if (status === 'partial' && !docDiagnostics.length) docDiagnostics.push('ดึงหน้าเว็บได้เพียงบางส่วน จึงอาจวิเคราะห์ได้ไม่ครบ')
+        return buildSourceDocument({
+          url: normalizedUrl,
+          normalizedUrl,
+          fetchMode: attempt.fetchMode,
+          siteKey,
+          sourceType,
+          title: meta.title,
+          description: meta.description,
+          rawHtml,
+          rawText: meta.bodyText,
+          mainContentText,
+          diagnostics: docDiagnostics,
+          status,
+        })
+      } catch (err) {
+        lastError = err
+        const message = err?.name === 'AbortError' ? 'timeout' : (err?.message || 'fetch failed')
+        diagnostics.push(`${attempt.fetchMode}: ${message}`)
+      }
+    }
+    if (isFileOrigin) {
+      throw new Error('ไม่สามารถอ่านหน้าเว็บไซต์ได้จากโหมด file:// ในเบราว์เซอร์นี้ กรุณาเปิดแอปผ่าน http://localhost เพื่อให้การวิเคราะห์ลิงก์ทำงานได้เสถียรกว่าเดิม')
+    }
+    throw lastError || new Error('ไม่สามารถอ่านหน้าเว็บไซต์ได้')
+  }
+
+  function createPromotionDraft(data = {}) {
+    return {
+      id: String(data.id || genId()),
+      sourceUrl: String(data.sourceUrl || ''),
+      sourceSite: String(data.sourceSite || 'unknown'),
+      sourceType: String(data.sourceType || 'unknown'),
+      title: String(data.title || '').trim(),
+      subtitle: String(data.subtitle || '').trim(),
+      summary: String(data.summary || '').trim(),
+      cardScope: {
+        issuerHints: Array.isArray(data.cardScope?.issuerHints) ? data.cardScope.issuerHints.filter(Boolean) : [],
+        cardNames: Array.isArray(data.cardScope?.cardNames) ? data.cardScope.cardNames.filter(Boolean) : [],
+        networkHints: Array.isArray(data.cardScope?.networkHints) ? data.cardScope.networkHints.filter(Boolean) : [],
+      },
+      reward: {
+        kind: data.reward?.kind || 'unknown',
+        cashbackRate: parseRuleNumber(data.reward?.cashbackRate, null),
+        cashbackFixedAmount: parseRuleNumber(data.reward?.cashbackFixedAmount, null),
+        discountRate: parseRuleNumber(data.reward?.discountRate, null),
+        discountFixedAmount: parseRuleNumber(data.reward?.discountFixedAmount, null),
+        pointsMultiplier: parseRuleNumber(data.reward?.pointsMultiplier, null),
+        bahtPerPoint: parseRuleNumber(data.reward?.bahtPerPoint, null),
+      },
+      eligibility: {
+        minSpendPerTx: parseRuleNumber(data.eligibility?.minSpendPerTx, null),
+        minSpendPerCycle: parseRuleNumber(data.eligibility?.minSpendPerCycle, null),
+        channel: Array.isArray(data.eligibility?.channel) ? data.eligibility.channel.filter(Boolean) : [],
+        categoriesText: Array.isArray(data.eligibility?.categoriesText) ? data.eligibility.categoriesText.filter(Boolean) : [],
+        merchantNames: Array.isArray(data.eligibility?.merchantNames) ? [...new Set(data.eligibility.merchantNames.map(v => flattenImportText(v)).filter(Boolean))] : [],
+        merchantGroupLabel: String(data.eligibility?.merchantGroupLabel || '').trim(),
+        requiresRegistration: data.eligibility?.requiresRegistration === true,
+        registrationUrl: String(data.eligibility?.registrationUrl || '').trim(),
+      },
+      limits: {
+        maxRewardPerTx: parseRuleNumber(data.limits?.maxRewardPerTx, null),
+        maxRewardPerCycle: parseRuleNumber(data.limits?.maxRewardPerCycle, null),
+        maxRewardPerMonth: parseRuleNumber(data.limits?.maxRewardPerMonth, null),
+        maxRewardPerCampaign: parseRuleNumber(data.limits?.maxRewardPerCampaign, null),
+        maxUsesPerCard: parseRuleNumber(data.limits?.maxUsesPerCard, null),
+        maxUsesTotal: parseRuleNumber(data.limits?.maxUsesTotal, null),
+      },
+      validity: {
+        startDate: String(data.validity?.startDate || '').trim(),
+        endDate: String(data.validity?.endDate || '').trim(),
+        statementCycleHint: String(data.validity?.statementCycleHint || '').trim(),
+      },
+      exclusions: {
+        excludedCategoriesText: Array.isArray(data.exclusions?.excludedCategoriesText) ? data.exclusions.excludedCategoriesText.filter(Boolean) : [],
+        excludedMerchantNames: Array.isArray(data.exclusions?.excludedMerchantNames) ? data.exclusions.excludedMerchantNames.filter(Boolean) : [],
+        excludedKeywords: Array.isArray(data.exclusions?.excludedKeywords) ? data.exclusions.excludedKeywords.filter(Boolean) : [],
+      },
+      notes: {
+        freeText: Array.isArray(data.notes?.freeText) ? data.notes.freeText.filter(Boolean) : [],
+        rawSections: Array.isArray(data.notes?.rawSections) ? data.notes.rawSections.filter(Boolean) : [],
+      },
+      confidence: {
+        overall: clampConfidence(data.confidence?.overall || 0),
+        reward: clampConfidence(data.confidence?.reward || 0),
+        merchants: clampConfidence(data.confidence?.merchants || 0),
+        validity: clampConfidence(data.confidence?.validity || 0),
+        limits: clampConfidence(data.confidence?.limits || 0),
+      },
+      diagnostics: Array.isArray(data.diagnostics) ? data.diagnostics.filter(Boolean) : [],
+    }
+  }
+
+  function parseNumberFromMatch(matchValue = '') {
+    return Number(String(matchValue || '').replace(/,/g, '')) || null
+  }
+
+  function extractUrlFromText(text = '') {
+    const match = String(text || '').match(/https?:\/\/[^\s)]+/i)
+    return match ? match[0] : ''
+  }
+
+  function extractMerchantList(text = '') {
+    return [...new Set(
+      String(text || '')
+        .replace(/\s*\.\s*/g, '.')
+        .replace(/\s*,\s*/g, ', ')
+        .replace(/\band\b/gi, ',')
+        .replace(/\s*และ\s*/g, ',')
+        .replace(/\s*หรือ\s*/g, ',')
+        .split(/[,:;\n]/)
+        .map(item => flattenImportText(item))
+        .filter(item => item && item.length > 1 && !/ร้านค้าที่ร่วมรายการ|merchant|participating/i.test(item))
+    )]
+  }
+
+  function parseBenefitThaiDateRange(text = '') {
+    const src = String(text || '')
+    const monthMap = {
+      'ม.ค.': 1, 'ก.พ.': 2, 'มี.ค.': 3, 'เม.ย.': 4, 'พ.ค.': 5, 'มิ.ย.': 6,
+      'ก.ค.': 7, 'ส.ค.': 8, 'ก.ย.': 9, 'ต.ค.': 10, 'พ.ย.': 11, 'ธ.ค.': 12,
+    }
+    const match = src.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*(\d{2,4})\s*(?:-|–|ถึง)\s*(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*(\d{2,4})/i)
+    if (!match) return { startDate: '', endDate: '' }
+    const startYearRaw = Number(match[3])
+    const endYearRaw = Number(match[6])
+    const startYear = startYearRaw > 2400 ? startYearRaw - 543 : startYearRaw < 100 ? (startYearRaw >= 40 ? startYearRaw + 1957 : startYearRaw + 2000) : startYearRaw
+    const endYear = endYearRaw > 2400 ? endYearRaw - 543 : endYearRaw < 100 ? (endYearRaw >= 40 ? endYearRaw + 1957 : endYearRaw + 2000) : endYearRaw
+    const startMonth = monthMap[match[2]] || 0
+    const endMonth = monthMap[match[5]] || 0
+    const startDay = Number(match[1])
+    const endDay = Number(match[4])
+    if (!startYear || !endYear || !startMonth || !endMonth || !startDay || !endDay) return { startDate: '', endDate: '' }
+    return {
+      startDate: `${String(startYear).padStart(4, '0')}-${String(startMonth).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`,
+      endDate: `${String(endYear).padStart(4, '0')}-${String(endMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`,
+    }
+  }
+
+  function scorePromotionDraft(promotion) {
+    let score = 0.2
+    if (promotion.title) score += 0.1
+    if (promotion.reward?.kind && promotion.reward.kind !== 'unknown') score += 0.2
+    if (promotion.reward?.cashbackRate || promotion.reward?.discountRate || promotion.reward?.cashbackFixedAmount || promotion.reward?.discountFixedAmount || promotion.reward?.pointsMultiplier) score += 0.15
+    if (promotion.eligibility?.merchantNames?.length) score += 0.15
+    if (promotion.eligibility?.channel?.length) score += 0.1
+    if (promotion.validity?.startDate || promotion.validity?.endDate) score += 0.1
+    if (promotion.limits?.maxRewardPerTx || promotion.limits?.maxRewardPerCycle || promotion.limits?.maxRewardPerMonth || promotion.limits?.maxRewardPerCampaign) score += 0.1
+    if (promotion.eligibility?.minSpendPerTx || promotion.eligibility?.minSpendPerCycle) score += 0.1
+    return clampConfidence(score)
+  }
+
+  App._parseUnionPayPromotionDrafts = function(sourceDocument) {
+    const text = String(sourceDocument.mainContentText || sourceDocument.rawText || '')
+    const flat = flattenImportText(text)
+    const rewardBlock = sliceBetween(text, /ลดทันที/i, /1\.|ข้อกำหนดและเงื่อนไข|UnionPay International จะไม่มีการชดเชย/i) || text
+    const normalizedRewardBlock = flattenImportText(rewardBlock).replace(/(\d)\s*,\s*(\d)/g, '$1,$2')
+    const rewardMatch = normalizedRewardBlock.match(/ลดทันที\s*([0-9]+(?:\.[0-9]+)?)%\s*เมื่อใช้จ่ายขั้นต่ำ\s*([0-9,]+)\s*บาท\s*\/\s*รายการ/i)
+    const periodMatch = flat.match(/(\d{4}-\d{2}-\d{2}).{0,30}(?:ถึง|-)\s*(\d{4}-\d{2}-\d{2})/i)
+    const merchantMatch = flat.match(/ร้านค้าที่ร่วมรายการ[:：]\s*(.+?)\s*(?:ขั้นตอนการลงทะเบียน|1\.|ข้อกำหนดและเงื่อนไข)/i)
+    const registrationUrl = extractUrlFromText(sliceBetween(text, /ลิงก์ลงทะเบียน/i, /เวลากิจกรรม|หัวข้อกิจกรรม/i))
+      || (String(sourceDocument.rawHtml || '').match(/https:\/\/marketing\.unionpayintl\.com\/offer-promote\/[^"' <)]+/i)?.[0] || '')
+    const maxUsesMatch = flat.match(/จำกัด\s*([0-9]+)\s*สิทธิ์\/บัตร\/เดือน/i)
+    const maxRewardMatch = flat.match(/สูงสุด\s*([0-9,]+)\s*บาท\/บัตร\/เดือน/i)
+    const totalUsesMatch = flat.match(/([0-9,]+)\s*สิทธิ์\s*ตลอดรายการ/i)
+    const merchantNames = extractMerchantList(merchantMatch?.[1] || '')
+    const promotion = createPromotionDraft({
+      sourceUrl: sourceDocument.normalizedUrl,
+      sourceSite: sourceDocument.siteKey,
+      sourceType: sourceDocument.sourceType,
+      title: rewardMatch ? `UnionPay Online ${rewardMatch[1]}%` : sourceDocument.title,
+      summary: rewardMatch?.[0] || '',
+      cardScope: { networkHints: ['UnionPay'] },
+      reward: {
+        kind: 'discount',
+        discountRate: parseNumberFromMatch(rewardMatch?.[1]),
+      },
+      eligibility: {
+        minSpendPerTx: parseNumberFromMatch(rewardMatch?.[2]),
+        channel: /Online Payment/i.test(text) ? ['online'] : [],
+        merchantNames,
+        merchantGroupLabel: merchantNames.length ? 'ร้านค้าที่ร่วมรายการ UnionPay' : '',
+        requiresRegistration: !!registrationUrl,
+        registrationUrl,
+      },
+      limits: {
+        maxRewardPerMonth: parseNumberFromMatch(maxRewardMatch?.[1]),
+        maxUsesPerCard: parseNumberFromMatch(maxUsesMatch?.[1]),
+        maxUsesTotal: parseNumberFromMatch(totalUsesMatch?.[1]),
+      },
+      validity: {
+        startDate: periodMatch?.[1] || '',
+        endDate: periodMatch?.[2] || '',
+      },
+      notes: {
+        freeText: [
+          /Recurring/i.test(text) ? 'รายการ recurring หรือ auto-renew ไม่ร่วมรายการ' : '',
+          /ไม่สามารถใช้ร่วมกับโปรโมชัน/i.test(text) ? 'ไม่สามารถใช้ร่วมกับโปรโมชันหรือคูปองอื่น' : '',
+        ],
+        rawSections: [
+          { heading: 'หัวข้อกิจกรรม', body: sliceBetween(text, /หัวข้อกิจกรรม[:：]/i, /1\.|ข้อกำหนดและเงื่อนไข/i).slice(0, 2500) },
+          { heading: 'ข้อกำหนดและเงื่อนไข', body: sliceBetween(text, /1\./i, /UnionPay International จะไม่มีการชดเชย|$|Copyright/i).slice(0, 2500) },
+        ],
+      },
+      diagnostics: [
+        !rewardMatch ? 'ไม่พบ reward headline แบบ UnionPay ที่ชัดเจน' : '',
+        !merchantNames.length ? 'ไม่พบรายชื่อร้านค้าที่ร่วมรายการ' : '',
+      ],
+    })
+    promotion.confidence = {
+      overall: scorePromotionDraft(promotion),
+      reward: rewardMatch ? 0.95 : 0.3,
+      merchants: merchantNames.length ? 0.95 : 0.2,
+      validity: periodMatch ? 0.9 : 0.2,
+      limits: (maxUsesMatch || maxRewardMatch) ? 0.85 : 0.2,
+    }
+    return [promotion]
+  }
+
+  App._parseAeonPromotionDrafts = function(sourceDocument) {
+    const text = String(sourceDocument.mainContentText || sourceDocument.rawText || '')
+    const flat = flattenImportText(text)
+    const titleMatch = flat.match(/รับเครดิตเงินคืน\s*([0-9]+(?:\.[0-9]+)?)%/i)
+    const minSpendTxMatch = flat.match(/ตั้งแต่\s*([0-9,]+)\s*บาท\s*ขึ้นไปต่อเซลล์สลิป/i)
+    const minSpendCycleMatch = flat.match(/Scan To Pay\s*ตั้งแต่\s*([0-9,]+)\s*บาทขึ้นไป\/บัญชีบัตรหลัก\/ภายในรอบบัญชีเดียวกัน/i)
+    const maxPerTxMatch = flat.match(/สูงสุด\s*([0-9,]+)\s*บาท\/รายการ/i)
+    const maxPerCycleMatch = flat.match(/สูงสุด\s*([0-9,]+)\s*บาท\/บัญชีบัตรหลัก\/รอบบัญชี/i)
+    const exclusionsMatch = flat.match(/ยอดใช้จ่ายที่ไม่ร่วมรายการได้แก่\s*(.+?)\s*(?:บริษัทฯ|8\.|ข้อ 8|ผู้ถือบัตรฯ จะต้อง)/i)
+    const promotion = createPromotionDraft({
+      sourceUrl: sourceDocument.normalizedUrl,
+      sourceSite: sourceDocument.siteKey,
+      sourceType: sourceDocument.sourceType,
+      title: titleMatch ? `AEON NextGen Cashback ${titleMatch[1]}%` : sourceDocument.title,
+      summary: titleMatch ? `รับเครดิตเงินคืน ${titleMatch[1]}% สำหรับร้านค้าออนไลน์` : sourceDocument.description,
+      cardScope: { issuerHints: ['AEON'], cardNames: ['AEON NextGen Digital Card'] },
+      reward: {
+        kind: 'cashback',
+        cashbackRate: parseNumberFromMatch(titleMatch?.[1]),
+      },
+      eligibility: {
+        minSpendPerTx: parseNumberFromMatch(minSpendTxMatch?.[1]),
+        minSpendPerCycle: parseNumberFromMatch(minSpendCycleMatch?.[1]),
+        channel: /ร้านค้าออนไลน์|online/i.test(text) ? ['online'] : [],
+        categoriesText: ['ร้านค้าออนไลน์'],
+      },
+      limits: {
+        maxRewardPerTx: parseNumberFromMatch(maxPerTxMatch?.[1]),
+        maxRewardPerCycle: parseNumberFromMatch(maxPerCycleMatch?.[1]),
+      },
+      exclusions: {
+        excludedKeywords: exclusionsMatch ? splitImportLines(exclusionsMatch[1]).join(' ').split(/,| และ | หรือ /).map(v => flattenImportText(v)).filter(Boolean).slice(0, 20) : [],
+      },
+      notes: {
+        freeText: [
+          minSpendCycleMatch ? `Scan To Pay มียอดขั้นต่ำ ${minSpendCycleMatch[1]} บาท/รอบบัญชี` : '',
+        ],
+        rawSections: [
+          { heading: 'ข้อกำหนดและเงื่อนไข', body: sliceBetween(text, /\*ข้อกำหนดและเงื่อนไข/i, /สิทธิประโยชน์อื่น|สมัครบัตร|$|ติดต่อเรา/i).slice(0, 2500) },
+        ],
+      },
+      diagnostics: [
+        !titleMatch ? 'ไม่พบอัตราเครดิตเงินคืนหลัก' : '',
+        !minSpendTxMatch ? 'ไม่พบขั้นต่ำต่อรายการ' : '',
+      ],
+    })
+    promotion.confidence = {
+      overall: scorePromotionDraft(promotion),
+      reward: titleMatch ? 0.95 : 0.3,
+      merchants: 0.35,
+      validity: 0.2,
+      limits: (maxPerTxMatch || maxPerCycleMatch) ? 0.95 : 0.2,
+    }
+    return [promotion]
+  }
+
+  App._parseFirstChoicePromotionDrafts = function(sourceDocument) {
+    const text = String(sourceDocument.mainContentText || sourceDocument.rawText || '')
+    const mainSection = sliceBetween(text, /ต่อที่ 1\s*[:：]|รูดเต็ม\s*[:：]/i, /ต่อที่ 2\s*[:：]|ผ่อน\s*\+\s*รูดเต็ม|แลกคะแนนสะสมเพื่อรับเครดิตเงินคืน\s*15%/i) || text
+    const mainFlat = flattenImportText(mainSection)
+    const cycleThresholdMatch = mainFlat.match(/ทุกๆ\s*([0-9,]+)\s*บาท/i)
+    const tierCashbackMatch = mainFlat.match(/ทุกๆ\s*([0-9,]+)\s*บาท\s*200\s*\(สูงสุด\s*([0-9,]+)\s*บาท\)\s*2%/i)
+      || mainFlat.match(/ทุกๆ\s*([0-9,]+)\s*บาท.*?([0-9,]+)\s*\(สูงสุด\s*([0-9,]+)\s*บาท\).*?(\d+(?:\.\d+)?)%/i)
+    const titleMatch = mainFlat.match(/(?:รับเครดิตเงินคืน|รับแคชแบ็ค)\s*(\d+(?:\.\d+)?)%/i)
+      || (tierCashbackMatch?.[4] ? ['', tierCashbackMatch[4]] : null)
+      || mainFlat.match(/([0-9]+(?:\.\d+)?)%/i)
+    const monthLimitMatch = mainFlat.match(/สูงสุด\s*([0-9,]+)\s*บาท\s*\/\s*บัญชีบัตรหลัก\s*\/\s*เดือน/i)
+    const campaignLimitMatch = mainFlat.match(/([0-9,]+)\s*บาท\s*\/\s*บัญชีบัตรหลัก\s*\/\s*ตลอดรายการ/i)
+    const bonusSection = sliceBetween(mainSection, /รับเพิ่ม/i, /จำกัดเครดิตเงินคืน|ลงทะเบียนรับสิทธิ์|ลงทะเบียนครั้งเดียวก่อนทำรายการ/i)
+    const bonusPairMatch = flattenImportText(bonusSection).match(/ครบ\s*([0-9,]+)\s*บาท\s*([0-9,]+)\s*บาท/i)
+    const bonusMatch = bonusPairMatch?.[2] ? ['', bonusPairMatch[2]] : flattenImportText(bonusSection).match(/([0-9,]+)\s*บาท/i)
+    const bonusTriggerMatch = bonusPairMatch?.[1] ? ['', bonusPairMatch[1]] : mainFlat.match(/ครบ\s*([0-9,]+)\s*บาท/i)
+    const regCodeMatch = mainFlat.match(/"?(NW\d+)"?/i)
+    const registrationUrl = String(sourceDocument.rawHtml || '').match(/https:\/\/uchoose\.onelink\.me\/[^"' <)]+/i)?.[0] || ''
+    const validity = parseBenefitThaiDateRange(text)
+    const fullFlat = flattenImportText(text)
+    const categoryBlocks = [
+      {
+        label: 'หมวด Marketplace',
+        merchantsText: fullFlat.match(/หมวด Marketplace ได้แก่\s*(.+?)(?=หมวดร้านอาหารออนไลน์|หมวดท่องเที่ยว|หมวดประกัน|เงื่อนไข|ข้อกำหนด)/i)?.[1] || '',
+      },
+      {
+        label: 'หมวดร้านอาหารออนไลน์ Food Delivery',
+        merchantsText: fullFlat.match(/หมวดร้านอาหารออนไลน์\s*Food Delivery\s*ได้แก่\s*(.+?)(?=หมวดท่องเที่ยว|หมวดประกัน|เงื่อนไข|ข้อกำหนด)/i)?.[1] || '',
+      },
+      {
+        label: 'หมวดท่องเที่ยว',
+        merchantsText: '',
+      },
+      {
+        label: 'หมวดประกัน ทุกประเภท',
+        merchantsText: '',
+      },
+    ].filter(block => block.merchantsText || new RegExp(block.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(fullFlat))
+    const categories = categoryBlocks.map(block => block.label).slice(0, 12)
+    const merchantNames = [...new Set(categoryBlocks.flatMap(block => {
+      return String(block.merchantsText || '')
+        .replace(/\(.*$/g, '')
+        .replace(/รายการใช้จ่ายในแอปพลิเคชัน\s*grab\s*ทั้งหมด/ig, 'Grab')
+        .split(/,| และ | หรือ |และ|หรือ/)
+        .map(item => flattenImportText(item).trim())
+        .filter(item => item && item.length <= 40 && !/หมวดดังกล่าว|คลิก|มค 69|เมย 69|กด|โปรโมชั่น|travel agency|ยอดใช้จ่าย/i.test(item))
+    }))].slice(0, 30)
+    const promotion = createPromotionDraft({
+      sourceUrl: sourceDocument.normalizedUrl,
+      sourceSite: sourceDocument.siteKey,
+      sourceType: sourceDocument.sourceType,
+      title: titleMatch ? `First Choice NW2 Cashback ${titleMatch[1]}%` : sourceDocument.title,
+      summary: titleMatch ? `รับแคชแบ็ค ${titleMatch[1]}% ทุก ${cycleThresholdMatch?.[1] || '10,000'} บาท สูงสุด ${monthLimitMatch?.[1] || '2,500'} บาท/เดือน` : (sourceDocument.description || ''),
+      cardScope: { issuerHints: ['First Choice', 'Krungsri'] },
+      reward: {
+        kind: 'cashback',
+        cashbackRate: parseNumberFromMatch(titleMatch?.[1] || tierCashbackMatch?.[4] || tierCashbackMatch?.[3]),
+      },
+      eligibility: {
+        minSpendPerCycle: parseNumberFromMatch(tierCashbackMatch?.[1] || cycleThresholdMatch?.[1]),
+        channel: [],
+        categoriesText: categories.length ? categories : ['หมวดที่ร่วมรายการตามโปรโมชัน'],
+        merchantNames,
+        merchantGroupLabel: merchantNames.length ? 'ตัวอย่างร้านค้าที่ร่วมรายการ' : '',
+        requiresRegistration: /ลงทะเบียน/i.test(mainSection),
+        registrationUrl,
+      },
+      limits: {
+        maxRewardPerMonth: parseNumberFromMatch(monthLimitMatch?.[1] || tierCashbackMatch?.[2]),
+        maxRewardPerCampaign: parseNumberFromMatch(campaignLimitMatch?.[1]),
+      },
+      validity,
+      notes: {
+        freeText: [
+          cycleThresholdMatch ? `คำนวณตามยอดใช้จ่ายสะสมทุก ${cycleThresholdMatch[1]} บาท` : '',
+          bonusMatch ? `มีโบนัสเครดิตเงินคืนเพิ่มอีก ${bonusMatch[1]} บาทเมื่อยอดสะสมครบ ${bonusTriggerMatch?.[1] || '-'} บาท` : '',
+          regCodeMatch ? `ต้องลงทะเบียนรหัส ${regCodeMatch[1]} ก่อนทำรายการ` : '',
+        ],
+        rawSections: [
+          { heading: 'ต่อที่ 1', body: mainSection.slice(0, 2500) },
+          { heading: 'หมวดที่ร่วมรายการ', body: categoryBlocks.map(block => `${block.label}${block.merchantsText ? `: ${block.merchantsText}` : ''}`).join('\n').slice(0, 2500) },
+        ],
+      },
+      diagnostics: [
+        !titleMatch ? 'ไม่พบอัตรา cashback หลักของโปรโมชัน NW2' : '',
+        !cycleThresholdMatch ? 'ไม่พบยอดใช้จ่ายสะสมขั้นต่ำของต่อที่ 1' : '',
+        !merchantNames.length ? 'ไม่พบรายชื่อร้านจากหมวด Marketplace/Food Delivery อย่างชัดเจน' : '',
+      ],
+    })
+    promotion.confidence = {
+      overall: scorePromotionDraft(promotion),
+      reward: titleMatch ? 0.85 : 0.3,
+      merchants: merchantNames.length ? 0.8 : 0.25,
+      validity: validity.startDate || validity.endDate ? 0.85 : 0.2,
+      limits: (monthLimitMatch || campaignLimitMatch) ? 0.85 : 0.2,
+    }
+    return [promotion]
+  }
+
+  App._parseBenefitSourceDocument = function(sourceDocument) {
+    if (!sourceDocument) return { promotions: [], diagnostics: ['ไม่พบ source document'] }
+    if (sourceDocument.siteKey === 'cardx') {
+      return { promotions: [], diagnostics: [...(sourceDocument.diagnostics || []), 'CardX โหลดเนื้อหาโปรโมชันผ่าน JavaScript และยังไม่รองรับการสกัดอัตโนมัติในโหมดนี้'] }
+    }
+    if (sourceDocument.siteKey === 'uob') {
+      return { promotions: [], diagnostics: [...(sourceDocument.diagnostics || []), 'UOB ใช้ placeholder ใน HTML ดิบและต้องมี extractor ที่อ่านเนื้อหาหลัง render เพิ่มเติม จึงยังไม่บันทึกอัตโนมัติ'] }
+    }
+    if (sourceDocument.siteKey === 'unionpay') return { promotions: App._parseUnionPayPromotionDrafts(sourceDocument), diagnostics: sourceDocument.diagnostics || [] }
+    if (sourceDocument.siteKey === 'aeon') return { promotions: App._parseAeonPromotionDrafts(sourceDocument), diagnostics: sourceDocument.diagnostics || [] }
+    if (sourceDocument.siteKey === 'firstchoice') return { promotions: App._parseFirstChoicePromotionDrafts(sourceDocument), diagnostics: sourceDocument.diagnostics || [] }
+    return { promotions: [], diagnostics: [...(sourceDocument.diagnostics || []), 'ยังไม่มี parser เฉพาะสำหรับเว็บไซต์นี้'] }
+  }
+
+  function categoryIdsFromTexts(texts = []) {
+    return [...new Set((texts || []).flatMap(text => inferCategoryIdsFromText(text) || []).filter(Boolean))]
+  }
+
+  function humanizeRuleReward(rule = {}) {
+    const parts = []
+    if (rule.cashback?.rate) parts.push(`เงินคืน ${rule.cashback.rate}%`)
+    if (rule.cashback?.fixedAmount) parts.push(`เงินคืน ${money(rule.cashback.fixedAmount)}`)
+    if (rule.discount?.rate) parts.push(`ส่วนลด ${rule.discount.rate}%`)
+    if (rule.discount?.fixedAmount) parts.push(`ส่วนลด ${money(rule.discount.fixedAmount)}`)
+    if (rule.points?.bahtPerPoint) parts.push(`ทุก ${rule.points.bahtPerPoint} บาท = 1 คะแนน`)
+    if (rule.points?.multiplier && rule.points.multiplier > 1) parts.push(`x${rule.points.multiplier} คะแนน`)
+    return parts.join(' · ')
+  }
+
+  App._promotionDraftToRuleDrafts = function(cardId, promotion) {
+    if (!promotion) return []
+    const type = promotion.reward.kind === 'discount'
+      ? 'discount'
+      : promotion.reward.kind === 'points'
+      ? 'points'
+      : promotion.reward.kind === 'both' || promotion.reward.kind === 'mixed'
+      ? 'both'
+      : 'cashback'
+    const descriptionParts = [
+      promotion.summary || '',
+      promotion.eligibility.requiresRegistration ? 'ต้องลงทะเบียนก่อนใช้สิทธิ์' : '',
+      promotion.eligibility.registrationUrl ? `ลงทะเบียน: ${promotion.eligibility.registrationUrl}` : '',
+      promotion.eligibility.minSpendPerCycle ? `ขั้นต่ำสะสมต่อรอบ ${money(promotion.eligibility.minSpendPerCycle)}` : '',
+      promotion.limits.maxRewardPerMonth ? `สูงสุด ${money(promotion.limits.maxRewardPerMonth)} ต่อเดือน` : '',
+      promotion.limits.maxRewardPerCampaign ? `สูงสุด ${money(promotion.limits.maxRewardPerCampaign)} ตลอดโปรโมชัน` : '',
+      promotion.exclusions.excludedKeywords.length ? `ไม่รวม: ${promotion.exclusions.excludedKeywords.slice(0, 8).join(', ')}` : '',
+      ...(promotion.notes.freeText || []),
+    ].filter(Boolean)
+    const rule = App.normalizeBenefitRule?.({
+      id: genId(),
+      cardId,
+      name: promotion.title || 'Imported promotion',
+      active: true,
+      type,
+      description: descriptionParts.join(' · ').slice(0, 800),
+      suggestedConditions: {
+        categories: categoryIdsFromTexts(promotion.eligibility.categoriesText),
+        merchants: promotion.eligibility.merchantNames || [],
+        channels: (promotion.eligibility.channel || []).filter(v => v !== 'any'),
+        minSpend: promotion.eligibility.minSpendPerTx || null,
+      },
+      validity: {
+        mode: promotion.validity.startDate || promotion.validity.endDate ? 'range' : 'always',
+        startDate: promotion.validity.startDate || '',
+        endDate: promotion.validity.endDate || '',
+      },
+      cashback: {
+        mode: promotion.reward.cashbackFixedAmount && !promotion.reward.cashbackRate ? 'fixed' : 'percent',
+        rate: promotion.reward.cashbackRate || null,
+        fixedAmount: promotion.reward.cashbackFixedAmount || null,
+      },
+      discount: {
+        mode: promotion.reward.discountFixedAmount && !promotion.reward.discountRate ? 'fixed' : 'percent',
+        rate: promotion.reward.discountRate || null,
+        fixedAmount: promotion.reward.discountFixedAmount || null,
+      },
+      points: {
+        bahtPerPoint: promotion.reward.bahtPerPoint || null,
+        multiplier: promotion.reward.pointsMultiplier || 1,
+        multiplierMode: 'total',
+      },
+      limits: {
+        maxRewardAmountPerTx: promotion.limits.maxRewardPerTx || null,
+        maxRewardAmountPerCycle: promotion.limits.maxRewardPerCycle || promotion.limits.maxRewardPerMonth || promotion.limits.maxRewardPerCampaign || null,
+      },
+      allowStacking: true,
+      isBaseRule: false,
+      priority: 20,
+      source: promotion.sourceUrl,
+    }, cardId) || null
+    if (!rule) return []
+    const warnings = [
+      promotion.confidence.overall < 0.7 ? 'ความมั่นใจของการสกัดข้อมูลยังไม่สูง ควรตรวจสอบก่อนบันทึก' : '',
+      !promotion.eligibility.merchantNames.length ? 'ไม่พบร้านค้าที่ร่วมรายการอย่างชัดเจน' : '',
+      !promotion.validity.startDate && !promotion.validity.endDate ? 'ไม่พบช่วงเวลาโปรโมชัน' : '',
+    ].filter(Boolean)
+    const reviewFields = ['reward']
+    if (!promotion.eligibility.merchantNames.length) reviewFields.push('merchant')
+    if (!promotion.validity.startDate && !promotion.validity.endDate) reviewFields.push('validity')
+    if (!rule.suggestedConditions?.categories?.length && promotion.eligibility.categoriesText.length) reviewFields.push('category')
+    return [{
+      rule,
+      sourceUrl: promotion.sourceUrl,
+      campaignTitle: promotion.title,
+      confidence: promotion.confidence.overall,
+      warnings,
+      reviewFields: [...new Set(reviewFields)],
+      diagnostics: promotion.diagnostics || [],
+    }]
+  }
+
+  App._renderBenefitImportPreview = function(preview) {
+    const resultEl = document.getElementById('cc-benefit-import-result')
+    if (!resultEl) return
+    if (!preview) {
+      resultEl.innerHTML = `<div class="card card-pad"><div class="list-item-name">ไม่พบผลวิเคราะห์</div></div>`
+      return
+    }
+    const diagnostics = [...(preview.sourceDocument?.diagnostics || []), ...(preview.diagnostics || [])].filter(Boolean)
+    const doc = preview.sourceDocument || {}
+    const ruleRows = (preview.ruleDrafts || []).map((draft, idx) => {
+      const rule = draft.rule || {}
+      const cond = rule.suggestedConditions || {}
+      const reviewText = (draft.reviewFields || []).join(', ')
+      const diagnosticsText = [...new Set((draft.diagnostics || []).filter(Boolean))].join(' · ')
+      return `<div class="card card-pad" style="margin-top:10px">
+        <div class="list-item-name">${idx + 1}. ${esc(draft.campaignTitle || rule.name || 'Draft rule')}</div>
+        <div class="list-item-sub">ความมั่นใจ ${(Number(draft.confidence || 0) * 100).toFixed(0)}% · ${esc(rule.type || '-')}</div>
+        ${humanizeRuleReward(rule) ? `<div class="list-item-sub">${esc(humanizeRuleReward(rule))}</div>` : ''}
+        ${(cond.merchants || []).length ? `<div class="list-item-sub">ร้าน: ${esc(cond.merchants.slice(0, 12).join(', '))}</div>` : ''}
+        ${(cond.channels || []).length || cond.minSpend || rule.validity?.startDate || rule.validity?.endDate ? `<div class="list-item-sub">${esc([
+          (cond.channels || []).length ? `ช่องทาง ${cond.channels.join(', ')}` : '',
+          cond.minSpend ? `ขั้นต่ำ ${money(cond.minSpend)}` : '',
+          rule.validity?.startDate || rule.validity?.endDate ? `ช่วง ${rule.validity.startDate || '-'} ถึง ${rule.validity.endDate || '-'}` : '',
+        ].filter(Boolean).join(' · '))}</div>` : ''}
+        ${(draft.warnings || []).length ? `<div class="form-hint" style="color:var(--expense);margin-top:6px">${esc(draft.warnings.join(' · '))}</div>` : ''}
+        ${diagnosticsText ? `<div class="form-hint">${esc(diagnosticsText)}</div>` : ''}
+        ${reviewText ? `<div class="form-hint">ควรตรวจ: ${esc(reviewText)}</div>` : ''}
+      </div>`
+    }).join('')
+    const diagHtml = diagnostics.length
+      ? `<div class="card card-pad" style="margin-top:10px"><div class="list-item-name">Diagnostics</div>${diagnostics.map(msg => `<div class="form-hint">${esc(msg)}</div>`).join('')}</div>`
+      : ''
+    resultEl.innerHTML = `
+      <div class="card card-pad">
+        <div class="list-item-name">${esc(doc.title || 'ผลการวิเคราะห์')}</div>
+        <div class="list-item-sub">${esc(doc.normalizedUrl || preview.url || '')}</div>
+        <div class="list-item-sub">เว็บ: ${esc(doc.siteKey || 'unknown')} · วิธีดึง: ${esc(doc.fetchMode || '-')} · สถานะ: ${esc(doc.status || '-')}</div>
+        ${doc.description ? `<div class="list-item-sub" style="margin-top:4px">${esc(doc.description)}</div>` : ''}
+      </div>
+      ${ruleRows || `<div class="card card-pad" style="margin-top:10px"><div class="list-item-name">ยังไม่พร้อมสร้างกฎอัตโนมัติ</div><div class="list-item-sub">ระบบดึงหน้าเว็บได้ แต่ยังไม่สามารถแปลงเป็น draft rule ที่มั่นใจพอ</div></div>`}
+      ${diagHtml}
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button class="btn btn-secondary" onclick="App.openCCBenefitRuleForm('${esc(preview.cardId || '')}')">เพิ่มเอง</button>
+        ${preview.ruleDrafts?.length ? `<button class="btn btn-primary" onclick="App.saveImportedCCBenefitRules('${esc(preview.cardId || '')}')">บันทึก ${preview.ruleDrafts.length} กฎ</button>` : ''}
+      </div>
+      <div class="form-hint" style="margin-top:10px">ก่อนบันทึกควรตรวจร้านค้า ช่วงเวลา และข้อยกเว้นของแต่ละ rule อีกครั้ง</div>`
+  }
+
+  App.analyzeCCBenefitLink = async function(cardId) {
+    const url = String(document.getElementById('cc-benefit-import-url')?.value || '').trim()
+    const resultEl = document.getElementById('cc-benefit-import-result')
+    if (!url) { notify('กรุณาใส่ลิงก์ก่อน', 'error'); return }
+    if (resultEl) resultEl.innerHTML = `<div class="card card-pad">กำลังวิเคราะห์ลิงก์...</div>`
+    try {
+      const sourceDocument = await App._fetchBenefitSourceDocument(url)
+      const parsed = App._parseBenefitSourceDocument(sourceDocument)
+      const promotions = Array.isArray(parsed.promotions) ? parsed.promotions : []
+      const ruleDrafts = promotions.flatMap(promotion => App._promotionDraftToRuleDrafts(cardId, promotion))
+      App._ccBenefitImportPreview = {
+        cardId,
+        url: sourceDocument.normalizedUrl,
+        sourceDocument,
+        promotions,
+        ruleDrafts,
+        diagnostics: parsed.diagnostics || [],
+      }
+      App._renderBenefitImportPreview(App._ccBenefitImportPreview)
+    } catch (err) {
+      if (resultEl) resultEl.innerHTML = `<div class="card card-pad"><div class="list-item-name">วิเคราะห์ไม่สำเร็จ</div><div class="list-item-sub">${esc(err?.message || 'ไม่สามารถอ่านหน้าเว็บไซต์ได้')}</div></div>`
+    }
+  }
+
+  function buildImportedRuleKey(cardId, rule) {
+    return [
+      String(cardId || ''),
+      String(rule?.source || '').trim(),
+      normalizeCompareText(rule?.name || ''),
+      String(rule?.type || ''),
+    ].join('|')
+  }
+
+  App.saveImportedCCBenefitRules = function(cardId) {
+    const preview = App._ccBenefitImportPreview
+    if (!preview || String(preview.cardId || '') !== String(cardId || '') || !Array.isArray(preview.ruleDrafts) || !preview.ruleDrafts.length) {
+      notify('ยังไม่มีผลวิเคราะห์ให้บันทึก', 'warn')
+      return
+    }
+    App.ensureCCBenefitRulesState?.()
+    const existingByKey = new Map((S.ccBenefitRules || []).map(rule => [buildImportedRuleKey(cardId, rule), rule]))
+    let created = 0
+    let updated = 0
+    preview.ruleDrafts.forEach(draft => {
+      const normalized = App.normalizeBenefitRule?.({ ...(draft.rule || {}), id: draft.rule?.id || genId(), cardId }, cardId) || null
+      if (!normalized) return
+      const key = buildImportedRuleKey(cardId, normalized)
+      const existing = existingByKey.get(key)
+      if (existing) {
+        const idx = (S.ccBenefitRules || []).findIndex(rule => rule.id === existing.id)
+        if (idx >= 0) {
+          S.ccBenefitRules[idx] = { ...existing, ...normalized, id: existing.id }
+          updated++
+        }
+      } else {
+        normalized.id = genId()
+        S.ccBenefitRules.push(normalized)
+        created++
+      }
+    })
+    persist()
+    document.getElementById('cc-benefit-import-dialog')?.remove()
+    App._ccBenefitImportPreview = null
+    App.openCCBenefitScreen(cardId)
+    notify(`นำเข้าสิทธิประโยชน์แล้ว · เพิ่ม ${created} · อัปเดต ${updated}`, 'success')
   }
 
   App.toggleCCBenefitRule = function(ruleId) {
@@ -8660,6 +9459,197 @@ App._pickMerchant = function(name, opts = {}) {
     return Number.isFinite(n) && n > 0 ? n : fallback
   }
 
+  function normalizeCompareText(value = '') {
+    return String(value || '')
+      .toLowerCase()
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  function canonicalMerchantText(value = '') {
+    return normalizeCompareText(value)
+      .replace(/\b(co|company|ltd|limited|plc|public company limited|inc|corporation|corp|thailand|thai)\b/g, ' ')
+      .replace(/[()'".,\/\\\-_:;&+]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  function merchantAliasVariants(value = '') {
+    const normalized = canonicalMerchantText(value)
+    if (!normalized) return []
+    const compact = normalized.replace(/\s+/g, '')
+    const variants = new Set([normalized, compact])
+    const aliasPairs = [
+      ['7 11', '7 eleven'],
+      ['7eleven', '7 eleven'],
+      ['grabfood', 'grab food'],
+      ['grabmart', 'grab mart'],
+      ['lineman', 'line man'],
+      ['food panda', 'foodpanda'],
+      ['shopeefood', 'shopee food'],
+      ['lazada', 'lazada thailand'],
+    ]
+    aliasPairs.forEach(([a, b]) => {
+      const aNorm = canonicalMerchantText(a)
+      const bNorm = canonicalMerchantText(b)
+      if (normalized === aNorm || compact === aNorm.replace(/\s+/g, '')) variants.add(bNorm)
+      if (normalized === bNorm || compact === bNorm.replace(/\s+/g, '')) variants.add(aNorm)
+    })
+    return [...variants].filter(Boolean)
+  }
+
+  function merchantTextsMatch(left = '', right = '') {
+    const leftVariants = merchantAliasVariants(left)
+    const rightVariants = merchantAliasVariants(right)
+    if (!leftVariants.length || !rightVariants.length) return false
+    return leftVariants.some(lv => rightVariants.some(rv => {
+      if (lv === rv) return true
+      if (lv.length >= 4 && rv.includes(lv)) return true
+      if (rv.length >= 4 && lv.includes(rv)) return true
+      return false
+    }))
+  }
+
+  function expandRuleSubsets(rules = []) {
+    const list = (rules || []).filter(Boolean)
+    const maxRules = 12
+    const bounded = list.slice(0, maxRules)
+    const subsets = []
+    const total = 1 << bounded.length
+    for (let mask = 1; mask < total; mask++) {
+      const subset = []
+      for (let idx = 0; idx < bounded.length; idx++) {
+        if (mask & (1 << idx)) subset.push(bounded[idx])
+      }
+      subsets.push(subset)
+    }
+    return subsets
+  }
+
+  function getStackingWarnings(rules = []) {
+    const activeRules = (rules || []).filter(Boolean)
+    if (activeRules.length <= 1) return []
+    const exclusiveRules = activeRules.filter(rule => rule.allowStacking === false)
+    if (!exclusiveRules.length) return []
+    if (exclusiveRules.length === 1) {
+      return [`${exclusiveRules[0].name}: โปรดตรวจสอบว่าใช้ร่วมกับสิทธิ์อื่นได้จริง`]
+    }
+    return [`มี ${exclusiveRules.length} สิทธิ์ที่ระบุว่าไม่ใช้ร่วมกัน โปรดตรวจสอบเงื่อนไขอีกครั้ง`]
+  }
+
+  function inferCategoryIdsFromText(text = '') {
+    const hay = normalizeCompareText(text)
+    if (!hay) return []
+    return (S.categories?.expense || [])
+      .filter(cat => {
+        const label = normalizeCompareText(cat?.label || '')
+        return label && hay.includes(label)
+      })
+      .map(cat => cat.id)
+  }
+
+  function inferMerchantNamesFromText(text = '') {
+    const hay = normalizeCompareText(text)
+    if (!hay) return []
+    return (S.merchants || [])
+      .filter(merchant => {
+        const name = normalizeCompareText(merchant?.name || '')
+        return name && hay.includes(name)
+      })
+      .map(merchant => merchant.name)
+  }
+
+  function inferChannelsFromText(text = '') {
+    const hay = normalizeCompareText(text)
+    const channels = []
+    if (/(online|ออนไลน์|app|application|website|web site|e-commerce|ช้อปออนไลน์|ผ่านแอป|ผ่านเว็บไซต์)/.test(hay)) channels.push('online')
+    if (/(offline|หน้าร้าน|สาขา|in-store|in store|onsite|ออฟไลน์)/.test(hay)) channels.push('offline')
+    return [...new Set(channels)]
+  }
+
+  function extractMinSpendFromText(text = '') {
+    const patterns = [
+      /ขั้นต่ำ\s*([0-9][0-9,]*(?:\.\d+)?)\s*บาท/i,
+      /เมื่อ(?:มียอด|ใช้จ่าย|ชำระ)\s*(?:ตั้งแต่|ครบ)?\s*([0-9][0-9,]*(?:\.\d+)?)\s*บาท/i,
+      /ยอด(?:ซื้อ|ใช้จ่าย)?ขั้นต่ำ\s*([0-9][0-9,]*(?:\.\d+)?)\s*บาท/i,
+    ]
+    for (const pattern of patterns) {
+      const match = String(text || '').match(pattern)
+      if (match?.[1]) return Number(match[1].replace(/,/g, '')) || null
+    }
+    return null
+  }
+
+  function parseDateToISO(raw = '', fallbackYear = new Date().getFullYear()) {
+    const value = String(raw || '').trim()
+    if (!value) return ''
+    let match = value.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+    if (match) {
+      const year = Number(match[1])
+      const month = Number(match[2])
+      const day = Number(match[3])
+      if (year && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return `${String(year).padStart(4,'0')}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+      }
+    }
+    match = value.match(/(\d{1,2})[-/.](\d{1,2})(?:[-/.](\d{2,4}))?/)
+    if (match) {
+      const day = Number(match[1])
+      const month = Number(match[2])
+      let year = match[3] ? Number(match[3]) : Number(fallbackYear)
+      if (year > 2400) year -= 543
+      if (year < 100) year += 2000
+      if (year && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return `${String(year).padStart(4,'0')}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+      }
+    }
+    return ''
+  }
+
+  function extractValidityFromText(text = '') {
+    const src = String(text || '')
+    const fullRange = src.match(/(?:ตั้งแต่|ระหว่าง)\s*([0-9]{1,2}[\/.-][0-9]{1,2}(?:[\/.-][0-9]{2,4})?|[0-9]{4}[\/.-][0-9]{1,2}[\/.-][0-9]{1,2})\s*(?:ถึง|-|–)\s*([0-9]{1,2}[\/.-][0-9]{1,2}(?:[\/.-][0-9]{2,4})?|[0-9]{4}[\/.-][0-9]{1,2}[\/.-][0-9]{1,2})/i)
+    if (!fullRange) return { mode: 'always', startDate: '', endDate: '' }
+    const startDate = parseDateToISO(fullRange[1])
+    const endDate = parseDateToISO(fullRange[2])
+    if (!startDate && !endDate) return { mode: 'always', startDate: '', endDate: '' }
+    return { mode: 'range', startDate, endDate }
+  }
+
+  function getRuleEligibility(txDraft = {}, rule = {}) {
+    const cond = rule.suggestedConditions || {}
+    const categories = Array.isArray(cond.categories) ? cond.categories : []
+    const merchants = Array.isArray(cond.merchants) ? cond.merchants : []
+    const channels = Array.isArray(cond.channels) ? cond.channels : []
+    const amount = Number(txDraft.amount || 0)
+    const categoryId = String(txDraft.categoryId || '').trim()
+    const merchant = normalizeCompareText(txDraft.merchant || '')
+    const channel = normalizeCompareText(txDraft.channel || '')
+    const date = String(txDraft.date || today())
+    const categoryMatch = !categories.length || categories.includes(categoryId)
+    const merchantMatch = !merchants.length || merchants.some(v => merchantTextsMatch(v, merchant))
+    const channelMatch = !channels.length || channels.includes('any') || (!!channel && channels.includes(channel))
+    const minSpend = Number(cond.minSpend || 0)
+    const minSpendMatch = !minSpend || amount >= minSpend
+    const timeMatch = ruleIsInActiveWindow(rule, date)
+    const reasons = []
+    if (!timeMatch) reasons.push('อยู่นอกช่วงวันที่ของกฎนี้')
+    if (!categoryMatch) reasons.push('หมวดหมู่ไม่ตรงเงื่อนไข')
+    if (!merchantMatch) reasons.push('ร้านค้าไม่เข้าร่วมเงื่อนไข')
+    if (!channelMatch) reasons.push('ช่องทางไม่ตรงเงื่อนไข')
+    if (!minSpendMatch) reasons.push(`ไม่ถึงยอดขั้นต่ำ ${money(minSpend)}`)
+    return {
+      matched: timeMatch && categoryMatch && merchantMatch && channelMatch && minSpendMatch,
+      reasons,
+      categoryMatch,
+      merchantMatch,
+      channelMatch,
+      minSpendMatch,
+      timeMatch,
+    }
+  }
+
   function normalizeBenefitRule(rule = {}, cardId = '') {
     const suggestedConditions = rule.suggestedConditions || {}
     const cashback = rule.cashback || {}
@@ -8825,25 +9815,16 @@ App._pickMerchant = function(name, opts = {}) {
   App.getSuggestedBenefitRules = function(txDraft = {}) {
     ensureCCBenefitRulesState()
     const cardId = String(txDraft.walletId || '')
-    const amount = Number(txDraft.amount || 0)
-    const merchant = String(txDraft.merchant || '').trim().toLowerCase()
-    const categoryId = String(txDraft.categoryId || '').trim()
-    const channel = String(txDraft.channel || '').trim().toLowerCase()
     return App.getCreditCardBenefitRules(cardId)
       .map(rule => {
-        const cond = rule.suggestedConditions || {}
-        const categories = Array.isArray(cond.categories) ? cond.categories : []
-        const merchants = Array.isArray(cond.merchants) ? cond.merchants : []
-        const channels = Array.isArray(cond.channels) ? cond.channels : []
-        const minSpend = Number(cond.minSpend || 0)
-        const categoryMatch = !categories.length || categories.includes(categoryId)
-        const merchantMatch = !merchants.length || merchants.some(v => String(v || '').trim().toLowerCase() === merchant)
-        const channelMatch = !channels.length || channels.includes('any') || (!!channel && channels.includes(channel))
-        const minSpendMatch = !minSpend || amount >= minSpend
-        const timeMatch = ruleIsInActiveWindow(rule, txDraft.date || today())
-        const suggested = !!rule.active && timeMatch && categoryMatch && merchantMatch && channelMatch && minSpendMatch
-        const score = (suggested ? 100 : 0) + (rule.isBaseRule ? 15 : 0) + Number(rule.priority || 0)
-        return { ...rule, suggested, timeMatch, suggestionScore: score }
+        const eligibility = getRuleEligibility(txDraft, rule)
+        const specificity = (rule.suggestedConditions?.categories?.length || 0)
+          + (rule.suggestedConditions?.merchants?.length || 0)
+          + (rule.suggestedConditions?.channels?.length || 0)
+          + (rule.suggestedConditions?.minSpend ? 1 : 0)
+        const suggested = !!rule.active && eligibility.matched
+        const score = (suggested ? 100 : 0) + (rule.isBaseRule ? 15 : 0) + (specificity * 3) + Number(rule.priority || 0)
+        return { ...rule, suggested, timeMatch: eligibility.timeMatch, eligibility, suggestionScore: score }
       })
       .sort((a, b) => Number(b.suggested) - Number(a.suggested) || Number(b.suggestionScore || 0) - Number(a.suggestionScore || 0) || String(a.name || '').localeCompare(String(b.name || '')))
   }
@@ -8877,22 +9858,15 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.applyBenefitRule = function(txDraft, rule, cycleUsage = {}) {
     const amount = Math.max(0, Number(txDraft?.amount || 0))
-    const cond = rule.suggestedConditions || {}
     const limits = rule.limits || {}
     const cashbackCfg = rule.cashback || {}
     const pointsCfg = rule.points || {}
-    const minSpend = Number(cond.minSpend || 0)
+    const eligibility = getRuleEligibility(txDraft, rule)
     let eligibleAmount = amount
     let capApplied = false
     const capReasons = []
-    const warnings = []
-    const txDate = String(txDraft?.date || today())
-    if (!ruleIsInActiveWindow(rule, txDate)) {
-      warnings.push('อยู่นอกช่วงวันที่ของกฎนี้')
-      eligibleAmount = 0
-    }
-    if (minSpend && amount < minSpend) {
-      warnings.push(`ไม่ถึงยอดขั้นต่ำ ${money(minSpend)}`)
+    const warnings = [...(eligibility.reasons || [])]
+    if (!eligibility.matched) {
       eligibleAmount = 0
     }
     if (limits.maxEligibleSpendPerTx > 0 && eligibleAmount > limits.maxEligibleSpendPerTx) {
@@ -8996,7 +9970,56 @@ App._pickMerchant = function(name, opts = {}) {
         ? Math.max(0, Number(limits.maxRewardAmountPerCycle || 0) - Number(rule.type === 'points' ? cycleUsage.pointsUsedBefore : rule.type === 'discount' ? cycleUsage.discountUsedBefore : cycleUsage.cashbackUsedBefore || 0))
         : null,
       warnings,
+      matched: eligibility.matched,
     }
+  }
+
+  App.getOptimalBenefitSelection = function(txDraft = {}) {
+    ensureCCBenefitRulesState()
+    const card = walletById(txDraft.walletId)
+    if (!card || card.type !== 'credit' || txDraft.type !== 'expense') {
+      return { selectedRuleIds: [], estimate: { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] }, applicableRules: [], rankingScore: 0 }
+    }
+    const applicableRules = (App.getSuggestedBenefitRules(txDraft) || []).filter(rule => rule.suggested)
+    if (!applicableRules.length) {
+      return { selectedRuleIds: [], estimate: { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] }, applicableRules: [], rankingScore: 0 }
+    }
+    const estimateFor = ids => App.calculateSelectedRewardEstimate?.(txDraft, ids) || { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] }
+    const scoreFor = estimate => Number(estimate.cashback || 0) + Number(estimate.discount || 0) + (Number(estimate.points || 0) * 0.001)
+
+    const candidates = expandRuleSubsets(applicableRules)
+      .map(subset => {
+        const ids = subset.map(rule => rule.id)
+        return { ids, estimate: estimateFor(ids) }
+      })
+    const best = candidates
+      .map(candidate => ({ ...candidate, score: scoreFor(candidate.estimate) }))
+      .sort((a, b) => Number(b.score || 0) - Number(a.score || 0) || b.ids.length - a.ids.length)[0]
+    return {
+      selectedRuleIds: best?.ids || [],
+      estimate: best?.estimate || { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] },
+      applicableRules,
+      rankingScore: Number(best?.score || 0),
+    }
+  }
+
+  App.applyRecommendedCardSelection = function(cardId, ruleIds = []) {
+    S.tx ||= {}
+    S.tx.walletId = cardId
+    S.tx.rewardRuleIds = Array.isArray(ruleIds) ? [...ruleIds] : []
+    const draft = {
+      id: S.editingTxId || '',
+      type: 'expense',
+      amount: Number(S.tx.amount || 0),
+      walletId: cardId || '',
+      categoryId: S.tx.categoryId || '',
+      merchant: S.tx.merchant || '',
+      note: S.tx.note || '',
+      date: S.tx.date || today(),
+      channel: S.tx.channel || '',
+    }
+    S.tx.rewardEstimate = App.calculateSelectedRewardEstimate?.(draft, S.tx.rewardRuleIds) || null
+    App._renderAddTxDetail?.()
   }
 
   App.calculateSelectedRewardEstimate = function(txDraft = {}, selectedRuleIds = []) {
@@ -9020,9 +10043,7 @@ App._pickMerchant = function(name, opts = {}) {
       points += Number(result.points || 0)
       ;(result.warnings || []).forEach(msg => warnings.push(`${rule.name}: ${msg}`))
     })
-    const cashbackRules = rules.filter(rule => (rule.type === 'cashback' || rule.type === 'both'))
-    const nonStackable = cashbackRules.filter(rule => rule.allowStacking === false)
-    if (nonStackable.length > 1) warnings.push('เลือก cashback มากกว่า 1 สิทธิ์ โปรดตรวจสอบว่าใช้ร่วมกันได้จริง')
+    getStackingWarnings(rules).forEach(msg => warnings.push(msg))
     return {
       cashback: Math.round(cashback * 100) / 100,
       discount: Math.round(discount * 100) / 100,
@@ -11185,32 +12206,47 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const estimates = creditCards.map(card => {
       try {
         const draft = { ...draftBase, walletId: card.id }
-        const rules = App.getSuggestedBenefitRules?.(draft) || []
-        const ruleIds = rules.map(r => r.id)
-        const est = App.calculateSelectedRewardEstimate?.(draft, ruleIds) || { cashback:0, points:0, discount:0 }
-        return { card, est, value: Number(est.cashback||0) + Number(est.discount||0), pts: Number(est.points||0) }
+        const optimal = App.getOptimalBenefitSelection?.(draft) || { selectedRuleIds: [], estimate: { cashback:0, points:0, discount:0 }, applicableRules: [], rankingScore: 0 }
+        const est = optimal.estimate || { cashback:0, points:0, discount:0 }
+        return {
+          card,
+          est,
+          applicableRules: optimal.applicableRules || [],
+          selectedRuleIds: optimal.selectedRuleIds || [],
+          value: Number(est.cashback||0) + Number(est.discount||0),
+          pts: Number(est.points||0),
+          score: Number(optimal.rankingScore || 0),
+        }
       } catch(_) {
-        return { card, est:{cashback:0,points:0,discount:0}, value:0, pts:0 }
+        return { card, est:{cashback:0,points:0,discount:0}, applicableRules: [], selectedRuleIds: [], value:0, pts:0, score:0 }
       }
-    }).sort((a,b) => (b.value+b.pts*0.001) - (a.value+a.pts*0.001))
+    })
+      .filter(item => item.applicableRules?.length && (item.value > 0 || item.pts > 0))
+      .sort((a,b) => Number(b.score || 0) - Number(a.score || 0))
+      .slice(0, 3)
 
-    if (!estimates.some(e => e.value > 0 || e.pts > 0)) return
+    if (!estimates.length) return
 
     const currentId = S.tx.walletId
     const rows = estimates.map((item, idx) => {
       const isSel = item.card.id === currentId
       const isBest = idx === 0 && (item.value > 0 || item.pts > 0)
-      const parts = [
+      const ruleNames = (item.applicableRules || [])
+        .filter(rule => (item.selectedRuleIds || []).includes(rule.id))
+        .slice(0, 2)
+        .map(rule => rule.name)
+      const rewardParts = [
         item.est.cashback > 0 ? `เงินคืน ฿${Number(item.est.cashback).toFixed(2)}` : '',
         item.est.discount  > 0 ? `ส่วนลด ฿${Number(item.est.discount).toFixed(2)}`  : '',
         item.est.points    > 0 ? `${Number(item.est.points).toLocaleString('en-US')} คะแนน` : '',
-      ].filter(Boolean).join(' · ')
-      const rewardHtml = parts
-        ? `<span style="font-size:11px;color:var(--income)">${esc(parts)}</span>`
+      ].filter(Boolean)
+      const detailText = [...rewardParts, ...ruleNames].slice(0, 2).join(' · ')
+      const rewardHtml = detailText
+        ? `<span style="font-size:11px;color:var(--income);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(detailText)}</span>`
         : `<span style="font-size:11px;color:var(--muted)">ไม่มีสิทธิประโยชน์</span>`
       const bestBadge = isBest ? `<span style="font-size:9px;font-weight:700;background:var(--income);color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px">ดีสุด</span>` : ''
       return `<button type="button"
-        onclick="App._txField('walletId','${esc(item.card.id)}');App._renderAddTxDetail()"
+        onclick='App.applyRecommendedCardSelection(${JSON.stringify(item.card.id)}, ${JSON.stringify(item.selectedRuleIds || [])})'
         style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:10px;border:1.5px solid ${isSel?'var(--primary)':'var(--border)'};background:${isSel?'color-mix(in srgb,var(--primary) 8%,transparent)':'transparent'};text-align:left;cursor:pointer;width:100%;margin-bottom:0">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">${esc(item.card.icon||'💳')}</span>
@@ -11224,7 +12260,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }).join('')
 
     const widget = `<div class="card-picker-widget" style="padding:12px 14px;background:var(--card);border-radius:14px;border:1px solid var(--border);margin-bottom:0">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">ถือบัตรไหนดีสุด?</div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">ใข้บัตรไหนดีสุด?</div>
       <div style="display:flex;flex-direction:column;gap:6px">${rows}</div>
     </div>`
 

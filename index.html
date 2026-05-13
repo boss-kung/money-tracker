@@ -9,7 +9,6 @@
   <meta name="apple-mobile-web-app-title" content="Money Tracker">
   <meta name="description" content="ติดตามการเงินส่วนตัว">
   <title>Money Tracker 💰</title>
-  <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style_v2.css?v=2026.05.13-line-seed2">
   <style>
     /* Active tab dot indicator */
@@ -174,6 +173,14 @@
   // Optional but recommended for reliable Thai gold-price sync.
   // Paste your Google Apps Script Web App URL here after deploying the Gold Traders proxy.
   window.MT_GOLD_PROXY_URL = "";
+
+  // Avoid Chrome manifest CORS errors when the app is opened via file://
+  if (location.protocol !== 'file:') {
+    const manifestLink = document.createElement('link')
+    manifestLink.rel = 'manifest'
+    manifestLink.href = 'manifest.json'
+    document.head.appendChild(manifestLink)
+  }
 </script>
 <script src="app_v2.js?v=2026.05.13-line-seed2"></script>
 </body>
