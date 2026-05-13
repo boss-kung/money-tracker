@@ -2144,6 +2144,18 @@ App.render();
     S.transactions.filter(t => t.type === type && t.categoryId).forEach(t => usage[t.categoryId] = (usage[t.categoryId] || 0) + 1)
     return [...cats].sort((a,b) => (usage[b.id] || 0) - (usage[a.id] || 0))
   }
+  App.getBenefitChannelOptions = function() {
+    return [
+      ['', 'ไม่ระบุ'],
+      ['online', 'ออนไลน์'],
+      ['offline', 'หน้าร้าน / ออฟไลน์'],
+      ['truemoney', 'TrueMoney / Wallet ผูกบัตร'],
+      ['line_pay', 'LINE Pay'],
+      ['shopeepay', 'ShopeePay'],
+      ['rabbit_line_pay', 'Rabbit LINE Pay'],
+      ['qr_payment', 'QR / Scan to Pay'],
+    ]
+  }
   App.showAllTxCategories = function() { S.txShowAllCats = true; App._renderAddTxDetail() }
   App.hideAllTxCategories = function() { S.txShowAllCats = false; App._renderAddTxDetail() }
 
@@ -2187,7 +2199,7 @@ App.render();
         <div class="add-detail-scroll">
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div class="cat-grid cat-grid-compact" id="cat-grid">${shownCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}${hasMore ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.showAllTxCategories()"><span class="cat-icon">⋯</span><span>เพิ่มเติม</span></button>` : ''}${S.txShowAllCats && allCats.length > 5 ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.hideAllTxCategories()"><span class="cat-icon">⌃</span><span>ย่อ</span></button>` : ''}</div></div>` : ''}
-          ${isExpense ? `<div class="form-group"><label class="form-label">ช่องทางการใช้จ่าย</label><select class="form-input" id="tx-channel" onchange="App._txField('channel',this.value);App._renderAddTxDetail()"><option value=""${!S.tx.channel ? ' selected' : ''}>ไม่ระบุ</option><option value="online"${S.tx.channel === 'online' ? ' selected' : ''}>ออนไลน์</option><option value="offline"${S.tx.channel === 'offline' ? ' selected' : ''}>หน้าร้าน / ออฟไลน์</option></select></div>` : ''}
+          ${isExpense ? `<div class="form-group"><label class="form-label">ช่องทางการใช้จ่าย</label><select class="form-input" id="tx-channel" onchange="App._txField('channel',this.value);App._renderAddTxDetail()">${(App.getBenefitChannelOptions?.() || [['','ไม่ระบุ'],['online','ออนไลน์'],['offline','หน้าร้าน / ออฟไลน์']]).map(([value,label]) => `<option value="${esc(value)}"${S.tx.channel === value ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></div>` : ''}
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);App._renderAddTxDetail()">${walletOptions}</select></div>
           ${type === 'transfer'
   ? `<div class="form-group">
@@ -2246,7 +2258,7 @@ App.render();
               }).join('')
               const _warnings = (_estimate.warnings || []).map(msg => `<div class="form-hint" style="color:var(--expense)">${esc(msg)}</div>`).join('')
               const _caps = (_estimate.rules || [])
-                .filter(row => row.capApplied || row.cycleRewardRemainingBefore != null)
+                .filter(row => row.capApplied || row.cycleRewardRemainingBefore != null || row.triggerMode === 'cycle_spend_threshold')
                 .map(row => {
                   const _text = App.buildBenefitCapAppliedText?.(row) || ''
                   return _text ? `<div class="form-hint">${esc(row.ruleName)}: ${esc(_text)}</div>` : ''
@@ -5014,6 +5026,7 @@ App._pickMerchant = function(name, opts = {}) {
           <div class="list-item-sub" style="margin-top:4px">
             ${rule.cashback?.rate ? `เงินคืน ${rule.cashback.rate}% ` : ''}${rule.cashback?.fixedAmount ? `เงินคืนคงที่ ${money(rule.cashback.fixedAmount)} ` : ''}${rule.discount?.rate ? `ส่วนลด ${rule.discount.rate}% ` : ''}${rule.discount?.fixedAmount ? `ส่วนลดคงที่ ${money(rule.discount.fixedAmount)} ` : ''}${rule.points?.bahtPerPoint ? `· ${rule.points.bahtPerPoint} บาท = 1 คะแนน x${rule.points.multiplier || 1}` : ''}
           </div>
+          ${rule.rewardTrigger?.mode === 'cycle_spend_threshold' ? `<div class="list-item-sub" style="margin-top:4px">ยอดสะสมครบ ${money(rule.rewardTrigger.thresholdAmount)} · ${rule.rewardTrigger.grantMode === 'every_threshold' ? 'ให้ทุกครั้งที่ครบยอด' : 'ให้ครั้งเดียวต่อรอบ'}</div>` : ''}
           <div class="flex-row" style="margin-top:10px">
             <button class="btn btn-outline" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">แก้ไข</button>
             <button class="btn btn-outline" onclick="App.openCCBenefitRuleCopyDialog('${esc(cardId)}','${esc(rule.id)}')">คัดลอก</button>
@@ -5035,6 +5048,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (template === 'cashback_targeted') return { ...base, name: 'เงินคืนตามหมวด', type: 'cashback', cashback: { mode: 'percent', rate: 10 }, allowStacking: false }
     if (template === 'points_targeted') return { ...base, name: 'คะแนนพิเศษ', type: 'points', points: { bahtPerPoint: 25, multiplier: 5, multiplierMode: 'total' }, allowStacking: true }
     if (template === 'instant_discount') return { ...base, name: 'ส่วนลดอัตโนมัติทันที', type: 'discount', description: 'ลดทันทีตั้งแต่ตอนตัดบัตร', discount: { mode: 'percent', rate: 5, fixedAmount: null }, allowStacking: false }
+    if (template === 'cycle_cashback') return { ...base, name: 'เงินคืนยอดสะสมรายเดือน', type: 'cashback', description: 'สะสมยอดใช้จ่ายผ่านช่องทางที่กำหนด ครบยอดแล้วรับเงินคืน', suggestedConditions: { channels: ['truemoney'], minSpend: null }, validity: { statementCycleHint: 'calendar_month' }, cashback: { mode: 'fixed', fixedAmount: 100 }, rewardTrigger: { mode: 'cycle_spend_threshold', thresholdAmount: 2000, grantMode: 'once_per_cycle' }, allowStacking: false }
     return { ...base, name: 'เงินคืนพื้นฐาน', type: 'cashback', description: 'สิทธิ์พื้นฐานของบัตร', cashback: { mode: 'percent', rate: 1 }, allowStacking: false, isBaseRule: true, priority: 10 }
   }
 
@@ -5074,13 +5088,16 @@ App._pickMerchant = function(name, opts = {}) {
     const rule = App.normalizeBenefitRule?.(current || App._benefitRuleTemplate(template, cardId), cardId) || (current || App._benefitRuleTemplate(template, cardId))
     const categoryOptions = (S.categories?.expense || []).map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('')
     const merchantOptions = (S.merchants || []).map(m => `<option value="${esc(m.name)}">`).join('')
+    const channelOptions = (App.getBenefitChannelOptions?.() || [['', 'ทุกช่องทาง'], ['online', 'ออนไลน์'], ['offline', 'หน้าร้าน / ออฟไลน์']])
+      .map(([value, label]) => `<option value="${esc(value)}"${(rule.suggestedConditions.channels || [])[0] === value ? ' selected' : ''}>${esc(value ? label : 'ทุกช่องทาง')}</option>`)
+      .join('')
     const v = n => n ?? ''
     const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCBenefitScreen('${esc(cardId)}')">←</button><h2>${ruleId ? 'แก้ไขกติกาสิทธิประโยชน์' : 'เพิ่มกติกาสิทธิประโยชน์'}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefitRule('${esc(cardId)}','${esc(ruleId)}')" style="width:auto">บันทึก</button></div>
       <div class="sub-scroll">
         <div class="form-hint" style="margin-bottom:10px">เลือกประเภทสิทธิ์ก่อน แล้วระบบจะแสดงเฉพาะส่วนที่เกี่ยวข้องให้</div>
         ${accordion('ccbr-basic-acc', 'ข้อมูลพื้นฐาน', `
-          <div class="form-group"><label class="form-label">รูปแบบตั้งต้น</label><div class="chip-row"><button type="button" class="chip mini${template==='base_cashback' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','base_cashback')">เงินคืนพื้นฐาน</button><button type="button" class="chip mini${template==='base_points' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','base_points')">คะแนนพื้นฐาน</button><button type="button" class="chip mini${template==='cashback_targeted' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','cashback_targeted')">เงินคืนตามเงื่อนไข</button><button type="button" class="chip mini${template==='points_targeted' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','points_targeted')">คะแนนพิเศษ</button><button type="button" class="chip mini${template==='instant_discount' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','instant_discount')">ส่วนลดทันที</button></div></div>
+          <div class="form-group"><label class="form-label">รูปแบบตั้งต้น</label><div class="chip-row"><button type="button" class="chip mini${template==='base_cashback' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','base_cashback')">เงินคืนพื้นฐาน</button><button type="button" class="chip mini${template==='base_points' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','base_points')">คะแนนพื้นฐาน</button><button type="button" class="chip mini${template==='cashback_targeted' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','cashback_targeted')">เงินคืนตามเงื่อนไข</button><button type="button" class="chip mini${template==='cycle_cashback' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','cycle_cashback')">เงินคืนยอดสะสม</button><button type="button" class="chip mini${template==='points_targeted' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','points_targeted')">คะแนนพิเศษ</button><button type="button" class="chip mini${template==='instant_discount' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','instant_discount')">ส่วนลดทันที</button></div></div>
           <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input class="form-input" id="ccbr-name" value="${esc(rule.name)}" placeholder="เช่น Shopee 10%, คะแนนพื้นฐาน, Online 5X"></div>
           <div class="tx-reward-toggle-row"><span>เปิดใช้งาน</span><button type="button" id="ccbr-active" class="toggle${rule.active ? ' on' : ''}" onclick="this.classList.toggle('on')"></button></div>
           <div class="form-group"><label class="form-label">ประเภทสิทธิ์</label><select class="form-input" id="ccbr-type" onchange="App._syncCCBenefitRuleFormSections()"><option value="cashback"${rule.type==='cashback'?' selected':''}>เงินคืน</option><option value="points"${rule.type==='points'?' selected':''}>คะแนน</option><option value="both"${rule.type==='both'?' selected':''}>ทั้งเงินคืนและคะแนน</option><option value="discount"${rule.type==='discount'?' selected':''}>ส่วนลดอัตโนมัติทันที</option></select></div>
@@ -5099,9 +5116,15 @@ App._pickMerchant = function(name, opts = {}) {
           <div class="form-hint" style="margin-bottom:8px">ส่วนนี้มีไว้ช่วยจัดลำดับคำแนะนำตอนบันทึกรายการ ผู้ใช้ยังต้องกดเลือกเอง</div>
           <div class="form-group"><label class="form-label">หมวดหมู่ (คั่นด้วย comma)</label><input class="form-input" id="ccbr-categories" list="ccbr-categories-list" value="${esc((rule.suggestedConditions.categories || []).join(', '))}" placeholder="เช่น shopping, food"><datalist id="ccbr-categories-list">${categoryOptions}</datalist></div>
           <div class="form-group"><label class="form-label">ร้านค้า (คั่นด้วย comma)</label><input class="form-input" id="ccbr-merchants" list="ccbr-merchants-list" value="${esc((rule.suggestedConditions.merchants || []).join(', '))}" placeholder="เช่น Shopee, Grab"><datalist id="ccbr-merchants-list">${merchantOptions}</datalist></div>
-          <div class="form-group"><label class="form-label">ช่องทาง</label><select class="form-input" id="ccbr-channel"><option value="">ทุกช่องทาง</option><option value="online"${(rule.suggestedConditions.channels || []).includes('online') ? ' selected' : ''}>ออนไลน์</option><option value="offline"${(rule.suggestedConditions.channels || []).includes('offline') ? ' selected' : ''}>หน้าร้าน / ออฟไลน์</option></select></div>
+          <div class="form-group"><label class="form-label">ช่องทาง</label><select class="form-input" id="ccbr-channel">${channelOptions}</select></div>
           <div class="form-group"><label class="form-label">ขั้นต่ำต่อรายการ</label><input class="form-input" type="number" step="0.01" id="ccbr-minSpend" value="${esc(v(rule.suggestedConditions.minSpend))}"></div>
         `)}
+        ${accordion('ccbr-trigger-acc', 'ยอดสะสมเพื่อปลดเงินคืน', `
+          <div class="form-hint" style="margin-bottom:8px">ใช้กับโปรโมชันประเภทสะสมยอดทั้งรอบ เช่น ครบ 2,000 บาท รับเงินคืน 100 บาท</div>
+          <div class="form-group"><label class="form-label">รูปแบบการปลดสิทธิ์</label><select class="form-input" id="ccbr-trigger-mode"><option value="none"${(rule.rewardTrigger?.mode || 'none') === 'none' ? ' selected' : ''}>ไม่ใช้ยอดสะสม</option><option value="cycle_spend_threshold"${rule.rewardTrigger?.mode === 'cycle_spend_threshold' ? ' selected' : ''}>ครบยอดสะสมในรอบ</option></select></div>
+          <div class="form-group"><label class="form-label">ยอดสะสมที่ต้องครบ (บาท)</label><input class="form-input" type="number" step="0.01" id="ccbr-trigger-threshold" value="${esc(v(rule.rewardTrigger?.thresholdAmount))}"></div>
+          <div class="form-group"><label class="form-label">วิธีให้รางวัล</label><select class="form-input" id="ccbr-trigger-grant"><option value="once_per_cycle"${(rule.rewardTrigger?.grantMode || 'once_per_cycle') === 'once_per_cycle' ? ' selected' : ''}>ครั้งเดียวต่อรอบ</option><option value="every_threshold"${rule.rewardTrigger?.grantMode === 'every_threshold' ? ' selected' : ''}>ทุกครั้งที่ครบยอด</option></select></div>
+        `, rule.rewardTrigger?.mode === 'cycle_spend_threshold')}
         ${accordion('ccbr-cashback-acc', 'การคำนวณเงินคืน', `
           <div class="form-hint" style="margin-bottom:8px">คิดเป็นเปอร์เซ็นต์ของยอดที่เข้าเงื่อนไข หรือให้จำนวนคงที่</div>
           <div class="form-group"><label class="form-label">วิธีคิดเงินคืน</label><select class="form-input" id="ccbr-cb-mode" onchange="App._syncCCBenefitRuleFormSections()"><option value="percent"${rule.cashback.mode==='percent'?' selected':''}>คิดเป็นเปอร์เซ็นต์</option><option value="fixed"${rule.cashback.mode==='fixed'?' selected':''}>ให้จำนวนคงที่</option></select></div>
@@ -5182,6 +5205,11 @@ App._pickMerchant = function(name, opts = {}) {
         maxEligibleSpendPerCycle: readNum('ccbr-limit-eligible-cycle'),
         maxRewardAmountPerTx: readNum('ccbr-limit-reward-tx'),
         maxRewardAmountPerCycle: readNum('ccbr-limit-reward-cycle'),
+      },
+      rewardTrigger: {
+        mode: document.getElementById('ccbr-trigger-mode')?.value || 'none',
+        thresholdAmount: readNum('ccbr-trigger-threshold'),
+        grantMode: document.getElementById('ccbr-trigger-grant')?.value || 'once_per_cycle',
       },
       allowStacking: document.getElementById('ccbr-stacking')?.classList.contains('on'),
       isBaseRule: document.getElementById('ccbr-base')?.classList.contains('on'),
@@ -6117,7 +6145,7 @@ App._pickMerchant = function(name, opts = {}) {
         mode: promotion.validity.startDate || promotion.validity.endDate ? 'range' : 'always',
         startDate: promotion.validity.startDate || '',
         endDate: promotion.validity.endDate || '',
-        statementCycleHint: promotion.limits.maxRewardPerMonth ? 'calendar_month' : 'statement_cycle',
+        statementCycleHint: promotion.limits.maxRewardPerMonth || promotion.eligibility.minSpendPerCycle ? 'calendar_month' : 'statement_cycle',
       },
       cashback: {
         mode: promotion.reward.cashbackFixedAmount && !promotion.reward.cashbackRate ? 'fixed' : 'percent',
@@ -6137,6 +6165,11 @@ App._pickMerchant = function(name, opts = {}) {
       limits: {
         maxRewardAmountPerTx: promotion.limits.maxRewardPerTx || null,
         maxRewardAmountPerCycle: promotion.limits.maxRewardPerCycle || promotion.limits.maxRewardPerMonth || promotion.limits.maxRewardPerCampaign || null,
+      },
+      rewardTrigger: {
+        mode: promotion.eligibility.minSpendPerCycle ? 'cycle_spend_threshold' : 'none',
+        thresholdAmount: promotion.eligibility.minSpendPerCycle || null,
+        grantMode: 'once_per_cycle',
       },
       allowStacking: true,
       isBaseRule: false,
@@ -9890,8 +9923,24 @@ App._pickMerchant = function(name, opts = {}) {
     const hay = normalizeCompareText(text)
     const channels = []
     if (/(online|ออนไลน์|app|application|website|web site|e-commerce|ช้อปออนไลน์|ผ่านแอป|ผ่านเว็บไซต์)/.test(hay)) channels.push('online')
+    if (/(truemoney|true money|ทรูมันนี่|wallet|วอลเล็ต)/.test(hay)) channels.push('truemoney')
+    if (/(line pay|ไลน์เพย์)/.test(hay)) channels.push('line_pay')
+    if (/(shopeepay|shopee pay|ช้อปปี้เพย์)/.test(hay)) channels.push('shopeepay')
+    if (/(rabbit line pay|แรบบิท)/.test(hay)) channels.push('rabbit_line_pay')
+    if (/(qr|scan to pay|สแกน|พร้อมเพย์)/.test(hay)) channels.push('qr_payment')
     if (/(offline|หน้าร้าน|สาขา|in-store|in store|onsite|ออฟไลน์)/.test(hay)) channels.push('offline')
     return [...new Set(channels)]
+  }
+
+  const ONLINE_CHANNEL_ALIASES = new Set(['online', 'truemoney', 'line_pay', 'shopeepay', 'rabbit_line_pay', 'qr_payment'])
+  function channelMatches(ruleChannel = '', txChannel = '') {
+    const ruleValue = normalizeCompareText(ruleChannel)
+    const txValue = normalizeCompareText(txChannel)
+    if (!ruleValue || ruleValue === 'any') return true
+    if (!txValue) return false
+    if (ruleValue === txValue) return true
+    if (ruleValue === 'online' && ONLINE_CHANNEL_ALIASES.has(txValue)) return true
+    return false
   }
 
   function extractMinSpendFromText(text = '') {
@@ -9955,7 +10004,7 @@ App._pickMerchant = function(name, opts = {}) {
     const date = String(txDraft.date || today())
     const categoryMatch = !categories.length || categories.includes(categoryId)
     const merchantMatch = !merchants.length || merchants.some(v => merchantTextsMatch(v, merchant))
-    const channelMatch = !channels.length || channels.includes('any') || (!!channel && channels.includes(channel))
+    const channelMatch = !channels.length || channels.some(value => channelMatches(value, channel))
     const minSpend = Number(cond.minSpend || 0)
     const minSpendMatch = !minSpend || amount >= minSpend
     const timeMatch = ruleIsInActiveWindow(rule, date)
@@ -9983,6 +10032,7 @@ App._pickMerchant = function(name, opts = {}) {
     const points = rule.points || {}
     const limits = rule.limits || {}
     const validity = rule.validity || {}
+    const rewardTrigger = rule.rewardTrigger || {}
     const hasExistingCycleHint = !!(validity.statementCycleHint || rule.cycleMode || limits.cycleMode)
     const hasCycleRewardCap = Number(limits.maxRewardAmountPerCycle || 0) > 0
     const cycleHintText = normalizeCompareText(`${rule.name || ''} ${rule.description || ''}`)
@@ -10032,6 +10082,11 @@ App._pickMerchant = function(name, opts = {}) {
         maxEligibleSpendPerCycle: parseRuleNumber(limits.maxEligibleSpendPerCycle, null),
         maxRewardAmountPerTx: parseRuleNumber(limits.maxRewardAmountPerTx, null),
         maxRewardAmountPerCycle: parseRuleNumber(limits.maxRewardAmountPerCycle, null),
+      },
+      rewardTrigger: {
+        mode: rewardTrigger.mode === 'cycle_spend_threshold' ? 'cycle_spend_threshold' : 'none',
+        thresholdAmount: parseRuleNumber(rewardTrigger.thresholdAmount, null),
+        grantMode: rewardTrigger.grantMode === 'every_threshold' ? 'every_threshold' : 'once_per_cycle',
       },
       allowStacking: rule.allowStacking !== false,
       isBaseRule: !!rule.isBaseRule,
@@ -10169,6 +10224,20 @@ App._pickMerchant = function(name, opts = {}) {
     const diffValue = Math.max(0, rawValue - finalValue)
     const cycleLabel = row.cycleMode === 'calendar_month' ? 'ในเดือนปฏิทินนี้' : 'ในรอบบิลนี้'
     const parts = []
+    if (row.triggerMode === 'cycle_spend_threshold' && Number(row.triggerThresholdAmount || 0) > 0) {
+      const before = Number(row.cycleEligibleSpendUsedBefore || 0)
+      const after = Number(row.cycleEligibleSpendAfter || 0)
+      const threshold = Number(row.triggerThresholdAmount || 0)
+      parts.push(`ยอดสะสม ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel}`)
+      if (Number(row.triggerCount || 0) > 0) {
+        const grantLabel = row.triggerGrantMode === 'every_threshold' ? `ปลดสิทธิ์ ${Number(row.triggerCount || 0)} ครั้ง` : 'ปลดสิทธิ์รอบนี้แล้ว'
+        parts.push(grantLabel)
+      } else if (after < threshold) {
+        parts.push(`ก่อนรายการนี้สะสม ${formatBenefitCapValue('', before)}`)
+      } else {
+        parts.push('สิทธิ์ยอดสะสมรอบนี้ถูกปลดไปแล้ว')
+      }
+    }
     if (remainingBefore != null) {
       if (Number(remainingBefore || 0) <= 0) parts.push('ใช้สิทธิ์รอบนี้ครบแล้ว')
       else parts.push(`เหลือใช้ได้อีก ${formatBenefitCapValue(row.type, remainingBefore)} ${cycleLabel}`)
@@ -10210,6 +10279,7 @@ App._pickMerchant = function(name, opts = {}) {
           + (rule.suggestedConditions?.merchants?.length || 0)
           + (rule.suggestedConditions?.channels?.length || 0)
           + (rule.suggestedConditions?.minSpend ? 1 : 0)
+          + (rule.rewardTrigger?.mode === 'cycle_spend_threshold' ? 1 : 0)
         const suggested = !!rule.active && eligibility.matched
         const score = (suggested ? 100 : 0) + (rule.isBaseRule ? 15 : 0) + (specificity * 3) + Number(rule.priority || 0)
         return { ...rule, suggested, timeMatch: eligibility.timeMatch, eligibility, suggestionScore: score }
@@ -10222,6 +10292,7 @@ App._pickMerchant = function(name, opts = {}) {
     let cashbackUsed = 0
     let discountUsed = 0
     let pointsUsed = 0
+    let triggerCountUsed = 0
     ;(S.transactions || []).forEach(tx => {
       if (String(tx.id || '') === String(excludeTxId || '')) return
       if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return
@@ -10234,6 +10305,7 @@ App._pickMerchant = function(name, opts = {}) {
         cashbackUsed += Number(row.cashback || row.finalCashback || 0)
         discountUsed += Number(row.discount || row.finalDiscount || 0)
         pointsUsed += Number(row.points || row.finalPoints || 0)
+        triggerCountUsed += Number(row.triggerCount || 0)
       })
     })
     return {
@@ -10241,6 +10313,7 @@ App._pickMerchant = function(name, opts = {}) {
       cashbackUsedBefore: Math.round(cashbackUsed * 100) / 100,
       discountUsedBefore: Math.round(discountUsed * 100) / 100,
       pointsUsedBefore: Math.round(pointsUsed * 100) / 100,
+      triggerCountUsedBefore: Math.floor(triggerCountUsed),
     }
   }
 
@@ -10249,6 +10322,7 @@ App._pickMerchant = function(name, opts = {}) {
     const limits = rule.limits || {}
     const cashbackCfg = rule.cashback || {}
     const pointsCfg = rule.points || {}
+    const trigger = rule.rewardTrigger || {}
     const eligibility = getRuleEligibility(txDraft, rule)
     let eligibleAmount = amount
     let capApplied = false
@@ -10273,11 +10347,33 @@ App._pickMerchant = function(name, opts = {}) {
     }
     eligibleAmount = Math.max(0, Math.round(eligibleAmount * 100) / 100)
 
+    const triggerMode = trigger.mode === 'cycle_spend_threshold' && Number(trigger.thresholdAmount || 0) > 0 ? 'cycle_spend_threshold' : 'none'
+    const thresholdAmount = Number(trigger.thresholdAmount || 0)
+    const cycleSpendBefore = Math.round(Number(cycleUsage.eligibleSpendUsedBefore || 0) * 100) / 100
+    const cycleSpendAfter = Math.round((cycleSpendBefore + eligibleAmount) * 100) / 100
+    let triggerCount = 0
+    if (triggerMode === 'cycle_spend_threshold' && eligibleAmount > 0) {
+      if (trigger.grantMode === 'every_threshold') {
+        triggerCount = Math.max(0, Math.floor(cycleSpendAfter / thresholdAmount) - Math.floor(cycleSpendBefore / thresholdAmount))
+      } else {
+        triggerCount = cycleSpendBefore < thresholdAmount && cycleSpendAfter >= thresholdAmount ? 1 : 0
+      }
+      if (triggerCount <= 0) {
+        const remaining = Math.max(0, thresholdAmount - cycleSpendAfter)
+        warnings.push(remaining > 0 ? `ยอดสะสมยังขาด ${money(remaining)} จึงยังไม่ปลดสิทธิ์` : 'สิทธิ์ยอดสะสมรอบนี้ถูกปลดไปแล้ว')
+      }
+    }
+
     let rawCashback = 0
     let rawDiscount = 0
     let rawPoints = 0
     if (eligibleAmount > 0 && (rule.type === 'cashback' || rule.type === 'both')) {
-      if (cashbackCfg.mode === 'fixed') rawCashback = Number(cashbackCfg.fixedAmount || 0)
+      if (triggerMode === 'cycle_spend_threshold') {
+        if (triggerCount > 0) {
+          if (cashbackCfg.mode === 'fixed') rawCashback = Number(cashbackCfg.fixedAmount || 0) * triggerCount
+          else rawCashback = eligibleAmount * (Number(cashbackCfg.rate || 0) / 100)
+        }
+      } else if (cashbackCfg.mode === 'fixed') rawCashback = Number(cashbackCfg.fixedAmount || 0)
       else rawCashback = eligibleAmount * (Number(cashbackCfg.rate || 0) / 100)
     }
     if (eligibleAmount > 0 && rule.type === 'discount') {
@@ -10353,10 +10449,16 @@ App._pickMerchant = function(name, opts = {}) {
       capReason,
       cycleEligibleSpendUsedBefore: Math.round(Number(cycleUsage.eligibleSpendUsedBefore || 0) * 100) / 100,
       cycleEligibleSpendRemainingBefore: limits.maxEligibleSpendPerCycle > 0 ? Math.max(0, Number(limits.maxEligibleSpendPerCycle || 0) - Number(cycleUsage.eligibleSpendUsedBefore || 0)) : null,
+      cycleEligibleSpendAfter: cycleSpendAfter,
       cycleRewardUsedBefore: rule.type === 'points' ? Math.floor(Number(cycleUsage.pointsUsedBefore || 0)) : rule.type === 'discount' ? Math.round(Number(cycleUsage.discountUsedBefore || 0) * 100) / 100 : Math.round(Number(cycleUsage.cashbackUsedBefore || 0) * 100) / 100,
       cycleRewardRemainingBefore: limits.maxRewardAmountPerCycle > 0
         ? Math.max(0, Number(limits.maxRewardAmountPerCycle || 0) - Number(rule.type === 'points' ? cycleUsage.pointsUsedBefore : rule.type === 'discount' ? cycleUsage.discountUsedBefore : cycleUsage.cashbackUsedBefore || 0))
         : null,
+      triggerMode,
+      triggerThresholdAmount: triggerMode === 'cycle_spend_threshold' ? thresholdAmount : null,
+      triggerGrantMode: trigger.grantMode === 'every_threshold' ? 'every_threshold' : 'once_per_cycle',
+      triggerCount,
+      triggerCountUsedBefore: Math.floor(Number(cycleUsage.triggerCountUsedBefore || 0)),
       warnings,
       matched: eligibility.matched,
     }
