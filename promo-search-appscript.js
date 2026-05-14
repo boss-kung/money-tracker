@@ -22,8 +22,8 @@
 // Config
 // ---------------------------------------------------------------------------
 
-var SCRIPT_VERSION = '2026.05.14-benefit-v1';
-var GEMINI_MODEL = 'gemini-2.5-flash-preview-05-20';
+var SCRIPT_VERSION = '2026.05.14-benefit-v2';
+var GEMINI_MODEL = 'gemini-2.5-flash';
 var GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 var ISSUER_CONFIG = {
@@ -91,6 +91,9 @@ var PROMO_RESPONSE_SCHEMA = {
 function doPost(e) {
   try {
     var payload = JSON.parse(e.postData.contents || '{}');
+    if (payload.action === 'ping') {
+      return respond({ ok: true, version: SCRIPT_VERSION, features: ['promoSearch', 'analyzeBenefitUrl'] });
+    }
     if (payload.action === 'analyzeBenefitUrl') {
       return respond(handleBenefitAnalysis(payload));
     }

@@ -6312,7 +6312,11 @@ App._pickMerchant = function(name, opts = {}) {
     if (!endpoint) { notify('ยังไม่ได้ตั้งค่า MT_PROMO_SEARCH_ENDPOINT', 'error'); return }
     if (resultEl) resultEl.innerHTML = `<div class="card card-pad">กำลังตรวจสอบ endpoint...</div>`
     try {
-      const res = await fetch(endpoint, { cache: 'no-store' })
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({ action: 'ping' }),
+      })
       const data = await res.json()
       const version = data.version || '(ไม่มี version — อาจเป็น version เก่า)'
       const features = Array.isArray(data.features) ? data.features : []
