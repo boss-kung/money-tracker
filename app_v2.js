@@ -6284,7 +6284,7 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   App._analyzeBenefitTextWithAI = async function(mainContentText, sourceUrl, cardId, endpoint) {
-    const text = String(mainContentText || '').slice(0, 4000)
+    const text = String(mainContentText || '').slice(0, 8000)
     const payload = {
       action: 'analyzeBenefitUrl',
       sourceUrl,
@@ -6318,10 +6318,18 @@ App._pickMerchant = function(name, opts = {}) {
       let diagnostics = []
       const endpoint = String(window.MT_PROMO_SEARCH_ENDPOINT || '').trim()
 
+      const mainLen = String(sourceDocument.mainContentText || '').trim().length
+      const rawLen = String(sourceDocument.rawText || '').trim().length
+      const contentForAI = mainLen >= 200 ? sourceDocument.mainContentText
+                         : rawLen >= 200 ? sourceDocument.rawText
+                         : sourceDocument.mainContentText
+      const contentLen = String(contentForAI || '').trim().length
+      diagnostics.push(`ดึงเนื้อหาผ่าน ${sourceDocument.fetchMode} (${sourceDocument.siteKey}): ${contentLen} ตัวอักษร`)
+
       if (endpoint) {
         try {
           const aiResult = await App._analyzeBenefitTextWithAI(
-            sourceDocument.mainContentText,
+            contentForAI,
             sourceDocument.normalizedUrl,
             cardId,
             endpoint

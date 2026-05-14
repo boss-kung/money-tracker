@@ -489,7 +489,7 @@ function handleBenefitAnalysis(payload) {
     return { ok: false, message: 'GEMINI_API_KEY ยังไม่ได้ตั้งค่า', ruleDrafts: [], diagnostics: [] };
   }
 
-  var text = String(payload.mainContentText || '').slice(0, 4000);
+  var text = String(payload.mainContentText || '').slice(0, 8000);
   var sourceUrl = String(payload.sourceUrl || '');
 
   if (!text || text.trim().length < 50) {
