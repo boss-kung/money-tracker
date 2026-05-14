@@ -5502,12 +5502,13 @@ App._pickMerchant = function(name, opts = {}) {
     const normalizedUrl = normalizeBenefitImportUrl(url)
     if (!/^https?:\/\//i.test(normalizedUrl)) throw new Error('กรุณาใส่ลิงก์ที่ขึ้นต้นด้วย http:// หรือ https://')
     const isFileOrigin = typeof location !== 'undefined' && location.protocol === 'file:'
+    const isLocalhost = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
     const siteKeyHint = detectBenefitSourceSiteKey(normalizedUrl)
     const cardxSlug = siteKeyHint === 'cardx' ? (normalizedUrl.match(/\/promotion\/([^/?#]+)/i)?.[1] || '') : ''
     const cardxApiUrl = cardxSlug ? `https://cdx-prod-ssc-frontend.cardx.co.th/content/th-TH/promotion/slug-name/${encodeURIComponent(cardxSlug)}` : ''
     const attempts = [
       ...(cardxApiUrl && !isFileOrigin ? [{ url: cardxApiUrl, fetchMode: 'cardx-api' }] : []),
-      ...(!isFileOrigin ? [{ url: normalizedUrl, fetchMode: 'direct' }] : []),
+      ...(!isFileOrigin && isLocalhost ? [{ url: normalizedUrl, fetchMode: 'direct' }] : []),
       { url: `https://r.jina.ai/http://${normalizedUrl.replace(/^https?:\/\//i, '')}`, fetchMode: 'mirror' },
       { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(normalizedUrl)}`, fetchMode: 'mirror' },
       { url: `https://corsproxy.io/?${encodeURIComponent(normalizedUrl)}`, fetchMode: 'mirror' },
