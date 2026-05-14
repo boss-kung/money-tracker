@@ -24,6 +24,7 @@ const VALID_ROUTES = new Set([
   'goals',
   'recurring',
   'budgets',
+  'privileges',
 ])
 
 const VALID_TRIGGERS = new Set([
@@ -39,6 +40,7 @@ const VALID_TRIGGERS = new Set([
   'no_tx_streak',
   'budget_over',
   'recurring_due_today',
+  'privilege_expiry',
 ])
 
 function cleanText(value: unknown, max = 160) {

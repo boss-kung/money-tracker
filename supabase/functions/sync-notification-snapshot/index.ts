@@ -24,6 +24,7 @@ Deno.serve(async req => {
       credit_due: limitedArray(body.creditDue, 25),
       budget_alerts: limitedArray(body.budgetAlerts, 25),
       recurring_due: limitedArray(body.recurringDue, 25),
+      privileges_expiring: limitedArray(body.privilegesExpiring, 25),
       last_exported_at: body.lastExportedAt || null,
       app_version: body.appVersion ? String(body.appVersion).slice(0, 80) : null,
     }

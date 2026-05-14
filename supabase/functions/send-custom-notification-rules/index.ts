@@ -25,6 +25,7 @@ type SnapshotRow = {
   credit_due: Array<Record<string, unknown>>
   budget_alerts: Array<{ pct: number; over: boolean; categoryId: string; label: string }>
   recurring_due: Array<Record<string, unknown>>
+  privileges_expiring: Array<{ id: string; daysLeft: number }>
   last_exported_at: string | null
 }
 
@@ -84,6 +85,7 @@ function routeHash(route: string) {
     goals: '#more?open=goals',
     recurring: '#more?open=recurring',
     budgets: '#more?open=budgets',
+    privileges: '#more?open=privileges',
   }
   return map[route] || '#dashboard'
 }
@@ -177,6 +179,14 @@ function shouldSend(rule: RuleRow, snapshot: SnapshotRow | undefined, now = bang
       : ''
   }
 
+  if (rule.trigger_type === 'privilege_expiry') {
+    const daysBefore = Number(config.daysBefore ?? 3)
+    const hasMatch = (snapshot?.privileges_expiring || []).some(p => Number(p.daysLeft) === daysBefore)
+    return hasMatch
+      ? `custom-rule:${rule.rule_id}:priv:${now.date}:${daysBefore}`
+      : ''
+  }
+
   return ''
 }
 
@@ -208,7 +218,7 @@ Deno.serve(async req => {
 
     const { data: snapshots, error: snapshotError } = await supabase
       .from('mt_notification_snapshots')
-      .select('install_id, snapshot_date, today_tx_count, last_tx_date, upcoming_bills, credit_due, budget_alerts, recurring_due, last_exported_at')
+      .select('install_id, snapshot_date, today_tx_count, last_tx_date, upcoming_bills, credit_due, budget_alerts, recurring_due, privileges_expiring, last_exported_at')
       .in('install_id', installIds)
     if (snapshotError) throw snapshotError
 
