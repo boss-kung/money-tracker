@@ -6,6 +6,7 @@
   'use strict'
 
   const INSTALL_KEY = 'mt_notification_install_id'
+  const FCM_TOKEN_KEY = 'mt_notification_fcm_token'
   const LAST_SYNC_KEY = 'mt_notification_last_snapshot_sync'
   const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch]))
 
@@ -15,18 +16,33 @@
 
   function defaultPrefs() {
     return {
-      daily_expense_enabled: true,
+      enabled: false,
+      daily_expense_enabled: false,
       daily_expense_time: '20:30',
-      upcoming_bill_enabled: true,
-      credit_card_due_enabled: true,
+      upcoming_bill_enabled: false,
+      credit_card_due_enabled: false,
       budget_alert_enabled: false,
-      recurring_enabled: true,
-      backup_reminder_enabled: true,
+      recurring_enabled: false,
+      backup_reminder_enabled: false,
       monthly_summary_enabled: false,
       hide_amounts_in_notification: Boolean(S.settings?.hideMoney),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Bangkok',
       customRules: [],
+      seededDefaultRuleV1: false,
     }
+  }
+
+  function defaultDailyExpenseRule() {
+    return normalizeCustomRule({
+      id: 'default_daily_expense_2030',
+      enabled: true,
+      title: 'อย่าลืมจดรายจ่ายวันนี้',
+      body: 'ใช้เวลาแป๊บเดียว แล้วรายงานเดือนนี้จะแม่นขึ้น',
+      route: 'addTx',
+      actionLabel: 'เพิ่มรายการ',
+      triggerType: 'daily_time',
+      triggerConfig: { time: '20:30' },
+    })
   }
 
   function ensureSettings() {
@@ -34,6 +50,13 @@
     S.settings.notifications ||= {}
     S.settings.notifications = { ...defaultPrefs(), ...S.settings.notifications }
     if (!Array.isArray(S.settings.notifications.customRules)) S.settings.notifications.customRules = []
+    if (!S.settings.notifications.seededDefaultRuleV1) {
+      if (!S.settings.notifications.customRules.length) {
+        S.settings.notifications.customRules = [defaultDailyExpenseRule()]
+      }
+      S.settings.notifications.seededDefaultRuleV1 = true
+      try { persist() } catch (_) {}
+    }
     return S.settings.notifications
   }
 
@@ -196,12 +219,20 @@
   }
 
   async function savePreferences() {
-    ensureSettings()
+    const prefs = ensureSettings()
     persist()
     if (!isConfigured()) return false
     await callFunction('update-notification-preferences', {
       installId: getInstallId(),
-      preferences: S.settings.notifications,
+      preferences: {
+        ...prefs,
+        daily_expense_enabled: false,
+        upcoming_bill_enabled: false,
+        credit_card_due_enabled: false,
+        recurring_enabled: false,
+        backup_reminder_enabled: false,
+        monthly_summary_enabled: false,
+      },
     })
     return true
   }
@@ -240,6 +271,10 @@
     const prefs = ensureSettings()
     prefs.customRules = (prefs.customRules || []).map(normalizeCustomRule)
     return prefs.customRules
+  }
+
+  function storedFcmToken() {
+    try { return localStorage.getItem(FCM_TOKEN_KEY) || '' } catch (_) { return '' }
   }
 
   async function syncCustomRules() {
@@ -308,6 +343,7 @@
       serviceWorkerRegistration: registration,
     })
     if (!fcmToken) throw new Error('สร้าง FCM token ไม่สำเร็จ')
+    try { localStorage.setItem(FCM_TOKEN_KEY, fcmToken) } catch (_) {}
 
     const prefs = ensureSettings()
     prefs.permission = 'granted'
@@ -335,52 +371,55 @@
     return true
   }
 
+  async function disableNotifications() {
+    const prefs = ensureSettings()
+    prefs.enabled = false
+    persist()
+    if (isConfigured() && storedFcmToken()) {
+      await callFunction('register-notification-device', {
+        installId: getInstallId(),
+        fcmToken: storedFcmToken(),
+        platform: platform(),
+        browser: browserName(),
+        timezone: prefs.timezone,
+        permission: Notification.permission || 'default',
+        enabled: false,
+        hideAmounts: Boolean(prefs.hide_amounts_in_notification),
+        appVersion: window.MT_APP_VERSION || '',
+        userAgent: navigator.userAgent || '',
+      })
+    }
+    await savePreferences().catch(() => {})
+    notify('ปิดการแจ้งเตือนแล้ว', 'success')
+    App.renderMore?.()
+    return true
+  }
+
   function statusLabel() {
+    const prefs = ensureSettings()
     if (!('Notification' in window)) return 'ไม่รองรับ'
     if (!isConfigured()) return 'รอตั้งค่า'
+    if (!prefs.enabled) return 'ปิดอยู่'
     if (Notification.permission === 'granted') return 'เปิดแล้ว'
     if (Notification.permission === 'denied') return 'ถูกบล็อก'
     return 'ยังไม่เปิด'
   }
 
-  function togglePreference(key) {
-    ensureSettings()
-    S.settings.notifications[key] = !S.settings.notifications[key]
-    savePreferences()
-      .then(() => {
-        notify('บันทึกการตั้งค่าแจ้งเตือนแล้ว', 'success')
-        App.renderMore?.()
-      })
-      .catch(err => notify(err.message || 'บันทึกการตั้งค่าไม่สำเร็จ', 'error'))
-  }
-
   function renderNotificationSettings() {
     const prefs = ensureSettings()
     const customCount = getCustomRules().length
-    const toggle = (key, label, sub = '') => `
-      <div class="settings-row" onclick="App.toggleNotificationPreference('${key}')">
-        <div class="s-icon">🔔</div>
-        <div class="s-label">${esc(label)}${sub ? `<br><div class="s-value" style="font-weight:400;text-align:left !important">${esc(sub)}</div>` : ''}</div>
-        <button class="toggle${prefs[key] ? ' on' : ''}" onclick="event.stopPropagation();App.toggleNotificationPreference('${key}')" aria-label="${esc(label)}" aria-pressed="${prefs[key] ? 'true' : 'false'}"></button>
-      </div>`
 
     return `
       <div class="sec-title">การแจ้งเตือน</div>
       <div class="card card-pad">
-        <div class="settings-row" onclick="App.enableNotifications()">
+        <div class="settings-row" onclick="App.toggleNotificationsMaster()">
           <div class="s-icon">🔔</div>
-          <div class="s-label">เปิดการแจ้งเตือน</div>
-          <div class="s-value">${esc(statusLabel())}</div>
+          <div class="s-label">เปิดการแจ้งเตือน<br><div class="s-value" style="font-weight:400;text-align:left !important">${esc(statusLabel())}</div></div>
+          <button class="toggle${prefs.enabled ? ' on' : ''}" onclick="event.stopPropagation();App.toggleNotificationsMaster()" aria-label="เปิดการแจ้งเตือน" aria-pressed="${prefs.enabled ? 'true' : 'false'}"></button>
         </div>
-        ${toggle('daily_expense_enabled', 'เตือนจดรายจ่ายทุกวัน', 'เวลา 20:30')}
-        ${toggle('upcoming_bill_enabled', 'บิลและรายการรอจ่าย', 'เตือนรายการที่ใกล้ครบกำหนด')}
-        ${toggle('credit_card_due_enabled', 'กำหนดชำระบัตรเครดิต', 'เตือนก่อนครบกำหนด')}
-        ${toggle('recurring_enabled', 'รายการประจำ', 'เตือนรายการที่ถึงกำหนด')}
-        ${toggle('backup_reminder_enabled', 'เตือนสำรองข้อมูล', 'เหมาะกับแอปที่เก็บข้อมูลในเครื่อง')}
-        ${toggle('hide_amounts_in_notification', 'ซ่อนจำนวนเงินในแจ้งเตือน', 'ใช้ร่วมกับโหมดซ่อนเงิน')}
         <div class="settings-row" onclick="App.openCustomNotificationRulesScreen()">
           <div class="s-icon">⚙️</div>
-          <div class="s-label">กฎแจ้งเตือนเอง<br><div class="s-value" style="font-weight:400;text-align:left !important">ตั้งข้อความ เวลา เงื่อนไข และปลายทางเอง</div></div>
+          <div class="s-label">กฎแจ้งเตือนเอง<br><div class="s-value" style="font-weight:400;text-align:left !important">daily 20:30 ถูกสร้างเป็นกฎเริ่มต้นและแก้ได้เอง</div></div>
           <div class="s-value">${customCount} กฎ</div>
         </div>
         <div style="display:flex;gap:8px;padding:12px 0 0">
@@ -406,8 +445,14 @@
   App.enableNotifications = function() {
     enableNotifications().catch(err => notify(err.message || 'เปิดการแจ้งเตือนไม่สำเร็จ', 'error'))
   }
-
-  App.toggleNotificationPreference = togglePreference
+  App.disableNotifications = function() {
+    disableNotifications().catch(err => notify(err.message || 'ปิดการแจ้งเตือนไม่สำเร็จ', 'error'))
+  }
+  App.toggleNotificationsMaster = function() {
+    const prefs = ensureSettings()
+    ;(prefs.enabled ? disableNotifications() : enableNotifications())
+      .catch(err => notify(err.message || 'บันทึกการตั้งค่าไม่สำเร็จ', 'error'))
+  }
 
   App.openCustomNotificationRulesScreen = function() {
     const rules = getCustomRules()

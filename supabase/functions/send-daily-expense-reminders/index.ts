@@ -85,7 +85,7 @@ Deno.serve(async req => {
     for (const device of deviceRows) {
       const installId = String(device.install_id)
       const prefs = prefsByInstallId.get(installId)
-      if (prefs?.daily_expense_enabled === false) {
+      if (prefs?.daily_expense_enabled !== true) {
         skipped++
         continue
       }
