@@ -2478,7 +2478,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   display:grid;
   grid-template-columns: .85fr 1.35fr;
   gap:8px;
-  padding:10px 16px calc(8px + var(--safe-b) + var(--app-bottom-gap));
+  padding:10px 16px calc(8px + var(--app-bottom-gap));
   background:linear-gradient(to top, var(--surface) 78%, color-mix(in srgb, var(--surface) 0%, transparent));
   border-top:1px solid var(--border);
 }
