@@ -10079,7 +10079,7 @@ App._pickMerchant = function(name, opts = {}) {
     const targetRect = target.getBoundingClientRect()
     const targetTopInScroll = scrollEl.scrollTop + targetRect.top - scrollRect.top
     const scrollPaddingTop = parseFloat(getComputedStyle(scrollEl).paddingTop || '0') || 0
-    const breathingRoom = 14
+    const breathingRoom = 12
     const offsetInScroll = Math.max(0, targetTopInScroll - scrollPaddingTop - breathingRoom)
     scrollEl.scrollTo({ top: offsetInScroll, behavior: 'smooth' })
     document.querySelectorAll('.wallet-tab').forEach(btn => {
