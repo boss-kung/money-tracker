@@ -3071,12 +3071,16 @@ Calc.getUsableMoney = function(wallets, state = null) {
           <div class="name">${card.name}</div>
         </div>`).join('')}</div>`
 
+    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:4px 0"></div>`
+
     html += `<div class="mt-stat-row">
       <div class="mt-stat-card income"><small>รายรับ</small><strong>+${FMT(stats.income)}</strong></div>
       <div class="mt-stat-card expense"><small>รายจ่าย</small><strong>-${FMT(stats.expense)}</strong></div>
       <div class="mt-stat-card transfer"><small>โอนเงิน</small><strong>${FMT(transferTotal)}</strong></div>
       <div class="mt-stat-card saving"><small>คงเหลือเดือนนี้</small><strong>${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(stats.net))}</strong></div>
     </div>`
+
+    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:4px 0"></div>`
 
     const budgetRows = [...expBudgets]
       .filter(b => Number(b.monthlyLimit || 0) > 0)
@@ -3099,6 +3103,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         </div>`
       })
       html += `</div>`
+      html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:4px 0"></div>`
     }
 
     html += secHdr('รายการล่าสุด', 'ดูทั้งหมด', "App.showPage('transactions')")
