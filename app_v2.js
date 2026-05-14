@@ -792,7 +792,7 @@ let S = {
 
   // Reports
   rptMonth: THIS_MONTH,
-  rptView: 'expense',
+  rptView: 'assets',
 
   // Misc
   selectedTxId: null,
@@ -4413,7 +4413,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       ${buildSummaryCard('อัตราออม', monthly.savingsRate === null ? '—' : `${monthly.savingsRate.toFixed(1)}%`, monthly.savingsRate === null ? 'var(--muted)' : monthly.savingsRate >= 0 ? 'var(--income)' : 'var(--expense)', monthly.income > 0 ? 'รายรับหลังหักรายจ่าย' : 'ยังไม่มีรายรับในเดือนนี้')}
     </div>`
 
-    html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><strong>AI Financial Coach</strong></div><button class="btn btn-secondary btn-sm" onclick="App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${
+    html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><strong>AI Financial Coach</strong></div><button class="btn btn-secondary btn-sm" onclick="InsightEngine.invalidate();App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${
       smartInsights.length
         ? smartInsights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')
         : `<div class="list-item-sub">ข้อมูลเดือนนี้ยังไม่พอสำหรับสรุปแนวโน้มเพิ่มเติม</div>`
@@ -5093,7 +5093,7 @@ App._pickMerchant = function(name, opts = {}) {
       .join('')
     const v = n => n ?? ''
     const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCBenefitScreen('${esc(cardId)}')">←</button><h2>${ruleId ? 'แก้ไขกติกาสิทธิประโยชน์' : 'เพิ่มกติกาสิทธิประโยชน์'}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefitRule('${esc(cardId)}','${esc(ruleId)}')" style="width:auto">บันทึก</button></div>
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App._onCCBenefitRuleFormBack('${esc(cardId)}')">←</button><h2>${ruleId ? 'แก้ไขกติกาสิทธิประโยชน์' : 'เพิ่มกติกาสิทธิประโยชน์'}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefitRule('${esc(cardId)}','${esc(ruleId)}')" style="width:auto">บันทึก</button></div>
       <div class="sub-scroll">
         <div class="form-hint" style="margin-bottom:10px">เลือกประเภทสิทธิ์ก่อน แล้วระบบจะแสดงเฉพาะส่วนที่เกี่ยวข้องให้</div>
         ${accordion('ccbr-basic-acc', 'ข้อมูลพื้นฐาน', `
@@ -5220,6 +5220,18 @@ App._pickMerchant = function(name, opts = {}) {
     if (idx >= 0) S.ccBenefitRules[idx] = rule
     else S.ccBenefitRules.push(rule)
     persist()
+    // If opened from import preview, update draft.rule and return to dialog
+    if (App._benefitDraftEditReturn === cardId) {
+      App._benefitDraftEditReturn = null
+      const preview = App._ccBenefitImportPreview
+      if (preview) {
+        const draft = (preview.ruleDrafts || []).find(d => d.rule?.id === rule.id)
+        if (draft) draft.rule = rule
+      }
+      App._reopenCCBenefitImportDialog(cardId)
+      notify('บันทึกกฎแล้ว — กลับมาเลือกสิทธิประโยชน์', 'success')
+      return
+    }
     App.openCCBenefitScreen(cardId)
     notify('บันทึกกฎสิทธิประโยชน์แล้ว', 'success')
   }
@@ -6215,43 +6227,63 @@ App._pickMerchant = function(name, opts = {}) {
     const diagnostics = [...(preview.sourceDocument?.diagnostics || []), ...(preview.diagnostics || [])].filter(Boolean)
     const doc = preview.sourceDocument || {}
     const cardId = preview.cardId || ''
-    const ruleRows = (preview.ruleDrafts || []).map((draft, idx) => {
+    const sel = preview.selectedIndices instanceof Set ? preview.selectedIndices : new Set((preview.ruleDrafts || []).map((_, i) => i))
+    preview.selectedIndices = sel
+    const drafts = preview.ruleDrafts || []
+    const selectedCount = drafts.filter((_, i) => sel.has(i)).length
+    const allSelected = selectedCount === drafts.length
+    const ruleRows = drafts.map((draft, idx) => {
       const rule = draft.rule || {}
       const cond = rule.suggestedConditions || {}
       const conf = Number(draft.confidence || 0)
       const isLowConf = conf < 0.7
+      const isChecked = sel.has(idx)
       const reviewText = (draft.reviewFields || []).join(', ')
       const diagnosticsText = [...new Set((draft.diagnostics || []).filter(Boolean))].join(' · ')
       const cardStyle = isLowConf
-        ? 'margin-top:10px;border-color:rgba(217,119,6,.45)!important;background:color-mix(in srgb,#F59E0B 8%,var(--surface))!important;'
-        : 'margin-top:10px;'
+        ? `margin-top:10px;border-color:rgba(217,119,6,.45)!important;background:color-mix(in srgb,#F59E0B 8%,var(--surface))!important;opacity:${isChecked ? '1' : '0.55'}`
+        : `margin-top:10px;opacity:${isChecked ? '1' : '0.55'}`
       const confBadge = isLowConf
         ? `<span style="color:#D97706;font-size:11px;font-weight:700">⚠ ตรวจสอบ (${(conf * 100).toFixed(0)}%)</span>`
         : `<span style="color:var(--ok,#16a34a);font-size:11px;font-weight:700">✓ ${(conf * 100).toFixed(0)}%</span>`
       return `<div class="card card-pad" style="${cardStyle}">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="display:flex;align-items:flex-start;gap:8px">
+          <input type="checkbox" ${isChecked ? 'checked' : ''} onclick="App._toggleBenefitDraftSelection(${idx})"
+            style="width:18px;height:18px;margin-top:3px;flex-shrink:0;cursor:pointer;accent-color:var(--primary)">
           <div style="min-width:0;flex:1">
             <div class="list-item-name">${idx + 1}. ${esc(draft.campaignTitle || rule.name || 'Draft rule')}</div>
             <div class="list-item-sub">${confBadge} · ${esc(rule.type || '-')}</div>
+            ${humanizeRuleReward(rule) ? `<div class="list-item-sub">${esc(humanizeRuleReward(rule))}</div>` : ''}
+            ${(cond.merchants || []).length ? `<div class="list-item-sub">ร้าน: ${esc(cond.merchants.slice(0, 12).join(', '))}</div>` : ''}
+            ${(cond.channels || []).length || cond.minSpend || rule.validity?.startDate || rule.validity?.endDate ? `<div class="list-item-sub">${esc([
+              (cond.channels || []).length ? `ช่องทาง ${cond.channels.join(', ')}` : '',
+              cond.minSpend ? `ขั้นต่ำ ${money(cond.minSpend)}` : '',
+              rule.validity?.startDate || rule.validity?.endDate ? `ช่วง ${rule.validity.startDate || '-'} ถึง ${rule.validity.endDate || '-'}` : '',
+            ].filter(Boolean).join(' · '))}</div>` : ''}
+            ${(draft.warnings || []).length ? `<div class="form-hint" style="color:var(--expense);margin-top:4px">${esc(draft.warnings.join(' · '))}</div>` : ''}
+            ${diagnosticsText ? `<div class="form-hint">${esc(diagnosticsText)}</div>` : ''}
+            ${reviewText ? `<div class="form-hint" style="color:#D97706">⚠ ควรตรวจ: ${esc(reviewText)}</div>` : ''}
           </div>
           <button class="btn btn-secondary btn-sm" style="flex-shrink:0;width:auto" onclick="App._editCCBenefitDraftAtIndex('${esc(cardId)}',${idx})">แก้ไข</button>
         </div>
-        ${humanizeRuleReward(rule) ? `<div class="list-item-sub">${esc(humanizeRuleReward(rule))}</div>` : ''}
-        ${(cond.merchants || []).length ? `<div class="list-item-sub">ร้าน: ${esc(cond.merchants.slice(0, 12).join(', '))}</div>` : ''}
-        ${(cond.channels || []).length || cond.minSpend || rule.validity?.startDate || rule.validity?.endDate ? `<div class="list-item-sub">${esc([
-          (cond.channels || []).length ? `ช่องทาง ${cond.channels.join(', ')}` : '',
-          cond.minSpend ? `ขั้นต่ำ ${money(cond.minSpend)}` : '',
-          rule.validity?.startDate || rule.validity?.endDate ? `ช่วง ${rule.validity.startDate || '-'} ถึง ${rule.validity.endDate || '-'}` : '',
-        ].filter(Boolean).join(' · '))}</div>` : ''}
-        ${(draft.warnings || []).length ? `<div class="form-hint" style="color:var(--expense);margin-top:6px">${esc(draft.warnings.join(' · '))}</div>` : ''}
-        ${diagnosticsText ? `<div class="form-hint">${esc(diagnosticsText)}</div>` : ''}
-        ${reviewText ? `<div class="form-hint" style="color:#D97706">⚠ ควรตรวจ: ${esc(reviewText)}</div>` : ''}
       </div>`
     }).join('')
     const diagHtml = diagnostics.length
       ? `<div class="card card-pad" style="margin-top:10px"><div class="list-item-name">Diagnostics</div>${diagnostics.map(msg => `<div class="form-hint">${esc(msg)}</div>`).join('')}</div>`
       : ''
-    const aiLabel = preview.usedAI ? `<div class="form-hint" style="margin-top:8px;margin-bottom:4px">✨ วิเคราะห์ด้วย Claude AI</div>` : ''
+    const aiLabel = preview.usedAI ? `<div class="form-hint" style="margin-top:8px;margin-bottom:4px">✨ วิเคราะห์ด้วย Gemini AI</div>` : ''
+    const selectionBar = drafts.length > 1 ? `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding:8px 0">
+        <span style="font-size:13px;color:var(--muted)">เลือก ${selectedCount} / ${drafts.length} กฎ</span>
+        <button class="btn btn-secondary btn-sm" style="width:auto" onclick="App._toggleAllBenefitDrafts()">
+          ${allSelected ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
+        </button>
+      </div>` : ''
+    const saveBtn = drafts.length
+      ? `<button class="btn btn-primary" onclick="App.saveImportedCCBenefitRules('${esc(cardId)}')" ${selectedCount === 0 ? 'disabled style="opacity:0.5"' : ''}>
+           บันทึก ${selectedCount} กฎที่เลือก
+         </button>`
+      : ''
     resultEl.innerHTML = `
       <div class="card card-pad">
         <div class="list-item-name">${esc(doc.title || 'ผลการวิเคราะห์')}</div>
@@ -6262,11 +6294,62 @@ App._pickMerchant = function(name, opts = {}) {
       ${aiLabel}
       ${ruleRows || `<div class="card card-pad" style="margin-top:10px"><div class="list-item-name">ยังไม่พร้อมสร้างกฎอัตโนมัติ</div><div class="list-item-sub">ระบบดึงหน้าเว็บได้ แต่ยังไม่สามารถแปลงเป็น draft rule ที่มั่นใจพอ</div></div>`}
       ${diagHtml}
-      <div style="display:flex;gap:10px;margin-top:12px">
+      ${selectionBar}
+      <div style="display:flex;gap:10px;margin-top:10px">
         <button class="btn btn-secondary" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')">เพิ่มเอง</button>
-        ${preview.ruleDrafts?.length ? `<button class="btn btn-primary" onclick="App.saveImportedCCBenefitRules('${esc(cardId)}')">บันทึก ${preview.ruleDrafts.length} กฎ</button>` : ''}
+        ${saveBtn}
       </div>
       <div class="form-hint" style="margin-top:10px">ก่อนบันทึกควรตรวจร้านค้า ช่วงเวลา และข้อยกเว้นของแต่ละ rule อีกครั้ง</div>`
+  }
+
+  App._toggleBenefitDraftSelection = function(idx) {
+    const preview = App._ccBenefitImportPreview
+    if (!preview) return
+    if (preview.selectedIndices.has(idx)) preview.selectedIndices.delete(idx)
+    else preview.selectedIndices.add(idx)
+    App._renderBenefitImportPreview(preview)
+  }
+
+  App._toggleAllBenefitDrafts = function() {
+    const preview = App._ccBenefitImportPreview
+    if (!preview) return
+    const allSelected = preview.selectedIndices.size === (preview.ruleDrafts || []).length
+    preview.selectedIndices = allSelected
+      ? new Set()
+      : new Set((preview.ruleDrafts || []).map((_, i) => i))
+    App._renderBenefitImportPreview(preview)
+  }
+
+  App._reopenCCBenefitImportDialog = function(cardId) {
+    App.closeSubScreen()
+    const preview = App._ccBenefitImportPreview
+    if (!preview || String(preview.cardId || '') !== String(cardId || '')) return
+    const dialogId = 'cc-benefit-import-dialog'
+    document.getElementById(dialogId)?.remove()
+    document.getElementById('app')?.insertAdjacentHTML('beforeend', `
+      <div id="${dialogId}" class="overlay open" role="dialog" aria-modal="true">
+        <div class="overlay-backdrop" onclick="document.getElementById('${dialogId}')?.remove()"></div>
+        <div class="sheet" style="max-height:92dvh">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <h2>เลือกสิทธิประโยชน์</h2>
+            <button class="btn-icon" onclick="document.getElementById('${dialogId}')?.remove()">✕</button>
+          </div>
+          <div class="sheet-body" style="overflow-y:auto">
+            <div id="cc-benefit-import-result"></div>
+          </div>
+        </div>
+      </div>`)
+    App._renderBenefitImportPreview(preview)
+  }
+
+  App._onCCBenefitRuleFormBack = function(cardId) {
+    if (App._benefitDraftEditReturn === cardId) {
+      App._benefitDraftEditReturn = null
+      App._reopenCCBenefitImportDialog(cardId)
+      return
+    }
+    App.openCCBenefitScreen(cardId)
   }
 
   App._editCCBenefitDraftAtIndex = function(cardId, draftIdx) {
@@ -6283,8 +6366,9 @@ App._pickMerchant = function(name, opts = {}) {
       S.ccBenefitRules.push(rule)
       persist()
     }
-    // Close the import dialog first — its z-index (780) sits above #sub-screen (600)
-    // and would block the rule form from being visible or interactive.
+    // Set flag so saveCCBenefitRule / back button returns to import dialog
+    App._benefitDraftEditReturn = cardId
+    // Close the import dialog (z-index 780) before opening sub-screen (z-index 600)
     document.getElementById('cc-benefit-import-dialog')?.remove()
     App.openCCBenefitRuleForm(cardId, rule.id)
   }
@@ -6411,6 +6495,8 @@ App._pickMerchant = function(name, opts = {}) {
         ruleDrafts,
         diagnostics,
         usedAI: !!endpoint,
+        // All selected by default; persists across edit round-trips
+        selectedIndices: new Set(ruleDrafts.map((_, i) => i)),
       }
       App._renderBenefitImportPreview(App._ccBenefitImportPreview)
     } catch (err) {
@@ -6433,11 +6519,14 @@ App._pickMerchant = function(name, opts = {}) {
       notify('ยังไม่มีผลวิเคราะห์ให้บันทึก', 'warn')
       return
     }
+    const sel = preview.selectedIndices instanceof Set ? preview.selectedIndices : new Set(preview.ruleDrafts.map((_, i) => i))
+    const selectedDrafts = preview.ruleDrafts.filter((_, i) => sel.has(i))
+    if (!selectedDrafts.length) { notify('กรุณาเลือกอย่างน้อย 1 กฎก่อนบันทึก', 'warn'); return }
     App.ensureCCBenefitRulesState?.()
     const existingByKey = new Map((S.ccBenefitRules || []).map(rule => [buildImportedRuleKey(cardId, rule), rule]))
     let created = 0
     let updated = 0
-    preview.ruleDrafts.forEach(draft => {
+    selectedDrafts.forEach(draft => {
       const normalized = App.normalizeBenefitRule?.({ ...(draft.rule || {}), id: draft.rule?.id || genId(), cardId }, cardId) || null
       if (!normalized) return
       const key = buildImportedRuleKey(cardId, normalized)
