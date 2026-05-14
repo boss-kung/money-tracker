@@ -506,6 +506,7 @@
   }
 
   App.openCustomNotificationRulesScreen = function(animate = true) {
+    S.notificationRuleDraft = null
     const rules = getCustomRules()
     const rows = rules.map(rule => `
       <div class="list-item" onclick="App.openNotificationRuleForm('${esc(rule.id)}')">
@@ -536,7 +537,7 @@
   App.openNotificationRuleForm = function(ruleId = '', nextTriggerType = '', animate = true) {
     const rules = getCustomRules()
     const existing = rules.find(rule => rule.id === ruleId)
-    const draft = S.notificationRuleDraft?.id === (ruleId || S.notificationRuleDraft?.id) ? S.notificationRuleDraft : null
+    const draft = ruleId && S.notificationRuleDraft?.id === ruleId ? S.notificationRuleDraft : null
     const rule = normalizeCustomRule(draft || existing || {
       triggerType: nextTriggerType || 'daily_time',
       title: '',
