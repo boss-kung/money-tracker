@@ -750,7 +750,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.13-benefit-link1'
+const APP_VERSION = '2026.05.14-notifications1'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
