@@ -473,10 +473,6 @@
           <div class="s-label">กฎการแจ้งเตือน<br><div class="s-value" style="font-weight:400;text-align:left !important">เพิ่มและแก้ไขกฎการแจ้งเตือนของคุณ</div></div>
           <div class="s-value">${customCount} กฎ</div>
         </div>
-        <div style="display:flex;gap:8px;padding:12px 0 0">
-          <button class="btn btn-secondary btn-sm" onclick="App.syncNotificationSnapshot(true)" style="width:auto">Sync ตอนนี้</button>
-          <button class="btn btn-secondary btn-sm" onclick="App.testLocalNotification()" style="width:auto">ทดสอบในเครื่อง</button>
-        </div>
       </div>`
   }
 
@@ -523,12 +519,13 @@
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
-        <h2>กฎแจ้งเตือนเอง</h2>
+        <h2>กฎการแจ้งเตือน</h2>
         <button class="btn btn-primary btn-sm" onclick="App.openNotificationRuleForm()" style="width:auto">+ เพิ่ม</button>
       </div>
       <div class="sub-scroll">
-        <div class="card card-pad" style="margin-bottom:12px">
-          <button class="btn btn-secondary btn-sm" onclick="App.syncCustomNotificationRules(true)" style="width:auto">Sync กฎขึ้น Supabase</button>
+        <div class="card card-pad" style="margin-bottom:12px;display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="App.syncAllNotificationData()" style="width:auto">Sync ข้อมูลแจ้งเตือน</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.testLocalNotification()" style="width:auto">ทดสอบในเครื่อง</button>
         </div>
         <div class="card"><div style="padding:0 16px">${rows || App._emptyState?.('🔔','ยังไม่มีกฎแจ้งเตือน','สร้างกฎเพื่อกำหนดข้อความ เงื่อนไข และปลายทางเอง') || ''}</div></div>
       </div>`, { animate })
@@ -750,6 +747,15 @@
         App.openCustomNotificationRulesScreen()
       },
     })
+  }
+
+  App.syncAllNotificationData = function() {
+    Promise.all([
+      syncSnapshot({ force: true }),
+      syncCustomRules(),
+    ])
+      .then(() => notify('Sync ข้อมูลแจ้งเตือนแล้ว', 'success'))
+      .catch(err => notify(err.message || 'Sync ไม่สำเร็จ', 'error'))
   }
 
   App.syncCustomNotificationRules = function(showToast = false) {

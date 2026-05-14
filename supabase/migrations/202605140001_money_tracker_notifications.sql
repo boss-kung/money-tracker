@@ -42,6 +42,7 @@ create table if not exists public.mt_notification_snapshots (
   credit_due jsonb not null default '[]'::jsonb,
   budget_alerts jsonb not null default '[]'::jsonb,
   recurring_due jsonb not null default '[]'::jsonb,
+  privileges_expiring jsonb not null default '[]'::jsonb,
   last_exported_at timestamptz,
   app_version text,
   updated_at timestamptz not null default now(),
