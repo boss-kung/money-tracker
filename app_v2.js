@@ -2177,8 +2177,10 @@ App.render();
     const typeKey = type === 'income' ? 'income' : 'expense'
     const allCats = getFrequentCategories(typeKey)
     const needsCat = type !== 'transfer'
-    const shownCats = S.txShowAllCats ? allCats : allCats.slice(0, 5)
-    const hasMore = needsCat && allCats.length > 5 && !S.txShowAllCats
+    const _suggestedCatId = S.tx.txSuggestedFields?.categoryId || ''
+    const orderedCats = _suggestedCatId
+      ? [allCats.find(c => c.id === _suggestedCatId), ...allCats.filter(c => c.id !== _suggestedCatId)].filter(Boolean)
+      : allCats
     const amount = numericAmount(S.tx.amount || 0)
     const display = formatDraftAmount(S.tx.amount || '0')
     const color = typeColor(type)
@@ -2200,7 +2202,7 @@ App.render();
       <div class="add-detail-shell">
         <div class="add-detail-scroll">
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
-          ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div class="cat-grid cat-grid-compact" id="cat-grid">${shownCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}${hasMore ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.showAllTxCategories()"><span class="cat-icon">⋯</span><span>เพิ่มเติม</span></button>` : ''}${S.txShowAllCats && allCats.length > 5 ? `<button type="button" class="cat-btn cat-more-btn" onclick="App.hideAllTxCategories()"><span class="cat-icon">⌃</span><span>ย่อ</span></button>` : ''}</div></div>` : ''}
+          ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div id="cat-grid" style="display:flex;flex-direction:row;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding:0 2px 6px;margin:0 -2px">${orderedCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')" style="flex:0 0 72px;width:72px;scroll-snap-align:start"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}</div></div>` : ''}
           ${isExpense ? `<div class="form-group"><label class="form-label">ช่องทางการใช้จ่าย</label><select class="form-input" id="tx-channel" onchange="App._txField('channel',this.value);App._renderAddTxDetail()">${(App.getBenefitChannelOptions?.() || [['','ไม่ระบุ'],['online','ออนไลน์'],['offline','หน้าร้าน / ออฟไลน์']]).map(([value,label]) => `<option value="${esc(value)}"${S.tx.channel === value ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></div>` : ''}
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);App._renderAddTxDetail()">${walletOptions}</select></div>
           ${type === 'transfer'
@@ -2272,9 +2274,9 @@ App.render();
                 ${_rules.length ? `<div class="reward-rule-results">${_rows}</div>` : `<div class="card card-pad" style="margin-top:10px; padding:12px; border-radius:12px !important;"><div class="list-item-name">บัตรนี้ยังไม่มีสิทธิประโยชน์</div><div class="list-item-sub">ไปที่รายละเอียดบัตรเครดิต แล้วกด ตั้งค่า เพื่อเพิ่มสิทธิประโยชน์</div></div>`}
                 <div class="card card-pad" style="margin-top:10px; padding:12px; border-radius:12px !important;">
                   <div class="list-item-name">สรุปสิทธิประโยชน์</div>
-                  <div class="list-item-sub">เงินคืนโดยประมาณ: ฿${Number(_estimate.cashback || 0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-                  <div class="list-item-sub">ส่วนลดทันทีโดยประมาณ: ฿${Number(_estimate.discount || 0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-                  <div class="list-item-sub">คะแนนโดยประมาณ: ${Number(_estimate.points || 0).toLocaleString('en-US')} คะแนน</div>
+                  ${Number(_estimate.cashback || 0) > 0 ? `<div class="list-item-sub">เงินคืนโดยประมาณ: ฿${Number(_estimate.cashback).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>` : ''}
+                  ${Number(_estimate.discount || 0) > 0 ? `<div class="list-item-sub">ส่วนลดทันทีโดยประมาณ: ฿${Number(_estimate.discount).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>` : ''}
+                  ${Number(_estimate.points || 0) > 0 ? `<div class="list-item-sub">คะแนนโดยประมาณ: ${Number(_estimate.points).toLocaleString('en-US')} คะแนน</div>` : ''}
                   ${_selectedNames.length ? `<div class="list-item-sub">ใช้สิทธิ์: ${esc(_selectedNames.join(', '))}</div>` : `<div class="list-item-sub">ยังไม่ได้เลือกสิทธิประโยชน์</div>`}
                   ${_caps}
                   ${_warnings}
@@ -10818,8 +10820,14 @@ App._pickMerchant = function(name, opts = {}) {
       date: S.tx.date || today(),
       channel: S.tx.channel || '',
     }
+    const _scrollEl = document.querySelector('.add-detail-scroll')
+    const _scrollTop = _scrollEl ? _scrollEl.scrollTop : 0
     S.tx.rewardEstimate = App.calculateSelectedRewardEstimate?.(draft, S.tx.rewardRuleIds) || null
     App._renderAddTxDetail?.()
+    requestAnimationFrame(() => {
+      const el = document.querySelector('.add-detail-scroll')
+      if (el) el.scrollTop = _scrollTop
+    })
   }
 
   App.getCreditCardDueInfo = function(card, refDate = today()) {
