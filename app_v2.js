@@ -4426,7 +4426,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       ${buildSummaryCard('อัตราออม', monthly.savingsRate === null ? '—' : `${monthly.savingsRate.toFixed(1)}%`, monthly.savingsRate === null ? 'var(--muted)' : monthly.savingsRate >= 0 ? 'var(--income)' : 'var(--expense)', monthly.income > 0 ? 'รายรับหลังหักรายจ่าย' : 'ยังไม่มีรายรับในเดือนนี้')}
     </div>`
 
-    html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head"><strong>AI Financial Coach</strong></div><button class="btn btn-secondary btn-sm" onclick="InsightEngine.invalidate();App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${
+    html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head" style="display:flex;align-items:center;justify-content:space-between"><strong>AI Financial Coach</strong><button class="btn btn-secondary btn-sm" onclick="InsightEngine.invalidate();App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${
       smartInsights.length
         ? smartInsights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')
         : `<div class="list-item-sub">ข้อมูลเดือนนี้ยังไม่พอสำหรับสรุปแนวโน้มเพิ่มเติม</div>`
@@ -13224,8 +13224,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
     insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
 
-    // Replace the "วิเคราะห์ใหม่" button with insight cards
-    const reloadBtn = advisorCard.querySelector('button.btn-secondary, button.btn')
+    // Replace the "วิเคราะห์ใหม่" button with ↻ รีเฟรช (stays inside ai-card-head)
+    const reloadBtn = advisorCard.querySelector('.ai-card-head button')
     if (reloadBtn) {
       reloadBtn.outerHTML = `<button class="btn btn-secondary btn-sm" onclick="InsightEngine.invalidate();App.renderReports()" style="width:auto;font-size:11px">↻ รีเฟรช</button>`
     }
