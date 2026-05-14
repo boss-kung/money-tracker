@@ -25,6 +25,7 @@
       monthly_summary_enabled: false,
       hide_amounts_in_notification: Boolean(S.settings?.hideMoney),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Bangkok',
+      customRules: [],
     }
   }
 
@@ -32,6 +33,7 @@
     S.settings ||= {}
     S.settings.notifications ||= {}
     S.settings.notifications = { ...defaultPrefs(), ...S.settings.notifications }
+    if (!Array.isArray(S.settings.notifications.customRules)) S.settings.notifications.customRules = []
     return S.settings.notifications
   }
 
@@ -204,6 +206,79 @@
     return true
   }
 
+  function normalizeCustomRule(raw = {}) {
+    const triggerType = [
+      'daily_time',
+      'weekly_time',
+      'one_time',
+      'no_transaction_today',
+      'upcoming_bill_due',
+      'credit_card_due',
+      'backup_stale',
+    ].includes(raw.triggerType) ? raw.triggerType : 'daily_time'
+    return {
+      id: String(raw.id || `rule_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`),
+      enabled: raw.enabled !== false,
+      title: String(raw.title || '').trim(),
+      body: String(raw.body || '').trim(),
+      route: String(raw.route || 'dashboard'),
+      actionLabel: String(raw.actionLabel || 'เปิดดู').trim(),
+      triggerType,
+      triggerConfig: {
+        time: String(raw.triggerConfig?.time || raw.time || '09:00'),
+        date: String(raw.triggerConfig?.date || raw.date || todayStr()),
+        weekdays: Array.isArray(raw.triggerConfig?.weekdays) ? raw.triggerConfig.weekdays : ['mon','tue','wed','thu','fri'],
+        daysBefore: Number(raw.triggerConfig?.daysBefore ?? raw.daysBefore ?? 1),
+        staleDays: Number(raw.triggerConfig?.staleDays ?? raw.staleDays ?? 30),
+      },
+      createdAt: raw.createdAt || new Date().toISOString(),
+      updatedAt: raw.updatedAt || new Date().toISOString(),
+    }
+  }
+
+  function getCustomRules() {
+    const prefs = ensureSettings()
+    prefs.customRules = (prefs.customRules || []).map(normalizeCustomRule)
+    return prefs.customRules
+  }
+
+  async function syncCustomRules() {
+    if (!isConfigured()) return false
+    await callFunction('sync-notification-rules', {
+      installId: getInstallId(),
+      rules: getCustomRules(),
+      appVersion: window.MT_APP_VERSION || '',
+    })
+    return true
+  }
+
+  function routeLabel(route) {
+    return {
+      dashboard: 'หน้าหลัก',
+      addTx: 'เพิ่มรายการ',
+      transactions: 'รายการ',
+      wallets: 'กระเป๋า',
+      reports: 'รายงาน',
+      more: 'เพิ่มเติม',
+      upcomingBills: 'รายการรอจ่าย',
+      creditCards: 'บัตรเครดิต',
+      goals: 'เป้าหมาย',
+    }[route] || 'หน้าหลัก'
+  }
+
+  function triggerLabel(rule) {
+    const cfg = rule.triggerConfig || {}
+    const days = { mon:'จ', tue:'อ', wed:'พ', thu:'พฤ', fri:'ศ', sat:'ส', sun:'อา' }
+    if (rule.triggerType === 'daily_time') return `ทุกวัน ${cfg.time || '09:00'}`
+    if (rule.triggerType === 'weekly_time') return `ทุกสัปดาห์ ${((cfg.weekdays || []).map(d => days[d] || d).join(', ') || 'ไม่ระบุ')} ${cfg.time || '09:00'}`
+    if (rule.triggerType === 'one_time') return `${cfg.date || todayStr()} ${cfg.time || '09:00'}`
+    if (rule.triggerType === 'no_transaction_today') return `ถ้าวันนี้ยังไม่มีรายการ เวลา ${cfg.time || '20:30'}`
+    if (rule.triggerType === 'upcoming_bill_due') return `บิลครบใน ${Number(cfg.daysBefore ?? 1)} วัน`
+    if (rule.triggerType === 'credit_card_due') return `บัตรครบใน ${Number(cfg.daysBefore ?? 1)} วัน`
+    if (rule.triggerType === 'backup_stale') return `ไม่ได้ backup ${Number(cfg.staleDays ?? 30)} วัน`
+    return 'กฎแจ้งเตือน'
+  }
+
   async function enableNotifications() {
     if (location.protocol === 'file:') {
       notify('การแจ้งเตือนต้องเปิดผ่าน http/https หรือ PWA ที่ติดตั้งแล้ว', 'warn')
@@ -253,6 +328,7 @@
       userAgent: navigator.userAgent || '',
     })
     await savePreferences()
+    await syncCustomRules().catch(() => {})
     await syncSnapshot({ force: true })
     notify('เปิดการแจ้งเตือนแล้ว', 'success')
     App.renderMore?.()
@@ -280,6 +356,7 @@
 
   function renderNotificationSettings() {
     const prefs = ensureSettings()
+    const customCount = getCustomRules().length
     const toggle = (key, label, sub = '') => `
       <div class="settings-row" onclick="App.toggleNotificationPreference('${key}')">
         <div class="s-icon">🔔</div>
@@ -301,6 +378,11 @@
         ${toggle('recurring_enabled', 'รายการประจำ', 'เตือนรายการที่ถึงกำหนด')}
         ${toggle('backup_reminder_enabled', 'เตือนสำรองข้อมูล', 'เหมาะกับแอปที่เก็บข้อมูลในเครื่อง')}
         ${toggle('hide_amounts_in_notification', 'ซ่อนจำนวนเงินในแจ้งเตือน', 'ใช้ร่วมกับโหมดซ่อนเงิน')}
+        <div class="settings-row" onclick="App.openCustomNotificationRulesScreen()">
+          <div class="s-icon">⚙️</div>
+          <div class="s-label">กฎแจ้งเตือนเอง<br><div class="s-value" style="font-weight:400;text-align:left !important">ตั้งข้อความ เวลา เงื่อนไข และปลายทางเอง</div></div>
+          <div class="s-value">${customCount} กฎ</div>
+        </div>
         <div style="display:flex;gap:8px;padding:12px 0 0">
           <button class="btn btn-secondary btn-sm" onclick="App.syncNotificationSnapshot(true)" style="width:auto">Sync ตอนนี้</button>
           <button class="btn btn-secondary btn-sm" onclick="App.testLocalNotification()" style="width:auto">ทดสอบในเครื่อง</button>
@@ -327,6 +409,219 @@
 
   App.toggleNotificationPreference = togglePreference
 
+  App.openCustomNotificationRulesScreen = function() {
+    const rules = getCustomRules()
+    const rows = rules.map(rule => `
+      <div class="list-item" onclick="App.openNotificationRuleForm('${esc(rule.id)}')">
+        <div class="list-item-icon" style="background:${rule.enabled ? 'rgba(37,99,235,.12)' : 'rgba(148,163,184,.18)'}">${rule.enabled ? '🔔' : '🔕'}</div>
+        <div class="list-item-info">
+          <div class="list-item-name">${esc(rule.title || 'ยังไม่ตั้งชื่อ')}</div>
+          <div class="list-item-sub">${esc(triggerLabel(rule))} · ไปที่ ${esc(routeLabel(rule.route))}</div>
+        </div>
+        <div class="recurring-actions">
+          <button class="icon-btn" onclick="event.stopPropagation();App.toggleNotificationRule('${esc(rule.id)}')">${rule.enabled ? 'ปิด' : 'เปิด'}</button>
+          <button class="icon-btn" onclick="event.stopPropagation();App.testCustomNotificationRule('${esc(rule.id)}')">ทดสอบ</button>
+        </div>
+      </div>`).join('')
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>กฎแจ้งเตือนเอง</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.openNotificationRuleForm()" style="width:auto">+ เพิ่ม</button>
+      </div>
+      <div class="sub-scroll">
+        <div class="card card-pad" style="margin-bottom:12px">
+          <button class="btn btn-secondary btn-sm" onclick="App.syncCustomNotificationRules(true)" style="width:auto">Sync กฎขึ้น Supabase</button>
+        </div>
+        <div class="card"><div style="padding:0 16px">${rows || App._emptyState?.('🔔','ยังไม่มีกฎแจ้งเตือน','สร้างกฎเพื่อกำหนดข้อความ เงื่อนไข และปลายทางเอง') || ''}</div></div>
+      </div>`)
+  }
+
+  App.openNotificationRuleForm = function(ruleId = '', nextTriggerType = '') {
+    const rules = getCustomRules()
+    const existing = rules.find(rule => rule.id === ruleId)
+    const draft = S.notificationRuleDraft?.id === (ruleId || S.notificationRuleDraft?.id) ? S.notificationRuleDraft : null
+    const rule = normalizeCustomRule(draft || existing || {
+      triggerType: nextTriggerType || 'daily_time',
+      title: '',
+      body: '',
+      route: 'dashboard',
+      actionLabel: 'เปิดดู',
+      triggerConfig: { time: '09:00', date: todayStr(), weekdays: ['mon','tue','wed','thu','fri'], daysBefore: 1, staleDays: 30 },
+    })
+    if (nextTriggerType) rule.triggerType = nextTriggerType
+    S.notificationRuleDraft = rule
+    const cfg = rule.triggerConfig || {}
+    const selected = (value, current) => String(value) === String(current) ? ' selected' : ''
+    const checked = day => (cfg.weekdays || []).includes(day) ? ' checked' : ''
+    const showTime = ['daily_time','weekly_time','one_time','no_transaction_today'].includes(rule.triggerType)
+    const showDate = rule.triggerType === 'one_time'
+    const showWeekdays = rule.triggerType === 'weekly_time'
+    const showDaysBefore = ['upcoming_bill_due','credit_card_due'].includes(rule.triggerType)
+    const showStaleDays = rule.triggerType === 'backup_stale'
+
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.openCustomNotificationRulesScreen()">←</button>
+        <h2>${existing ? 'แก้ไขกฎ' : 'เพิ่มกฎแจ้งเตือน'}</h2>
+        <button class="btn btn-primary btn-sm" onclick="App.saveNotificationRule('${esc(rule.id)}')" style="width:auto">บันทึก</button>
+      </div>
+      <div class="sub-scroll">
+        <div class="card card-pad">
+          <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="nr-title" value="${esc(rule.title)}" placeholder="เช่น อย่าลืมจดค่าอาหาร"></div>
+          <div class="form-group"><label class="form-label">Description</label><textarea class="form-input" id="nr-body" rows="3" placeholder="ข้อความรองใน notification">${esc(rule.body)}</textarea></div>
+          <div class="form-group"><label class="form-label">Trigger</label><select class="form-input" id="nr-trigger" onchange="App.changeNotificationRuleTrigger('${esc(rule.id)}', this.value)">
+            <option value="daily_time"${selected('daily_time', rule.triggerType)}>ทุกวันตามเวลา</option>
+            <option value="weekly_time"${selected('weekly_time', rule.triggerType)}>ทุกสัปดาห์ตามวัน/เวลา</option>
+            <option value="one_time"${selected('one_time', rule.triggerType)}>ครั้งเดียวตามวัน/เวลา</option>
+            <option value="no_transaction_today"${selected('no_transaction_today', rule.triggerType)}>ถ้าวันนี้ยังไม่มีรายการ</option>
+            <option value="upcoming_bill_due"${selected('upcoming_bill_due', rule.triggerType)}>บิล / รายการรอจ่ายใกล้ครบ</option>
+            <option value="credit_card_due"${selected('credit_card_due', rule.triggerType)}>บัตรเครดิตใกล้ครบกำหนด</option>
+            <option value="backup_stale"${selected('backup_stale', rule.triggerType)}>ไม่ได้สำรองข้อมูลหลายวัน</option>
+          </select></div>
+          ${showDate ? `<div class="form-group"><label class="form-label">วันที่</label><input class="form-input" type="date" id="nr-date" value="${esc(cfg.date || todayStr())}"></div>` : ''}
+          ${showTime ? `<div class="form-group"><label class="form-label">เวลา</label><input class="form-input" type="time" id="nr-time" value="${esc(cfg.time || '09:00')}"></div>` : ''}
+          ${showWeekdays ? `<div class="form-group"><label class="form-label">วันในสัปดาห์</label><div class="chips">${[
+            ['mon','จ'],['tue','อ'],['wed','พ'],['thu','พฤ'],['fri','ศ'],['sat','ส'],['sun','อา'],
+          ].map(([value, label]) => `<label class="chip" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" name="nr-weekday" value="${value}"${checked(value)}> ${label}</label>`).join('')}</div></div>` : ''}
+          ${showDaysBefore ? `<div class="form-group"><label class="form-label">เตือนก่อนครบกำหนดกี่วัน</label><input class="form-input" type="number" min="0" max="30" id="nr-days-before" value="${esc(cfg.daysBefore ?? 1)}"></div>` : ''}
+          ${showStaleDays ? `<div class="form-group"><label class="form-label">ไม่ได้ backup กี่วันแล้วให้เตือน</label><input class="form-input" type="number" min="1" max="365" id="nr-stale-days" value="${esc(cfg.staleDays ?? 30)}"></div>` : ''}
+          <div class="form-group"><label class="form-label">Action route</label><select class="form-input" id="nr-route">
+            ${[
+              ['dashboard','หน้าหลัก'],['addTx','เพิ่มรายการ'],['transactions','รายการ'],['wallets','กระเป๋า'],['reports','รายงาน'],['more','เพิ่มเติม'],['upcomingBills','รายการรอจ่าย'],['creditCards','บัตรเครดิต'],['goals','เป้าหมาย'],
+            ].map(([value, label]) => `<option value="${value}"${selected(value, rule.route)}>${label}</option>`).join('')}
+          </select></div>
+          <div class="form-group"><label class="form-label">ป้ายปุ่ม Action</label><input class="form-input" id="nr-action-label" value="${esc(rule.actionLabel || 'เปิดดู')}" placeholder="เช่น เปิดดู, เพิ่มรายการ"></div>
+          <button class="btn btn-secondary" onclick="App.testNotificationRuleFromForm('${esc(rule.id)}')">ทดสอบกฎนี้ในเครื่อง</button>
+          ${existing ? `<button class="btn btn-outline mt-8" onclick="App.deleteNotificationRule('${esc(rule.id)}')">ลบกฎนี้</button>` : ''}
+        </div>
+      </div>`)
+  }
+
+  App.changeNotificationRuleTrigger = function(ruleId, triggerType) {
+    const current = normalizeCustomRule({
+      ...(S.notificationRuleDraft || {}),
+      id: ruleId,
+      title: document.getElementById('nr-title')?.value || S.notificationRuleDraft?.title || '',
+      body: document.getElementById('nr-body')?.value || S.notificationRuleDraft?.body || '',
+      route: document.getElementById('nr-route')?.value || S.notificationRuleDraft?.route || 'dashboard',
+      actionLabel: document.getElementById('nr-action-label')?.value || S.notificationRuleDraft?.actionLabel || 'เปิดดู',
+      triggerType,
+      triggerConfig: {
+        ...(S.notificationRuleDraft?.triggerConfig || {}),
+        time: document.getElementById('nr-time')?.value || S.notificationRuleDraft?.triggerConfig?.time || '09:00',
+        date: document.getElementById('nr-date')?.value || S.notificationRuleDraft?.triggerConfig?.date || todayStr(),
+        weekdays: [...document.querySelectorAll('input[name="nr-weekday"]:checked')].map(input => input.value),
+        daysBefore: Number(document.getElementById('nr-days-before')?.value || S.notificationRuleDraft?.triggerConfig?.daysBefore || 1),
+        staleDays: Number(document.getElementById('nr-stale-days')?.value || S.notificationRuleDraft?.triggerConfig?.staleDays || 30),
+      },
+    })
+    S.notificationRuleDraft = current
+    App.openNotificationRuleForm(ruleId, triggerType)
+  }
+
+  App.saveNotificationRule = function(ruleId) {
+    const prefs = ensureSettings()
+    const rules = getCustomRules()
+    const existing = rules.find(rule => rule.id === ruleId)
+    const triggerType = document.getElementById('nr-trigger')?.value || 'daily_time'
+    const weekdays = [...document.querySelectorAll('input[name="nr-weekday"]:checked')].map(input => input.value)
+    const rule = normalizeCustomRule({
+      ...(existing || {}),
+      id: ruleId,
+      enabled: existing?.enabled !== false,
+      title: document.getElementById('nr-title')?.value || '',
+      body: document.getElementById('nr-body')?.value || '',
+      route: document.getElementById('nr-route')?.value || 'dashboard',
+      actionLabel: document.getElementById('nr-action-label')?.value || 'เปิดดู',
+      triggerType,
+      triggerConfig: {
+        time: document.getElementById('nr-time')?.value || existing?.triggerConfig?.time || '09:00',
+        date: document.getElementById('nr-date')?.value || existing?.triggerConfig?.date || todayStr(),
+        weekdays: weekdays.length ? weekdays : existing?.triggerConfig?.weekdays || ['mon','tue','wed','thu','fri'],
+        daysBefore: Number(document.getElementById('nr-days-before')?.value || existing?.triggerConfig?.daysBefore || 1),
+        staleDays: Number(document.getElementById('nr-stale-days')?.value || existing?.triggerConfig?.staleDays || 30),
+      },
+      createdAt: existing?.createdAt,
+      updatedAt: new Date().toISOString(),
+    })
+    if (!rule.title) return notify('กรุณากรอก Title ของแจ้งเตือน', 'error')
+    const idx = rules.findIndex(item => item.id === rule.id)
+    if (idx >= 0) rules[idx] = rule
+    else rules.unshift(rule)
+    prefs.customRules = rules
+    persist()
+    S.notificationRuleDraft = null
+    syncCustomRules().catch(() => {})
+    notify('บันทึกกฎแจ้งเตือนแล้ว', 'success')
+    App.openCustomNotificationRulesScreen()
+  }
+
+  App.toggleNotificationRule = function(ruleId) {
+    const rules = getCustomRules()
+    const rule = rules.find(item => item.id === ruleId)
+    if (!rule) return
+    rule.enabled = !rule.enabled
+    rule.updatedAt = new Date().toISOString()
+    persist()
+    syncCustomRules().catch(() => {})
+    App.openCustomNotificationRulesScreen()
+  }
+
+  App.deleteNotificationRule = function(ruleId) {
+    const rule = getCustomRules().find(item => item.id === ruleId)
+    App.showConfirm?.({
+      title: 'ลบกฎแจ้งเตือน',
+      body: rule?.title ? `ลบ “${rule.title}”?` : 'ลบกฎนี้?',
+      confirmLabel: 'ลบ',
+      danger: true,
+      onConfirm() {
+        const prefs = ensureSettings()
+        prefs.customRules = getCustomRules().filter(item => item.id !== ruleId)
+        persist()
+        syncCustomRules().catch(() => {})
+        notify('ลบกฎแจ้งเตือนแล้ว', 'success')
+        App.openCustomNotificationRulesScreen()
+      },
+    })
+  }
+
+  App.syncCustomNotificationRules = function(showToast = false) {
+    syncCustomRules()
+      .then(ok => { if (showToast) notify(ok ? 'Sync กฎแจ้งเตือนแล้ว' : 'ยังไม่ได้ตั้งค่า Firebase/Supabase', ok ? 'success' : 'warn') })
+      .catch(err => notify(err.message || 'Sync กฎไม่สำเร็จ', 'error'))
+  }
+
+  App.testCustomNotificationRule = async function(ruleId) {
+    const rule = getCustomRules().find(item => item.id === ruleId)
+    if (!rule) return notify('ไม่พบกฎแจ้งเตือน', 'error')
+    await App._showCustomNotificationRule(rule)
+  }
+
+  App.testNotificationRuleFromForm = async function(ruleId) {
+    const temp = normalizeCustomRule({
+      id: ruleId,
+      title: document.getElementById('nr-title')?.value || 'ทดสอบแจ้งเตือน',
+      body: document.getElementById('nr-body')?.value || 'ข้อความทดสอบจากกฎแจ้งเตือน',
+      route: document.getElementById('nr-route')?.value || 'dashboard',
+      actionLabel: document.getElementById('nr-action-label')?.value || 'เปิดดู',
+    })
+    await App._showCustomNotificationRule(temp)
+  }
+
+  App._showCustomNotificationRule = async function(rule) {
+    if (!('Notification' in window)) return notify('เบราว์เซอร์นี้ไม่รองรับ Notification', 'warn')
+    const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
+    if (permission !== 'granted') return notify('ยังไม่ได้อนุญาตการแจ้งเตือน', 'warn')
+    const reg = await navigator.serviceWorker.ready
+    await reg.showNotification(rule.title || 'Money Tracker', {
+      body: rule.body || '',
+      tag: `mt-custom-test-${rule.id}`,
+      data: { type: 'custom_rule', ruleId: rule.id, route: rule.route || 'dashboard' },
+      actions: [{ action: rule.route || 'open', title: rule.actionLabel || 'เปิดแอป' }],
+    })
+  }
+
   App.syncNotificationSnapshot = function(force = false) {
     syncSnapshot({ force: Boolean(force) })
       .then(ok => notify(ok ? 'Sync ข้อมูลแจ้งเตือนแล้ว' : 'ยังไม่ได้ตั้งค่า Notification', ok ? 'success' : 'warn'))
@@ -352,6 +647,7 @@
     const open = params.get('open') || new URLSearchParams(location.search).get('open')
     if (open === 'addTx') setTimeout(() => App.openAddTx?.(), 350)
     if (open === 'upcomingBills') setTimeout(() => App.openUpcomingBillsScreen?.(), 350)
+    if (open === 'goals') setTimeout(() => App.openGoalsScreen?.(), 350)
   }
 
   window.addEventListener('hashchange', handleNotificationRoute, { passive: true })
@@ -360,5 +656,6 @@
     handleNotificationRoute()
     if (S.page === 'more') App.renderMore?.()
     syncSnapshot().catch(() => {})
+    syncCustomRules().catch(() => {})
   }, 500)
 })()
