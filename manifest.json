@@ -1,7 +1,7 @@
 {
-  "name": "Money Tracker",
-  "short_name": "MoneyTracker",
-  "description": "ติดตามการเงินส่วนตัว",
+  "name": "Financial Tracker",
+  "short_name": "Financial Tracker",
+  "description": "ศูนย์รวมการเงินส่วนตัวและสิทธิประโยชน์ของคุณ",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",

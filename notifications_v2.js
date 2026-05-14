@@ -480,7 +480,7 @@
             <option value="backup_stale"${selected('backup_stale', rule.triggerType)}>ไม่ได้สำรองข้อมูลหลายวัน</option>
           </select></div>
           ${showDate ? `<div class="form-group"><label class="form-label">วันที่</label><input class="form-input" type="date" id="nr-date" value="${esc(cfg.date || todayStr())}"></div>` : ''}
-          ${showTime ? `<div class="form-group"><label class="form-label">เวลา</label><input class="form-input" type="time" id="nr-time" value="${esc(cfg.time || '09:00')}"></div>` : ''}
+          ${showTime ? `<div class="form-group"><label class="form-label">เวลา</label><input class="form-input" type="time" id="nr-time" value="${esc(cfg.time || '09:00')}" style="width:100%;max-width:100%;min-width:0;box-sizing:border-box;-webkit-appearance:none;appearance:none"></div>` : ''}
           ${showWeekdays ? `<div class="form-group"><label class="form-label">วันในสัปดาห์</label><div class="chips">${[
             ['mon','จ'],['tue','อ'],['wed','พ'],['thu','พฤ'],['fri','ศ'],['sat','ส'],['sun','อา'],
           ].map(([value, label]) => `<label class="chip" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" name="nr-weekday" value="${value}"${checked(value)}> ${label}</label>`).join('')}</div></div>` : ''}
