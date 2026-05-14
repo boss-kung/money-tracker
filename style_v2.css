@@ -5540,3 +5540,31 @@ h6,
 .ccbr-inline-input { display: flex; align-items: center; gap: 8px; }
 .ccbr-inline-input .form-input { flex: 1; min-width: 0; }
 .ccbr-input-unit { color: var(--muted); font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+.ccbr-section-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 10px;
+}
+.ccbr-section-hint {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+.ccbr-date-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 0;
+}
+.ccbr-date-row > div { min-width: 0; }
+.ccbr-nav-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+.ccbr-nav-btn {
+  flex: 1;
+  padding: 10px 16px !important;
+  font-size: 14px !important;
+}
