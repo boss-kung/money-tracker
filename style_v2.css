@@ -5872,12 +5872,12 @@ h6,
   height: 200%;
   background: linear-gradient(
     105deg,
-    transparent 30%,
-    rgba(255,255,255,.38) 50%,
-    transparent 70%
+    transparent 10%,
+    rgba(255,255,255,.3) 30%,
+    transparent 50%
   );
   transform: skewX(-18deg);
-  animation: mt-sweep 1s ease-out both;
+  animation: mt-sweep 0.25s ease-out both;
   pointer-events: none;
   z-index: 2;
 }

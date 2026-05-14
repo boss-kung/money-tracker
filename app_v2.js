@@ -14314,8 +14314,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           card.classList.remove('mt-shine')
           void card.offsetWidth
           card.classList.add('mt-shine')
-          setTimeout(() => card.classList.remove('mt-shine'), 1100)
-        }, i * 120)
+          setTimeout(() => card.classList.remove('mt-shine'), 550)
+        }, i * 40)
       })
       // W14: elastic scroll perspective
       _setupElasticScroll()
@@ -14449,11 +14449,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const text = el.textContent.trim()
     if (!text || text.includes('*')) return
     el.innerHTML = text.split('').map((ch, i) => {
-      const delay = (i * 38).toFixed(0)
+      const delay = (i * 50).toFixed(0)
       return `<span class="mt-digit-wrap"><span class="mt-digit-inner" style="animation-delay:${delay}ms">${ch}</span></span>`
     }).join('')
     // Restore plain text after animation finishes
-    setTimeout(() => { if (el.isConnected) el.textContent = text }, text.length * 38 + 700)
+    setTimeout(() => { if (el.isConnected) el.textContent = text }, text.length * 50 + 700)
   }
 
   // ─────────────────────────────────────────────────────────────
