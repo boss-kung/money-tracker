@@ -22,6 +22,8 @@ const VALID_ROUTES = new Set([
   'upcomingBills',
   'creditCards',
   'goals',
+  'recurring',
+  'budgets',
 ])
 
 const VALID_TRIGGERS = new Set([
@@ -32,6 +34,11 @@ const VALID_TRIGGERS = new Set([
   'upcoming_bill_due',
   'credit_card_due',
   'backup_stale',
+  'monthly_time',
+  'weekday_only_time',
+  'no_tx_streak',
+  'budget_over',
+  'recurring_due_today',
 ])
 
 function cleanText(value: unknown, max = 160) {
