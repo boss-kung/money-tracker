@@ -292,7 +292,7 @@
       <div class="card card-pad">
         <div class="settings-row" onclick="App.enableNotifications()">
           <div class="s-icon">🔔</div>
-          <div class="s-label">เปิดการแจ้งเตือน<br><div class="s-value" style="font-weight:400;text-align:left !important">Daily reminder เวลา 20:30</div></div>
+          <div class="s-label">เปิดการแจ้งเตือน</div>
           <div class="s-value">${esc(statusLabel())}</div>
         </div>
         ${toggle('daily_expense_enabled', 'เตือนจดรายจ่ายทุกวัน', 'เวลา 20:30')}
