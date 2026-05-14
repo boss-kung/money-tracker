@@ -20,8 +20,11 @@ type SnapshotRow = {
   install_id: string
   snapshot_date: string
   today_tx_count: number
+  last_tx_date: string | null
   upcoming_bills: Array<Record<string, unknown>>
   credit_due: Array<Record<string, unknown>>
+  budget_alerts: Array<{ pct: number; over: boolean; categoryId: string; label: string }>
+  recurring_due: Array<Record<string, unknown>>
   last_exported_at: string | null
 }
 
@@ -41,6 +44,7 @@ function bangkokParts() {
     date: `${get('year')}-${get('month')}-${get('day')}`,
     weekday: get('weekday').slice(0, 3).toLowerCase(),
     minutes: Number(get('hour') || 0) * 60 + Number(get('minute') || 0),
+    dayOfMonth: Number(get('day') || 0),
   }
 }
 
@@ -78,6 +82,8 @@ function routeHash(route: string) {
     upcomingBills: '#more?open=upcomingBills',
     creditCards: '#wallets',
     goals: '#more?open=goals',
+    recurring: '#more?open=recurring',
+    budgets: '#more?open=budgets',
   }
   return map[route] || '#dashboard'
 }
@@ -134,6 +140,43 @@ function shouldSend(rule: RuleRow, snapshot: SnapshotRow | undefined, now = bang
       : ''
   }
 
+  if (rule.trigger_type === 'monthly_time') {
+    const dayOfMonth = Math.min(28, Math.max(1, Number(config.dayOfMonth || 1)))
+    return now.dayOfMonth === dayOfMonth && isInCurrentWindow(time, now.minutes)
+      ? `custom-rule:${rule.rule_id}:monthly:${now.date.slice(0, 7)}:${dayOfMonth}`
+      : ''
+  }
+
+  if (rule.trigger_type === 'weekday_only_time') {
+    const weekdays = ['mon', 'tue', 'wed', 'thu', 'fri']
+    return weekdays.includes(now.weekday) && isInCurrentWindow(time, now.minutes)
+      ? todayDedupe
+      : ''
+  }
+
+  if (rule.trigger_type === 'no_tx_streak') {
+    const streakDays = Math.max(1, Number(config.streakDays || 3))
+    return daysSince(snapshot?.last_tx_date || null, now.date) >= streakDays && isInCurrentWindow(time, now.minutes)
+      ? `custom-rule:${rule.rule_id}:streak:${now.date}:${streakDays}`
+      : ''
+  }
+
+  if (rule.trigger_type === 'budget_over') {
+    const threshold = Math.max(1, Number(config.threshold || 90))
+    const budgetAlerts = (snapshot?.budget_alerts || []) as Array<{ pct: number }>
+    const hasMatch = budgetAlerts.some(b => Number(b.pct || 0) >= threshold)
+    return hasMatch && isInCurrentWindow(time, now.minutes)
+      ? `custom-rule:${rule.rule_id}:budget:${now.date.slice(0, 7)}:${threshold}`
+      : ''
+  }
+
+  if (rule.trigger_type === 'recurring_due_today') {
+    const hasDue = (snapshot?.recurring_due || []).length > 0
+    return hasDue && isInCurrentWindow(time, now.minutes)
+      ? `custom-rule:${rule.rule_id}:recurring:${now.date}`
+      : ''
+  }
+
   return ''
 }
 
@@ -165,7 +208,7 @@ Deno.serve(async req => {
 
     const { data: snapshots, error: snapshotError } = await supabase
       .from('mt_notification_snapshots')
-      .select('install_id, snapshot_date, today_tx_count, upcoming_bills, credit_due, last_exported_at')
+      .select('install_id, snapshot_date, today_tx_count, last_tx_date, upcoming_bills, credit_due, budget_alerts, recurring_due, last_exported_at')
       .in('install_id', installIds)
     if (snapshotError) throw snapshotError
 
