@@ -2309,7 +2309,7 @@ App.render();
     if (over) insights.push({ icon:'⚠️', title:'งบประมาณเกิน', body:`${over.label} เกินงบ ${fmt(over.spent - over.monthlyLimit)} แล้ว ควรหยุดใช้หมวดนี้ชั่วคราวจนจบรอบเดือน` })
     const usable = Calc.getUsableMoney ? Calc.getUsableMoney(S.wallets || [], S) : null
     const upcoming = App.getUpcomingItems?.(14) || []
-    const upcomingCommitted = upcoming.filter(row => ['credit_due', 'recurring', 'scheduled', 'installment'].includes(row.type)).reduce((sum, row) => sum + Number(row.amount || 0), 0)
+    const upcomingCommitted = upcoming.filter(row => ['จ่ายบิลบัตรเครดิต', 'รายการประจำ', 'รายการที่รอจ่าย', 'ผ่อนชำระ'].includes(row.type)).reduce((sum, row) => sum + Number(row.amount || 0), 0)
     if (usable && upcomingCommitted > 0 && usable.liquid < upcomingCommitted) {
       insights.push({ icon:'💸', title:'บิลใกล้ถึงเกินเงินพร้อมใช้', body:`14 วันข้างหน้ามีภาระประมาณ ${fmt(upcomingCommitted)} แต่เงินพร้อมใช้มี ${fmt(usable.liquid)} ควรเตรียมสภาพคล่องล่วงหน้า` })
     }

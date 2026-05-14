@@ -213,6 +213,19 @@
       .map(r => ({ id: r.id, name: r.name }))
       .slice(0, 25)
 
+    const privilegesExpiring = (S.privileges || [])
+      .filter(p => p.status === 'active' && p.expiryDate)
+      .map(p => ({
+        id: p.id,
+        title: p.title,
+        expiryDate: p.expiryDate,
+        daysLeft: daysBetween(p.expiryDate, today),
+        type: p.type || '',
+        platform: p.platform || '',
+      }))
+      .filter(p => p.daysLeft >= 0 && p.daysLeft <= 30)
+      .slice(0, 25)
+
     return {
       installId: getInstallId(),
       snapshotDate: today,
@@ -222,6 +235,7 @@
       creditDue,
       budgetAlerts,
       recurringDue,
+      privilegesExpiring,
       lastExportedAt: S.settings?.storageMeta?.lastExportedAt || null,
       appVersion: window.MT_APP_VERSION || '',
     }
@@ -270,6 +284,7 @@
       'no_tx_streak',
       'budget_over',
       'recurring_due_today',
+      'privilege_expiry',
     ].includes(raw.triggerType) ? raw.triggerType : 'daily_time'
     return {
       id: String(raw.id || `rule_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`),
@@ -327,6 +342,7 @@
       goals: 'เป้าหมาย',
       recurring: 'รายการประจำ',
       budgets: 'งบประมาณ',
+      privileges: 'สิทธิพิเศษ',
     }[route] || 'หน้าหลัก'
   }
 
@@ -345,6 +361,7 @@
     if (rule.triggerType === 'no_tx_streak') return `ไม่มีรายการ ${Number(cfg.streakDays ?? 3)} วันติด เวลา ${cfg.time || '09:00'}`
     if (rule.triggerType === 'budget_over') return `งบถึง ${Number(cfg.threshold ?? 90)}% เวลา ${cfg.time || '09:00'}`
     if (rule.triggerType === 'recurring_due_today') return `รายการประจำถึงกำหนด เวลา ${cfg.time || '09:00'}`
+    if (rule.triggerType === 'privilege_expiry') return `สิทธิพิเศษหมดใน ${Number(cfg.daysBefore ?? 3)} วัน`
     return 'กฎแจ้งเตือน'
   }
 
@@ -453,7 +470,7 @@
         </div>
         <div class="settings-row" onclick="App.openCustomNotificationRulesScreen()">
           <div class="s-icon">⚙️</div>
-          <div class="s-label">กฎแจ้งเตือนเอง<br><div class="s-value" style="font-weight:400;text-align:left !important">daily 20:30 ถูกสร้างเป็นกฎเริ่มต้นและแก้ได้เอง</div></div>
+          <div class="s-label">กฎการแจ้งเตือน<br><div class="s-value" style="font-weight:400;text-align:left !important">เพิ่มและแก้ไขกฎการแจ้งเตือนของคุณ</div></div>
           <div class="s-value">${customCount} กฎ</div>
         </div>
         <div style="display:flex;gap:8px;padding:12px 0 0">
@@ -499,7 +516,7 @@
         </div>
         <div class="recurring-actions">
           <button class="icon-btn" onclick="event.stopPropagation();App.toggleNotificationRule('${esc(rule.id)}')">${rule.enabled ? 'ปิด' : 'เปิด'}</button>
-          <button class="icon-btn" onclick="event.stopPropagation();App.testCustomNotificationRule('${esc(rule.id)}')">ทดสอบ</button>
+          <button class="icon-btn" onclick="event.stopPropagation();App.testCustomNotificationRule('${esc(rule.id)}')" style="width:auto">ทดสอบ</button>
         </div>
       </div>`).join('')
     App.openSubScreen(`
@@ -516,7 +533,7 @@
       </div>`, { animate })
   }
 
-  App.openNotificationRuleForm = function(ruleId = '', nextTriggerType = '') {
+  App.openNotificationRuleForm = function(ruleId = '', nextTriggerType = '', animate = true) {
     const rules = getCustomRules()
     const existing = rules.find(rule => rule.id === ruleId)
     const draft = S.notificationRuleDraft?.id === (ruleId || S.notificationRuleDraft?.id) ? S.notificationRuleDraft : null
@@ -538,7 +555,7 @@
     const showTime      = TIME_TRIGGERS.includes(rule.triggerType)
     const showDate      = rule.triggerType === 'one_time'
     const showWeekdays  = rule.triggerType === 'weekly_time'
-    const showDaysBefore   = ['upcoming_bill_due','credit_card_due'].includes(rule.triggerType)
+    const showDaysBefore   = ['upcoming_bill_due','credit_card_due','privilege_expiry'].includes(rule.triggerType)
     const showStaleDays    = rule.triggerType === 'backup_stale'
     const showDayOfMonth   = rule.triggerType === 'monthly_time'
     const showStreakDays    = rule.triggerType === 'no_tx_streak'
@@ -557,6 +574,7 @@
       upcoming_bill_due:    'ส่งเมื่อมีบิล/รายการรอจ่ายเหลือเวลาตามจำนวนวันที่กำหนด',
       credit_card_due:      'ส่งเมื่อบัตรเครดิตเหลือเวลาชำระตามจำนวนวันที่กำหนด',
       backup_stale:         'ส่งเมื่อไม่ได้ export/backup ข้อมูลนานเกินกำหนด',
+      privilege_expiry:     'ส่งเมื่อสิทธิพิเศษ/voucher ที่ active เหลืออายุตามจำนวนวันที่กำหนด',
     }
 
     App.openSubScreen(`
@@ -584,6 +602,7 @@
                 <option value="recurring_due_today"${selected('recurring_due_today', rule.triggerType)}>รายการประจำถึงกำหนดวันนี้</option>
                 <option value="upcoming_bill_due"${selected('upcoming_bill_due', rule.triggerType)}>บิลใกล้ครบกำหนด</option>
                 <option value="credit_card_due"${selected('credit_card_due', rule.triggerType)}>บัตรเครดิตใกล้ครบกำหนด</option>
+                <option value="privilege_expiry"${selected('privilege_expiry', rule.triggerType)}>สิทธิพิเศษใกล้หมดอายุ</option>
                 <option value="backup_stale"${selected('backup_stale', rule.triggerType)}>ไม่ได้ backup นานเกินกำหนด</option>
               </optgroup>
             </select>
@@ -622,6 +641,7 @@
               <optgroup label="รายการ">
                 <option value="upcomingBills"${selected('upcomingBills', rule.route)}>รายการรอจ่าย</option>
                 <option value="recurring"${selected('recurring', rule.route)}>รายการประจำ</option>
+                <option value="privileges"${selected('privileges', rule.route)}>สิทธิพิเศษ</option>
               </optgroup>
               <optgroup label="อื่นๆ">
                 <option value="reports"${selected('reports', rule.route)}>รายงาน</option>
@@ -634,7 +654,7 @@
           <button class="btn btn-secondary" onclick="App.testNotificationRuleFromForm('${esc(rule.id)}')">ทดสอบกฎนี้ในเครื่อง</button>
           ${existing ? `<button class="btn btn-outline mt-8" onclick="App.deleteNotificationRule('${esc(rule.id)}')">ลบกฎนี้</button>` : ''}
         </div>
-      </div>`)
+      </div>`, { animate })
   }
 
   App.changeNotificationRuleTrigger = function(ruleId, triggerType) {
@@ -659,7 +679,7 @@
       },
     })
     S.notificationRuleDraft = current
-    App.openNotificationRuleForm(ruleId, triggerType)
+    App.openNotificationRuleForm(ruleId, triggerType, false)
   }
 
   App.saveNotificationRule = function(ruleId) {
@@ -795,6 +815,7 @@
     if (open === 'goals') setTimeout(() => App.openGoalsScreen?.(), 350)
     if (open === 'recurring') setTimeout(() => App.openRecurringScreen?.(), 350)
     if (open === 'budgets') setTimeout(() => App.openBudgetScreen?.(), 350)
+    if (open === 'privileges') setTimeout(() => App.openPrivilegesScreen?.(), 350)
   }
 
   window.addEventListener('hashchange', handleNotificationRoute, { passive: true })
