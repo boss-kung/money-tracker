@@ -2767,7 +2767,7 @@ App.render();
   }
 
   // ── 1. Inline confirm dialog — replaces all 6 browser confirm() calls ──
-  App.showConfirm = function({ title = 'ยืนยัน', body = '', confirmLabel = 'ยืนยัน', danger = false, onConfirm, onCancel } = {}) {
+  App.showConfirm = function({ title = 'ยืนยัน', body = '', confirmLabel = 'ยืนยัน', danger = false, requireText = '', onConfirm, onCancel } = {}) {
     document.getElementById('v23-confirm-overlay')?.remove()
     const el = document.createElement('div')
     el.id = 'v23-confirm-overlay'
@@ -2776,22 +2776,31 @@ App.render();
       <div class="v23-confirm-sheet" role="alertdialog" aria-modal="true">
         <div class="v23-confirm-title">${ESC(title)}</div>
         ${body ? `<div class="v23-confirm-body">${ESC(body)}</div>` : ''}
+        ${requireText ? `<div class="v23-confirm-body" style="margin-top:8px">พิมพ์ <strong>${ESC(requireText)}</strong> เพื่อยืนยัน</div><input id="v23-confirm-text-input" class="v23-confirm-text-input" type="text" placeholder="${ESC(requireText)}" autocomplete="off" autocorrect="off" spellcheck="false">` : ''}
         <div class="v23-confirm-actions">
           <button class="btn btn-secondary v23-cancel-btn">ยกเลิก</button>
-          <button class="btn ${danger ? 'v23-btn-danger' : 'btn-primary'} v23-ok-btn">${ESC(confirmLabel)}</button>
+          <button class="btn ${danger ? 'v23-btn-danger' : 'btn-primary'} v23-ok-btn" ${requireText ? 'disabled' : ''}>${ESC(confirmLabel)}</button>
         </div>
       </div>`
     document.body.appendChild(el)
+    if (requireText) {
+      const input = el.querySelector('#v23-confirm-text-input')
+      const okBtn = el.querySelector('.v23-ok-btn')
+      input.addEventListener('input', () => {
+        okBtn.disabled = input.value !== requireText
+      })
+      setTimeout(() => input.focus(), 50)
+    }
     el.querySelector('.v23-cancel-btn').onclick = () => { el.remove(); onCancel?.() }
-    el.querySelector('.v23-ok-btn').onclick    = () => { el.remove(); onConfirm?.() }
+    el.querySelector('.v23-ok-btn').onclick    = () => { if (!el.querySelector('.v23-ok-btn').disabled) { el.remove(); onConfirm?.() } }
     el.addEventListener('click', e => { if (e.target === el) { el.remove(); onCancel?.() } })
   }
 
   App.resetData = function() {
     App.showConfirm({
       title: 'รีเซ็ตข้อมูลทั้งหมด',
-      body: 'ไม่สามารถกู้คืนได้ ยืนยันการรีเซ็ต?',
-      confirmLabel: 'รีเซ็ต', danger: true,
+      body: 'การรีเซ็ตจะลบข้อมูลทั้งหมดและไม่สามารถกู้คืนได้',
+      confirmLabel: 'รีเซ็ต', danger: true, requireText: 'RESET',
       onConfirm() {
         try { Storage.createLocalBackup?.(S, 'before-reset-data') } catch (_) {}
         Storage.reset()

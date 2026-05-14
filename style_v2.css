@@ -3509,6 +3509,47 @@ html.dark #reports-content .report-cat-bar{
   font-weight: 650 !important;
 }
 
+.v23-confirm-text-input {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin: 8px 0 4px !important;
+  padding: 10px 14px !important;
+  border: 1.5px solid var(--border, #E2E8F0) !important;
+  border-radius: 12px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  background: var(--surface-soft, #F8FAFC) !important;
+  color: var(--text, #0F172A) !important;
+  outline: none !important;
+  transition: border-color 0.15s !important;
+}
+
+.v23-confirm-text-input:focus {
+  border-color: var(--expense, #DC2626) !important;
+  background: #fff !important;
+}
+
+.v23-confirm-actions .v23-ok-btn:disabled,
+.v23-confirm-actions .v23-btn-danger:disabled {
+  opacity: 0.38 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  box-shadow: none !important;
+}
+
+html.dark .v23-confirm-text-input {
+  background: var(--elevated, #202C42) !important;
+  color: var(--text, #F8FAFC) !important;
+  border-color: var(--border, #2B3A52) !important;
+}
+
+html.dark .v23-confirm-text-input:focus {
+  border-color: var(--expense, #EF4444) !important;
+  background: var(--surface, #172033) !important;
+}
+
 .v23-confirm-actions {
   display: grid !important;
   grid-template-columns: 1fr 1fr !important;
