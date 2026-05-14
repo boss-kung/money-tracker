@@ -10723,6 +10723,7 @@ App._pickMerchant = function(name, opts = {}) {
     const scoreFor = estimate => Number(estimate.cashback || 0) + Number(estimate.discount || 0) + (Number(estimate.points || 0) * 0.001)
 
     const candidates = expandRuleSubsets(applicableRules)
+      .filter(subset => subset.filter(r => r.allowStacking === false).length <= 1)
       .map(subset => {
         const ids = subset.map(rule => rule.id)
         return { ids, estimate: estimateFor(ids) }
@@ -12979,26 +12980,24 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       ].filter(Boolean)
       const detailText = [...rewardParts, ...ruleNames].slice(0, 2).join(' · ')
       const rewardHtml = detailText
-        ? `<span style="font-size:11px;color:var(--income);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(detailText)}</span>`
-        : `<span style="font-size:11px;color:var(--muted)">ไม่มีสิทธิประโยชน์</span>`
-      const bestBadge = isBest ? `<span style="font-size:9px;font-weight:700;background:var(--income);color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px">ดีสุด</span>` : ''
+        ? `<div style="font-size:12px;font-weight:700;color:var(--income);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(detailText)}</div>`
+        : `<div style="font-size:11px;color:var(--muted);margin-top:2px">ไม่มีสิทธิพิเศษ</div>`
+      const bestBadge = isBest ? `<div style="font-size:9px;font-weight:700;background:var(--income);color:#fff;padding:1px 6px;border-radius:4px;margin-top:4px;display:inline-block">ดีสุด ✓</div>` : ''
+      const checkmark = isSel ? `<div style="position:absolute;top:8px;right:8px;width:18px;height:18px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">✓</div>` : ''
       return `<button type="button"
         onclick='App.applyRecommendedCardSelection(${JSON.stringify(item.card.id)}, ${JSON.stringify(item.selectedRuleIds || [])})'
-        style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:10px;border:1.5px solid ${isSel?'var(--primary)':'var(--border)'};background:${isSel?'color-mix(in srgb,var(--primary) 8%,transparent)':'transparent'};text-align:left;cursor:pointer;width:100%;margin-bottom:0">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:18px">${esc(item.card.icon||'💳')}</span>
-          <div>
-            <div style="font-size:13px;font-weight:${isSel?700:500}">${esc(item.card.name)}${bestBadge}</div>
-            ${rewardHtml}
-          </div>
-        </div>
-        ${isSel?`<span style="color:var(--primary);font-size:16px;font-weight:700">✓</span>`:''}
+        style="position:relative;flex:0 0 calc(66.67% - 5px);min-width:160px;display:flex;flex-direction:column;padding:12px 12px 10px;border-radius:14px;border:2px solid ${isSel?'var(--primary)':'var(--border)'};background:${isSel?'color-mix(in srgb,var(--primary) 10%,var(--card))':'var(--card)'};text-align:left;cursor:pointer;scroll-snap-align:start;box-sizing:border-box">
+        ${checkmark}
+        <span style="font-size:24px;margin-bottom:6px">${esc(item.card.icon||'💳')}</span>
+        <div style="font-size:13px;font-weight:${isSel?700:600};padding-right:${isSel?'22px':'0'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.card.name)}</div>
+        ${rewardHtml}
+        ${bestBadge}
       </button>`
     }).join('')
 
     const widget = `<div class="card-picker-widget" style="padding:12px 14px;background:var(--card);border-radius:14px;border:1px solid var(--border);margin-bottom:0">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">ใข้บัตรไหนดีสุด?</div>
-      <div style="display:flex;flex-direction:column;gap:6px">${rows}</div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">ใช้บัตรไหนดีสุด?</div>
+      <div style="display:flex;flex-direction:row;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin:0 -2px;padding:0 2px 6px">${rows}</div>
     </div>`
 
     const walletGroup = box.querySelector('#tx-wallet')?.closest('.form-group')
