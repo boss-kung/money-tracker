@@ -1796,6 +1796,34 @@ App.render();
 
   const originalShowPage = App.showPage?.bind(App) || function(){}
 
+  function getSmartQuickAmounts(type) {
+    const recent = (S.transactions || [])
+      .filter(t => t.type === type && Number(t.amount) > 0)
+      .slice(-80)
+    const freq = {}
+    recent.forEach(t => {
+      const a = Math.round(Number(t.amount))
+      if (a > 0) freq[a] = (freq[a] || 0) + 1
+    })
+    const sorted = Object.entries(freq)
+      .sort((a, b) => b[1] - a[1] || Number(a[0]) - Number(b[0]))
+      .slice(0, 5)
+      .map(([a]) => Number(a))
+    if (sorted.length >= 3) return sorted
+    const defaults = type === 'income'
+      ? [3000, 5000, 10000, 20000, 50000]
+      : type === 'transfer'
+        ? [500, 1000, 2000, 5000, 10000]
+        : [50, 100, 200, 500, 1000]
+    return defaults
+  }
+
+  function fmtQuickAmt(n) {
+    if (n >= 1000000) return `${(n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1)}M`
+    if (n >= 10000)   return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`
+    return `฿${n.toLocaleString('en-US')}`
+  }
+
   App._renderAddTxAmount = function() {
     const title = S.txMode === 'edit' ? 'แก้ไขรายการ' : S.txMode === 'duplicate' ? 'ทำซ้ำรายการ' : 'เพิ่มรายการ'
     const amount = String(S.tx.amount || '')
@@ -1815,7 +1843,7 @@ App.render();
       <div class="type-tabs">${tabs.map(([v,l,i]) => `<button class="type-tab type-${v}${S.tx.type === v ? ' active' : ''}" onclick="App._setTxType('${v}')"><span aria-hidden="true">${i}</span> ${l}</button>`).join('')}</div>
       <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 20px">
         <div class="amount-display" data-role="tx-amount-display" style="color:${canNext ? color : '#D1D5DB'}">${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}</div>
-        <div class="quick-amount-row">${[50,100,200,500,1000].map(n => `<button type="button" data-quick-amount="${n}">฿${n}</button>`).join('')}</div>
+        <div class="quick-amount-row">${getSmartQuickAmounts(S.tx.type).map(n => `<button type="button" data-quick-amount="${n}">${fmtQuickAmt(n)}</button>`).join('')}</div>
       </div>
       <div style="padding-bottom:calc(12px + var(--app-bottom-gap, 0px))">
         <div class="numpad">${['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(k => `<button type="button" class="numpad-key${k === '⌫' ? ' del' : ''}" data-numpad-key="${esc(k)}">${k}</button>`).join('')}</div>
@@ -3060,9 +3088,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
           ${usable.upcomingReserved > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>รายการรอจ่าย</small><strong style="color:#F59E0B">-${FMT(usable.upcomingReserved)}</strong></div>` : ''}
         </div>` : ''}
         <div class="mt-net-split">
-          <div class="mt-net-metric"><small>รายรับเดือนนี้</small><strong style="color:#4ADE80">+${FMT(stats.income)}</strong></div>
+          <div class="mt-net-metric"><small>รายรับ</small><strong style="color:#4ADE80">+${FMT(stats.income)}</strong></div>
           <div class="mt-divider"></div>
-          <div class="mt-net-metric"><small>รายจ่ายเดือนนี้</small><strong style="color:#F87171">-${FMT(stats.expense)}</strong></div>
+          <div class="mt-net-metric"><small>รายจ่าย</small><strong style="color:#F87171">-${FMT(stats.expense)}</strong></div>
+          ${transferTotal > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>โอน</small><strong>${FMT(transferTotal)}</strong></div>` : ''}
+          <div class="mt-divider"></div>
+          <div class="mt-net-metric"><small>คงเหลือ</small><strong style="color:${stats.net >= 0 ? '#4ADE80' : '#F87171'}">${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(stats.net))}</strong></div>
         </div>
       </div>`
 
@@ -3099,17 +3130,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
           <div class="value">${S.settings?.hideMoney ? '฿*****' : FMT(card.value)}</div>
           <div class="name">${card.name}</div>
         </div>`).join('')}</div>`
-
-    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
-
-    html += `<div class="mt-stat-row">
-      <div class="mt-stat-card income"><small>รายรับ</small><strong>+${FMT(stats.income)}</strong></div>
-      <div class="mt-stat-card expense"><small>รายจ่าย</small><strong>-${FMT(stats.expense)}</strong></div>
-      <div class="mt-stat-card transfer"><small>โอนเงิน</small><strong>${FMT(transferTotal)}</strong></div>
-      <div class="mt-stat-card saving"><small>คงเหลือเดือนนี้</small><strong>${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(stats.net))}</strong></div>
-    </div>`
-
-    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
 
     const budgetRows = [...expBudgets]
       .filter(b => Number(b.monthlyLimit || 0) > 0)
@@ -5078,14 +5098,22 @@ App._pickMerchant = function(name, opts = {}) {
     const w = walletById(cardId) || {}
     const f = (id, label, value) => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="1" min="1" max="31" id="${id}" value="${value || ''}" placeholder="1–31"></div>`
     const rules = App.getCreditCardBenefitRules(cardId)
-    const statementCard = `<div class="card card-pad" style="margin-bottom:12px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:12px">📅 รอบบัญชีบัตร</div>
-      <div class="benefit-form-grid">
-        ${f('ccb-cycleDay','วันที่ตัดรอบ (1–31)', w.cycleDay)}
-        ${f('ccb-dueAfterCycleDays','ชำระหลังวันตัดยอด (1–30)', w.dueAfterCycleDays)}
+    const cycleSummary = w.cycleDay
+      ? `ตัดวันที่ ${w.cycleDay}${w.dueAfterCycleDays ? ` · ชำระใน ${w.dueAfterCycleDays} วัน` : ''}`
+      : 'ยังไม่ได้ตั้งค่า'
+    const statementCard = `<details class="card card-pad cc-stmt-accordion" style="margin-bottom:12px"${w.cycleDay ? '' : ' open'}>
+      <summary class="cc-stmt-summary">
+        <span><span style="font-size:14px;font-weight:700">📅 รอบบัญชีบัตร</span><span class="cc-stmt-summary-sub">${esc(cycleSummary)}</span></span>
+        <span class="cc-stmt-chevron" aria-hidden="true">›</span>
+      </summary>
+      <div style="padding-top:12px">
+        <div class="benefit-form-grid">
+          ${f('ccb-cycleDay','วันที่ตัดรอบ (1–31)', w.cycleDay)}
+          ${f('ccb-dueAfterCycleDays','ชำระหลังวันตัดยอด (1–30)', w.dueAfterCycleDays)}
+        </div>
+        <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit('${esc(cardId)}')">บันทึกรอบบัญชี</button></div>
       </div>
-      <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit('${esc(cardId)}')">บันทึกรอบบัญชี</button></div>
-    </div>`
+    </details>`
     const rulesHtml = rules.length
       ? rules.map(rule => `<div class="card card-pad" style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
@@ -9986,16 +10014,34 @@ App._pickMerchant = function(name, opts = {}) {
 
     const content = document.getElementById('wallets-content')
     if (!content) return
+
+    // Inject wallet tab bar into page-header (once)
+    const walletPageHeader = document.querySelector('#page-wallets .page-header')
+    if (walletPageHeader && !walletPageHeader.querySelector('.wallet-tab-bar')) {
+      const tabBar = document.createElement('div')
+      tabBar.className = 'wallet-tab-bar'
+      tabBar.innerHTML = [
+        ['wallet-anchor-assets',  '🏦 สินทรัพย์'],
+        ['wallet-anchor-credits', '💳 บัตร'],
+        ['wallet-anchor-invest',  '📈 ลงทุน'],
+        ['wallet-anchor-crypto',  '🪙 Crypto'],
+      ].map(([id, label]) =>
+        `<button class="wallet-tab" data-target="${id}" onclick="App._scrollToWalletSection('${id}')">${label}</button>`
+      ).join('')
+      walletPageHeader.appendChild(tabBar)
+    }
+
     const gold = (S.marketPrices || {}).thaiGold || (S.marketPrices || {}).auroraGold
     const goldUpdated = gold?.fetchedAt ? new Date(gold.fetchedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : ''
     const goldNote = `<div class="wallet-market-note"><b>ราคาทอง:</b> ทองรูปพรรณรับซื้อ${gold?.jewelryBuy ? ` ${plainMoney(gold.jewelryBuy)}/บาททอง` : ' ยังไม่ Sync'}${goldUpdated ? ` · อัปเดต ${esc(goldUpdated)}` : ''}</div>`
     const empty = txt => `<div class="card card-pad wallet-empty-card">${esc(txt)}</div>`
-    const section = (title, icon, list, emptyTxt, grid, extra = '') => `<section class="wallet-section-block"><div class="wallet-section-title wallet-section-title-row"><span>${icon} ${esc(title)}</span>${extra}</div>${list.length ? `<div class="${grid ? 'wallet-grid-2' : 'wallet-list-stack'}">${list.map(App._walletCard).join('')}</div>` : empty(emptyTxt)}</section>`
+    const section = (title, icon, list, emptyTxt, grid, extra = '', anchorId = '') =>
+      `<section class="wallet-section-block"${anchorId ? ` id="${anchorId}"` : ''}><div class="wallet-section-title wallet-section-title-row"><span>${icon} ${esc(title)}</span>${extra}</div>${list.length ? `<div class="${grid ? 'wallet-grid-2' : 'wallet-list-stack'}">${list.map(App._walletCard).join('')}</div>` : empty(emptyTxt)}</section>`
     const cryptoUpdated = cryptoSummary.lastUpdatedAt ? new Date(cryptoSummary.lastUpdatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : 'ยังไม่ sync'
     const cryptoHoldingsHtml = cryptoSummary.holdings.length
       ? `<div class="crypto-holdings-grid">${cryptoSummary.holdings.slice().sort((a, b) => App.getCryptoHoldingValueTHB(b) - App.getCryptoHoldingValueTHB(a)).map(createHoldingRow).join('')}</div>`
       : `<div class="wallet-empty-card crypto-empty-state"><div><b>ยังไม่มี Crypto Holding</b><div class="list-item-sub">เพิ่ม BTC, ETH, USDT หรือเหรียญ custom ได้ที่นี่</div></div><button class="btn btn-primary" onclick="event.stopPropagation();App.openCryptoHoldingForm()" style="width:auto">เพิ่มเหรียญแรก</button></div>`
-    const cryptoSection = `<section class="wallet-section-block">
+    const cryptoSection = `<section class="wallet-section-block" id="wallet-anchor-crypto">
       <div class="wallet-section-title wallet-section-title-row"><span>🪙 Crypto Portfolio</span></div>
       <div class="wallet-card wallet-card-colored crypto-portfolio-card" style="--wallet-color:#F59E0B;--wallet-color-2:#D97706" onclick="App.openCryptoPortfolioDetail()">
         <div class="crypto-portfolio-glow"></div>
@@ -10019,10 +10065,23 @@ App._pickMerchant = function(name, opts = {}) {
     </section>`
 
     content.innerHTML = goldNote
-      + section('สินทรัพย์', '🏦', assets, 'ยังไม่มีสินทรัพย์', true)
-      + section('บัตรเครดิต', '💳', credits, 'ยังไม่มีบัตรเครดิต', false)
-      + section('การลงทุน', '📈', invests, 'เพิ่มทอง / FCD เพื่อดูราคาอ้างอิง', true)
+      + section('สินทรัพย์', '🏦', assets, 'ยังไม่มีสินทรัพย์', true, '', 'wallet-anchor-assets')
+      + section('บัตรเครดิต', '💳', credits, 'ยังไม่มีบัตรเครดิต', false, '', 'wallet-anchor-credits')
+      + section('การลงทุน', '📈', invests, 'เพิ่มทอง / FCD เพื่อดูราคาอ้างอิง', true, '', 'wallet-anchor-invest')
       + cryptoSection
+  }
+
+  App._scrollToWalletSection = function(anchorId) {
+    const target = document.getElementById(anchorId)
+    const scrollEl = document.getElementById('wallets-content')
+    if (!target || !scrollEl) return
+    // offsetTop is relative to the scroll container; subtract 8px for visual breathing room
+    const offsetInScroll = target.offsetTop - 8
+    scrollEl.scrollTo({ top: offsetInScroll, behavior: 'smooth' })
+    // Update active tab
+    document.querySelectorAll('.wallet-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.target === anchorId)
+    })
   }
 
   ensureCryptoState()
@@ -13187,7 +13246,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
 
     content.innerHTML = `<div style="padding:0 16px">
-      <div style="font-size:20px;font-weight:800;padding:12px 0 4px">เพิ่มเติม</div>
+      <div class="more-sticky-header">
+        <div style="font-size:20px;font-weight:800;padding:12px 0 8px">เพิ่มเติม</div>
+        <input class="form-input more-search-input" id="more-search" placeholder="🔍 ค้นหาฟีเจอร์..." autocomplete="off" oninput="App._filterMoreContent(this.value)" style="padding:10px 14px;font-size:14px;margin-bottom:10px">
+      </div>
 
       <div class="sec-title">วางแผน</div>
       <div class="card card-pad">
@@ -13245,6 +13307,40 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(window.MT_APP_VERSION||(typeof APP_VERSION!=='undefined'?APP_VERSION:''))}</div>
       </div>
     </div>`
+  }
+
+  App._filterMoreContent = function(q) {
+    q = (q || '').toLowerCase().trim()
+    const content = document.getElementById('more-content')
+    if (!content) return
+
+    if (!q) {
+      content.querySelectorAll('.settings-row').forEach(el => el.style.display = '')
+      content.querySelectorAll('.card.card-pad').forEach(el => el.style.display = '')
+      content.querySelectorAll('.sec-title').forEach(el => el.style.display = '')
+      return
+    }
+
+    // Show/hide individual rows based on label text
+    content.querySelectorAll('.settings-row').forEach(row => {
+      const label = (row.querySelector('.s-label')?.textContent || '').toLowerCase()
+      row.style.display = label.includes(q) ? '' : 'none'
+    })
+
+    // Show/hide section cards based on whether any child row is visible
+    content.querySelectorAll('.card.card-pad').forEach(card => {
+      const rows = card.querySelectorAll('.settings-row')
+      if (!rows.length) return
+      const hasVisible = [...rows].some(r => r.style.display !== 'none')
+      card.style.display = hasVisible ? '' : 'none'
+    })
+
+    // Show/hide sec-title based on the card that follows it
+    content.querySelectorAll('.sec-title').forEach(title => {
+      let next = title.nextElementSibling
+      while (next && !next.classList.contains('card')) next = next.nextElementSibling
+      title.style.display = (next && next.style.display !== 'none') ? '' : 'none'
+    })
   }
 
   // ── Apply ─────────────────────────────────────────────────
