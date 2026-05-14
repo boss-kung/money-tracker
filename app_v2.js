@@ -14301,22 +14301,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // ─────────────────────────────────────────────────────────────
-  // P2-D  Wallets: animate progress bars + W3 light sweep + W14
+  // P2-D  Wallets: animate progress bars + W14
   // ─────────────────────────────────────────────────────────────
   const _origRW = App.renderWallets?.bind(App)
   App.renderWallets = function (...args) {
     _origRW?.(...args)
     try {
       _animProgressBars('#wallets-content')
-      // W3: light sweep each wallet card
-      document.querySelectorAll('#wallets-content .wallet-card').forEach((card, i) => {
-        setTimeout(() => {
-          card.classList.remove('mt-shine')
-          void card.offsetWidth
-          card.classList.add('mt-shine')
-          setTimeout(() => card.classList.remove('mt-shine'), 550)
-        }, i * 40)
-      })
       // W14: elastic scroll perspective
       _setupElasticScroll()
     } catch (_) {}
@@ -14473,7 +14464,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // ─────────────────────────────────────────────────────────────
-  // W3: Light sweep — triggered in renderWallets (above)
   // W4: Budget ring injection
   // ─────────────────────────────────────────────────────────────
   function _injectBudgetRing(container) {
@@ -14748,10 +14738,495 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // ─────────────────────────────────────────────────────────────
   // Init
   // ─────────────────────────────────────────────────────────────
-  // Set initial body class for current page
   try {
     const cur = S.page || 'dashboard'
     document.body.classList.add(`is-${cur}`)
   } catch (_) {}
+
+  // ═══════════════════════════════════════════════════════════════
+  // Extended Animations  N1 – N30
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── N1/N2: Chip sliding pill indicator ─────────────────────
+  function _setupChipPill(container) {
+    if (!container || container._mtPill) return
+    container._mtPill = true
+    const pill = document.createElement('div')
+    pill.className = 'mt-chip-pill'
+    container.style.position = 'relative'
+    container.insertBefore(pill, container.firstChild)
+    function _move() {
+      const active = container.querySelector('.chip.active, .chip-btn.active, .chip[class*="active"]')
+      if (!active) { pill.style.opacity = '0'; return }
+      const cr = container.getBoundingClientRect()
+      const ar = active.getBoundingClientRect()
+      pill.style.opacity = '.18'
+      pill.style.left    = `${ar.left - cr.left}px`
+      pill.style.top     = `${ar.top  - cr.top}px`
+      pill.style.width   = `${ar.width}px`
+      pill.style.height  = `${ar.height}px`
+    }
+    setTimeout(_move, 80)
+    new MutationObserver(_move).observe(container, {
+      subtree: true, attributes: true, attributeFilter: ['class']
+    })
+  }
+  ;(function _initPills() {
+    const ids = ['tx-month-chips','tx-type-chips','report-month-chips','report-view-chips']
+    ids.forEach(id => { const el = document.getElementById(id); if (el) _setupChipPill(el) })
+    new MutationObserver(() => ids.forEach(id => {
+      const el = document.getElementById(id); if (el && !el._mtPill) _setupChipPill(el)
+    })).observe(document.getElementById('app') || document.body, { childList: true, subtree: true })
+  })()
+
+  // ── N3: Amount display pulse on numpad keystroke ────────────
+  document.addEventListener('pointerdown', function (e) {
+    if (!e.target.closest('.numpad-key')) return
+    const disp = document.querySelector(
+      '.amount-display, .add-amount-display, .numpad-display, ' +
+      '[class*="amount-big"], [class*="amount-val"], [class*="amount-display"]'
+    )
+    if (!disp) return
+    disp.classList.remove('mt-amount-pulse')
+    void disp.offsetWidth
+    disp.classList.add('mt-amount-pulse')
+    setTimeout(() => disp.classList.remove('mt-amount-pulse'), 280)
+  })
+
+  // ── N4: Toast slide-in — CSS handles entry; JS adds hide anim
+  ;(function _patchToast() {
+    const _origT = window.toast
+    if (!_origT) return
+    window.toast = function (msg, type = 'info') {
+      const result = _origT(msg, type)
+      // Find the newest toast and ensure hide animation before DOM removal
+      const container = document.getElementById('toast-container')
+      if (!container) return result
+      const toasts = container.querySelectorAll('.toast')
+      // The last added toast is the one just created
+      const latest = toasts[toasts.length - 1]
+      if (latest && !latest._mtPatchedRemove) {
+        latest._mtPatchedRemove = true
+        const _origRemove = latest.remove.bind(latest)
+        latest.remove = function () {
+          if (!latest.isConnected) return _origRemove()
+          latest.classList.add('mt-hiding')
+          setTimeout(_origRemove, 230)
+        }
+      }
+      return result
+    }
+  })()
+
+  // ── N5: Page cross-fade on tab switch ─────────────────────
+  ;(function _patchShowPageFade() {
+    const _prev = App.showPage?.bind(App)
+    App.showPage = function (page) {
+      _prev?.(page)
+      const pageEl = document.getElementById(`page-${page}`)
+      if (pageEl) {
+        pageEl.classList.remove('mt-page-enter')
+        void pageEl.offsetWidth
+        pageEl.classList.add('mt-page-enter')
+        setTimeout(() => pageEl.classList.remove('mt-page-enter'), 320)
+      }
+    }
+  })()
+
+  // ── N7: More page items stagger ────────────────────────────
+  ;(function _patchRenderMore() {
+    const _prev = App.renderMore?.bind(App)
+    if (!_prev) return
+    App.renderMore = function (...args) {
+      _prev?.(...args)
+      try {
+        setTimeout(() => {
+          document.querySelectorAll(
+            '#more-content .more-item:not(.mt-more-in), ' +
+            '#more-content .settings-row:not(.mt-more-in), ' +
+            '#more-content .card:not(.mt-more-in)'
+          ).forEach((el, i) => {
+            el.classList.add('mt-more-in')
+            el.style.animationDelay = `${i * 38}ms`
+          })
+        }, 30)
+      } catch (_) {}
+    }
+  })()
+
+  // ── N8: Wallet add button pulse rings ──────────────────────
+  ;(function _watchAddWalletBtn() {
+    const _seen = new WeakSet()
+    function _mark(root) {
+      root.querySelectorAll(
+        '[onclick*="addWallet"], [onclick*="openWalletForm"], .btn-add-wallet, ' +
+        '[data-action="add-wallet"]'
+      ).forEach(btn => {
+        if (_seen.has(btn)) return
+        _seen.add(btn)
+        btn.classList.add('mt-add-wallet-pulse')
+      })
+    }
+    new MutationObserver(() => _mark(document.getElementById('app') || document.body))
+      .observe(document.getElementById('app') || document.body, { childList: true, subtree: true })
+    _mark(document.body)
+  })()
+
+  // ── N9: CC payment progress ring ───────────────────────────
+  ;(function _ccPayRing() {
+    const overlay = document.getElementById('overlay-cc-pay')
+    if (!overlay) return
+    overlay.addEventListener('input', function (e) {
+      const val = parseFloat(e.target.value) || 0
+      let ring = overlay.querySelector('.mt-cc-ring-wrap')
+      if (!ring) {
+        ring = document.createElement('div')
+        ring.className = 'mt-cc-ring-wrap'
+        ring.style.cssText = 'display:flex;justify-content:center;padding:8px 0 4px'
+        const body = document.getElementById('cc-pay-content') || overlay.querySelector('.sheet-body')
+        if (body) body.insertAdjacentElement('afterbegin', ring)
+      }
+      const limit = parseFloat(
+        overlay.querySelector('[data-limit]')?.dataset.limit ||
+        overlay.querySelector('[data-credit-limit]')?.dataset.creditLimit
+      ) || 50000
+      const pct   = Math.min(val / limit * 100, 100)
+      const r     = 22
+      const circ  = +(2 * Math.PI * r).toFixed(2)
+      const off   = +(circ * (1 - pct / 100)).toFixed(2)
+      const color = pct > 90 ? '#EF4444' : pct > 70 ? '#F59E0B' : '#16A34A'
+      ring.innerHTML = `<svg width="54" height="54" viewBox="0 0 54 54">
+        <circle cx="27" cy="27" r="${r}" fill="none" stroke="var(--border)" stroke-width="5"/>
+        <circle cx="27" cy="27" r="${r}" fill="none" stroke="${color}" stroke-width="5"
+          stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${off}"
+          transform="rotate(-90 27 27)"
+          style="transition:stroke-dashoffset .45s cubic-bezier(.34,1.56,.64,1),stroke .3s ease"/>
+      </svg>`
+    })
+  })()
+
+  // ── N10: Transaction summary count-up ──────────────────────
+  ;(function _patchRTLSummary() {
+    const _prev = App.renderTransactionsList?.bind(App)
+    App.renderTransactionsList = function (...args) {
+      _prev?.(...args)
+      try {
+        document.querySelectorAll('#tx-summary strong, #tx-summary b, #tx-summary .sum-val').forEach(el => {
+          _countUp(el, 800)
+        })
+      } catch (_) {}
+    }
+  })()
+
+  // ── N11: Recurring icon slow spin ─────────────────────────
+  ;(function _watchRecurringIcons() {
+    const _seen = new WeakSet()
+    function _spin(root) {
+      root.querySelectorAll(
+        '.tx-recurring, [class*="recurring-icon"], [class*="recur-badge"] svg, ' +
+        '.tx-row [title*="วน"], .tx-row [title*="recurring"]'
+      ).forEach(el => {
+        if (_seen.has(el)) return
+        _seen.add(el)
+        el.classList.add('mt-rec-spin')
+      })
+    }
+    new MutationObserver(() => {
+      try { _spin(document.getElementById('app') || document.body) } catch (_) {}
+    }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true })
+    _spin(document.body)
+  })()
+
+  // ── N12 + N21: Wallet page: negative glow + budget colors ──
+  ;(function _patchRWExtra() {
+    const _prev = App.renderWallets?.bind(App)
+    App.renderWallets = function (...args) {
+      _prev?.(...args)
+      try {
+        // N12: negative balance red glow
+        document.querySelectorAll('#wallets-content .wc-card, #wallets-content .wallet-card').forEach(card => {
+          const balEl = card.querySelector('.wc-balance, [class*="balance"]')
+          if (!balEl) return
+          const neg = /^[-−]/.test(balEl.textContent.trim())
+          card.classList.toggle('mt-wallet-neg', neg)
+        })
+        // N21: budget bar color zones
+        document.querySelectorAll('#wallets-content .progress-bar, #wallets-content [class*="progress-wrap"]').forEach(wrap => {
+          const fill = wrap.querySelector('.progress-fill, .wc-prog-fill, [class*="prog-fill"]')
+          if (!fill) return
+          const pct = parseFloat(fill.style.width) || 0
+          wrap.classList.remove('mt-bar-warn', 'mt-bar-danger')
+          if (pct > 90) wrap.classList.add('mt-bar-danger')
+          else if (pct > 70) wrap.classList.add('mt-bar-warn')
+        })
+      } catch (_) {}
+    }
+  })()
+
+  // ── N13 + N24 + N27: Reports extra hooks ──────────────────
+  ;(function _patchRReportsExtra() {
+    const _prev = App.renderReports?.bind(App)
+    App.renderReports = function (...args) {
+      _prev?.(...args)
+      try {
+        const content = document.getElementById('reports-content')
+        // N13: fade in new content
+        if (content) {
+          content.style.opacity = '0'
+          content.style.transition = 'opacity .22s ease'
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            content.style.opacity = '1'
+            setTimeout(() => { content.style.transition = ''; content.style.opacity = '' }, 260)
+          }))
+        }
+        // N24: insight rows use flip-in instead of card-in
+        setTimeout(() => {
+          document.querySelectorAll('#reports-content .insight-row.mt-card-in:not(.mt-flip-card-in)').forEach((el, i) => {
+            el.classList.remove('mt-card-in')
+            el.classList.add('mt-flip-card-in')
+            el.style.animationDelay = `${Math.min(i * 85, 420)}ms`
+          })
+        }, 60)
+        // N27: confetti on 3+ month under-budget streak badge
+        setTimeout(() => {
+          const badge = document.querySelector(
+            '#reports-content [class*="streak"], #reports-content [class*="budget-ok"], ' +
+            '#reports-content [data-streak]'
+          )
+          if (!badge || badge._mtStreakDone) return
+          const n = parseInt(badge.dataset.streak || badge.textContent.match(/\d+/)?.[0] || '0')
+          if (n < 3) return
+          badge._mtStreakDone = true
+          const r = badge.getBoundingClientRect()
+          window.MT_confetti?.(r.left + r.width / 2, r.top + r.height / 2)
+        }, 400)
+      } catch (_) {}
+    }
+  })()
+
+  // ── N14: Sheet handle pulse on overlay open ────────────────
+  ;(function _patchOpenOverlayHandle() {
+    const _prev = App.openOverlay?.bind(App)
+    App.openOverlay = function (id) {
+      _prev?.(id)
+      try {
+        const el = document.getElementById(id)
+        const handle = el?.querySelector('.sheet-handle')
+        if (!handle) return
+        handle.classList.remove('mt-handle-pop')
+        void handle.offsetWidth
+        handle.classList.add('mt-handle-pop')
+        setTimeout(() => handle.classList.remove('mt-handle-pop'), 750)
+      } catch (_) {}
+    }
+  })()
+
+  // ── N15: More-item / settings-row tap ripple ───────────────
+  document.addEventListener('pointerdown', function (e) {
+    const row = e.target.closest('.more-item, .settings-row')
+    if (!row) return
+    const rect = row.getBoundingClientRect()
+    const sz   = Math.max(rect.width, rect.height)
+    const rip  = document.createElement('span')
+    rip.className = 'mt-item-ripple'
+    rip.style.cssText = `width:${sz}px;height:${sz}px;left:${e.clientX-rect.left-sz/2}px;top:${e.clientY-rect.top-sz/2}px`
+    row.appendChild(rip)
+    setTimeout(() => rip.remove(), 620)
+  })
+
+  // ── N16: Transfer row dashed animated arrow ────────────────
+  ;(function _watchTransferRows() {
+    const _seen = new WeakSet()
+    function _injectArrows(root) {
+      root.querySelectorAll(
+        '.tx-row[data-type="transfer"], .tx-row-modern[data-type="transfer"], ' +
+        '[data-txtype="transfer"]'
+      ).forEach(row => {
+        if (_seen.has(row)) return
+        _seen.add(row)
+        const sub = row.querySelector('.tx-sub, .tx-meta, .tx-note, [class*="tx-detail"]')
+        if (!sub) return
+        if (sub.querySelector('.mt-transfer-svg')) return
+        const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        arrow.setAttribute('width', '20'); arrow.setAttribute('height', '10')
+        arrow.setAttribute('viewBox', '0 0 20 10')
+        arrow.setAttribute('class', 'mt-transfer-svg')
+        arrow.style.verticalAlign = 'middle'
+        arrow.innerHTML = `<line x1="0" y1="5" x2="15" y2="5"/>
+          <polyline points="11,1 15,5 11,9"/>`
+        sub.innerHTML = sub.innerHTML.replace(/[→➜]|->/, '')
+        sub.insertAdjacentElement('afterbegin', arrow)
+      })
+    }
+    new MutationObserver(() => {
+      try {
+        ['tx-list-content','dashboard-content'].forEach(id => {
+          const el = document.getElementById(id)
+          if (el) _injectArrows(el)
+        })
+      } catch (_) {}
+    }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true })
+  })()
+
+  // ── N17: Date picker month slide ───────────────────────────
+  ;(function _watchDatePicker() {
+    let _lastLabel = null
+    new MutationObserver(() => {
+      const header = document.querySelector(
+        '.date-picker-header, .month-nav-label, [class*="datepick"] [class*="title"]'
+      )
+      if (!header) return
+      const cur = header.textContent.trim()
+      if (cur === _lastLabel) return
+      const prev = _lastLabel
+      _lastLabel = cur
+      if (!prev) return
+      const grid = header.nextElementSibling
+      if (!grid) return
+      grid.style.cssText = 'transform:translateX(28px);opacity:0;transition:transform .32s cubic-bezier(.34,1.56,.64,1),opacity .24s ease'
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        grid.style.transform = 'translateX(0)'
+        grid.style.opacity   = '1'
+        setTimeout(() => { grid.style.cssText = '' }, 360)
+      }))
+    }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true, characterData: true })
+  })()
+
+  // ── N18: Wallet mini cards pop-in stagger ─────────────────
+  ;(function _patchRDashMini() {
+    const _prev = App.renderDashboard?.bind(App)
+    App.renderDashboard = function (...args) {
+      _prev?.(...args)
+      try {
+        document.querySelectorAll(
+          '#dashboard-content .mt-wallet-mini:not(.mt-wallet-mini-pop)'
+        ).forEach((card, i) => {
+          card.classList.add('mt-wallet-mini-pop')
+          card.style.animationDelay = `${i * 65}ms`
+        })
+      } catch (_) {}
+    }
+  })()
+
+  // ── N22: Color swatch bounce ────────────────────────────────
+  document.addEventListener('change', function (e) {
+    const sw = e.target.closest('input[type="color"], .color-swatch, [class*="color-opt"]')
+    if (!sw) return
+    sw.classList.remove('mt-swatch-pop')
+    void sw.offsetWidth
+    sw.classList.add('mt-swatch-pop')
+    setTimeout(() => sw.classList.remove('mt-swatch-pop'), 400)
+  })
+  document.addEventListener('click', function (e) {
+    const sw = e.target.closest('.color-dot, [class*="color-chip"], [class*="color-btn"]')
+    if (!sw) return
+    sw.classList.remove('mt-swatch-pop')
+    void sw.offsetWidth
+    sw.classList.add('mt-swatch-pop')
+    setTimeout(() => sw.classList.remove('mt-swatch-pop'), 400)
+  })
+
+  // ── N23: Amount display fluid font resize ──────────────────
+  ;(function _amountFluidSize() {
+    const _sizes = [60, 54, 46, 40, 34, 30, 26, 22]
+    document.addEventListener('pointerdown', function (e) {
+      if (!e.target.closest('.numpad-key')) return
+      setTimeout(() => {
+        const disp = document.querySelector(
+          '.amount-display, .add-amount-display, .numpad-display, ' +
+          '[class*="amount-big"], [class*="amount-val"], [class*="amount-display"]'
+        )
+        if (!disp) return
+        const len = disp.textContent.replace(/[^0-9.]/g, '').length
+        const sz  = _sizes[Math.min(len > 0 ? len - 1 : 0, _sizes.length - 1)]
+        disp.style.fontSize  = `${sz}px`
+        disp.style.transition = 'font-size .15s cubic-bezier(.34, 1.56, .64, 1)'
+      }, 16)
+    })
+  })()
+
+  // ── N25: CC high-utilization bar shimmer ───────────────────
+  ;(function _watchCCShimmer() {
+    const _seen = new WeakSet()
+    function _shimmer(root) {
+      root.querySelectorAll('.wc-prog-fill, .cc-usage-fill, [class*="cc-prog"]').forEach(el => {
+        if (_seen.has(el)) return
+        const pct = parseFloat(el.style.width) || 0
+        if (pct < 60) return
+        _seen.add(el)
+        const cur = el.style.backgroundImage || ''
+        if (!cur.includes('linear-gradient')) {
+          el.style.backgroundImage = `linear-gradient(90deg,transparent 0%,rgba(255,255,255,.28) 50%,transparent 100%)`
+        }
+        el.style.backgroundSize = '200% 100%'
+        if (!(el.style.animation || '').includes('mt-shimmer')) {
+          el.style.animation = (el.style.animation ? el.style.animation + ', ' : '') + 'mt-shimmer 2s ease infinite'
+        }
+      })
+    }
+    new MutationObserver(() => {
+      try { _shimmer(document.getElementById('wallets-content') || document.body) } catch (_) {}
+    }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true })
+  })()
+
+  // ── N26: Wallet mini flash after successful save ────────────
+  ;(function _patchSaveTxWalletFlash() {
+    const _prev = App.saveTx?.bind(App)
+    App.saveTx = function (...args) {
+      const _snap = {}
+      document.querySelectorAll('#dashboard-content .mt-wallet-mini').forEach(card => {
+        const key = card.dataset.walletId || card.dataset.id || card.dataset.wid
+        const val = card.querySelector('.value, [class*="balance"], [class*="amount"]')?.textContent.trim()
+        if (key) _snap[key] = val
+      })
+      _prev?.(...args)
+      setTimeout(() => {
+        try {
+          document.querySelectorAll('#dashboard-content .mt-wallet-mini').forEach(card => {
+            const key    = card.dataset.walletId || card.dataset.id || card.dataset.wid
+            const newVal = card.querySelector('.value, [class*="balance"], [class*="amount"]')?.textContent.trim()
+            if (!key || !newVal || _snap[key] === newVal) return
+            const pv = parseFloat((_snap[key] || '').replace(/[^0-9.-]/g, ''))
+            const cv = parseFloat(newVal.replace(/[^0-9.-]/g, ''))
+            card.classList.remove('mt-wallet-flash-pos', 'mt-wallet-flash-neg')
+            void card.offsetWidth
+            card.classList.add(cv >= pv ? 'mt-wallet-flash-pos' : 'mt-wallet-flash-neg')
+            setTimeout(() => card.classList.remove('mt-wallet-flash-pos', 'mt-wallet-flash-neg'), 1400)
+          })
+        } catch (_) {}
+      }, 320)
+    }
+  })()
+
+  // ── N28: Dashboard scroll parallax on net-worth card ───────
+  ;(function _setupDashParallax() {
+    const scroller = document.getElementById('dashboard-content')
+    if (!scroller || scroller._mtParallax) return
+    scroller._mtParallax = true
+    scroller.addEventListener('scroll', function () {
+      const card = scroller.querySelector('.mt-net-card')
+      if (!card) return
+      const offset = scroller.scrollTop * 0.16
+      card.style.transform = `translateY(${offset.toFixed(2)}px)`
+    }, { passive: true })
+  })()
+
+  // ── N29: Delete confirm button wobble on appear ─────────────
+  ;(function _watchDeleteConfirm() {
+    const _seen = new WeakSet()
+    new MutationObserver(() => {
+      document.querySelectorAll(
+        '[onclick*="confirmDelete"], [onclick*="confirmDeleteTx"], ' +
+        '.btn-delete-confirm, [class*="delete-confirm-btn"]'
+      ).forEach(btn => {
+        if (_seen.has(btn)) return
+        _seen.add(btn)
+        btn.classList.add('mt-wobble')
+        setTimeout(() => btn.classList.remove('mt-wobble'), 800)
+      })
+    }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true })
+  })()
+
+  // N30: Empty state multi-bounce handled by CSS override of .empty-icon
 
 })()
