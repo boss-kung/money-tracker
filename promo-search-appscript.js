@@ -90,8 +90,10 @@ var PROMO_RESPONSE_SCHEMA = {
 function doPost(e) {
   try {
     var payload = JSON.parse(e.postData.contents || '{}');
-    var result = handlePromoSearch(payload);
-    return respond(result);
+    if (payload.action === 'analyzeBenefitUrl') {
+      return respond(handleBenefitAnalysis(payload));
+    }
+    return respond(handlePromoSearch(payload));
   } catch (err) {
     return respond({ ok: false, message: String(err.message || err), results: [], warnings: [] });
   }
@@ -429,6 +431,193 @@ function handlePromoSearch(payload) {
 
   cacheSet(ck, response);
   return response;
+}
+
+// ---------------------------------------------------------------------------
+// Benefit URL analysis — extract structured benefit rules from page content
+// ---------------------------------------------------------------------------
+
+var BENEFIT_RULE_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      name:                     { type: 'string' },
+      type:                     { type: 'string' },
+      cashbackRate:             { type: 'number' },
+      cashbackMode:             { type: 'string' },
+      cashbackFixedAmount:      { type: 'number' },
+      discountRate:             { type: 'number' },
+      pointsMultiplier:         { type: 'number' },
+      pointsBahtPerPoint:       { type: 'number' },
+      merchants:                { type: 'array', items: { type: 'string' } },
+      categories:               { type: 'array', items: { type: 'string' } },
+      channels:                 { type: 'array', items: { type: 'string' } },
+      minSpend:                 { type: 'number' },
+      maxRewardPerCycle:        { type: 'number' },
+      maxRewardPerTx:           { type: 'number' },
+      maxEligibleSpendPerCycle: { type: 'number' },
+      startDate:                { type: 'string' },
+      endDate:                  { type: 'string' },
+      confidence:               { type: 'number' },
+      warnings:                 { type: 'array', items: { type: 'string' } },
+    },
+    required: ['name', 'type', 'confidence'],
+  },
+};
+
+function handleBenefitAnalysis(payload) {
+  var props = PropertiesService.getScriptProperties();
+
+  if (props.getProperty('MOCK_MODE') === 'true') {
+    return {
+      ok: true,
+      ruleDrafts: [{
+        rule: { name: '[MOCK] Cashback 5%', type: 'cashback', cardId: payload.cardId },
+        campaignTitle: '[MOCK] Cashback 5%',
+        confidence: 0.9,
+        warnings: ['[MOCK DATA]'],
+        reviewFields: [],
+        diagnostics: [],
+      }],
+      diagnostics: ['[MOCK MODE]'],
+    };
+  }
+
+  var apiKey = props.getProperty('GEMINI_API_KEY');
+  if (!apiKey) {
+    return { ok: false, message: 'GEMINI_API_KEY ยังไม่ได้ตั้งค่า', ruleDrafts: [], diagnostics: [] };
+  }
+
+  var text = String(payload.mainContentText || '').slice(0, 4000);
+  var sourceUrl = String(payload.sourceUrl || '');
+
+  if (!text || text.trim().length < 50) {
+    return { ok: false, message: 'เนื้อหาน้อยเกินไป ไม่สามารถวิเคราะห์ได้', ruleDrafts: [], diagnostics: [] };
+  }
+
+  var prompt = 'สกัดสิทธิประโยชน์บัตรเครดิตจากเนื้อหาด้านล่าง\n\n'
+    + 'URL: ' + sourceUrl + '\n\n'
+    + '=== เนื้อหา ===\n' + text + '\n\n'
+    + 'กฎสำคัญ:\n'
+    + '- ตอบเป็น JSON array เท่านั้น\n'
+    + '- แต่ละ item คือ 1 สิทธิประโยชน์/กฎ\n'
+    + '- name ต้องเป็นภาษาไทย กระชับ ไม่เกิน 40 ตัวอักษร\n'
+    + '- type: cashback | discount | points | mixed\n'
+    + '- cashbackRate: ตัวเลขเปอร์เซ็นต์ เช่น 5 (ไม่ใช่ 0.05)\n'
+    + '- channels: online | offline | all\n'
+    + '- startDate / endDate: รูปแบบ YYYY-MM-DD หรือ null\n'
+    + '- confidence: 0-1 ความมั่นใจในข้อมูล\n'
+    + '- warnings: รายการเตือน เช่น ไม่พบวันหมดอายุ\n'
+    + '- ฟิลด์ที่หาไม่ได้ให้ใส่ null หรือ array ว่าง\n'
+    + '- ถ้าไม่มีสิทธิประโยชน์ชัดเจน ตอบ []';
+
+  var url = GEMINI_API_BASE + GEMINI_MODEL + ':generateContent?key=' + apiKey;
+  var body = JSON.stringify({
+    systemInstruction: { parts: [{ text: 'คุณเป็น JSON extraction API สำหรับสกัดสิทธิประโยชน์บัตรเครดิต ตอบด้วย JSON array เท่านั้น' }] },
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: BENEFIT_RULE_SCHEMA,
+      maxOutputTokens: 4096,
+      temperature: 0.1,
+    },
+  });
+
+  var res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: body,
+    muteHttpExceptions: true,
+  });
+
+  if (res.getResponseCode() !== 200) {
+    return { ok: false, message: 'Gemini error ' + res.getResponseCode(), ruleDrafts: [], diagnostics: [] };
+  }
+
+  var data = JSON.parse(res.getContentText());
+  var parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
+  var responseText = parts
+    .filter(function(p) { return !p.thought && typeof p.text === 'string'; })
+    .map(function(p) { return p.text; })
+    .join('');
+
+  var items;
+  try {
+    items = JSON.parse(responseText);
+    if (!Array.isArray(items)) items = [];
+  } catch (_) {
+    return { ok: false, message: 'Gemini ตอบกลับ JSON ไม่ถูกต้อง', ruleDrafts: [], diagnostics: [responseText.slice(0, 200)] };
+  }
+
+  var ruleDrafts = items.map(function(item) {
+    var type = String(item.type || 'cashback');
+    if (type === 'mixed') type = 'both';
+    var rule = {
+      name: String(item.name || 'สิทธิประโยชน์จาก AI').slice(0, 60),
+      type: type,
+      cardId: String(payload.cardId || ''),
+      source: sourceUrl,
+      active: true,
+      suggestedConditions: {
+        categories: Array.isArray(item.categories) ? item.categories : [],
+        merchants: Array.isArray(item.merchants) ? item.merchants : [],
+        channels: Array.isArray(item.channels) ? item.channels : [],
+        minSpend: Number(item.minSpend) || null,
+      },
+      validity: {
+        mode: (item.startDate || item.endDate) ? 'range' : 'always',
+        startDate: item.startDate || '',
+        endDate: item.endDate || '',
+        statementCycleHint: 'statement_cycle',
+      },
+      cashback: {
+        mode: String(item.cashbackMode || 'percent'),
+        rate: Number(item.cashbackRate) || null,
+        fixedAmount: Number(item.cashbackFixedAmount) || null,
+      },
+      discount: {
+        mode: 'percent',
+        rate: Number(item.discountRate) || null,
+        fixedAmount: null,
+      },
+      points: {
+        bahtPerPoint: Number(item.pointsBahtPerPoint) || null,
+        multiplier: Number(item.pointsMultiplier) || 1,
+        multiplierMode: 'total',
+      },
+      limits: {
+        maxEligibleSpendPerTx: null,
+        maxEligibleSpendPerCycle: Number(item.maxEligibleSpendPerCycle) || null,
+        maxRewardAmountPerTx: Number(item.maxRewardPerTx) || null,
+        maxRewardAmountPerCycle: Number(item.maxRewardPerCycle) || null,
+      },
+      rewardTrigger: { mode: 'none', thresholdAmount: null, grantMode: 'once_per_cycle' },
+      allowStacking: true,
+      isBaseRule: false,
+      priority: 20,
+    };
+    var warnings = Array.isArray(item.warnings) ? item.warnings : [];
+    var reviewFields = [];
+    if (!item.cashbackRate && !item.discountRate && !item.pointsMultiplier) reviewFields.push('reward');
+    if (!item.merchants || !item.merchants.length) reviewFields.push('merchants');
+    if (!item.endDate) reviewFields.push('validity');
+    return {
+      rule: rule,
+      sourceUrl: sourceUrl,
+      campaignTitle: rule.name,
+      confidence: Number(item.confidence) || 0.5,
+      warnings: warnings,
+      reviewFields: reviewFields,
+      diagnostics: [],
+    };
+  });
+
+  return {
+    ok: true,
+    ruleDrafts: ruleDrafts,
+    diagnostics: items.length === 0 ? ['ไม่พบสิทธิประโยชน์ที่ชัดเจนในหน้านี้'] : [],
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -2630,7 +2630,7 @@ App.render();
   };
   App._fetchAuroraGoldViaProxy = App._fetchThaiGoldViaSource;
 
-  try { if (S.page === 'wallets') App.renderWallets(); } catch (err) { console.warn('wallet rollback render failed', err); }
+  try { if (S.page === 'wallets') App.renderWallets?.(); } catch (err) { console.warn('wallet rollback render failed', err); }
 })();
 
 /* ============================================================
@@ -6276,6 +6276,28 @@ App._pickMerchant = function(name, opts = {}) {
     App.openCCBenefitRuleForm(cardId, rule.id)
   }
 
+  App._analyzeBenefitTextWithAI = async function(mainContentText, sourceUrl, cardId, endpoint) {
+    const text = String(mainContentText || '').slice(0, 4000)
+    const payload = {
+      action: 'analyzeBenefitUrl',
+      sourceUrl,
+      mainContentText: text,
+      cardId,
+    }
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) throw new Error('Endpoint HTTP ' + res.status)
+    const data = await res.json()
+    if (data.ok === false) throw new Error(data.message || 'AI endpoint error')
+    return {
+      ruleDrafts: Array.isArray(data.ruleDrafts) ? data.ruleDrafts : [],
+      diagnostics: Array.isArray(data.diagnostics) ? data.diagnostics : [],
+    }
+  }
+
   App.analyzeCCBenefitLink = async function(cardId) {
     const url = String(document.getElementById('cc-benefit-import-url')?.value || '').trim()
     const resultEl = document.getElementById('cc-benefit-import-result')
@@ -6287,73 +6309,41 @@ App._pickMerchant = function(name, opts = {}) {
 
       let ruleDrafts = []
       let diagnostics = []
-      let usedAI = false
+      const endpoint = String(window.MT_PROMO_SEARCH_ENDPOINT || '').trim()
 
-      try {
-        const content = String(sourceDocument.mainContentText || '').trim().slice(0, 4000)
-        const prompt = `URL: ${sourceDocument.normalizedUrl || url}\n\nเนื้อหาหน้าเว็บ:\n${content}\n\n---\nสกัดสิทธิประโยชน์บัตรเครดิตจากเนื้อหาข้างต้น ตอบเป็น JSON array เท่านั้น ห้ามมี markdown หรือข้อความอื่น\n\nแต่ละ object ใน array:\n- name: ชื่อกฎภาษาไทย สั้น กระชับ\n- type: "cashback" | "discount" | "points" | "mixed"\n- cashback: { "mode": "percent"|"fixed", "rate": number|null, "fixedAmount": number|null }\n- discount: { "mode": "percent"|"fixed", "rate": number|null, "fixedAmount": number|null }\n- points: { "bahtPerPoint": number|null, "multiplier": number }\n- suggestedConditions: { "categories": [], "merchants": [], "channels": [], "minSpend": number|null }\n- limits: { "maxRewardAmountPerCycle": number|null, "maxRewardAmountPerTx": number|null, "maxEligibleSpendPerCycle": number|null }\n- validity: { "startDate": "YYYY-MM-DD"|null, "endDate": "YYYY-MM-DD"|null }\n- confidence: 0-1\n- warnings: [] ข้อความภาษาไทย เช่น "ไม่พบวันหมดอายุ"\n\nถ้าหาข้อมูลบางฟิลด์ไม่ได้ ให้ใส่ null ถ้าไม่พบสิทธิประโยชน์ใดเลย ตอบ []`
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1000,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        })
-        const data = await res.json()
-        const text = (data.content || []).map(b => b.text || '').join('')
-        const jsonText = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
-        const items = JSON.parse(jsonText)
-        if (Array.isArray(items)) {
-          ruleDrafts = items.map(item => {
-            const type = item.type === 'mixed' ? 'both' : (['cashback','discount','points','both'].includes(item.type) ? item.type : 'cashback')
-            const reviewFields = []
-            const hasReward = item.cashback?.rate || item.cashback?.fixedAmount || item.discount?.rate || item.discount?.fixedAmount || item.points?.bahtPerPoint || (Number(item.points?.multiplier) > 1)
-            if (!hasReward) reviewFields.push('reward')
-            if (!item.validity?.startDate && !item.validity?.endDate) reviewFields.push('validity')
-            if (!(item.suggestedConditions?.merchants?.length) && !(item.suggestedConditions?.categories?.length)) reviewFields.push('merchants')
-            return {
-              rule: {
-                id: genId(),
-                name: String(item.name || '').trim() || 'Unnamed rule',
-                type,
-                cashback: item.cashback || { mode: 'percent', rate: null, fixedAmount: null },
-                discount: item.discount || { mode: 'percent', rate: null, fixedAmount: null },
-                points: item.points || { bahtPerPoint: null, multiplier: 1 },
-                suggestedConditions: item.suggestedConditions || { categories: [], merchants: [], channels: [], minSpend: null },
-                limits: item.limits || { maxRewardAmountPerCycle: null, maxRewardAmountPerTx: null, maxEligibleSpendPerCycle: null },
-                validity: {
-                  mode: (item.validity?.startDate || item.validity?.endDate) ? 'range' : 'always',
-                  startDate: item.validity?.startDate || '',
-                  endDate: item.validity?.endDate || '',
-                },
-                source: sourceDocument.normalizedUrl || url,
-              },
-              sourceUrl: sourceDocument.normalizedUrl || url,
-              campaignTitle: String(item.name || '').trim() || 'Draft rule',
-              confidence: Number(item.confidence) || 0,
-              warnings: Array.isArray(item.warnings) ? item.warnings.filter(Boolean) : [],
-              reviewFields,
-              diagnostics: [],
-            }
-          })
-          usedAI = true
+      if (endpoint) {
+        try {
+          const aiResult = await App._analyzeBenefitTextWithAI(
+            sourceDocument.mainContentText,
+            sourceDocument.normalizedUrl,
+            cardId,
+            endpoint
+          )
+          ruleDrafts = aiResult.ruleDrafts || []
+          diagnostics = aiResult.diagnostics || []
+        } catch (aiErr) {
+          diagnostics.push('AI วิเคราะห์ไม่สำเร็จ (' + (aiErr?.message || 'unknown') + ') — ใช้การวิเคราะห์แบบ regex แทน')
+          const parsed = App._parseBenefitSourceDocument(sourceDocument)
+          const promotions = Array.isArray(parsed.promotions) ? parsed.promotions : []
+          ruleDrafts = promotions.flatMap(p => App._promotionDraftToRuleDrafts(cardId, p))
+          diagnostics.push(...(parsed.diagnostics || []))
         }
-      } catch (_aiErr) {
+      } else {
         const parsed = App._parseBenefitSourceDocument(sourceDocument)
         const promotions = Array.isArray(parsed.promotions) ? parsed.promotions : []
-        ruleDrafts = promotions.flatMap(promotion => App._promotionDraftToRuleDrafts(cardId, promotion))
-        diagnostics = [...(parsed.diagnostics || []), 'ใช้การวิเคราะห์แบบ regex เนื่องจาก AI ไม่พร้อมใช้งาน']
+        ruleDrafts = promotions.flatMap(p => App._promotionDraftToRuleDrafts(cardId, p))
+        diagnostics.push(...(parsed.diagnostics || []))
+        diagnostics.push('ยังไม่ได้ตั้งค่า MT_PROMO_SEARCH_ENDPOINT — ใช้การวิเคราะห์แบบ regex')
       }
 
       App._ccBenefitImportPreview = {
         cardId,
         url: sourceDocument.normalizedUrl,
         sourceDocument,
+        promotions: [],
         ruleDrafts,
         diagnostics,
-        usedAI,
+        usedAI: !!endpoint,
       }
       App._renderBenefitImportPreview(App._ccBenefitImportPreview)
     } catch (err) {
