@@ -12991,16 +12991,16 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       const rewardHtml = detailText
         ? `<div style="font-size:12px;font-weight:700;color:var(--income);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(detailText)}</div>`
         : `<div style="font-size:11px;color:var(--muted);margin-top:2px">ไม่มีสิทธิพิเศษ</div>`
-      const bestBadge = isBest ? `<div style="font-size:9px;font-weight:700;background:var(--income);color:#fff;padding:1px 6px;border-radius:4px;margin-top:4px;display:inline-block">ดีสุด ✓</div>` : ''
-      const checkmark = isSel ? `<div style="position:absolute;top:8px;right:8px;width:18px;height:18px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">✓</div>` : ''
+      const bestBadge = isBest ? `<div style="position:absolute;top:8px;right:8px;font-size:9px;font-weight:700;background:var(--income);color:#fff;padding:2px 6px;border-radius:4px">ดีสุด</div>` : ''
+      const selRing = isSel ? `<div style="position:absolute;top:8px;right:${isBest?'58px':'8px'};width:18px;height:18px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">✓</div>` : ''
       return `<button type="button"
         onclick='App.applyRecommendedCardSelection(${JSON.stringify(item.card.id)}, ${JSON.stringify(item.selectedRuleIds || [])})'
         style="position:relative;flex:0 0 calc(66.67% - 5px);min-width:160px;display:flex;flex-direction:column;padding:12px 12px 10px;border-radius:14px;border:2px solid ${isSel?'var(--primary)':'var(--border)'};background:${isSel?'color-mix(in srgb,var(--primary) 10%,var(--card))':'var(--card)'};text-align:left;cursor:pointer;scroll-snap-align:start;box-sizing:border-box">
-        ${checkmark}
-        <span style="font-size:24px;margin-bottom:6px">${esc(item.card.icon||'💳')}</span>
-        <div style="font-size:13px;font-weight:${isSel?700:600};padding-right:${isSel?'22px':'0'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.card.name)}</div>
-        ${rewardHtml}
         ${bestBadge}
+        ${selRing}
+        <span style="font-size:24px;margin-bottom:6px;margin-top:${isBest||isSel?'18px':'0'}">${esc(item.card.icon||'💳')}</span>
+        <div style="font-size:13px;font-weight:${isSel?700:600};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.card.name)}</div>
+        ${rewardHtml}
       </button>`
     }).join('')
 
