@@ -750,7 +750,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.15-ui-polish2'
+const APP_VERSION = '2026.05.15-more-order1'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -10079,7 +10079,7 @@ App._pickMerchant = function(name, opts = {}) {
     const targetRect = target.getBoundingClientRect()
     const targetTopInScroll = scrollEl.scrollTop + targetRect.top - scrollRect.top
     const scrollPaddingTop = parseFloat(getComputedStyle(scrollEl).paddingTop || '0') || 0
-    const breathingRoom = 12
+    const breathingRoom = 8
     const offsetInScroll = Math.max(0, targetTopInScroll - scrollPaddingTop - breathingRoom)
     scrollEl.scrollTo({ top: offsetInScroll, behavior: 'smooth' })
     document.querySelectorAll('.wallet-tab').forEach(btn => {

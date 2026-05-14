@@ -481,11 +481,14 @@
     previousRenderMore?.()
     const content = document.getElementById('more-content')
     if (!content || document.getElementById('mt-notification-settings')) return
+    const systemTitle = [...content.querySelectorAll('.sec-title')]
+      .find(el => String(el.textContent || '').trim() === 'ระบบ')
     const footer = content.querySelector('div[style*="text-align:center"]')
     const wrapper = document.createElement('div')
     wrapper.id = 'mt-notification-settings'
     wrapper.innerHTML = renderNotificationSettings()
-    if (footer) footer.insertAdjacentElement('beforebegin', wrapper)
+    if (systemTitle) systemTitle.insertAdjacentElement('beforebegin', wrapper)
+    else if (footer) footer.insertAdjacentElement('beforebegin', wrapper)
     else content.appendChild(wrapper)
   }
 
