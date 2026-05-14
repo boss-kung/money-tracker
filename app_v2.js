@@ -721,7 +721,6 @@ window.__mountUpcomingBillsFeature = function() {
   const prevRenderWallets = App.renderWallets?.bind(App)
   App.renderWallets = function() {
     prevRenderWallets?.()
-    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     injectWalletAvailabilityRows()
   }
 
@@ -734,7 +733,6 @@ window.__mountUpcomingBillsFeature = function() {
   const prevRenderDashboard = App.renderDashboard?.bind(App)
   App.renderDashboard = function() {
     prevRenderDashboard?.()
-    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     injectDashboardUpcomingAlerts()
   }
 
@@ -2314,8 +2312,10 @@ App.render();
         <div class="add-detail-actions"><button class="btn btn-secondary" onclick="App._backToAmount()">← แก้จำนวน</button><button class="btn btn-primary" ${hasEnoughForTransfer ? `style="background:${color};box-shadow:0 4px 16px ${color}44"` : 'disabled style="opacity:.45;cursor:not-allowed"'} onclick="App.saveTx()">${S.txMode === 'edit' ? 'บันทึก' : `บันทึก ${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}`}</button></div>
       </div>`
     if (_savedScroll > 0) {
-      const _newScrollEl = box.querySelector('.add-detail-scroll')
-      if (_newScrollEl) _newScrollEl.scrollTop = _savedScroll
+      requestAnimationFrame(() => {
+        const _newScrollEl = box.querySelector('.add-detail-scroll')
+        if (_newScrollEl) _newScrollEl.scrollTop = _savedScroll
+      })
     }
   }
 
@@ -12799,7 +12799,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   const prevRenderDashboard = App.renderDashboard?.bind(App)
   App.renderDashboard = function() {
     prevRenderDashboard?.()
-    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     injectDashboardPrivilegeAlerts()
   }
 
@@ -13217,7 +13216,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   const _prevRenderDashboard = App.renderDashboard?.bind(App)
   App.renderDashboard = function() {
     _prevRenderDashboard?.()
-    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     _injectDashboardInsights()
   }
 
@@ -13250,7 +13248,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   const _prevRenderReports = App.renderReports?.bind(App)
   App.renderReports = function() {
     _prevRenderReports?.()
-    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     _upgradeReportsAI()
   }
 
@@ -13284,7 +13281,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   const _prevRenderDetail = App._renderAddTxDetail?.bind(App)
   App._renderAddTxDetail = function() {
     _prevRenderDetail?.()
-    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     _injectBudgetChip()
   }
 
