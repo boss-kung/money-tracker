@@ -6273,6 +6273,8 @@ App._pickMerchant = function(name, opts = {}) {
     const preview = App._ccBenefitImportPreview
     if (!preview || !preview.ruleDrafts?.[draftIdx]) return
     const draft = preview.ruleDrafts[draftIdx]
+    // Ensure stable id (should already be set by analyzeCCBenefitLink, but guard here too)
+    if (draft.rule && !draft.rule.id) draft.rule.id = genId()
     const rule = App.normalizeBenefitRule?.({ ...(draft.rule || {}), cardId }, cardId)
     if (!rule) return
     App.ensureCCBenefitRulesState?.()
@@ -6281,6 +6283,9 @@ App._pickMerchant = function(name, opts = {}) {
       S.ccBenefitRules.push(rule)
       persist()
     }
+    // Close the import dialog first — its z-index (780) sits above #sub-screen (600)
+    // and would block the rule form from being visible or interactive.
+    document.getElementById('cc-benefit-import-dialog')?.remove()
     App.openCCBenefitRuleForm(cardId, rule.id)
   }
 
@@ -6396,6 +6401,8 @@ App._pickMerchant = function(name, opts = {}) {
         diagnostics.push('ยังไม่ได้ตั้งค่า MT_PROMO_SEARCH_ENDPOINT — ใช้การวิเคราะห์แบบ regex')
       }
 
+      // Stamp stable ids once so repeated edit-button clicks don't generate new ids
+      ruleDrafts.forEach(draft => { if (draft.rule && !draft.rule.id) draft.rule.id = genId() })
       App._ccBenefitImportPreview = {
         cardId,
         url: sourceDocument.normalizedUrl,
