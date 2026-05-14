@@ -22,6 +22,7 @@
 // Config
 // ---------------------------------------------------------------------------
 
+var SCRIPT_VERSION = '2026.05.14-benefit-v1';
 var GEMINI_MODEL = 'gemini-2.5-flash-preview-05-20';
 var GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
@@ -100,7 +101,7 @@ function doPost(e) {
 }
 
 function doGet() {
-  return respond({ ok: true, message: 'Promo Search endpoint is running (v3 two-step)' });
+  return respond({ ok: true, message: 'Money Tracker endpoint running', version: SCRIPT_VERSION, features: ['promoSearch', 'analyzeBenefitUrl'] });
 }
 
 function respond(data) {
@@ -613,10 +614,14 @@ function handleBenefitAnalysis(payload) {
     };
   });
 
+  var diags = [];
+  if (items.length === 0) diags.push('ไม่พบสิทธิประโยชน์ที่ชัดเจนในหน้านี้ ลองใส่ลิงก์หน้าโปรโมชันโดยตรง');
+  diags.push('endpoint version: ' + SCRIPT_VERSION);
   return {
     ok: true,
+    version: SCRIPT_VERSION,
     ruleDrafts: ruleDrafts,
-    diagnostics: items.length === 0 ? ['ไม่พบสิทธิประโยชน์ที่ชัดเจนในหน้านี้'] : [],
+    diagnostics: diags,
   };
 }
 

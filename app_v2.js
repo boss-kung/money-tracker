@@ -5328,9 +5328,10 @@ App._pickMerchant = function(name, opts = {}) {
               <input class="form-input" id="cc-benefit-import-url" placeholder="https://..." onkeydown="if(event.key==='Enter'){event.preventDefault();App.analyzeCCBenefitLink('${esc(cardId)}')}">
               <div class="form-hint">ระบบจะพยายามอ่านเงื่อนไขสิทธิประโยชน์จากหน้าเว็บ แล้วเตรียมกฎให้ตรวจสอบก่อนบันทึก</div>
             </div>
-            <div style="display:flex;gap:10px;margin-bottom:12px">
+            <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
               <button class="btn btn-secondary" onclick="document.getElementById('${dialogId}')?.remove()">ยกเลิก</button>
               <button class="btn btn-primary" onclick="App.analyzeCCBenefitLink('${esc(cardId)}')">วิเคราะห์ลิงก์</button>
+              ${window.MT_PROMO_SEARCH_ENDPOINT ? `<button class="btn btn-secondary btn-sm" onclick="App.verifyBenefitEndpoint()" style="width:auto;font-size:12px">ตรวจสอบ endpoint</button>` : ''}
             </div>
             <div id="cc-benefit-import-result"></div>
           </div>
@@ -6305,6 +6306,29 @@ App._pickMerchant = function(name, opts = {}) {
     }
   }
 
+  App.verifyBenefitEndpoint = async function() {
+    const resultEl = document.getElementById('cc-benefit-import-result')
+    const endpoint = String(window.MT_PROMO_SEARCH_ENDPOINT || '').trim()
+    if (!endpoint) { notify('ยังไม่ได้ตั้งค่า MT_PROMO_SEARCH_ENDPOINT', 'error'); return }
+    if (resultEl) resultEl.innerHTML = `<div class="card card-pad">กำลังตรวจสอบ endpoint...</div>`
+    try {
+      const res = await fetch(endpoint, { cache: 'no-store' })
+      const data = await res.json()
+      const version = data.version || '(ไม่มี version — อาจเป็น version เก่า)'
+      const features = Array.isArray(data.features) ? data.features : []
+      const hasAnalyze = features.includes('analyzeBenefitUrl')
+      if (resultEl) resultEl.innerHTML = `<div class="card card-pad">
+        <div class="list-item-name" style="color:${hasAnalyze ? 'var(--success)' : 'var(--warning)'}">
+          ${hasAnalyze ? '✓ Endpoint พร้อมใช้งาน' : '⚠ Endpoint เก่า — ยังไม่รองรับ analyzeBenefitUrl'}
+        </div>
+        <div class="list-item-sub">version: ${esc(String(version))}</div>
+        ${!hasAnalyze ? `<div class="list-item-sub" style="color:var(--warning);margin-top:6px">กรุณาไปที่ script.google.com → Deploy → Manage deployments → แก้ไข deployment → เลือก <b>New version</b> → Deploy</div>` : ''}
+      </div>`
+    } catch (err) {
+      if (resultEl) resultEl.innerHTML = `<div class="card card-pad"><div class="list-item-sub" style="color:var(--danger)">ตรวจสอบไม่ได้: ${esc(err?.message || 'error')}</div></div>`
+    }
+  }
+
   App.analyzeCCBenefitLink = async function(cardId) {
     const url = String(document.getElementById('cc-benefit-import-url')?.value || '').trim()
     const resultEl = document.getElementById('cc-benefit-import-result')
@@ -6339,7 +6363,7 @@ App._pickMerchant = function(name, opts = {}) {
         } catch (aiErr) {
           const aiErrMsg = aiErr?.message || 'unknown'
           if (/month must be in YYYY-MM/i.test(aiErrMsg)) {
-            diagnostics.push('Apps Script ยังไม่ได้ re-deploy — กรุณาไปที่ script.google.com → Deploy → Manage deployments → New version เพื่อเปิดใช้ฟีเจอร์นี้')
+            diagnostics.push('Endpoint ตอบกลับด้วย version เก่า (ยังไม่รองรับ analyzeBenefitUrl) — กด "ตรวจสอบ endpoint" เพื่อดู version ที่ deploy อยู่ จากนั้นไปที่ script.google.com → Deploy → Manage deployments → แก้ไข deployment เดิม → เลือก New version → Deploy')
           } else {
             diagnostics.push('AI วิเคราะห์ไม่สำเร็จ (' + aiErrMsg + ')')
           }
