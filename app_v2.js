@@ -14036,3 +14036,706 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // ── Init ─────────────────────────────────────────────────────
   try { if (S.page === 'more') App.renderMore?.() } catch(_) {}
 })()
+
+/* ================================================================
+   MT Animation Suite  ·  Priority 1 – 4  +  WOW W1 – W15
+   Self-contained IIFE. Wraps existing App methods non-invasively.
+   Runs after all feature IIFEs so wraps the final versions of every
+   function. Uses only the global `App` and `S` that already exist.
+   ================================================================ */
+;(function () {
+  'use strict'
+  if (typeof App === 'undefined' || typeof S === 'undefined') return
+
+  // ── Pending close-animation timers keyed by overlay id ───────
+  const _closeTimers = {}
+
+  // ─────────────────────────────────────────────────────────────
+  // P1-A  Count-up animation for numbers in dashboard
+  // ─────────────────────────────────────────────────────────────
+  function _countUp(el, duration) {
+    if (!el) return
+    const orig = (el.textContent || '').trim()
+    if (!orig || orig.includes('*')) return
+    const isNeg  = /^[-–]/.test(orig) || /฿\s*[-–]/.test(orig)
+    const numStr = orig.replace(/[^0-9.]/g, '')
+    const val    = parseFloat(numStr)
+    if (!isFinite(val) || val === 0) return
+    const hasDec  = /\.\d/.test(orig)
+    const hasBaht = orig.includes('฿')
+    const t0      = performance.now()
+    ;(function step(now) {
+      const p = Math.min((now - t0) / duration, 1)
+      if (p >= 1) { el.textContent = orig; return }
+      const ease = 1 - (1 - p) ** 3
+      const cur  = val * ease
+      const fmt  = hasDec
+        ? cur.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : Math.round(cur).toLocaleString('th-TH')
+      el.textContent = (isNeg ? '-' : '') + (hasBaht ? '฿' : '') + fmt
+      requestAnimationFrame(step)
+    })(t0)
+  }
+
+  function _runDashCountUp() {
+    if (S.settings?.hideMoney) return
+    document.querySelectorAll(
+      '#dashboard-content .mt-net-metric strong, ' +
+      '#dashboard-content .mt-wallet-mini .value'
+    ).forEach(el => _countUp(el, 1000))
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P1-B  Progress bars: animate width from 0 → target
+  // ─────────────────────────────────────────────────────────────
+  function _animProgressBars(scope) {
+    document.querySelectorAll(
+      `${scope} .progress-fill, ${scope} .wc-prog-fill`
+    ).forEach(el => {
+      const target = el.style.width
+      if (!target || target === '0%' || target === '0') return
+      el.style.transition = 'none'
+      el.style.width = '0%'
+      void el.offsetWidth
+      el.style.transition = 'width 1.2s cubic-bezier(.34, 1.56, .64, 1)'
+      el.style.width = target
+    })
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P1-C  FAB icon + overlay close animation
+  // ─────────────────────────────────────────────────────────────
+  App.openOverlay = function (id) {
+    clearTimeout(_closeTimers[id])
+    delete _closeTimers[id]
+    const el = document.getElementById(id)
+    if (!el) return
+    el.classList.remove('mt-closing')
+    el.classList.add('open')
+    if (id === 'overlay-add-tx') {
+      document.getElementById('fab')?.classList.add('fab-open')
+    }
+  }
+
+  App.closeOverlay = function (id) {
+    if (id === 'overlay-add-tx') {
+      document.getElementById('fab')?.classList.remove('fab-open')
+    }
+    if (id === 'overlay-tx-detail') {
+      try { S.deleteConfirm = false } catch (_) {}
+    }
+    const el = document.getElementById(id)
+    if (!el?.classList.contains('open')) return
+    clearTimeout(_closeTimers[id])
+    el.classList.add('mt-closing')
+    _closeTimers[id] = setTimeout(() => {
+      el.classList.remove('open', 'mt-closing')
+      delete _closeTimers[id]
+    }, 380)
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P1-D  Bottom nav icon spring-bounce on tab switch
+  // ─────────────────────────────────────────────────────────────
+  const _origShowPage = App.showPage?.bind(App)
+  App.showPage = function (page) {
+    _origShowPage?.(page)
+    const btn = document.querySelector(`.nav-btn[data-tab="${page}"]`)
+    if (!btn) return
+    btn.classList.remove('mt-nav-bounce')
+    void btn.offsetWidth
+    btn.classList.add('mt-nav-bounce')
+    setTimeout(() => btn.classList.remove('mt-nav-bounce'), 560)
+    // W11: add body class for magnetic FAB CSS targeting
+    document.body.className = document.body.className
+      .replace(/\bis-\w+/g, '').trim() + ` is-${page}`
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P1-E  renderDashboard post-hook
+  // ─────────────────────────────────────────────────────────────
+  const _origRD = App.renderDashboard?.bind(App)
+  App.renderDashboard = function (...args) {
+    // W15: snapshot values before re-render
+    const _prevVals = {}
+    document.querySelectorAll('#dashboard-content [data-val-key]').forEach(el => {
+      _prevVals[el.dataset.valKey] = el.textContent.trim()
+    })
+
+    _origRD?.(...args)
+
+    try {
+      _runDashCountUp()
+      _animProgressBars('#dashboard-content')
+      document.querySelectorAll(
+        '#dashboard-content .tx-row:not(.mt-anim-in), ' +
+        '#dashboard-content .tx-row-modern:not(.mt-anim-in)'
+      ).forEach((row, i) => {
+        row.classList.add('mt-anim-in')
+        row.style.animationDelay = `${Math.min(i * 50, 300)}ms`
+      })
+      // W1: digit roller on the hero net-worth value
+      _digitRoll('#dashboard-content .mt-net-value')
+      // W2: aurora (CSS handles it, just ensure ::before is active via class)
+      document.querySelectorAll('#dashboard-content .mt-net-card').forEach(c => {
+        c.classList.add('mt-aurora-on')
+      })
+      // W13: canvas particles in net-worth card
+      _netCardParticles()
+      // W15: diff highlight
+      setTimeout(() => {
+        document.querySelectorAll('#dashboard-content [data-val-key]').forEach(el => {
+          const key  = el.dataset.valKey
+          const prev = _prevVals[key]
+          const cur  = el.textContent.trim()
+          if (!prev || prev === cur) return
+          const pv = parseFloat(prev.replace(/[^0-9.-]/g, ''))
+          const cv = parseFloat(cur.replace(/[^0-9.-]/g, ''))
+          if (!isFinite(pv) || !isFinite(cv)) return
+          el.classList.remove('mt-num-up', 'mt-num-down')
+          void el.offsetWidth
+          el.classList.add(cv > pv ? 'mt-num-up' : 'mt-num-down')
+          setTimeout(() => el.classList.remove('mt-num-up', 'mt-num-down'), 700)
+        })
+      }, 80)
+      // W9: shake hero if net negative
+      setTimeout(() => {
+        const hero = document.querySelector('#dashboard-content .mt-net-value')
+        if (hero) {
+          const v = parseFloat(hero.textContent.replace(/[^0-9.-]/g, ''))
+          if (isFinite(v) && v < 0) {
+            hero.classList.remove('mt-shake')
+            void hero.offsetWidth
+            hero.classList.add('mt-shake')
+            setTimeout(() => hero.classList.remove('mt-shake'), 800)
+          }
+        }
+      }, 1100)
+    } catch (_) {}
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P1-F  Transaction list stagger
+  // ─────────────────────────────────────────────────────────────
+  function _staggerTxRows() {
+    if (S.txSearch) return
+    document.querySelectorAll(
+      '#tx-list-content .tx-row:not(.mt-anim-in), ' +
+      '#tx-list-content .tx-row-modern:not(.mt-anim-in)'
+    ).forEach((row, i) => {
+      row.classList.add('mt-anim-in')
+      row.style.animationDelay = `${Math.min(i * 50, 400)}ms`
+    })
+  }
+
+  const _origRTL = App.renderTransactionsList?.bind(App)
+  App.renderTransactionsList = function (...args) {
+    _origRTL?.(...args)
+    try { _staggerTxRows() } catch (_) {}
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P2-A  Category button pop on tap
+  // ─────────────────────────────────────────────────────────────
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.cat-btn')
+    if (!btn) return
+    btn.classList.remove('mt-pop')
+    void btn.offsetWidth
+    btn.classList.add('mt-pop')
+    setTimeout(() => btn.classList.remove('mt-pop'), 380)
+  }, true)
+
+  // ─────────────────────────────────────────────────────────────
+  // P2-B  Numpad key ripple
+  // ─────────────────────────────────────────────────────────────
+  document.addEventListener('pointerdown', function (e) {
+    const key = e.target.closest('.numpad-key')
+    if (!key) return
+    const rect = key.getBoundingClientRect()
+    const sz   = Math.max(rect.width, rect.height)
+    const x    = e.clientX - rect.left - sz / 2
+    const y    = e.clientY - rect.top  - sz / 2
+    const rip  = document.createElement('span')
+    rip.className = 'mt-ripple'
+    rip.style.cssText = `width:${sz}px;height:${sz}px;left:${x}px;top:${y}px`
+    key.appendChild(rip)
+    setTimeout(() => rip.remove(), 780)
+  })
+
+  // ─────────────────────────────────────────────────────────────
+  // P2-C  Reports: stagger cards + animate category bars
+  // ─────────────────────────────────────────────────────────────
+  function _staggerReportCards() {
+    document.querySelectorAll(
+      '#reports-content .card:not(.mt-card-in), ' +
+      '#reports-content .insight-row:not(.mt-card-in)'
+    ).forEach((el, i) => {
+      el.classList.add('mt-card-in')
+      el.style.animationDelay = `${Math.min(i * 65, 420)}ms`
+    })
+  }
+
+  function _animCatBars() {
+    document.querySelectorAll('#reports-content .report-cat-fill').forEach(el => {
+      const target = el.style.width
+      if (!target || target === '0%') return
+      el.style.transition = 'none'
+      el.style.width = '0%'
+      void el.offsetWidth
+      el.style.transition = 'width 1s cubic-bezier(.25, .46, .45, .94)'
+      el.style.width = target
+    })
+  }
+
+  const _origRR = App.renderReports?.bind(App)
+  App.renderReports = function (...args) {
+    _origRR?.(...args)
+    try {
+      _staggerReportCards()
+      _animProgressBars('#reports-content')
+      _animCatBars()
+      // W10: SVG bar draw on trend chart
+      setTimeout(_animTrendBars, 120)
+    } catch (_) {}
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P2-D  Wallets: animate progress bars + W3 light sweep + W14
+  // ─────────────────────────────────────────────────────────────
+  const _origRW = App.renderWallets?.bind(App)
+  App.renderWallets = function (...args) {
+    _origRW?.(...args)
+    try {
+      _animProgressBars('#wallets-content')
+      // W3: light sweep each wallet card
+      document.querySelectorAll('#wallets-content .wallet-card').forEach((card, i) => {
+        setTimeout(() => {
+          card.classList.remove('mt-shine')
+          void card.offsetWidth
+          card.classList.add('mt-shine')
+          setTimeout(() => card.classList.remove('mt-shine'), 1100)
+        }, i * 120)
+      })
+      // W14: elastic scroll perspective
+      _setupElasticScroll()
+    } catch (_) {}
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P3-A  Flash newly-saved tx row green + W5 FAB particles +
+  //       W12 checkmark
+  // ─────────────────────────────────────────────────────────────
+  const _origSaveTx = App.saveTx?.bind(App)
+  App.saveTx = function (...args) {
+    _origSaveTx?.(...args)
+    // W12: checkmark overlay
+    _showCheckmark()
+    // W5: FAB particle burst
+    const fab = document.getElementById('fab')
+    if (fab) {
+      const r = fab.getBoundingClientRect()
+      _fabParticles(r.left + r.width / 2, r.top + r.height / 2, args[0])
+    }
+    setTimeout(() => {
+      try {
+        const first = document.querySelector(
+          '#tx-list-content .tx-row, #tx-list-content .tx-row-modern'
+        )
+        if (!first) return
+        first.classList.remove('mt-tx-flash')
+        void first.offsetWidth
+        first.classList.add('mt-tx-flash')
+        setTimeout(() => first.classList.remove('mt-tx-flash'), 1700)
+      } catch (_) {}
+    }, 220)
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P3-B  Wallet card 3-D tilt on desktop hover
+  // ─────────────────────────────────────────────────────────────
+  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    document.addEventListener('mousemove', function (e) {
+      const card = e.target.closest?.('.wallet-card')
+      if (!card) return
+      const r  = card.getBoundingClientRect()
+      const dx = ((e.clientX - r.left)  / r.width  - .5) * 2
+      const dy = ((e.clientY - r.top)   / r.height - .5) * 2
+      card.style.transform  = `perspective(700px) rotateX(${(-dy * 3.5).toFixed(2)}deg) rotateY(${(dx * 3.5).toFixed(2)}deg) scale(1.014)`
+      card.style.transition = 'transform .08s ease'
+    })
+    document.addEventListener('mouseleave', function (e) {
+      const card = e.target.closest?.('.wallet-card')
+      if (card) {
+        card.style.transform  = ''
+        card.style.transition = 'transform .32s ease'
+      }
+    }, true)
+
+    // W11: magnetic FAB
+    _setupMagneticFab()
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P3-C  Delete row slide-out
+  // ─────────────────────────────────────────────────────────────
+  const _origConfirmDelete = App.confirmDeleteTx?.bind(App)
+  if (_origConfirmDelete) {
+    App.confirmDeleteTx = function () {
+      const txId = S.selectedTxId
+      if (txId) {
+        const row = document.querySelector(`[data-txid="${txId}"]`)
+        if (row) {
+          row.classList.add('mt-row-delete')
+          setTimeout(() => { try { _origConfirmDelete() } catch (_) {} }, 420)
+          return
+        }
+      }
+      _origConfirmDelete()
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P4-A  Confetti burst — window.MT_confetti(x, y)
+  // ─────────────────────────────────────────────────────────────
+  const _CONFETTI_COLORS = [
+    '#2563EB', '#16A34A', '#F59E0B', '#7C3AED',
+    '#DC2626', '#0EA5E9', '#F97316', '#EC4899',
+  ]
+  window.MT_confetti = function (cx, cy) {
+    for (let i = 0; i < 26; i++) {
+      const el = document.createElement('div')
+      el.className = 'mt-confetti'
+      const w = (5 + Math.random() * 6).toFixed(1)
+      const h = (5 + Math.random() * 6).toFixed(1)
+      el.style.cssText = [
+        `left:${(cx + (Math.random() - .5) * 100).toFixed(0)}px`,
+        `top:${cy}px`,
+        `width:${w}px`,
+        `height:${h}px`,
+        `background:${_CONFETTI_COLORS[i % _CONFETTI_COLORS.length]}`,
+        `border-radius:${Math.random() > .45 ? '50%' : '2px'}`,
+        `animation-delay:${(Math.random() * 220).toFixed(0)}ms`,
+        `animation-duration:${(900 + Math.random() * 500).toFixed(0)}ms`,
+      ].join(';')
+      document.body.appendChild(el)
+      setTimeout(() => el.remove(), 1700)
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // P4-B  Skeleton shimmer — window.MT_skeleton(container, rows)
+  // ─────────────────────────────────────────────────────────────
+  window.MT_skeleton = function (container, rows) {
+    if (!container) return
+    container.innerHTML = Array.from({ length: rows || 4 }, () => `
+      <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
+        <div class="mt-skeleton" style="width:38px;height:38px;border-radius:13px;flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div class="mt-skeleton" style="height:13px;width:${55 + (Math.random() * 28 | 0)}%;margin-bottom:6px;border-radius:6px"></div>
+          <div class="mt-skeleton" style="height:10px;width:${26 + (Math.random() * 18 | 0)}%;border-radius:5px"></div>
+        </div>
+        <div class="mt-skeleton" style="width:54px;height:14px;border-radius:6px"></div>
+      </div>`).join('')
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W1: Digit roller — slot-machine per-character on hero value
+  // ─────────────────────────────────────────────────────────────
+  function _digitRoll(selector) {
+    if (S.settings?.hideMoney) return
+    const el = document.querySelector(selector)
+    if (!el) return
+    const text = el.textContent.trim()
+    if (!text || text.includes('*')) return
+    el.innerHTML = text.split('').map((ch, i) => {
+      const delay = (i * 38).toFixed(0)
+      return `<span class="mt-digit-wrap"><span class="mt-digit-inner" style="animation-delay:${delay}ms">${ch}</span></span>`
+    }).join('')
+    // Restore plain text after animation finishes
+    setTimeout(() => { if (el.isConnected) el.textContent = text }, text.length * 38 + 700)
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W3: Light sweep — triggered in renderWallets (above)
+  // W4: Budget ring injection
+  // ─────────────────────────────────────────────────────────────
+  function _injectBudgetRing(container) {
+    const bars = container.querySelectorAll('.progress-wrap, .budget-progress-wrap')
+    bars.forEach(wrap => {
+      if (wrap.querySelector('.mt-budget-ring-wrap')) return
+      const fill = wrap.querySelector('.progress-fill, .wc-prog-fill')
+      if (!fill) return
+      const pct = parseFloat(fill.style.width) || 0
+      const r   = 18
+      const circ = 2 * Math.PI * r
+      const used = circ * (1 - Math.min(pct, 100) / 100)
+      const color = pct > 90 ? '#EF4444' : pct > 70 ? '#F59E0B' : '#16A34A'
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      svg.setAttribute('width', '44'); svg.setAttribute('height', '44')
+      svg.setAttribute('viewBox', '0 0 44 44')
+      svg.classList.add('mt-budget-ring')
+      svg.innerHTML = `
+        <circle class="track" cx="22" cy="22" r="${r}"/>
+        <circle class="fill" cx="22" cy="22" r="${r}"
+          stroke="${color}"
+          stroke-dasharray="${circ.toFixed(2)}"
+          stroke-dashoffset="${circ.toFixed(2)}"/>`
+      const ringWrap = document.createElement('div')
+      ringWrap.className = 'mt-budget-ring-wrap'
+      ringWrap.appendChild(svg)
+      wrap.insertBefore(ringWrap, wrap.firstChild)
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const c = svg.querySelector('.fill')
+        if (c) c.style.strokeDashoffset = used.toFixed(2)
+      }))
+    })
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W5: FAB particle burst
+  // ─────────────────────────────────────────────────────────────
+  const _TX_COLORS = { income: '#16A34A', expense: '#EF4444', transfer: '#3B82F6' }
+  function _fabParticles(cx, cy, tx) {
+    const color = _TX_COLORS[tx?.type] || '#6366F1'
+    for (let i = 0; i < 14; i++) {
+      const angle = (i / 14) * Math.PI * 2
+      const dist  = 40 + Math.random() * 50
+      const px    = (Math.cos(angle) * dist).toFixed(1)
+      const py    = (Math.sin(angle) * dist).toFixed(1)
+      const el    = document.createElement('div')
+      el.className = 'mt-fab-particle'
+      el.style.cssText = [
+        `left:${cx}px`, `top:${cy}px`,
+        `background:${color}`,
+        `--px:${px}px`, `--py:${py}px`,
+        `animation-delay:${(Math.random() * 60).toFixed(0)}ms`,
+        `animation-duration:${(700 + Math.random() * 300).toFixed(0)}ms`,
+      ].join(';')
+      document.body.appendChild(el)
+      setTimeout(() => el.remove(), 1100)
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W6: Typewriter on AI insight text
+  // ─────────────────────────────────────────────────────────────
+  function _typewriterInsights() {
+    document.querySelectorAll('.insight-body:not([data-tw-done])').forEach(el => {
+      el.dataset.twDone = '1'
+      const full = el.textContent
+      if (!full || full.length < 5) return
+      el.textContent = ''
+      const cursor = document.createElement('span')
+      cursor.className = 'mt-typewriter-cursor'
+      el.appendChild(cursor)
+      let i = 0
+      const iv = setInterval(() => {
+        if (i >= full.length) {
+          clearInterval(iv)
+          cursor.remove()
+          el.textContent = full
+          return
+        }
+        cursor.insertAdjacentText('beforebegin', full[i++])
+      }, 22)
+    })
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W7: Balance flip when toggling hide-money
+  // ─────────────────────────────────────────────────────────────
+  const _origToggleHide = App.toggleHideMoney?.bind(App)
+  if (_origToggleHide) {
+    App.toggleHideMoney = function (...args) {
+      const targets = document.querySelectorAll(
+        '.mt-net-value, .mt-wallet-mini .value, .wc-balance'
+      )
+      targets.forEach(el => {
+        el.style.transformOrigin = '50% 50%'
+        el.classList.remove('mt-flip-out', 'mt-flip-in')
+        void el.offsetWidth
+        el.classList.add('mt-flip-out')
+      })
+      setTimeout(() => {
+        _origToggleHide(...args)
+        targets.forEach(el => {
+          el.classList.remove('mt-flip-out')
+          void el.offsetWidth
+          el.classList.add('mt-flip-in')
+          setTimeout(() => el.classList.remove('mt-flip-in'), 500)
+        })
+      }, 300)
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W8: CC alert card glow — injected after renderDashboard /
+  //     renderWallets via MutationObserver on #app
+  // ─────────────────────────────────────────────────────────────
+  ;(function _watchAlertCards() {
+    const _seen = new WeakSet()
+    function _mark(root) {
+      root.querySelectorAll('.alert-card, .cc-alert, [class*="alert"]').forEach(el => {
+        if (_seen.has(el)) return
+        _seen.add(el)
+        el.classList.add('mt-alert-card')
+      })
+    }
+    const obs = new MutationObserver(() => _mark(document.getElementById('app') || document.body))
+    obs.observe(document.getElementById('app') || document.body, { childList: true, subtree: true })
+    _mark(document.body)
+  })()
+
+  // ─────────────────────────────────────────────────────────────
+  // W10: SVG bar draw on trend chart rects
+  // ─────────────────────────────────────────────────────────────
+  function _animTrendBars() {
+    document.querySelectorAll('#reports-content svg rect:not(.mt-bar-draw)').forEach((rect, i) => {
+      rect.classList.add('mt-bar-draw')
+      rect.style.animationDelay = `${i * 60}ms`
+    })
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W11: Magnetic FAB (desktop pointer only)
+  // ─────────────────────────────────────────────────────────────
+  function _setupMagneticFab() {
+    const fab = document.getElementById('fab')
+    if (!fab) return
+    fab.classList.add('mt-magnetic')
+    document.addEventListener('mousemove', function (e) {
+      if (fab.classList.contains('hidden')) return
+      const r   = fab.getBoundingClientRect()
+      const cx  = r.left + r.width  / 2
+      const cy  = r.top  + r.height / 2
+      const dx  = e.clientX - cx
+      const dy  = e.clientY - cy
+      const dist = Math.hypot(dx, dy)
+      if (dist < 70) {
+        const pull = (1 - dist / 70) * 14
+        fab.style.setProperty('--mt-fab-tx', `${(dx / dist * pull).toFixed(2)}px`)
+        fab.style.setProperty('--mt-fab-ty', `${(dy / dist * pull).toFixed(2)}px`)
+      } else {
+        fab.style.setProperty('--mt-fab-tx', '0px')
+        fab.style.setProperty('--mt-fab-ty', '0px')
+      }
+    }, { passive: true })
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W12: Save-success checkmark overlay
+  // ─────────────────────────────────────────────────────────────
+  function _showCheckmark() {
+    const existing = document.querySelector('.mt-checkmark-overlay')
+    if (existing) existing.remove()
+    const wrap = document.createElement('div')
+    wrap.className = 'mt-checkmark-overlay'
+    wrap.innerHTML = `<svg width="80" height="80" viewBox="0 0 80 80">
+      <circle cx="40" cy="40" r="36"/>
+      <path d="M24 40 l12 12 l20-22"/>
+    </svg>`
+    document.body.appendChild(wrap)
+    setTimeout(() => wrap.remove(), 1700)
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W13: Canvas floating particles in net-worth card
+  // ─────────────────────────────────────────────────────────────
+  function _netCardParticles() {
+    const card = document.querySelector('#dashboard-content .mt-net-card')
+    if (!card) return
+    const existing = card.querySelector('.mt-net-canvas')
+    if (existing) existing.remove()
+    const canvas = document.createElement('canvas')
+    canvas.className = 'mt-net-canvas'
+    canvas.width  = card.offsetWidth  || 320
+    canvas.height = card.offsetHeight || 120
+    card.insertBefore(canvas, card.firstChild)
+    const ctx  = canvas.getContext('2d')
+    const N    = 18
+    const dots = Array.from({ length: N }, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: 1.2 + Math.random() * 2,
+      vx: (Math.random() - .5) * .4,
+      vy: (Math.random() - .5) * .4,
+      a: .12 + Math.random() * .2,
+    }))
+    ;(function loop() {
+      if (!canvas.isConnected) return
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      dots.forEach(d => {
+        d.x += d.vx; d.y += d.vy
+        if (d.x < 0) d.x = canvas.width
+        if (d.x > canvas.width)  d.x = 0
+        if (d.y < 0) d.y = canvas.height
+        if (d.y > canvas.height) d.y = 0
+        ctx.beginPath()
+        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(255,255,255,${d.a})`
+        ctx.fill()
+      })
+      requestAnimationFrame(loop)
+    })()
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W14: Elastic scroll perspective in wallets page
+  // ─────────────────────────────────────────────────────────────
+  function _setupElasticScroll() {
+    const scroller = document.getElementById('wallets-content')
+    if (!scroller || scroller._mtElastic) return
+    scroller._mtElastic = true
+    let _last = 0
+    scroller.addEventListener('scroll', function () {
+      const vel = scroller.scrollTop - _last
+      _last = scroller.scrollTop
+      const tilt = Math.max(-6, Math.min(6, vel * .4))
+      scroller.querySelectorAll('.wallet-card').forEach(card => {
+        card.style.transform  = `rotateX(${(-tilt).toFixed(2)}deg)`
+        card.style.transition = 'transform .1s ease'
+      })
+      clearTimeout(scroller._mtElasticT)
+      scroller._mtElasticT = setTimeout(() => {
+        scroller.querySelectorAll('.wallet-card').forEach(card => {
+          card.style.transform  = 'rotateX(0deg)'
+          card.style.transition = 'transform .45s cubic-bezier(.34,1.56,.64,1)'
+        })
+      }, 80)
+    }, { passive: true })
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // W6: Hook into AI insights render (watch for insight-body els)
+  // ─────────────────────────────────────────────────────────────
+  ;(function _watchInsights() {
+    const obs = new MutationObserver(() => {
+      try { _typewriterInsights() } catch (_) {}
+    })
+    obs.observe(document.getElementById('app') || document.body, { childList: true, subtree: true })
+  })()
+
+  // ─────────────────────────────────────────────────────────────
+  // W4: inject budget rings after wallet/report renders
+  // ─────────────────────────────────────────────────────────────
+  const _origRW2 = App.renderWallets
+  App.renderWallets = (function (_prev) {
+    return function (...args) {
+      _prev?.(...args)
+      try {
+        setTimeout(() => _injectBudgetRing(document.getElementById('wallets-content') || document.body), 300)
+      } catch (_) {}
+    }
+  })(App.renderWallets)
+
+  // ─────────────────────────────────────────────────────────────
+  // Init
+  // ─────────────────────────────────────────────────────────────
+  // Set initial body class for current page
+  try {
+    const cur = S.page || 'dashboard'
+    document.body.classList.add(`is-${cur}`)
+  } catch (_) {}
+
+})()

@@ -5660,3 +5660,398 @@ h6,
   padding: 10px 16px !important;
   font-size: 14px !important;
 }
+
+/* ================================================================
+   MT Animation Suite  ·  Priority 1 – 4  +  WOW W1 – W15
+   All class names prefixed "mt-" to avoid collisions.
+   prefers-reduced-motion is already handled globally (see line 1687).
+   ================================================================ */
+
+/* ── P1: FAB icon rotates to × when sheet is open ────────────── */
+#fab svg {
+  transition: transform .36s cubic-bezier(.34, 1.56, .64, 1) !important;
+}
+#fab.fab-open svg {
+  transform: rotate(45deg) !important;
+}
+
+/* ── P1: Bottom nav icon spring-bounce on tab activate ───────── */
+@keyframes mt-nav-bounce {
+  0%   { transform: scale(1)    translateY(0);    }
+  40%  { transform: scale(1.28) translateY(-5px); }
+  72%  { transform: scale(.93)  translateY(2px);  }
+  100% { transform: scale(1)    translateY(0);    }
+}
+.nav-btn.mt-nav-bounce svg {
+  animation: mt-nav-bounce .52s cubic-bezier(.34, 1.56, .64, 1) both !important;
+}
+
+/* ── P1: Transaction row stagger fade-up on list render ──────── */
+@keyframes mt-tx-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+.tx-row.mt-anim-in,
+.tx-row-modern.mt-anim-in {
+  animation: mt-tx-in .4s ease both !important;
+}
+
+/* ── P2: Category button pop when selected ───────────────────── */
+@keyframes mt-cat-pop {
+  0%   { transform: scale(1);    }
+  40%  { transform: scale(1.14); }
+  72%  { transform: scale(.95);  }
+  100% { transform: scale(1);    }
+}
+.cat-btn.mt-pop {
+  animation: mt-cat-pop .34s cubic-bezier(.34, 1.56, .64, 1) both !important;
+}
+
+/* ── P2: Numpad key ripple on press ──────────────────────────── */
+.numpad-key {
+  position: relative !important;
+  overflow: hidden !important;
+}
+@keyframes mt-ripple {
+  from { transform: scale(0); opacity: .32; }
+  to   { transform: scale(3.5); opacity: 0; }
+}
+.mt-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--primary);
+  pointer-events: none;
+  animation: mt-ripple .7s ease-out both;
+  z-index: 0;
+}
+
+/* ── P2: Bottom-sheet close animation ────────────────────────── */
+@keyframes mt-sheet-down {
+  from { transform: translateY(0);    }
+  to   { transform: translateY(108%); }
+}
+@keyframes mt-backdrop-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+.overlay.mt-closing .sheet {
+  animation: mt-sheet-down .38s cubic-bezier(.32, .72, 0, 1) both !important;
+}
+.overlay.mt-closing .overlay-backdrop {
+  animation: mt-backdrop-out .38s ease both !important;
+}
+
+/* ── P2: Card/insight stagger slide-up (reports) ─────────────── */
+@keyframes mt-card-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+.mt-card-in {
+  animation: mt-card-in .45s ease both !important;
+}
+
+/* ── P3: Empty state icon gentle float ───────────────────────── */
+@keyframes mt-float {
+  0%, 100% { transform: translateY(0);    }
+  50%       { transform: translateY(-10px); }
+}
+.empty-icon {
+  animation: mt-float 3.6s ease-in-out infinite !important;
+  display: inline-block !important;
+  will-change: transform;
+}
+
+/* ── P3: Saved transaction row flash green ───────────────────── */
+@keyframes mt-tx-flash {
+  0%   { background-color: rgba(22, 163, 74, .24); }
+  100% { background-color: transparent;              }
+}
+.mt-tx-flash {
+  animation: mt-tx-flash 1.6s ease both !important;
+}
+
+/* ── P3: Deleted row slides out left and collapses ───────────── */
+@keyframes mt-row-out {
+  0%   { opacity: 1;   transform: translateX(0);     max-height: 80px;
+         padding-top: 9px; padding-bottom: 9px; border-bottom-width: 1px; }
+  48%  { opacity: .4;  transform: translateX(-22px);  max-height: 80px; }
+  100% { opacity: 0;   transform: translateX(-68px);  max-height: 0;
+         padding-top: 0; padding-bottom: 0; border-bottom-width: 0; }
+}
+.mt-row-delete {
+  animation: mt-row-out .45s ease both !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+/* ── P4: Skeleton shimmer placeholder ────────────────────────── */
+@keyframes mt-shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position:  200% 0; }
+}
+.mt-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--elevated) 25%,
+    var(--border)   50%,
+    var(--elevated) 75%
+  ) !important;
+  background-size: 200% 100% !important;
+  animation: mt-shimmer 2.2s ease infinite !important;
+  border-radius: 8px !important;
+  color: transparent !important;
+  user-select: none !important;
+}
+
+/* ── P4: Confetti particle ───────────────────────────────────── */
+@keyframes mt-confetti {
+  0%   { transform: translateY(0)     rotate(0deg)   scale(1);   opacity: 1; }
+  80%  { opacity: .8; }
+  100% { transform: translateY(110px) rotate(720deg) scale(.4);  opacity: 0; }
+}
+.mt-confetti {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  animation: mt-confetti 1.2s ease-in both;
+}
+
+/* ================================================================
+   WOW Animations  W1 – W15
+   ================================================================ */
+
+/* ── W1: Digit roller (slot-machine) chars ───────────────────── */
+.mt-digit-wrap {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  line-height: 1;
+}
+.mt-digit-inner {
+  display: inline-block;
+  animation: mt-digit-roll .55s cubic-bezier(.16, 1, .3, 1) both;
+}
+@keyframes mt-digit-roll {
+  from { transform: translateY(-60%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ── W2: Aurora shimmer on net-worth card ────────────────────── */
+@keyframes mt-aurora {
+  0%   { background-position: 0%   50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0%   50%; }
+}
+.mt-net-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(99,102,241,.18) 0%,
+    rgba(16,185,129,.14) 25%,
+    rgba(245,158,11,.10) 50%,
+    rgba(99,102,241,.14) 75%,
+    rgba(236,72,153,.12) 100%
+  );
+  background-size: 300% 300%;
+  animation: mt-aurora 10s ease infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── W3: iOS light sweep on wallet card ──────────────────────── */
+.wallet-card { overflow: hidden !important; }
+.wallet-card.mt-shine::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -80%;
+  width: 55%;
+  height: 200%;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255,255,255,.38) 50%,
+    transparent 70%
+  );
+  transform: skewX(-18deg);
+  animation: mt-sweep 1s ease-out both;
+  pointer-events: none;
+  z-index: 2;
+}
+@keyframes mt-sweep {
+  from { left: -80%; }
+  to   { left: 130%;  }
+}
+
+/* ── W4: Budget ring SVG ─────────────────────────────────────── */
+.mt-budget-ring-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+.mt-budget-ring circle.track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 5;
+}
+.mt-budget-ring circle.fill {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+  transform-origin: 50% 50%;
+  transform: rotate(-90deg);
+  transition: stroke-dashoffset 1.4s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+/* ── W5: FAB particle burst elements ────────────────────────── */
+@keyframes mt-fab-particle {
+  0%   { transform: translate(0,0) scale(1);   opacity: 1; }
+  100% { transform: translate(var(--px),var(--py)) scale(0); opacity: 0; }
+}
+.mt-fab-particle {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9998;
+  animation: mt-fab-particle .9s cubic-bezier(.2,.8,.4,1) both;
+}
+
+/* ── W6: Typewriter cursor blink ─────────────────────────────── */
+.mt-typewriter-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--primary);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: mt-cursor-blink .7s step-end infinite;
+}
+@keyframes mt-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ── W7: Balance flip (hide/show money) ──────────────────────── */
+@keyframes mt-flip-out {
+  from { transform: rotateX(0deg);   opacity: 1; }
+  to   { transform: rotateX(90deg);  opacity: 0; }
+}
+@keyframes mt-flip-in {
+  from { transform: rotateX(-90deg); opacity: 0; }
+  to   { transform: rotateX(0deg);   opacity: 1; }
+}
+.mt-flip-out { animation: mt-flip-out .28s ease-in  both !important; }
+.mt-flip-in  { animation: mt-flip-in  .36s ease-out both !important; }
+
+/* ── W8: CC alert card glow pulse ────────────────────────────── */
+@keyframes mt-alert-glow {
+  0%, 100% { box-shadow: 0 0  6px rgba(239, 68, 68, .2); }
+  50%       { box-shadow: 0 0 22px rgba(239, 68, 68, .55); }
+}
+.mt-alert-card {
+  animation: mt-alert-glow 2.4s ease-in-out infinite !important;
+}
+
+/* ── W9: Shake when balance is negative ──────────────────────── */
+@keyframes mt-shake {
+  0%,100% { transform: translateX(0);   }
+  15%     { transform: translateX(-6px);}
+  30%     { transform: translateX(6px); }
+  45%     { transform: translateX(-5px);}
+  60%     { transform: translateX(5px); }
+  75%     { transform: translateX(-3px);}
+  90%     { transform: translateX(3px); }
+}
+.mt-shake {
+  animation: mt-shake .65s cubic-bezier(.36,.07,.19,.97) both !important;
+}
+
+/* ── W10: SVG bar draw (trend chart rect) ────────────────────── */
+.mt-bar-draw {
+  transform-origin: bottom center;
+  animation: mt-bar-grow .8s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+@keyframes mt-bar-grow {
+  from { transform: scaleY(0); opacity: 0; }
+  to   { transform: scaleY(1); opacity: 1; }
+}
+
+/* ── W11: Magnetic FAB via CSS vars ──────────────────────────── */
+body.is-dashboard #fab.mt-magnetic:not(.hidden),
+body.is-transactions #fab.mt-magnetic:not(.hidden) {
+  transform: translate3d(var(--mt-fab-tx,0px), var(--mt-fab-ty,0px), 0) !important;
+  transition: transform .18s cubic-bezier(.34, 1.56, .64, 1) !important;
+}
+
+/* ── W12: Save-success checkmark overlay ────────────────────── */
+.mt-checkmark-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9997;
+  pointer-events: none;
+  animation: mt-check-fade 1.6s ease both;
+}
+@keyframes mt-check-fade {
+  0%   { opacity: 0; transform: translate(-50%,-50%) scale(.7); }
+  15%  { opacity: 1; transform: translate(-50%,-50%) scale(1);  }
+  75%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%,-50%) scale(1.1);}
+}
+.mt-checkmark-overlay circle {
+  fill: rgba(22,163,74,.18);
+}
+.mt-checkmark-overlay path {
+  fill: none;
+  stroke: #16A34A;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 52;
+  stroke-dashoffset: 52;
+  animation: mt-check-draw .55s .18s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes mt-check-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* ── W13: Canvas particles in net-worth card ─────────────────── */
+.mt-net-card { position: relative; }
+.mt-net-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── W14: Elastic scroll perspective (wallets) ───────────────── */
+#wallets-content {
+  perspective: 900px;
+}
+.mt-elastic-tilt {
+  transition: transform .35s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+/* ── W15: Number diff highlight (dashboard after re-render) ───── */
+@keyframes mt-num-up {
+  0%   { color: #16A34A; transform: translateY(-4px); opacity: 0; }
+  30%  { opacity: 1; }
+  100% { color: inherit; transform: translateY(0); opacity: 1; }
+}
+@keyframes mt-num-down {
+  0%   { color: #DC2626; transform: translateY(4px); opacity: 0; }
+  30%  { opacity: 1; }
+  100% { color: inherit; transform: translateY(0); opacity: 1; }
+}
+.mt-num-up   { animation: mt-num-up   .55s ease both !important; }
+.mt-num-down { animation: mt-num-down .55s ease both !important; }
