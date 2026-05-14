@@ -750,7 +750,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.15-more-order1'
+const APP_VERSION = '2026.05.15-more-order2'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -10388,6 +10388,29 @@ App._pickMerchant = function(name, opts = {}) {
     if (ruleValue === txValue) return true
     if (ruleValue === 'online' && ONLINE_CHANNEL_ALIASES.has(txValue)) return true
     return false
+  }
+
+  function normalizeTrackChannels(trigger = {}, rule = {}) {
+    const legacyChannel = trigger.trackChannel || rule.unlockCondition?.channel || ''
+    const raw = Array.isArray(trigger.trackChannels) ? trigger.trackChannels : (legacyChannel ? [legacyChannel] : [])
+    return [...new Set(raw.map(v => String(v || '').trim()).filter(Boolean))]
+  }
+
+  function getTriggerTrackChannels(trigger = {}) {
+    return normalizeTrackChannels(trigger)
+  }
+
+  function channelMatchesAny(ruleChannels = [], txChannel = '') {
+    const channels = Array.isArray(ruleChannels) ? ruleChannels.filter(Boolean) : []
+    if (!channels.length) return true
+    return channels.some(value => channelMatches(value, txChannel))
+  }
+
+  function formatTrackChannelLabel(channels = []) {
+    const values = Array.isArray(channels) ? channels.filter(Boolean) : []
+    if (!values.length) return ''
+    const opts = App.getBenefitChannelOptions?.() || []
+    return values.map(value => opts.find(([v]) => v === value)?.[1] || value).join(', ')
   }
 
   function extractMinSpendFromText(text = '') {
