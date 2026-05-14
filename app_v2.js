@@ -14818,21 +14818,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
   })()
 
-  // ── N5: Page cross-fade on tab switch ─────────────────────
-  ;(function _patchShowPageFade() {
-    const _prev = App.showPage?.bind(App)
-    App.showPage = function (page) {
-      _prev?.(page)
-      const pageEl = document.getElementById(`page-${page}`)
-      if (pageEl) {
-        pageEl.classList.remove('mt-page-enter')
-        void pageEl.offsetWidth
-        pageEl.classList.add('mt-page-enter')
-        setTimeout(() => pageEl.classList.remove('mt-page-enter'), 320)
-      }
-    }
-  })()
-
   // ── N7: More page items stagger ────────────────────────────
   ;(function _patchRenderMore() {
     const _prev = App.renderMore?.bind(App)
@@ -14852,24 +14837,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         }, 30)
       } catch (_) {}
     }
-  })()
-
-  // ── N8: Wallet add button pulse rings ──────────────────────
-  ;(function _watchAddWalletBtn() {
-    const _seen = new WeakSet()
-    function _mark(root) {
-      root.querySelectorAll(
-        '[onclick*="addWallet"], [onclick*="openWalletForm"], .btn-add-wallet, ' +
-        '[data-action="add-wallet"]'
-      ).forEach(btn => {
-        if (_seen.has(btn)) return
-        _seen.add(btn)
-        btn.classList.add('mt-add-wallet-pulse')
-      })
-    }
-    new MutationObserver(() => _mark(document.getElementById('app') || document.body))
-      .observe(document.getElementById('app') || document.body, { childList: true, subtree: true })
-    _mark(document.body)
   })()
 
   // ── N9: CC payment progress ring ───────────────────────────
@@ -15196,35 +15163,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         } catch (_) {}
       }, 320)
     }
-  })()
-
-  // ── N28: Dashboard scroll parallax on net-worth card ───────
-  ;(function _setupDashParallax() {
-    const scroller = document.getElementById('dashboard-content')
-    if (!scroller || scroller._mtParallax) return
-    scroller._mtParallax = true
-    scroller.addEventListener('scroll', function () {
-      const card = scroller.querySelector('.mt-net-card')
-      if (!card) return
-      const offset = scroller.scrollTop * 0.16
-      card.style.transform = `translateY(${offset.toFixed(2)}px)`
-    }, { passive: true })
-  })()
-
-  // ── N29: Delete confirm button wobble on appear ─────────────
-  ;(function _watchDeleteConfirm() {
-    const _seen = new WeakSet()
-    new MutationObserver(() => {
-      document.querySelectorAll(
-        '[onclick*="confirmDelete"], [onclick*="confirmDeleteTx"], ' +
-        '.btn-delete-confirm, [class*="delete-confirm-btn"]'
-      ).forEach(btn => {
-        if (_seen.has(btn)) return
-        _seen.add(btn)
-        btn.classList.add('mt-wobble')
-        setTimeout(() => btn.classList.remove('mt-wobble'), 800)
-      })
-    }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true })
   })()
 
   // N30: Empty state multi-bounce handled by CSS override of .empty-icon

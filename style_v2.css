@@ -6079,35 +6079,12 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
 .toast { animation: mt-toast-in .4s cubic-bezier(.34, 1.56, .64, 1) both !important; }
 .toast.mt-hiding { animation: mt-toast-out .22s ease-in both !important; }
 
-/* ── N5: Page cross-fade on tab switch ──────────────────────── */
-@keyframes mt-page-fade { from { opacity: 0; } to { opacity: 1; } }
-.page.mt-page-enter { animation: mt-page-fade .26s ease both !important; }
-
 /* ── N7: More page items cascade in ────────────────────────── */
 @keyframes mt-more-in {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0);    }
 }
 .mt-more-in { animation: mt-more-in .38s ease both !important; }
-
-/* ── N8: Wallet "add" button pulse rings ────────────────────── */
-@keyframes mt-add-ring {
-  0%   { transform: scale(1);   opacity: .55; }
-  100% { transform: scale(2.6); opacity: 0;   }
-}
-.mt-add-wallet-pulse { position: relative !important; }
-.mt-add-wallet-pulse::before,
-.mt-add-wallet-pulse::after {
-  content: '';
-  position: absolute;
-  inset: -5px;
-  border-radius: inherit;
-  border: 2px solid var(--primary);
-  animation: mt-add-ring 2.4s ease-out infinite;
-  pointer-events: none;
-  z-index: 0;
-}
-.mt-add-wallet-pulse::after { animation-delay: 1.2s; }
 
 /* ── N11: Recurring icon slow spin ─────────────────────────── */
 @keyframes mt-spin-slow { to { transform: rotate(360deg); } }
@@ -6218,22 +6195,6 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
 @keyframes mt-wflash-neg { 0% { background-color: rgba(239,68,68,.18); } 100% { background-color: transparent; } }
 .mt-wallet-flash-pos { animation: mt-wflash-pos 1.2s ease both !important; }
 .mt-wallet-flash-neg { animation: mt-wflash-neg 1.2s ease both !important; }
-
-/* ── N28: Dashboard parallax — net card slow scroll ────────── */
-.mt-net-card { will-change: transform; }
-
-/* ── N29: Delete confirm button wobble ──────────────────────── */
-@keyframes mt-wobble {
-  0%,100% { transform: rotate(0deg);  }
-  18%     { transform: rotate(-4deg); }
-  36%     { transform: rotate( 4deg); }
-  54%     { transform: rotate(-2.5deg); }
-  72%     { transform: rotate( 2.5deg); }
-}
-.mt-wobble {
-  animation: mt-wobble .65s ease both !important;
-  display: inline-block !important;
-}
 
 /* ── N30: Empty state multi-step bounce sequence ────────────── */
 @keyframes mt-bounce-seq {
