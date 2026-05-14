@@ -10960,7 +10960,11 @@ App._pickMerchant = function(name, opts = {}) {
     const normalized = Storage.normalizeBackupPayload(data)
     BACKUP_SCHEMA_KEYS.forEach(key => {
       if (key === 'settings') S.settings = { ...(S.settings || {}), ...(normalized.settings || {}) }
-      else S[key] = normalized[key]
+      else if (key === 'aiInsightStore') {
+        try { if (typeof InsightEngine !== 'undefined') InsightEngine.saveStore(normalized.aiInsightStore) } catch (_) {}
+      } else {
+        S[key] = normalized[key]
+      }
     })
     App.ensurePrivilegesState?.()
     S.cryptoSyncMeta ||= {}
