@@ -405,7 +405,7 @@ window.__mountUpcomingBillsFeature = function() {
         <h2>${existing ? 'แก้ไขรายการรอจ่าย' : 'เพิ่มรายการรอจ่าย'}</h2>
         <button class="btn btn-primary btn-sm" onclick="App.saveUpcomingBill('${esc(billId)}')" style="width:auto">บันทึก</button>
       </div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="card card-pad">
           <div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" value="${esc(S.upcomingBillDraft.title || '')}" oninput="App._updateUpcomingBillDraft('title', this.value)" placeholder="เช่น ค่าไฟ"></div>
           <div class="form-group"><label class="form-label">จำนวนเงิน (฿)</label><input class="form-input" type="number" inputmode="decimal" value="${esc(S.upcomingBillDraft.amount || '')}" oninput="App._updateUpcomingBillDraft('amount', this.value)" placeholder="0"></div>
@@ -1171,10 +1171,10 @@ Object.assign(App, {
 
   toggleRecurring(id) { const r = S.recurring.find(x => x.id === id); if (r) r.paused = !r.paused; persist(); App.openRecurringScreen() },
 
-  openCategoryScreen(type='expense', q='') { S.catManageType = type; const cats = (S.categories[type] || []).filter(c => !q || c.label.toLowerCase().includes(q.toLowerCase())); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll"><div class="tab-strip"><button class="tab-btn ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="tab-btn ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${q}" oninput="App.openCategoryScreen('${type}', this.value)"><div class="card mt-12"><div style="padding:0 16px">${cats.map(c => `<div class="list-item"><div class="list-item-icon" style="background:${c.color}33">${c.icon}</div><div class="list-item-info"><div class="list-item-name">${c.label}</div><div class="list-item-sub">${c.color}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openCategoryForm('${c.id}')">✏️</button><button class="icon-btn" onclick="App.deleteCategory('${c.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')}</div></div></div>`) },
+  openCategoryScreen(type='expense', q='') { S.catManageType = type; const cats = (S.categories[type] || []).filter(c => !q || c.label.toLowerCase().includes(q.toLowerCase())); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="tab-strip"><button class="tab-btn ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="tab-btn ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${q}" oninput="App.openCategoryScreen('${type}', this.value)"><div class="card mt-12"><div style="padding:0 16px">${cats.map(c => `<div class="list-item"><div class="list-item-icon" style="background:${c.color}33">${c.icon}</div><div class="list-item-info"><div class="list-item-name">${c.label}</div><div class="list-item-sub">${c.color}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openCategoryForm('${c.id}')">✏️</button><button class="icon-btn" onclick="App.deleteCategory('${c.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')}</div></div></div>`) },
   saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { toast('กรุณากรอกชื่อหมวดหมู่','error'); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
 
-  openMerchantScreen(q='') { App._ensureV2State(); const usage = Calc.getMerchantUsage(S.transactions); const list = S.merchants.filter(m => !q || m.name.toLowerCase().includes(q.toLowerCase())); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${q}" oninput="App.openMerchantScreen(this.value)"><div class="card mt-12"><div style="padding:0 16px">${list.map(m => `<div class="list-item"><div class="list-item-icon" style="background:${m.color}33">${m.emoji || '🏪'}</div><div class="list-item-info"><div class="list-item-name">${m.name}</div><div class="list-item-sub">ใช้จ่าย ${usage[m.name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${m.id}')">✏️</button><button class="icon-btn" onclick="App.deleteMerchant('${m.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')}</div></div></div>`) },
+  openMerchantScreen(q='') { App._ensureV2State(); const usage = Calc.getMerchantUsage(S.transactions); const list = S.merchants.filter(m => !q || m.name.toLowerCase().includes(q.toLowerCase())); App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${q}" oninput="App.openMerchantScreen(this.value)"><div class="card mt-12"><div style="padding:0 16px">${list.map(m => `<div class="list-item"><div class="list-item-icon" style="background:${m.color}33">${m.emoji || '🏪'}</div><div class="list-item-info"><div class="list-item-name">${m.name}</div><div class="list-item-sub">ใช้จ่าย ${usage[m.name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${m.id}')">✏️</button><button class="icon-btn" onclick="App.deleteMerchant('${m.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')}</div></div></div>`) },
   saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { toast('กรุณากรอกชื่อร้านค้า','error'); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
   _registerMerchantFromTx(tx) {
   App._ensureV2State()
@@ -1956,7 +1956,7 @@ App.render();
     </div>`).join('') : App._emptyState('💰', `ยังไม่มีหมวด${label}`, 'ไปที่จัดการหมวดหมู่เพื่อเพิ่มหมวด')
 
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ตั้งงบประมาณ</h2><button class="btn btn-primary btn-sm" onclick="App.saveBudgets('${active}')" style="width:auto;padding:8px 16px">บันทึก</button></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="budget-tabs"><button class="budget-tab ${active === 'expense' ? 'active' : ''}" onclick="App.openBudgetScreen('expense')">รายจ่าย</button><button class="budget-tab ${active === 'income' ? 'active' : ''}" onclick="App.openBudgetScreen('income')">รายรับ</button></div>
         <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px">${active === 'income' ? 'ตั้งเป้ารายรับรายเดือนแต่ละหมวด' : 'ตั้งงบรายจ่ายรายเดือนแต่ละหมวด'} (0 = ไม่กำหนด)</p>
         <div class="card card-pad">${rowsHtml}</div>
@@ -2105,7 +2105,7 @@ App.render();
     const type = S.catManageType || 'expense'
     const c = id ? (S.categories[type] || []).find(x => x.id === id) : null
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCategoryScreen('${type}')">←</button><h2>${c ? 'แก้ไข' : 'เพิ่ม'}หมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.saveCategory('${esc(id || '')}')" style="width:auto;padding:8px 14px">บันทึก</button></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="form-group"><label class="form-label">ชื่อหมวดหมู่</label><input class="form-input" id="cat-name" value="${esc(c?.label || '')}" placeholder="เช่น อาหาร, เดินทาง"></div>
         <div class="form-group"><label class="form-label">อีโมจิ</label>${renderEditorEmoji('cat', c?.icon || '📦', 'cat-icon')}</div>
         <div class="form-group"><label class="form-label">สี</label>${renderEditorColor('cat', c?.color || '#2563EB', 'cat-color')}</div>
@@ -2116,7 +2116,7 @@ App.render();
     App._ensureV2State?.()
     const m = id ? S.merchants.find(x => x.id === id) : null
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openMerchantScreen()">←</button><h2>${m ? 'แก้ไข' : 'เพิ่ม'}ร้านค้า</h2><button class="btn btn-primary btn-sm" onclick="App.saveMerchant('${esc(id || '')}')" style="width:auto;padding:8px 14px">บันทึก</button></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="form-group"><label class="form-label">ชื่อร้านค้า</label><input class="form-input" id="mer-name" value="${esc(m?.name || '')}" placeholder="เช่น Grab, Netflix"></div>
         <div class="form-group"><label class="form-label">อีโมจิ</label>${renderEditorEmoji('mer', m?.emoji || '🏪', 'mer-emoji')}</div>
         <div class="form-group"><label class="form-label">สี</label>${renderEditorColor('mer', m?.color || '#2563EB', 'mer-color')}</div>
@@ -3588,7 +3588,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         <h2>ตรวจสอบยอดคงเหลือ</h2>
         ${anyGap ? `<button class="btn btn-primary btn-sm" onclick="App._rebuildWalletBalances();App.closeSubScreen()" style="width:auto">แก้ทั้งหมด</button>` : ''}
       </div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="card card-pad" style="margin-bottom:14px;font-size:12px;color:var(--muted)">
           เปรียบเทียบยอดที่เก็บกับยอดที่คำนวณจากรายการทั้งหมด + ยอดเปิดบัญชี
         </div>
@@ -4064,7 +4064,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         <h2>${r?'แก้ไข':'เพิ่ม'}รายการประจำ</h2>
         <button class="btn btn-primary btn-sm" onclick="App.saveRecurring('${esc(id||'')}')" style="width:auto">บันทึก</button>
       </div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         ${accordion('rec-basic-acc', 'ข้อมูลหลัก', `
           <div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" id="rec-name" value="${esc(r?.name||'')}"></div>
           <div class="form-group"><label class="form-label">ประเภท</label><select class="form-input" id="rec-type">${typeOpts}</select></div>
@@ -4868,7 +4868,7 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.openRecurringScreen = function() {
     const rows = (S.recurring || []).slice().sort((a,b) => String(a.nextDueDate || '').localeCompare(String(b.nextDueDate || '')))
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.openRecurringForm()" style="width:auto">+ เพิ่ม</button></div><div class="sub-scroll">${rows.length ? rows.map(r => { const due = r.nextDueDate || today(); const dueNow = due <= today(); return `<div class="recurring-item ${r.paused?'paused':''}"><div class="list-item-icon" style="background:${esc(r.color || '#2563EB')}33">${esc(r.icon || '🔁')}</div><div class="list-item-info"><div class="list-item-name">${esc(r.name)}</div><div class="list-item-sub">${money(r.amount)} · ${r.type === 'income' ? 'รายรับ' : 'รายจ่าย'} · ครบกำหนด ${thaiDateShort(due)}${dueNow ? ' · ถึงกำหนดแล้ว' : ''}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.postRecurringNow('${esc(r.id)}')">✓</button><button class="icon-btn" onclick="App.snoozeRecurring('${esc(r.id)}',7)">+7</button><button class="icon-btn" onclick="App.skipRecurring('${esc(r.id)}')">ข้าม</button><button class="icon-btn" onclick="App.openRecurringForm('${esc(r.id)}')">✏️</button><button class="icon-btn" onclick="App.deleteRecurring('${esc(r.id)}')">🗑</button></div></div>` }).join('') : App._emptyState('🔁','ยังไม่มีรายการประจำ','')}</div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.openRecurringForm()" style="width:auto">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px">${rows.length ? rows.map(r => { const due = r.nextDueDate || today(); const dueNow = due <= today(); return `<div class="recurring-item ${r.paused?'paused':''}"><div class="list-item-icon" style="background:${esc(r.color || '#2563EB')}33">${esc(r.icon || '🔁')}</div><div class="list-item-info"><div class="list-item-name">${esc(r.name)}</div><div class="list-item-sub">${money(r.amount)} · ${r.type === 'income' ? 'รายรับ' : 'รายจ่าย'} · ครบกำหนด ${thaiDateShort(due)}${dueNow ? ' · ถึงกำหนดแล้ว' : ''}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.postRecurringNow('${esc(r.id)}')">✓</button><button class="icon-btn" onclick="App.snoozeRecurring('${esc(r.id)}',7)">+7</button><button class="icon-btn" onclick="App.skipRecurring('${esc(r.id)}')">ข้าม</button><button class="icon-btn" onclick="App.openRecurringForm('${esc(r.id)}')">✏️</button><button class="icon-btn" onclick="App.deleteRecurring('${esc(r.id)}')">🗑</button></div></div>` }).join('') : App._emptyState('🔁','ยังไม่มีรายการประจำ','')}</div>`)
   }
 
   // 6) Restore AI financial advisor card on the rolled-back Reports screen.
@@ -4905,7 +4905,7 @@ App._pickMerchant = function(name, opts = {}) {
     const catOpts = (S.categories.expense || []).map(c => `<option value="${esc(c.id)}"${first.categoryId===c.id?' selected':''}>${esc(c.icon || '')} ${esc(c.label)}</option>`).join('')
     const back = cardId ? `App.openInstallmentCenter('${esc(cardId)}')` : 'App.openInstallmentCenter()'
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>แก้ไขชุดผ่อน</h2><button class="btn btn-primary btn-sm" onclick="App.saveInstallmentGroupEdit('${esc(groupId)}','${esc(cardId)}')" style="width:auto">บันทึก</button></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="installment-edit-note"><b>${esc(g.merchant || 'ผ่อนชำระ')}</b><span>บันทึกแล้ว ${past.length} งวด · ยอดที่ถือว่าเกิดขึ้นแล้ว ${money(paidKept)}</span></div>
         <div class="form-group"><label class="form-label">ขอบเขตการแก้ไข</label><select class="form-input" id="ieg-scope"><option value="future">แก้งวดอนาคตเท่านั้น (แนะนำ)</option><option value="all">แก้ทั้งชุด รวมงวดที่ผ่านมา</option></select><div class="form-hint">ถ้าแก้ทั้งชุด ยอดย้อนหลังในรายงานและกระเป๋าจะถูกคำนวณใหม่ด้วย</div></div>
         <div class="form-group"><label class="form-label">ชื่อร้านค้า / รายการ</label><input class="form-input" id="ieg-merchant" value="${esc(first.merchant || g.merchant || '')}"></div>
@@ -5059,7 +5059,7 @@ App._pickMerchant = function(name, opts = {}) {
         </div>`).join('')
       : App._emptyState?.('🎁', 'ยังไม่มีกฎสิทธิประโยชน์', 'เพิ่มสิทธิ์พื้นฐานหรือแคมเปญของบัตรใบนี้') || ''
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog('${esc(cardId)}')" style="width:auto">วางลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         ${statementCard}
         <div class="sec-title">กฎของบัตรใบนี้</div>
         ${rulesHtml}
@@ -5118,7 +5118,7 @@ App._pickMerchant = function(name, opts = {}) {
     const v = n => n ?? ''
     const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted);font-weight:600">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App._onCCBenefitRuleFormBack('${esc(cardId)}')">←</button><h2>${ruleId ? 'แก้ไขกติกาสิทธิประโยชน์' : 'เพิ่มกติกาสิทธิประโยชน์'}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefitRule('${esc(cardId)}','${esc(ruleId)}')" style="width:auto">บันทึก</button></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         ${accordion('ccbr-basic-acc', 'ข้อมูลพื้นฐาน', `
           <div class="form-group"><div class="chip-row"><button type="button" class="chip mini${template==='base_cashback' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','base_cashback')">เงินคืนพื้นฐาน</button><button type="button" class="chip mini${template==='base_points' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','base_points')">คะแนนพื้นฐาน</button><button type="button" class="chip mini${template==='cashback_targeted' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','cashback_targeted')">เงินคืนตามเงื่อนไข</button><button type="button" class="chip mini${template==='cycle_cashback' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','cycle_cashback')">เงินคืนยอดสะสม</button><button type="button" class="chip mini${template==='points_targeted' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','points_targeted')">คะแนนพิเศษ</button><button type="button" class="chip mini${template==='instant_discount' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','instant_discount')">ส่วนลดทันที</button></div></div>
           <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input class="form-input" id="ccbr-name" value="${esc(rule.name)}" placeholder="เช่น Shopee 10%, คะแนนพื้นฐาน, Online 5X"></div>
@@ -7683,7 +7683,7 @@ App._pickMerchant = function(name, opts = {}) {
         <h2>สมุดสิทธิประโยชน์</h2>
         <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm()" style="width:auto">+ บัญชีคะแนน</button>
       </div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="sec-title">บัญชีคะแนนสะสม</div>
         <div class="card card-pad" style="margin-bottom:12px">${acctSummaryHtml}</div>
 
@@ -7714,7 +7714,7 @@ App._pickMerchant = function(name, opts = {}) {
         <h2>${a ? 'แก้ไข' : 'เพิ่ม'}บัญชีคะแนน</h2>
         <button class="btn btn-primary btn-sm" onclick="App.saveRewardAccount('${esc(accountId||'')}')" style="width:auto">บันทึก</button>
       </div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="form-group"><label class="form-label">ชื่อบัญชีคะแนน</label><input class="form-input" id="ra-name" value="${esc(a?.name||'')}" placeholder="เช่น KTC Forever Points"></div>
         <div class="form-group">
           <label class="form-label">ผู้ออกบัตร / ธนาคาร</label>
@@ -7761,7 +7761,7 @@ App._pickMerchant = function(name, opts = {}) {
         <h2>ปรับคะแนน</h2>
         <button class="btn btn-primary btn-sm" onclick="App.saveAdjustPoints('${esc(accountId)}')" style="width:auto">บันทึก</button>
       </div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="card card-pad" style="margin-bottom:12px;text-align:center">
           <div style="font-size:13px;color:var(--muted)">คะแนนปัจจุบัน</div>
           <div style="font-size:28px;font-weight:800">${bal.toLocaleString('en-US')}</div>
@@ -7821,7 +7821,7 @@ App._pickMerchant = function(name, opts = {}) {
         <h2>กลุ่มวงเงินร่วม</h2>
         <button class="btn btn-primary btn-sm" onclick="App.openCreditLimitGroupForm()" style="width:auto">+ เพิ่ม</button>
       </div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         ${rows || App._emptyState?.('💳','ยังไม่มีกลุ่มวงเงินร่วม','สร้างกลุ่มเพื่อใช้วงเงินร่วมระหว่างบัตรหลายใบ') || ''}
       </div>`)
   }
@@ -7834,7 +7834,7 @@ App._pickMerchant = function(name, opts = {}) {
         <h2>${g ? 'แก้ไข' : 'เพิ่ม'}กลุ่มวงเงินร่วม</h2>
         <button class="btn btn-primary btn-sm" onclick="App.saveCreditLimitGroup('${esc(groupId||'')}')" style="width:auto">บันทึก</button>
       </div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="form-group"><label class="form-label">ชื่อกลุ่ม</label><input class="form-input" id="clg-name" value="${esc(g?.name||'')}" placeholder="เช่น KTC วงเงินรวม"></div>
         <div class="form-group">
           <label class="form-label">ผู้ออกบัตร / ธนาคาร</label>
@@ -9289,7 +9289,7 @@ App._pickMerchant = function(name, opts = {}) {
       searchError: '',
     }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCryptoPortfolioDetail()">←</button><h2>${holding ? 'แก้ไขเหรียญ' : 'เพิ่มเหรียญ'}</h2><div style="display:flex;gap:6px">${holding ? `<button class="btn btn-outline btn-sm" onclick="App.deleteCryptoHolding('${esc(holding.id)}')" style="min-width:50px">ลบ</button>` : ''}<button class="btn btn-primary btn-sm" onclick="App.saveCryptoHolding('${esc(holdingId)}')" style="min-width:50px">บันทึก</button></div></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <input type="hidden" id="crypto-form-mode" value="${customMode ? 'custom' : 'preset'}">
         <input type="hidden" id="crypto-selected-preset-id" value="${esc(selectedCoinGeckoId)}">
         <div class="tab-strip crypto-form-tabs">
@@ -9675,7 +9675,7 @@ App._pickMerchant = function(name, opts = {}) {
     const sourceWallets = visibleWallets().filter(w => !['credit','gold','crypto','fcd'].includes(w.type))
     const targetUnits = type === 'adjust' ? (holding ? holding.units : 0) : ''
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCryptoPortfolioDetail('${esc(holdingId)}')">←</button><h2>${type === 'buy' ? 'ซื้อ' : type === 'sell' ? 'ขาย' : 'ปรับจำนวน'} ${esc(asset?.symbol || '')}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCryptoTx('${esc(type)}','${esc(holdingId)}')" style="width:auto">บันทึก</button></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="card card-pad" style="margin-bottom:12px">
           <div class="list-item-name">${esc(asset?.symbol || '')} · ${esc(asset?.name || '')}</div>
           <div class="list-item-sub">ถืออยู่ ${unitFmt(holding?.units || 0, asset?.decimals || 8)} ${esc(asset?.symbol || '')}${location ? ` · ${esc(location)}` : ''}</div>
@@ -9791,7 +9791,7 @@ App._pickMerchant = function(name, opts = {}) {
       : App._emptyState?.('🪙', 'ยังไม่มี Crypto Holding', 'กด + เพิ่มเหรียญ เพื่อเริ่มต้น') || ''
     const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted);font-weight:600">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>Crypto Portfolio</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.refreshCryptoPrices()" style="width:auto">Sync ราคา</button><button class="btn btn-primary btn-sm" onclick="App.openCryptoHoldingForm()" style="width:auto">+ เพิ่มเหรียญ</button></div></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="card card-pad crypto-portfolio-card" style="margin-bottom:12px">
           <div class="list-item-name">ภาพรวมพอร์ต</div>
           <div class="list-item-sub">ราคาอัปเดตล่าสุด ${esc(lastUpdated)}</div>
@@ -11136,7 +11136,7 @@ App._pickMerchant = function(name, opts = {}) {
       </div>`
     }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ตั้งเป้าหมายทางการเงิน</h2><button class="btn btn-primary btn-sm" onclick="App.openGoalForm()" style="width:auto">+ เพิ่ม</button></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="chips" style="padding:0 0 12px"><button class="chip ${showArchived ? '' : 'active'}" onclick="App.openGoalsScreen(false)">กำลังใช้งาน</button><button class="chip ${showArchived ? 'active' : ''}" onclick="App.openGoalsScreen(true)">เก็บถาวร</button></div>
         ${rows.length ? rows.map(card).join('') : App._emptyState?.('🎯', showArchived ? 'ยังไม่มีเป้าหมายที่เก็บถาวร' : 'ยังไม่มีเป้าหมาย', 'ใช้วางแผนเงินฉุกเฉิน ท่องเที่ยว ภาษี หรือรายจ่ายประจำปี') || ''}
       </div>`)
@@ -11151,7 +11151,7 @@ App._pickMerchant = function(name, opts = {}) {
       .map(w => `<option value="${esc(w.id)}"${goal.linkedWalletId === w.id ? ' selected' : ''}>${esc(w.icon || '')} ${esc(w.name)}</option>`)
       .join('')
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openGoalsScreen()">←</button><h2>${g ? 'แก้ไขเป้าหมาย' : 'เพิ่มเป้าหมาย'}</h2><button class="btn btn-primary btn-sm" onclick="App.saveGoal('${esc(goalId)}')" style="width:auto">บันทึก</button></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="form-group"><label class="form-label">ชื่อเป้าหมาย</label><input class="form-input" id="goal-name" value="${esc(g?.name || '')}" placeholder="เช่น Emergency fund"></div>
         <div class="form-split-row"><div class="form-group"><label class="form-label">Emoji</label><input class="form-input" id="goal-icon" value="${esc(g?.icon || '🎯')}" maxlength="4"></div><div class="form-group"><label class="form-label">เป้าหมาย (บาท)</label><input class="form-input" type="number" min="0" id="goal-target" value="${g?.targetAmount || ''}"></div></div>
         <div class="form-group"><label class="form-label">โหมด</label><select class="form-input" id="goal-mode" onchange="App._syncGoalFormMode()"><option value="manual"${goal.mode === 'manual' ? ' selected' : ''}>กรอกยอดเอง</option><option value="linked"${goal.mode === 'linked' ? ' selected' : ''}>เชื่อมกับกระเป๋า</option></select></div>
@@ -11264,7 +11264,7 @@ App._pickMerchant = function(name, opts = {}) {
       <div style="text-align:right"><strong>${fmtHidden(row.amount)}</strong>${row.action ? `<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();${row.action}" style="width:auto">บันทึก</button>${row.skip ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();${row.skip}" style="width:auto">ข้าม</button>` : ''}</div>` : ''}</div>
     </div>`
     const html = order.filter(k => grouped[k]?.length).map(k => `<div class="sec-title">${k}</div><div class="card"><div style="padding:0 12px">${grouped[k].map(itemHtml).join('')}</div></div>`).join('')
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ปฏิทินบิล / รายการที่จะถึง</h2></div><div class="sub-scroll">${html || App._emptyState?.('📅','ยังไม่มีรายการที่จะถึง','รายการประจำ ผ่อนชำระ วันครบกำหนดบัตร และวันเป้าหมายจะแสดงที่นี่') || ''}</div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ปฏิทินบิล / รายการที่จะถึง</h2></div><div class="sub-scroll" style="padding:12px 16px 40px">${html || App._emptyState?.('📅','ยังไม่มีรายการที่จะถึง','รายการประจำ ผ่อนชำระ วันครบกำหนดบัตร และวันเป้าหมายจะแสดงที่นี่') || ''}</div>`)
   }
 
   function previewCount(payload, key) {
@@ -11322,7 +11322,7 @@ App._pickMerchant = function(name, opts = {}) {
     ]
     const counts = rows.map(([label, key]) => `<div class="reward-tile"><span>${esc(label)}</span><strong>${previewCount(payload, key).toLocaleString('en-US')}</strong></div>`).join('')
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen();${input ? "document.getElementById('import-file-v5').value=''" : ''}">←</button><h2>Preview นำเข้า</h2></div>
-      <div class="sub-scroll">
+      <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="card card-pad" style="margin-bottom:12px"><div class="report-category-title">ข้อมูลในไฟล์สำรอง</div><div class="reward-grid" style="margin-top:10px">${counts}</div>${(checked.warnings || []).length ? `<div class="form-hint" style="margin-top:10px">คำเตือน ${checked.warnings.length} จุด: ${esc(checked.warnings.slice(0,3).join(' · '))}</div>` : ''}</div>
         <div class="card card-pad"><button class="btn btn-primary" onclick="App.confirmImportPayload('merge')">Merge: เพิ่มเฉพาะข้อมูลใหม่</button><button class="btn btn-outline mt-8" onclick="App.confirmImportPayload('replace')">Replace: แทนที่ข้อมูลทั้งหมด</button><div class="form-hint" style="margin-top:10px">ระบบจะสร้าง local backup ก่อนนำเข้าทุกครั้ง Merge จะไม่เขียนทับ id ที่มีอยู่แล้ว</div></div>
       </div>`)
