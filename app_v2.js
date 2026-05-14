@@ -5391,6 +5391,12 @@ App._pickMerchant = function(name, opts = {}) {
     if (normalized.includes('firstchoice.co.th')) return 'firstchoice'
     if (normalized.includes('aeon.co.th')) return 'aeon'
     if (normalized.includes('uob.co.th')) return 'uob'
+    if (normalized.includes('ktc.co.th')) return 'ktc'
+    if (normalized.includes('kasikornbank.com') || normalized.includes('kbank.co.th')) return 'kbank'
+    if (normalized.includes('bangkokbank.com')) return 'bbl'
+    if (normalized.includes('krungsricard.com') || normalized.includes('krungsri.com')) return 'krungsri'
+    if (normalized.includes('ttbbank.com')) return 'ttb'
+    if (normalized.includes('specialoffers.jcb') || normalized.includes('jcbcard.th')) return 'jcb'
     return 'unknown'
   }
 
@@ -6323,11 +6329,23 @@ App._pickMerchant = function(name, opts = {}) {
           ruleDrafts = aiResult.ruleDrafts || []
           diagnostics = aiResult.diagnostics || []
         } catch (aiErr) {
-          diagnostics.push('AI วิเคราะห์ไม่สำเร็จ (' + (aiErr?.message || 'unknown') + ') — ใช้การวิเคราะห์แบบ regex แทน')
+          const aiErrMsg = aiErr?.message || 'unknown'
+          if (/month must be in YYYY-MM/i.test(aiErrMsg)) {
+            diagnostics.push('Apps Script ยังไม่ได้ re-deploy — กรุณาไปที่ script.google.com → Deploy → Manage deployments → New version เพื่อเปิดใช้ฟีเจอร์นี้')
+          } else {
+            diagnostics.push('AI วิเคราะห์ไม่สำเร็จ (' + aiErrMsg + ')')
+          }
           const parsed = App._parseBenefitSourceDocument(sourceDocument)
           const promotions = Array.isArray(parsed.promotions) ? parsed.promotions : []
           ruleDrafts = promotions.flatMap(p => App._promotionDraftToRuleDrafts(cardId, p))
-          diagnostics.push(...(parsed.diagnostics || []))
+          const parsedDiags = (parsed.diagnostics || []).filter(d => d !== 'ยังไม่มี parser เฉพาะสำหรับเว็บไซต์นี้')
+          diagnostics.push(...parsedDiags)
+          if (!ruleDrafts.length) {
+            const chars = String(sourceDocument.mainContentText || '').trim().length
+            diagnostics.push(chars > 100
+              ? `ดึงเนื้อหาได้ ${chars} ตัวอักษร — AI (Gemini) จำเป็นต้องใช้ในการวิเคราะห์เว็บนี้`
+              : 'ไม่สามารถดึงเนื้อหาหน้าเว็บได้เพียงพอ')
+          }
         }
       } else {
         const parsed = App._parseBenefitSourceDocument(sourceDocument)
