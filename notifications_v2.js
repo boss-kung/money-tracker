@@ -516,7 +516,7 @@
       </div>`, { animate })
   }
 
-  App.openNotificationRuleForm = function(ruleId = '', nextTriggerType = '') {
+  App.openNotificationRuleForm = function(ruleId = '', nextTriggerType = '', animate = true) {
     const rules = getCustomRules()
     const existing = rules.find(rule => rule.id === ruleId)
     const draft = S.notificationRuleDraft?.id === (ruleId || S.notificationRuleDraft?.id) ? S.notificationRuleDraft : null
@@ -634,7 +634,7 @@
           <button class="btn btn-secondary" onclick="App.testNotificationRuleFromForm('${esc(rule.id)}')">ทดสอบกฎนี้ในเครื่อง</button>
           ${existing ? `<button class="btn btn-outline mt-8" onclick="App.deleteNotificationRule('${esc(rule.id)}')">ลบกฎนี้</button>` : ''}
         </div>
-      </div>`)
+      </div>`, { animate })
   }
 
   App.changeNotificationRuleTrigger = function(ruleId, triggerType) {
@@ -659,7 +659,7 @@
       },
     })
     S.notificationRuleDraft = current
-    App.openNotificationRuleForm(ruleId, triggerType)
+    App.openNotificationRuleForm(ruleId, triggerType, false)
   }
 
   App.saveNotificationRule = function(ruleId) {
