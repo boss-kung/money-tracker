@@ -25,6 +25,7 @@ const KEYS = {
   creditCardPromoSearches: 'mt_credit_card_promo_searches',
   creditCardPromotions:    'mt_credit_card_promotions',
   migrations:          'mt_migrations',
+  aiInsightStore:      'mt_ai_insight_store',
 }
 
 const BACKUP_SCHEMA_VERSION = 2
@@ -57,6 +58,7 @@ const BACKUP_SCHEMA_KEYS = [
   'creditCardPromotions',
   'migrations',
   'settings',
+  'aiInsightStore',
 ]
 
 const BACKUP_DEFAULTS = {
@@ -86,6 +88,7 @@ const BACKUP_DEFAULTS = {
   creditCardPromotions: [],
   migrations: { cryptoCentralizedV1: false },
   settings: {},
+  aiInsightStore: { version: 1, lastRefreshed: null, payloadHash: '', insights: [], hiddenTypes: [], feedback: [] },
 }
 
 const Storage = {
@@ -334,8 +337,11 @@ const Storage = {
     }
     BACKUP_SCHEMA_KEYS.forEach(key => {
       const fallback = BACKUP_DEFAULTS[key]
-      const value = state?.[key]
-      payload[key] = value !== undefined ? value : JSON.parse(JSON.stringify(fallback))
+      let value = state?.[key]
+      if (value === undefined && key === 'aiInsightStore') {
+        try { value = JSON.parse(localStorage.getItem(KEYS.aiInsightStore) || 'null') } catch (_) { value = null }
+      }
+      payload[key] = value !== undefined && value !== null ? value : JSON.parse(JSON.stringify(fallback))
     })
     return payload
   },
