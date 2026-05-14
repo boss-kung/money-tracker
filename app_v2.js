@@ -6321,15 +6321,20 @@ App._pickMerchant = function(name, opts = {}) {
       const version = data.version || '(ไม่มี version — อาจเป็น version เก่า)'
       const features = Array.isArray(data.features) ? data.features : []
       const hasAnalyze = features.includes('analyzeBenefitUrl')
+      const shortUrl = endpoint.replace(/^https?:\/\//, '').slice(0, 60) + (endpoint.length > 70 ? '…' : '')
       if (resultEl) resultEl.innerHTML = `<div class="card card-pad">
         <div class="list-item-name" style="color:${hasAnalyze ? 'var(--success)' : 'var(--warning)'}">
           ${hasAnalyze ? '✓ Endpoint พร้อมใช้งาน' : '⚠ Endpoint เก่า — ยังไม่รองรับ analyzeBenefitUrl'}
         </div>
         <div class="list-item-sub">version: ${esc(String(version))}</div>
-        ${!hasAnalyze ? `<div class="list-item-sub" style="color:var(--warning);margin-top:6px">กรุณาไปที่ script.google.com → Deploy → Manage deployments → แก้ไข deployment → เลือก <b>New version</b> → Deploy</div>` : ''}
+        <div class="list-item-sub" style="word-break:break-all;margin-top:4px;font-size:11px;opacity:0.6">URL: ${esc(shortUrl)}</div>
+        ${!hasAnalyze ? `<div class="list-item-sub" style="color:var(--warning);margin-top:6px">URL ในแอปนี้อาจเป็น deployment เก่า — ตรวจสอบว่า URL ที่ใช้ตรงกับที่ deploy ล่าสุดใน script.google.com</div>` : ''}
       </div>`
     } catch (err) {
-      if (resultEl) resultEl.innerHTML = `<div class="card card-pad"><div class="list-item-sub" style="color:var(--danger)">ตรวจสอบไม่ได้: ${esc(err?.message || 'error')}</div></div>`
+      if (resultEl) resultEl.innerHTML = `<div class="card card-pad">
+        <div class="list-item-sub" style="color:var(--danger)">ตรวจสอบไม่ได้: ${esc(err?.message || 'error')}</div>
+        <div class="list-item-sub" style="word-break:break-all;margin-top:4px;font-size:11px;opacity:0.6">URL ที่แอปใช้: ${esc(endpoint.slice(0, 80))}</div>
+      </div>`
     }
   }
 
