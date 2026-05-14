@@ -6308,20 +6308,15 @@ App._pickMerchant = function(name, opts = {}) {
       : ''
     resultEl.innerHTML = `
       <div class="card card-pad">
-        <div class="list-item-name">${esc(doc.title || 'ผลการวิเคราะห์')}</div>
-        <div class="list-item-sub">${esc(doc.normalizedUrl || preview.url || '')}</div>
-        <div class="list-item-sub">เว็บ: ${esc(doc.siteKey || 'unknown')} · วิธีดึง: ${esc(doc.fetchMode || '-')} · สถานะ: ${esc(doc.status || '-')}</div>
         ${doc.description ? `<div class="list-item-sub" style="margin-top:4px">${esc(doc.description)}</div>` : ''}
       </div>
       ${aiLabel}
       ${ruleRows || `<div class="card card-pad" style="margin-top:10px"><div class="list-item-name">ยังไม่พร้อมสร้างกฎอัตโนมัติ</div><div class="list-item-sub">ระบบดึงหน้าเว็บได้ แต่ยังไม่สามารถแปลงเป็น draft rule ที่มั่นใจพอ</div></div>`}
-      ${diagHtml}
       ${selectionBar}
       <div style="display:flex;gap:10px;margin-top:10px">
         <button class="btn btn-secondary" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')">เพิ่มเอง</button>
         ${saveBtn}
-      </div>
-      <div class="form-hint" style="margin-top:10px">ก่อนบันทึกควรตรวจร้านค้า ช่วงเวลา และข้อยกเว้นของแต่ละ rule อีกครั้ง</div>`
+      </div>`
   }
 
   App._toggleBenefitDraftSelection = function(idx) {
