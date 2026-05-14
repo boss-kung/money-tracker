@@ -750,7 +750,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.15-ui-polish1'
+const APP_VERSION = '2026.05.15-ui-polish2'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -3016,7 +3016,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       ? alertCards.filter(card => Number(card.due?.daysLeft || 0) === minDaysLeft)
       : []
     const transferTotal = S.transactions
-      .filter(t => (t.date || '').startsWith(dm) && t.type === 'transfer')
+      .filter(t => (t.date || '').startsWith(dm) && t.type === 'transfer' && Calc.isPostedTx(t))
       .reduce((s,t) => s + Number(t.amount || 0), 0)
 
     // Daily budget calculation
@@ -4873,7 +4873,7 @@ App._pickMerchant = function(name, opts = {}) {
       : Number(tx.amount || 0)
     const income = filtered.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
     const expense = filtered
-      .filter(t => t.type === 'expense' || t.type === 'cc_payment')
+      .filter(t => t.type === 'expense')
       .reduce((s,t) => s + expenseAmountForList(t), 0)
     const summary = document.getElementById('tx-compact-summary')
     if (summary) summary.textContent = `${filtered.length} รายการ`
@@ -4887,7 +4887,7 @@ App._pickMerchant = function(name, opts = {}) {
       const rows = byDate[date]
       const dayInc = rows.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount || 0), 0)
       const dayExp = rows
-        .filter(t => t.type === 'expense' || t.type === 'cc_payment')
+        .filter(t => t.type === 'expense')
         .reduce((s,t) => s + expenseAmountForList(t), 0)
       const label = Calc.labelDate ? Calc.labelDate(date) : date
       html += `<div class="tx-date-header"><span>${esc(label)}</span><div>${dayInc ? `<b class="c-income">+${money(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense">-${money(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
@@ -10075,13 +10075,18 @@ App._pickMerchant = function(name, opts = {}) {
     const target = document.getElementById(anchorId)
     const scrollEl = document.getElementById('wallets-content')
     if (!target || !scrollEl) return
-    const tabBar = document.querySelector('#page-wallets .wallet-tab-bar')
-    const stickyOffset = tabBar ? Math.ceil(tabBar.getBoundingClientRect().height) : 0
-    const offsetInScroll = Math.max(0, target.offsetTop - stickyOffset - 14)
+    const scrollRect = scrollEl.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    const targetTopInScroll = scrollEl.scrollTop + targetRect.top - scrollRect.top
+    const scrollPaddingTop = parseFloat(getComputedStyle(scrollEl).paddingTop || '0') || 0
+    const breathingRoom = 14
+    const offsetInScroll = Math.max(0, targetTopInScroll - scrollPaddingTop - breathingRoom)
     scrollEl.scrollTo({ top: offsetInScroll, behavior: 'smooth' })
-    // Update active tab
     document.querySelectorAll('.wallet-tab').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.target === anchorId)
+      if (btn.dataset.target === anchorId) {
+        btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+      }
     })
   }
 
