@@ -4462,6 +4462,14 @@ html.dark .v64-rec-tab.active {
   background: color-mix(in srgb, var(--primary) 10%, var(--card));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 30%, transparent);
 }
+.reward-rule-result.locked {
+  opacity: .72;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--expense) 30%, var(--line));
+}
+.reward-rule-result.locked .reward-rule-toggle {
+  opacity: .45;
+}
 .reward-rule-result:hover {
   border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
   background: color-mix(in srgb, var(--card) 78%, var(--bg));
@@ -5468,3 +5476,67 @@ h6,
 .b {
   font-weight: 700 !important;
 }
+
+/* Benefit rule wizard */
+.ccbr-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 0 16px;
+}
+.ccbr-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: all .25s ease;
+}
+.ccbr-step-dot.active {
+  background: var(--primary);
+  width: 22px;
+  border-radius: 4px;
+}
+.ccbr-step-dot.done {
+  background: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+.ccbr-type-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+.ccbr-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 14px 8px;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  transition: border-color .15s, background .15s, color .15s;
+}
+.ccbr-type-card.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
+  color: var(--primary);
+}
+.ccbr-type-icon { font-size: 26px; line-height: 1; }
+.ccbr-chip-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 0 6px;
+}
+.ccbr-chip-scroll::-webkit-scrollbar { display: none; }
+.ccbr-chip-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+.ccbr-inline-input { display: flex; align-items: center; gap: 8px; }
+.ccbr-inline-input .form-input { flex: 1; min-width: 0; }
+.ccbr-input-unit { color: var(--muted); font-size: 13px; white-space: nowrap; flex-shrink: 0; }

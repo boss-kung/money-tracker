@@ -2269,13 +2269,15 @@ App.render();
               const _rows = _rules.map(rule => {
                 const _selected = S.tx.rewardRuleIds.includes(rule.id)
                 const _typeText = rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : 'ส่วนลดทันที'
-                const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.allowStacking ? '' : 'อาจไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
-                return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}" onclick="App._toggleTxRewardRule('${esc(rule.id)}')" aria-pressed="${_selected ? 'true' : 'false'}">
+                const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.trackLocked ? '🔒 ยังไม่ถึงยอด' : '', rule.allowStacking ? '' : 'อาจไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
+                const _trackHint = rule.trackLocked ? `<span class="list-item-sub" style="color:var(--expense)">สะสมผ่าน${esc(rule.trackChannelLabel)}อีก ${esc(money(rule.trackRemaining))} ในรอบนี้เพื่อปลดล็อก</span>` : ''
+                return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}${rule.trackLocked ? ' locked' : ''}" onclick="App._toggleTxRewardRule('${esc(rule.id)}')" aria-pressed="${_selected ? 'true' : 'false'}">
                   <span class="csr-main">
                     <span>
                       <span class="list-item-name">${esc(rule.name)}</span>
                       <span class="list-item-sub">${esc(_meta)}</span>
                       ${rule.description ? `<span class="list-item-sub">${esc(rule.description)}</span>` : ''}
+                      ${_trackHint}
                     </span>
                   </span>
                   <span class="reward-rule-toggle${_selected ? ' on' : ''}" aria-hidden="true"><span class="reward-rule-toggle-knob"></span></span>
@@ -5101,7 +5103,11 @@ App._pickMerchant = function(name, opts = {}) {
           <div class="list-item-sub" style="margin-top:4px">
             ${rule.cashback?.rate ? `เงินคืน ${rule.cashback.rate}% ` : ''}${rule.cashback?.fixedAmount ? `เงินคืนคงที่ ${money(rule.cashback.fixedAmount)} ` : ''}${rule.discount?.rate ? `ส่วนลด ${rule.discount.rate}% ` : ''}${rule.discount?.fixedAmount ? `ส่วนลดคงที่ ${money(rule.discount.fixedAmount)} ` : ''}${rule.points?.bahtPerPoint ? `· ${rule.points.bahtPerPoint} บาท = 1 คะแนน x${rule.points.multiplier || 1}` : ''}
           </div>
-          ${rule.rewardTrigger?.mode === 'cycle_spend_threshold' ? `<div class="list-item-sub" style="margin-top:4px">ยอดสะสมครบ ${money(rule.rewardTrigger.thresholdAmount)} · ${rule.rewardTrigger.grantMode === 'every_threshold' ? 'ให้ทุกครั้งที่ครบยอด' : 'ให้ครั้งเดียวต่อรอบ'}</div>` : ''}
+          ${rule.rewardTrigger?.mode === 'cycle_spend_threshold' ? (() => {
+            const chLabel = rule.rewardTrigger.trackChannel ? (App.getBenefitChannelOptions?.().find(([v]) => v === rule.rewardTrigger.trackChannel)?.[1] || rule.rewardTrigger.trackChannel) : null
+            const grantLabel = rule.rewardTrigger.grantMode === 'every_threshold' ? `ทุก ${money(rule.rewardTrigger.thresholdAmount)}` : `ครบ ${money(rule.rewardTrigger.thresholdAmount)} ต่อรอบ`
+            return `<div class="list-item-sub" style="margin-top:4px">🔒 ${chLabel ? `สะสมผ่าน${esc(chLabel)} ` : 'สะสม'}${esc(grantLabel)} → ได้รับสิทธิ์</div>`
+          })() : ''}
           <div class="flex-row" style="margin-top:10px">
             <button class="btn btn-secondary" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">แก้ไข</button>
             <button class="btn btn-secondary" onclick="App.openCCBenefitRuleCopyDialog('${esc(cardId)}','${esc(rule.id)}')">คัดลอก</button>
@@ -5127,171 +5133,212 @@ App._pickMerchant = function(name, opts = {}) {
     return { ...base, name: 'เงินคืนพื้นฐาน', type: 'cashback', description: 'สิทธิ์พื้นฐานของบัตร', cashback: { mode: 'percent', rate: 1 }, allowStacking: false, isBaseRule: true, priority: 10 }
   }
 
-  App._syncCCBenefitRuleFormSections = function() {
-    const type = String(document.getElementById('ccbr-type')?.value || 'cashback')
-    const validityMode = String(document.getElementById('ccbr-validity-mode')?.value || 'always')
-    const cashbackMode = String(document.getElementById('ccbr-cb-mode')?.value || 'percent')
-    const discountMode = String(document.getElementById('ccbr-discount-mode')?.value || 'percent')
-    const showCashback = type === 'cashback' || type === 'both'
-    const showPoints = type === 'points' || type === 'both'
-    const showDiscount = type === 'discount'
-    const toggleAccordion = (id, visible, forceOpen = false) => {
-      const el = document.getElementById(id)
-      if (!el) return
-      el.style.display = visible ? '' : 'none'
-      if (!visible) el.open = false
-      else if (forceOpen) el.open = true
+  App._ccbrDraft = null
+
+  App._ccbrNext = function() {
+    const d = App._ccbrDraft; if (!d) return
+    App._ccbrReadStep(d._step)
+    d._step = Math.min(3, d._step + 1)
+    App._ccbrRenderStep(d._step)
+  }
+  App._ccbrBack = function() {
+    const d = App._ccbrDraft; if (!d) return
+    App._ccbrReadStep(d._step)
+    d._step = Math.max(1, d._step - 1)
+    App._ccbrRenderStep(d._step)
+  }
+  App._ccbrSetType = function(displayType) {
+    const d = App._ccbrDraft; if (!d) return
+    const nameEl = document.getElementById('ccbr-name')
+    if (nameEl) d.name = nameEl.value
+    const activeEl = document.getElementById('ccbr-active')
+    if (activeEl) d.active = activeEl.classList.contains('on')
+    if (displayType === 'cashback')       { d.type = 'cashback'; d._cashbackMode = 'percent' }
+    else if (displayType === 'cashback_fixed') { d.type = 'cashback'; d._cashbackMode = 'fixed' }
+    else if (displayType === 'points')    { d.type = 'points' }
+    else if (displayType === 'discount')  { d.type = 'discount' }
+    App._ccbrRenderStep(1)
+  }
+  App._ccbrToggleChip = function(field, value, btn) {
+    const d = App._ccbrDraft; if (!d) return
+    if (!Array.isArray(d[field])) d[field] = []
+    const idx = d[field].indexOf(value)
+    if (idx >= 0) { d[field].splice(idx, 1); btn?.classList.remove('active') }
+    else          { d[field].push(value);    btn?.classList.add('active') }
+  }
+  App._ccbrToggleTrigger = function() {
+    const btn = document.getElementById('ccbr-trigger-toggle')
+    const body = document.getElementById('ccbr-trigger-body')
+    if (!btn || !body) return
+    btn.classList.toggle('on')
+    body.style.display = btn.classList.contains('on') ? '' : 'none'
+  }
+  App._ccbrReadStep = function(step) {
+    const d = App._ccbrDraft; if (!d) return
+    const readNum = id => { const n = Number(document.getElementById(id)?.value || 0); return Number.isFinite(n) && n > 0 ? n : null }
+    const readStr = id => String(document.getElementById(id)?.value || '').trim()
+    if (step === 1) {
+      d.name = readStr('ccbr-name') || d.name
+      const activeEl = document.getElementById('ccbr-active')
+      if (activeEl) d.active = activeEl.classList.contains('on')
+      const dt = d._cashbackMode === 'fixed' ? 'cashback_fixed' : d.type === 'cashback' ? 'cashback' : d.type
+      if (dt === 'cashback')       d.cashback  = { ...(d.cashback  || {}), mode: 'percent', rate: readNum('ccbr-val-rate') }
+      else if (dt === 'cashback_fixed') d.cashback = { ...(d.cashback || {}), mode: 'fixed', fixedAmount: readNum('ccbr-val-fixed') }
+      else if (dt === 'points')    d.points    = { ...(d.points    || {}), bahtPerPoint: readNum('ccbr-val-baht'), multiplier: readNum('ccbr-val-multi') || 1, multiplierMode: 'total' }
+      else if (dt === 'discount') {
+        const isFixed = document.getElementById('ccbr-disc-fix')?.classList.contains('active')
+        d.discount = { mode: isFixed ? 'fixed' : 'percent', rate: readNum('ccbr-val-disc-rate'), fixedAmount: readNum('ccbr-val-disc-fixed') }
+      }
+    } else if (step === 2) {
+      const startDate = readStr('ccbr-validity-start')
+      const endDate   = readStr('ccbr-validity-end')
+      d.validity = {
+        mode: (startDate || endDate) ? 'range' : 'always',
+        startDate, endDate,
+        statementCycleHint: document.getElementById('ccbr-cycle-cal')?.classList.contains('active') ? 'calendar_month' : 'statement_cycle',
+      }
+      d.suggestedConditions = {
+        channels:   [...(d._channels   || [])],
+        categories: [...(d._categories || [])],
+        merchants:  App.splitRuleListInput?.(readStr('ccbr-merchants')) || [],
+        minSpend:   readNum('ccbr-minSpend'),
+      }
     }
-    const toggleField = (id, visible) => {
-      const el = document.getElementById(id)
-      if (!el) return
-      el.style.display = visible ? '' : 'none'
+  }
+  App._ccbrStep1Html = function(d) {
+    const v = n => n ?? ''
+    const dt = d._cashbackMode === 'fixed' ? 'cashback_fixed' : d.type === 'cashback' ? 'cashback' : d.type
+    const types = [
+      { id: 'cashback',       icon: '💰', label: 'เงินคืน %' },
+      { id: 'cashback_fixed', icon: '💵', label: 'เงินคืนคงที่' },
+      { id: 'points',         icon: '⭐', label: 'คะแนน' },
+      { id: 'discount',       icon: '🏷️', label: 'ส่วนลดทันที' },
+    ]
+    const typeGrid = types.map(t => `<button type="button" class="ccbr-type-card${dt===t.id?' active':''}" onclick="App._ccbrSetType('${t.id}')"><span class="ccbr-type-icon">${t.icon}</span><span>${esc(t.label)}</span></button>`).join('')
+    let rewardInput = ''
+    if (dt === 'cashback') {
+      rewardInput = `<div class="form-group"><label class="form-label">อัตราเงินคืน</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="0.01" id="ccbr-val-rate" value="${esc(v(d.cashback?.rate))}" placeholder="เช่น 5"><span class="ccbr-input-unit">% ของยอดใช้จ่าย</span></div></div>`
+    } else if (dt === 'cashback_fixed') {
+      rewardInput = `<div class="form-group"><label class="form-label">เงินคืนคงที่</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-val-fixed" value="${esc(v(d.cashback?.fixedAmount))}" placeholder="เช่น 100"><span class="ccbr-input-unit">บาท เมื่อครบเงื่อนไข</span></div></div>`
+    } else if (dt === 'points') {
+      rewardInput = `<div class="form-group"><label class="form-label">อัตราสะสมคะแนน</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-val-baht" value="${esc(v(d.points?.bahtPerPoint))}" placeholder="เช่น 25"><span class="ccbr-input-unit">บาท = 1 คะแนน</span></div></div><div class="form-group"><label class="form-label">ตัวคูณคะแนน</label><div class="ccbr-inline-input"><span class="ccbr-input-unit">×</span><input class="form-input" type="number" step="0.5" id="ccbr-val-multi" value="${esc(v(d.points?.multiplier||1))}" placeholder="1"></div></div>`
+    } else if (dt === 'discount') {
+      const isFixed = d.discount?.mode === 'fixed'
+      rewardInput = `<div class="form-group"><label class="form-label">ส่วนลด</label><div style="display:flex;gap:8px;margin-bottom:10px"><button type="button" class="chip mini${!isFixed?' active':''}" id="ccbr-disc-pct" onclick="this.classList.add('active');document.getElementById('ccbr-disc-fix').classList.remove('active');document.getElementById('ccbr-disc-pct-row').style.display='';document.getElementById('ccbr-disc-fix-row').style.display='none'">เปอร์เซ็นต์</button><button type="button" class="chip mini${isFixed?' active':''}" id="ccbr-disc-fix" onclick="this.classList.add('active');document.getElementById('ccbr-disc-pct').classList.remove('active');document.getElementById('ccbr-disc-fix-row').style.display='';document.getElementById('ccbr-disc-pct-row').style.display='none'">คงที่</button></div><div id="ccbr-disc-pct-row"${isFixed?' style="display:none"':''}><div class="ccbr-inline-input"><input class="form-input" type="number" step="0.01" id="ccbr-val-disc-rate" value="${esc(v(d.discount?.rate))}" placeholder="เช่น 5"><span class="ccbr-input-unit">%</span></div></div><div id="ccbr-disc-fix-row"${!isFixed?' style="display:none"':''}><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-val-disc-fixed" value="${esc(v(d.discount?.fixedAmount))}" placeholder="เช่น 50"><span class="ccbr-input-unit">บาท</span></div></div></div>`
     }
-    toggleAccordion('ccbr-cashback-acc', showCashback, showCashback)
-    toggleAccordion('ccbr-points-acc', showPoints, showPoints)
-    toggleAccordion('ccbr-discount-acc', showDiscount, showDiscount)
-    toggleField('ccbr-validity-dates', validityMode === 'range')
-    toggleField('ccbr-cb-rate-row', showCashback && cashbackMode === 'percent')
-    toggleField('ccbr-cb-fixed-row', showCashback && cashbackMode === 'fixed')
-    toggleField('ccbr-discount-rate-row', showDiscount && discountMode === 'percent')
-    toggleField('ccbr-discount-fixed-row', showDiscount && discountMode === 'fixed')
+    const tpls = [['base_cashback','เงินคืนพื้นฐาน'],['base_points','คะแนนพื้นฐาน'],['cashback_targeted','เงินคืนตามเงื่อนไข'],['cycle_cashback','เงินคืนยอดสะสม'],['instant_discount','ส่วนลดทันที']]
+    const tplRow = `<div style="margin-bottom:16px"><div class="form-label" style="margin-bottom:6px;font-size:12px;color:var(--muted)">เริ่มจาก template</div><div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px">${tpls.map(([id,lbl])=>`<button type="button" class="chip mini" style="white-space:nowrap;flex-shrink:0" onclick="App.openCCBenefitRuleForm('${esc(d._cardId)}','${esc(d._ruleId)}','${id}')">${esc(lbl)}</button>`).join('')}</div></div>`
+    return `${tplRow}<div class="card card-pad" style="margin-bottom:12px"><div class="form-group"><label class="form-label">ชื่อกฎ</label><input class="form-input" id="ccbr-name" value="${esc(d.name)}" placeholder="เช่น TrueMoney 3%, คะแนนพื้นฐาน"></div><div class="form-group"><label class="form-label">ประเภทรางวัล</label><div class="ccbr-type-grid">${typeGrid}</div></div>${rewardInput}<div class="tx-reward-toggle-row" style="margin-top:4px"><span class="form-label" style="margin:0">ใช้งานกฎนี้</span><button type="button" id="ccbr-active" class="toggle${d.active!==false?' on':''}" onclick="this.classList.toggle('on')"></button></div></div>`
+  }
+  App._ccbrStep2Html = function(d) {
+    const v = n => n ?? ''
+    const validity = d.validity || {}
+    const isCal = (validity.statementCycleHint || '') === 'calendar_month'
+    const channelOpts = (App.getBenefitChannelOptions?.() || []).filter(([val]) => val !== '')
+    const selectedChs = d._channels || []
+    const chChips = channelOpts.map(([val,lbl]) => `<button type="button" class="chip mini${selectedChs.includes(val)?' active':''}" onclick="App._ccbrToggleChip('_channels','${esc(val)}',this)">${esc(lbl)}</button>`).join('')
+    const cats = S.categories?.expense || []
+    const selectedCats = d._categories || []
+    const catChips = cats.length ? cats.map(c => `<button type="button" class="chip mini${selectedCats.includes(c.id)?' active':''}" onclick="App._ccbrToggleChip('_categories','${esc(c.id)}',this)">${esc(c.label)}</button>`).join('') : '<span style="color:var(--muted);font-size:13px">ยังไม่มีหมวดหมู่</span>'
+    return `<div class="card card-pad" style="margin-bottom:12px"><div class="form-label" style="margin-bottom:10px">ช่วงเวลา <span style="color:var(--muted);font-weight:400;font-size:12px">ว่าง = ไม่จำกัด</span></div><div class="form-split-row"><div><label class="form-label" style="font-size:12px;margin-bottom:4px">วันเริ่ม</label><input class="form-input" type="date" id="ccbr-validity-start" value="${esc(validity.startDate||'')}"></div><div><label class="form-label" style="font-size:12px;margin-bottom:4px">วันสิ้นสุด</label><input class="form-input" type="date" id="ccbr-validity-end" value="${esc(validity.endDate||'')}"></div></div><div style="margin-top:10px"><label class="form-label" style="font-size:12px;margin-bottom:6px">นับรอบแบบ</label><div style="display:flex;gap:8px"><button type="button" class="chip mini${!isCal?' active':''}" id="ccbr-cycle-stmt" onclick="this.classList.add('active');document.getElementById('ccbr-cycle-cal').classList.remove('active')">รอบบิลบัตร</button><button type="button" class="chip mini${isCal?' active':''}" id="ccbr-cycle-cal" onclick="this.classList.add('active');document.getElementById('ccbr-cycle-stmt').classList.remove('active')">เดือนปฏิทิน</button></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="form-label" style="margin-bottom:8px">ช่องทาง <span style="color:var(--muted);font-weight:400;font-size:12px">ไม่เลือก = ทุกช่องทาง</span></div><div class="ccbr-chip-scroll">${chChips}</div></div><div class="card card-pad" style="margin-bottom:12px"><div class="form-label" style="margin-bottom:8px">หมวดหมู่ <span style="color:var(--muted);font-weight:400;font-size:12px">ไม่เลือก = ทุกหมวด</span></div><div class="ccbr-chip-wrap">${catChips}</div></div><div class="card card-pad" style="margin-bottom:12px"><div class="form-group" style="margin-bottom:10px"><label class="form-label">ร้านค้า <span style="color:var(--muted);font-weight:400;font-size:12px">คั่นด้วย comma, ว่าง = ทุกร้าน</span></label><input class="form-input" id="ccbr-merchants" value="${esc((d.suggestedConditions?.merchants||[]).join(', '))}" placeholder="เช่น Shopee, Grab, Netflix"></div><div class="form-group" style="margin-bottom:0"><label class="form-label">ยอดขั้นต่ำต่อรายการ <span style="color:var(--muted);font-weight:400;font-size:12px">ว่าง = ไม่กำหนด</span></label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-minSpend" value="${esc(v(d.suggestedConditions?.minSpend))}" placeholder="บาท"><span class="ccbr-input-unit">บาท</span></div></div></div>`
+  }
+  App._ccbrStep3Html = function(d) {
+    const v = n => n ?? ''
+    const limits = d.limits || {}
+    const trigger = d.rewardTrigger || {}
+    const hasTrigger = trigger.mode === 'cycle_spend_threshold'
+    const isEvery = trigger.grantMode === 'every_threshold'
+    const trackCh = trigger.trackChannel || ''
+    const channelOpts = App.getBenefitChannelOptions?.() || []
+    const trackChannelSelect = channelOpts.map(([val,lbl]) => `<option value="${esc(val)}"${trackCh===val?' selected':''}>${esc(val?lbl:'ทุกช่องทาง (นับทุก tx บนบัตร)')}</option>`).join('')
+    return `<div class="card card-pad" style="margin-bottom:12px"><div class="form-label" style="margin-bottom:10px">เพดานรางวัล <span style="color:var(--muted);font-weight:400;font-size:12px">ว่าง = ไม่จำกัด</span></div><div class="form-group"><label class="form-label">รางวัลสูงสุดต่อรายการ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-tx" value="${esc(v(limits.maxRewardAmountPerTx))}" placeholder="—"><span class="ccbr-input-unit">บาท</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label">รางวัลสูงสุดต่อรอบบิล</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-cycle" value="${esc(v(limits.maxRewardAmountPerCycle))}" placeholder="—"><span class="ccbr-input-unit">บาท</span></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="form-label" style="margin-bottom:10px">ยอดที่นำมาคำนวณ <span style="color:var(--muted);font-weight:400;font-size:12px">ว่าง = ไม่จำกัด</span></div><div class="form-group"><label class="form-label">สูงสุดที่คิดได้ต่อรายการ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-tx" value="${esc(v(limits.maxEligibleSpendPerTx))}" placeholder="—"><span class="ccbr-input-unit">บาท</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label">สูงสุดที่คิดได้ต่อรอบบิล</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-cycle" value="${esc(v(limits.maxEligibleSpendPerCycle))}" placeholder="—"><span class="ccbr-input-unit">บาท</span></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div style="display:flex;align-items:center;justify-content:space-between${hasTrigger?';margin-bottom:14px':''}"><div class="form-label" style="margin:0">ยอดสะสมเพื่อปลดล็อก</div><button type="button" id="ccbr-trigger-toggle" class="toggle${hasTrigger?' on':''}" onclick="App._ccbrToggleTrigger()"></button></div><div id="ccbr-trigger-body"${hasTrigger?'':' style="display:none"'}><div class="form-group"><label class="form-label">ช่องทางที่นับสะสม</label><select class="form-input" id="ccbr-trigger-channel">${trackChannelSelect}</select><div class="form-hint">นับจากทุก tx บนบัตร ไม่จำกัดเฉพาะรายการที่เลือกกฎนี้</div></div><div class="form-group"><label class="form-label">สะสมครบกี่บาทต่อรอบ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-trigger-threshold" value="${esc(v(trigger.thresholdAmount))}" placeholder="เช่น 2000"><span class="ccbr-input-unit">บาท</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label">วิธีให้รางวัล</label><div style="display:flex;gap:8px;margin-top:6px"><button type="button" class="chip mini${!isEvery?' active':''}" id="ccbr-grant-once" onclick="this.classList.add('active');document.getElementById('ccbr-grant-every').classList.remove('active')">ครั้งเดียวต่อรอบ</button><button type="button" class="chip mini${isEvery?' active':''}" id="ccbr-grant-every" onclick="this.classList.add('active');document.getElementById('ccbr-grant-once').classList.remove('active')" style="white-space:nowrap">ทุกครั้งที่ครบยอด</button></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="form-label" style="margin-bottom:10px">ตั้งค่าเพิ่มเติม</div><div class="tx-reward-toggle-row"><span>ใช้ร่วมกับสิทธิ์อื่นได้</span><button type="button" id="ccbr-stacking" class="toggle${d.allowStacking!==false?' on':''}" onclick="this.classList.toggle('on')"></button></div><div class="tx-reward-toggle-row"><span>เป็นสิทธิ์พื้นฐานของบัตร</span><button type="button" id="ccbr-base" class="toggle${d.isBaseRule?' on':''}" onclick="this.classList.toggle('on')"></button></div><div class="form-group" style="margin-top:10px;margin-bottom:0"><label class="form-label">ลำดับความสำคัญ</label><input class="form-input" type="number" step="1" id="ccbr-priority" value="${esc(v(d.priority||0))}"></div></div>`
+  }
+  App._ccbrRenderStep = function(step) {
+    const d = App._ccbrDraft; if (!d) return
+    const cardId = d._cardId, ruleId = d._ruleId, isEdit = !!ruleId
+    const stepTitles = ['รางวัลคืออะไร?', 'ใช้ได้เมื่อไหร่?', 'เพดาน & เงื่อนไขพิเศษ']
+    const dots = [1,2,3].map(n => `<div class="ccbr-step-dot${n===step?' active':n<step?' done':''}"></div>`).join('')
+    const backFn = step > 1 ? 'App._ccbrBack()' : `App._onCCBenefitRuleFormBack('${esc(cardId)}')`
+    const nextHtml = step < 3
+      ? `<button class="btn btn-primary" style="flex:1" onclick="App._ccbrNext()">ถัดไป →</button>`
+      : `<button class="btn btn-primary" style="flex:1" onclick="App.saveCCBenefitRule('${esc(cardId)}','${esc(ruleId)}')">บันทึก</button>`
+    const backHtml = `<button class="btn btn-secondary" onclick="${backFn}">${step > 1 ? '← ย้อนกลับ' : 'ยกเลิก'}</button>`
+    let body = ''
+    if (step === 1) body = App._ccbrStep1Html(d)
+    else if (step === 2) body = App._ccbrStep2Html(d)
+    else body = App._ccbrStep3Html(d)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${backFn}">←</button><div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.4px;text-transform:uppercase">${isEdit?'แก้ไขกฎ':'เพิ่มกฎ'} · ขั้น ${step}/3</div><div style="font-size:16px;font-weight:800;margin-top:1px">${esc(stepTitles[step-1])}</div></div><div></div></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="ccbr-steps">${dots}</div>${body}<div style="display:flex;gap:10px;margin-top:20px">${backHtml}${nextHtml}</div></div>`)
   }
 
   App.openCCBenefitRuleForm = function(cardId, ruleId = '', template = 'base_cashback') {
     App.ensureCCBenefitRulesState?.()
     const current = ruleId ? (S.ccBenefitRules || []).find(rule => rule.id === ruleId) : null
-    const rule = App.normalizeBenefitRule?.(current || App._benefitRuleTemplate(template, cardId), cardId) || (current || App._benefitRuleTemplate(template, cardId))
-    const categoryOptions = (S.categories?.expense || []).map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('')
-    const merchantOptions = (S.merchants || []).map(m => `<option value="${esc(m.name)}">`).join('')
-    const channelOptions = (App.getBenefitChannelOptions?.() || [['', 'ทุกช่องทาง'], ['online', 'ออนไลน์'], ['offline', 'หน้าร้าน / ออฟไลน์']])
-      .map(([value, label]) => `<option value="${esc(value)}"${(rule.suggestedConditions.channels || [])[0] === value ? ' selected' : ''}>${esc(value ? label : 'ทุกช่องทาง')}</option>`)
-      .join('')
-    const v = n => n ?? ''
-    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted);font-weight:600">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App._onCCBenefitRuleFormBack('${esc(cardId)}')">←</button><h2>${ruleId ? 'แก้ไขกติกาสิทธิประโยชน์' : 'เพิ่มกติกาสิทธิประโยชน์'}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefitRule('${esc(cardId)}','${esc(ruleId)}')" style="width:auto">บันทึก</button></div>
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        ${accordion('ccbr-basic-acc', 'ข้อมูลพื้นฐาน', `
-          <div class="form-group"><div class="chip-row"><button type="button" class="chip mini${template==='base_cashback' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','base_cashback')">เงินคืนพื้นฐาน</button><button type="button" class="chip mini${template==='base_points' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','base_points')">คะแนนพื้นฐาน</button><button type="button" class="chip mini${template==='cashback_targeted' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','cashback_targeted')">เงินคืนตามเงื่อนไข</button><button type="button" class="chip mini${template==='cycle_cashback' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','cycle_cashback')">เงินคืนยอดสะสม</button><button type="button" class="chip mini${template==='points_targeted' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','points_targeted')">คะแนนพิเศษ</button><button type="button" class="chip mini${template==='instant_discount' ? ' active' : ''}" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(ruleId)}','instant_discount')">ส่วนลดทันที</button></div></div>
-          <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input class="form-input" id="ccbr-name" value="${esc(rule.name)}" placeholder="เช่น Shopee 10%, คะแนนพื้นฐาน, Online 5X"></div>
-          <div class="tx-reward-toggle-row"><span>เปิดใช้งาน</span><button type="button" id="ccbr-active" class="toggle${rule.active ? ' on' : ''}" onclick="this.classList.toggle('on')"></button></div>
-          <div class="form-group"><label class="form-label">ประเภทสิทธิ์</label><select class="form-input" id="ccbr-type" onchange="App._syncCCBenefitRuleFormSections()"><option value="cashback"${rule.type==='cashback'?' selected':''}>เงินคืน</option><option value="points"${rule.type==='points'?' selected':''}>คะแนน</option><option value="both"${rule.type==='both'?' selected':''}>ทั้งเงินคืนและคะแนน</option><option value="discount"${rule.type==='discount'?' selected':''}>ส่วนลดอัตโนมัติทันที</option></select></div>
-          <div class="form-group"><label class="form-label">คำอธิบาย / หมายเหตุเงื่อนไข</label><input class="form-input" id="ccbr-description" value="${esc(rule.description || '')}" placeholder="เช่น ใช้เฉพาะแคมเปญ 1.1 / ต้องลงทะเบียนก่อน"></div>
-        `, true)}
-        ${accordion('ccbr-validity-acc', 'ช่วงเวลาใช้งาน', `
-          <div class="form-group"><label class="form-label">ช่วงเวลาใช้งาน</label><select class="form-input" id="ccbr-validity-mode" onchange="App._syncCCBenefitRuleFormSections()"><option value="always"${(rule.validity?.mode || 'always') === 'always' ? ' selected' : ''}>ไม่จำกัดเวลา</option><option value="range"${rule.validity?.mode === 'range' ? ' selected' : ''}>กำหนดวันเริ่ม - สิ้นสุด</option></select></div>
-          <div class="benefit-form-grid" id="ccbr-validity-dates">
-            <div class="form-group"><label class="form-label">วันเริ่มใช้</label><input class="form-input" type="date" id="ccbr-validity-start" value="${esc(rule.validity?.startDate || '')}"></div>
-            <div class="form-group"><label class="form-label">วันสิ้นสุด</label><input class="form-input" type="date" id="ccbr-validity-end" value="${esc(rule.validity?.endDate || '')}"></div>
-          </div>
-          <div class="form-group"><label class="form-label">วิธีนับเพดานรอบสะสม</label><select class="form-input" id="ccbr-validity-cycle-hint"><option value="statement_cycle"${(rule.validity?.statementCycleHint || 'statement_cycle') === 'statement_cycle' ? ' selected' : ''}>ตามรอบบิลบัตร</option><option value="calendar_month"${rule.validity?.statementCycleHint === 'calendar_month' ? ' selected' : ''}>ตามเดือนปฏิทิน</option></select></div>
-        `)}
-        ${accordion('ccbr-suggest-acc', 'เงื่อนไขสำหรับแนะนำสิทธิ์', `
-          <div class="form-group"><label class="form-label">หมวดหมู่ (คั่นด้วย comma)</label><input class="form-input" id="ccbr-categories" list="ccbr-categories-list" value="${esc((rule.suggestedConditions.categories || []).join(', '))}" placeholder="เช่น shopping, food"><datalist id="ccbr-categories-list">${categoryOptions}</datalist></div>
-          <div class="form-group"><label class="form-label">ร้านค้า (คั่นด้วย comma)</label><input class="form-input" id="ccbr-merchants" list="ccbr-merchants-list" value="${esc((rule.suggestedConditions.merchants || []).join(', '))}" placeholder="เช่น Shopee, Grab"><datalist id="ccbr-merchants-list">${merchantOptions}</datalist></div>
-          <div class="form-group"><label class="form-label">ช่องทาง</label><select class="form-input" id="ccbr-channel">${channelOptions}</select></div>
-          <div class="form-group"><label class="form-label">ขั้นต่ำต่อรายการ</label><input class="form-input" type="number" step="0.01" id="ccbr-minSpend" value="${esc(v(rule.suggestedConditions.minSpend))}"></div>
-        `)}
-        ${accordion('ccbr-trigger-acc', 'ยอดสะสมเพื่อปลดล็อกเงินคืน', `
-          <div class="form-group"><label class="form-label">รูปแบบการปลดสิทธิ์</label><select class="form-input" id="ccbr-trigger-mode"><option value="none"${(rule.rewardTrigger?.mode || 'none') === 'none' ? ' selected' : ''}>ไม่ใช้ยอดสะสม</option><option value="cycle_spend_threshold"${rule.rewardTrigger?.mode === 'cycle_spend_threshold' ? ' selected' : ''}>ครบยอดสะสมในรอบ</option></select></div>
-          <div class="form-group"><label class="form-label">ยอดสะสมที่ต้องครบ (บาท)</label><input class="form-input" type="number" step="0.01" id="ccbr-trigger-threshold" value="${esc(v(rule.rewardTrigger?.thresholdAmount))}"></div>
-          <div class="form-group"><label class="form-label">วิธีให้รางวัล</label><select class="form-input" id="ccbr-trigger-grant"><option value="once_per_cycle"${(rule.rewardTrigger?.grantMode || 'once_per_cycle') === 'once_per_cycle' ? ' selected' : ''}>ครั้งเดียวต่อรอบ</option><option value="every_threshold"${rule.rewardTrigger?.grantMode === 'every_threshold' ? ' selected' : ''}>ทุกครั้งที่ครบยอด</option></select></div>
-        `, rule.rewardTrigger?.mode === 'cycle_spend_threshold')}
-        ${accordion('ccbr-cashback-acc', 'การคำนวณเงินคืน', `
-          <div class="form-group"><label class="form-label">วิธีคิดเงินคืน</label><select class="form-input" id="ccbr-cb-mode" onchange="App._syncCCBenefitRuleFormSections()"><option value="percent"${rule.cashback.mode==='percent'?' selected':''}>คิดเป็นเปอร์เซ็นต์</option><option value="fixed"${rule.cashback.mode==='fixed'?' selected':''}>ให้จำนวนคงที่</option></select></div>
-          <div class="form-group" id="ccbr-cb-rate-row"><label class="form-label">อัตราเงินคืน (%)</label><input class="form-input" type="number" step="0.01" id="ccbr-cb-rate" value="${esc(v(rule.cashback.rate))}"></div>
-          <div class="form-group" id="ccbr-cb-fixed-row"><label class="form-label">เงินคืนคงที่ (บาท)</label><input class="form-input" type="number" step="0.01" id="ccbr-cb-fixed" value="${esc(v(rule.cashback.fixedAmount))}"></div>
-        `, rule.type === 'cashback' || rule.type === 'both')}
-        ${accordion('ccbr-discount-acc', 'ส่วนลดอัตโนมัติทันที', `
-          <div class="form-group"><label class="form-label">วิธีคิดส่วนลด</label><select class="form-input" id="ccbr-discount-mode" onchange="App._syncCCBenefitRuleFormSections()"><option value="percent"${(rule.discount?.mode || 'percent')==='percent'?' selected':''}>คิดเป็นเปอร์เซ็นต์</option><option value="fixed"${rule.discount?.mode==='fixed'?' selected':''}>ให้จำนวนคงที่</option></select></div>
-          <div class="form-group" id="ccbr-discount-rate-row"><label class="form-label">อัตราส่วนลด (%)</label><input class="form-input" type="number" step="0.01" id="ccbr-discount-rate" value="${esc(v(rule.discount?.rate))}"></div>
-          <div class="form-group" id="ccbr-discount-fixed-row"><label class="form-label">ส่วนลดคงที่ (บาท)</label><input class="form-input" type="number" step="0.01" id="ccbr-discount-fixed" value="${esc(v(rule.discount?.fixedAmount))}"></div>
-        `, rule.type === 'discount')}
-        ${accordion('ccbr-points-acc', 'การคำนวณคะแนน', `
-          <div class="form-group"><label class="form-label">ใช้จ่ายกี่บาท = 1 คะแนน</label><input class="form-input" type="number" step="0.01" id="ccbr-p-baht" value="${esc(v(rule.points.bahtPerPoint))}"></div>
-          <div class="form-group"><label class="form-label">ตัวคูณคะแนน</label><input class="form-input" type="number" step="1" id="ccbr-p-multi" value="${esc(v(rule.points.multiplier || 1))}"></div>
-          <div class="form-group"><label class="form-label">วิธีใช้ตัวคูณ</label><select class="form-input" id="ccbr-p-mode"><option value="total"${rule.points.multiplierMode==='total'?' selected':''}>คูณกับคะแนนรวมของรายการ</option></select></div>
-        `, rule.type === 'points' || rule.type === 'both')}
-        ${accordion('ccbr-limits-acc', 'เพดาน / ข้อจำกัด', `
-          <div class="form-group"><label class="form-label">ยอดใช้จ่ายสูงสุดที่นำมาคำนวณ ต่อรายการ</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-eligible-tx" value="${esc(v(rule.limits.maxEligibleSpendPerTx))}"></div>
-          <div class="form-group"><label class="form-label">ยอดใช้จ่ายสูงสุดที่นำมาคำนวณ ต่อรอบบิล</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-eligible-cycle" value="${esc(v(rule.limits.maxEligibleSpendPerCycle))}"></div>
-          <div class="form-group"><label class="form-label">เงินคืน/คะแนน/ส่วนลด สูงสุด ต่อรายการ</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-reward-tx" value="${esc(v(rule.limits.maxRewardAmountPerTx))}"></div>
-          <div class="form-group"><label class="form-label">เงินคืน/คะแนน/ส่วนลด สูงสุด ต่อรอบบิล</label><input class="form-input" type="number" step="0.01" id="ccbr-limit-reward-cycle" value="${esc(v(rule.limits.maxRewardAmountPerCycle))}"></div>
-        `)}
-        ${accordion('ccbr-advanced-acc', 'การใช้ร่วมกัน / ขั้นสูง', `
-          <div class="tx-reward-toggle-row"><span>อนุญาตให้ใช้ร่วมกับสิทธิ์อื่น</span><button type="button" id="ccbr-stacking" class="toggle${rule.allowStacking ? ' on' : ''}" onclick="this.classList.toggle('on')"></button></div>
-          <div class="tx-reward-toggle-row"><span>เป็นสิทธิ์พื้นฐานของบัตร</span><button type="button" id="ccbr-base" class="toggle${rule.isBaseRule ? ' on' : ''}" onclick="this.classList.toggle('on')"></button></div>
-          <div class="form-group" style="margin-top:12px"><label class="form-label">ลำดับความสำคัญ</label><input class="form-input" type="number" step="1" id="ccbr-priority" value="${esc(v(rule.priority || 0))}"></div>
-        `)}
-      </div>`)
-    setTimeout(() => App._syncCCBenefitRuleFormSections?.(), 0)
+    const base = App.normalizeBenefitRule?.(current || App._benefitRuleTemplate(template, cardId), cardId) || (current || App._benefitRuleTemplate(template, cardId))
+    App._ccbrDraft = {
+      ...base,
+      _cardId: cardId, _ruleId: ruleId, _step: 1,
+      _cashbackMode: base.cashback?.mode === 'fixed' ? 'fixed' : 'percent',
+      _channels: [...(base.suggestedConditions?.channels || [])],
+      _categories: [...(base.suggestedConditions?.categories || [])],
+    }
+    App._ccbrRenderStep(1)
   }
 
   App.saveCCBenefitRule = function(cardId, ruleId = '') {
     App.ensureCCBenefitRulesState?.()
+    const d = App._ccbrDraft
+    if (!d) { notify('เกิดข้อผิดพลาด กรุณาลองใหม่', 'error'); return }
+    App._ccbrReadStep(3)
     const readNum = id => {
       const n = Number(document.getElementById(id)?.value || 0)
       return Number.isFinite(n) && n > 0 ? n : null
     }
+    const triggerOn = document.getElementById('ccbr-trigger-toggle')?.classList.contains('on')
+    const triggerChannel = String(document.getElementById('ccbr-trigger-channel')?.value || '').trim()
+    const isEvery = document.getElementById('ccbr-grant-every')?.classList.contains('active')
     const rule = App.normalizeBenefitRule?.({
-      id: ruleId || genId(),
+      id: ruleId || d.id || genId(),
       cardId,
-      name: String(document.getElementById('ccbr-name')?.value || '').trim(),
-      active: document.getElementById('ccbr-active')?.classList.contains('on'),
-      type: document.getElementById('ccbr-type')?.value || 'cashback',
-      description: String(document.getElementById('ccbr-description')?.value || '').trim(),
+      name: d.name,
+      active: d.active !== false,
+      type: d.type || 'cashback',
       suggestedConditions: {
-        categories: App.splitRuleListInput?.(document.getElementById('ccbr-categories')?.value || '') || [],
-        merchants: App.splitRuleListInput?.(document.getElementById('ccbr-merchants')?.value || '') || [],
-        channels: String(document.getElementById('ccbr-channel')?.value || '').trim() ? [String(document.getElementById('ccbr-channel')?.value || '').trim()] : [],
-        minSpend: readNum('ccbr-minSpend'),
+        channels: [...(d._channels || [])],
+        categories: [...(d._categories || [])],
+        merchants: [...(d.suggestedConditions?.merchants || [])],
+        minSpend: d.suggestedConditions?.minSpend ?? null,
       },
-      validity: {
-        mode: document.getElementById('ccbr-validity-mode')?.value === 'range' ? 'range' : 'always',
-        startDate: String(document.getElementById('ccbr-validity-start')?.value || ''),
-        endDate: String(document.getElementById('ccbr-validity-end')?.value || ''),
-        statementCycleHint: String(document.getElementById('ccbr-validity-cycle-hint')?.value || 'statement_cycle'),
-      },
-      cashback: {
-        mode: document.getElementById('ccbr-cb-mode')?.value || 'percent',
-        rate: readNum('ccbr-cb-rate'),
-        fixedAmount: readNum('ccbr-cb-fixed'),
-      },
-      discount: {
-        mode: document.getElementById('ccbr-discount-mode')?.value || 'percent',
-        rate: readNum('ccbr-discount-rate'),
-        fixedAmount: readNum('ccbr-discount-fixed'),
-      },
-      points: {
-        bahtPerPoint: readNum('ccbr-p-baht'),
-        multiplier: readNum('ccbr-p-multi') || 1,
-        multiplierMode: document.getElementById('ccbr-p-mode')?.value || 'total',
-      },
+      validity: { ...(d.validity || {}) },
+      cashback: { ...(d.cashback || {}) },
+      discount: { ...(d.discount || {}) },
+      points: { ...(d.points || {}) },
       limits: {
-        maxEligibleSpendPerTx: readNum('ccbr-limit-eligible-tx'),
-        maxEligibleSpendPerCycle: readNum('ccbr-limit-eligible-cycle'),
         maxRewardAmountPerTx: readNum('ccbr-limit-reward-tx'),
         maxRewardAmountPerCycle: readNum('ccbr-limit-reward-cycle'),
+        maxEligibleSpendPerTx: readNum('ccbr-limit-eligible-tx'),
+        maxEligibleSpendPerCycle: readNum('ccbr-limit-eligible-cycle'),
       },
       rewardTrigger: {
-        mode: document.getElementById('ccbr-trigger-mode')?.value || 'none',
+        mode: triggerOn ? 'cycle_spend_threshold' : 'none',
+        trackChannel: triggerOn ? triggerChannel : '',
         thresholdAmount: readNum('ccbr-trigger-threshold'),
-        grantMode: document.getElementById('ccbr-trigger-grant')?.value || 'once_per_cycle',
+        grantMode: isEvery ? 'every_threshold' : 'once_per_cycle',
       },
       allowStacking: document.getElementById('ccbr-stacking')?.classList.contains('on'),
       isBaseRule: document.getElementById('ccbr-base')?.classList.contains('on'),
       priority: Number(document.getElementById('ccbr-priority')?.value || 0) || 0,
     }, cardId) || null
-    if (!rule.name) { notify('กรุณาระบุชื่อกฎ', 'error'); return }
+    if (!rule?.name) { notify('กรุณาระบุชื่อกฎ', 'error'); return }
     const idx = (S.ccBenefitRules || []).findIndex(row => row.id === rule.id)
     if (idx >= 0) S.ccBenefitRules[idx] = rule
     else S.ccBenefitRules.push(rule)
     persist()
-    // If opened from import preview, update draft.rule and return to dialog
+    App._ccbrDraft = null
     if (App._benefitDraftEditReturn === cardId) {
       App._benefitDraftEditReturn = null
       const preview = App._ccBenefitImportPreview
       if (preview) {
-        const draft = (preview.ruleDrafts || []).find(d => d.rule?.id === rule.id)
+        const draft = (preview.ruleDrafts || []).find(dr => dr.rule?.id === rule.id)
         if (draft) draft.rule = rule
       }
       App._reopenCCBenefitImportDialog(cardId)
@@ -10383,6 +10430,7 @@ App._pickMerchant = function(name, opts = {}) {
         mode: rewardTrigger.mode === 'cycle_spend_threshold' ? 'cycle_spend_threshold' : 'none',
         thresholdAmount: parseRuleNumber(rewardTrigger.thresholdAmount, null),
         grantMode: rewardTrigger.grantMode === 'every_threshold' ? 'every_threshold' : 'once_per_cycle',
+        trackChannel: String(rewardTrigger.trackChannel || rule.unlockCondition?.channel || '').trim(),
       },
       allowStacking: rule.allowStacking !== false,
       isBaseRule: !!rule.isBaseRule,
@@ -10521,10 +10569,12 @@ App._pickMerchant = function(name, opts = {}) {
     const cycleLabel = row.cycleMode === 'calendar_month' ? 'ในเดือนปฏิทินนี้' : 'ในรอบบิลนี้'
     const parts = []
     if (row.triggerMode === 'cycle_spend_threshold' && Number(row.triggerThresholdAmount || 0) > 0) {
-      const before = Number(row.cycleEligibleSpendUsedBefore || 0)
-      const after = Number(row.cycleEligibleSpendAfter || 0)
       const threshold = Number(row.triggerThresholdAmount || 0)
-      parts.push(`ยอดสะสม ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel}`)
+      const chLabel = row.triggerTrackChannel ? (App.getBenefitChannelOptions?.().find(([v]) => v === row.triggerTrackChannel)?.[1] || row.triggerTrackChannel) : null
+      const before = row.triggerTrackChannel ? Number(row.triggerChannelSpendBefore || 0) : Number(row.cycleEligibleSpendUsedBefore || 0)
+      const after = row.triggerTrackChannel ? Number(row.triggerChannelSpendAfter || 0) : Number(row.cycleEligibleSpendAfter || 0)
+      const spendLabel = chLabel ? `ยอดสะสมผ่าน${chLabel}` : 'ยอดสะสม'
+      parts.push(`${spendLabel} ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel}`)
       if (Number(row.triggerCount || 0) > 0) {
         const grantLabel = row.triggerGrantMode === 'every_threshold' ? `ปลดสิทธิ์ ${Number(row.triggerCount || 0)} ครั้ง` : 'ปลดสิทธิ์รอบนี้แล้ว'
         parts.push(grantLabel)
@@ -10576,24 +10626,44 @@ App._pickMerchant = function(name, opts = {}) {
           + (rule.suggestedConditions?.channels?.length || 0)
           + (rule.suggestedConditions?.minSpend ? 1 : 0)
           + (rule.rewardTrigger?.mode === 'cycle_spend_threshold' ? 1 : 0)
+        // ถ้ากฎมี trackChannel + threshold ให้คำนวณว่ายังไม่ถึงยอดหรือยัง เพื่อแสดง hint
+        let trackLocked = false
+        let trackRemaining = 0
+        let trackChannelLabel = ''
+        const trig = rule.rewardTrigger || {}
+        if (trig.mode === 'cycle_spend_threshold' && Number(trig.thresholdAmount || 0) > 0 && trig.trackChannel) {
+          const cycle = getCyclePeriodForDate(cardId, txDraft.date || today(), rule)
+          const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', trig.trackChannel)
+          const spent = Number(usage.trackChannelSpendBefore || 0)
+          trackLocked = trig.grantMode !== 'every_threshold' && spent >= Number(trig.thresholdAmount)
+            ? false  // once_per_cycle ที่ปลดไปแล้ว ก็ถือว่าไม่ locked
+            : spent < Number(trig.thresholdAmount)
+          trackRemaining = Math.max(0, Number(trig.thresholdAmount) - spent)
+          trackChannelLabel = App.getBenefitChannelOptions?.().find(([v]) => v === trig.trackChannel)?.[1] || trig.trackChannel
+        }
         const suggested = !!rule.active && eligibility.matched
         const score = (suggested ? 100 : 0) + (rule.isBaseRule ? 15 : 0) + (specificity * 3) + Number(rule.priority || 0)
-        return { ...rule, suggested, timeMatch: eligibility.timeMatch, eligibility, suggestionScore: score }
+        return { ...rule, suggested, timeMatch: eligibility.timeMatch, eligibility, suggestionScore: score, trackLocked, trackRemaining, trackChannelLabel }
       })
       .sort((a, b) => Number(b.suggested) - Number(a.suggested) || Number(b.suggestionScore || 0) - Number(a.suggestionScore || 0) || String(a.name || '').localeCompare(String(b.name || '')))
   }
 
-  App.getRuleCycleUsage = function(ruleId, cardId, cycleStart, cycleEnd, excludeTxId = '') {
+  App.getRuleCycleUsage = function(ruleId, cardId, cycleStart, cycleEnd, excludeTxId = '', trackChannel = '') {
     let eligibleSpendUsed = 0
     let cashbackUsed = 0
     let discountUsed = 0
     let pointsUsed = 0
     let triggerCountUsed = 0
+    let trackChannelSpend = 0
     ;(S.transactions || []).forEach(tx => {
       if (String(tx.id || '') === String(excludeTxId || '')) return
       if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return
       const date = String(tx.date || '')
       if (date < cycleStart || date > cycleEnd) return
+      if (trackChannel) {
+        const txCh = String(tx.channel || '').trim()
+        if (channelMatches(trackChannel, txCh)) trackChannelSpend += Number(tx.amount || 0)
+      }
       const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
       rows.forEach(row => {
         if (String(row.ruleId || '') !== String(ruleId || '')) return
@@ -10610,6 +10680,7 @@ App._pickMerchant = function(name, opts = {}) {
       discountUsedBefore: Math.round(discountUsed * 100) / 100,
       pointsUsedBefore: Math.round(pointsUsed * 100) / 100,
       triggerCountUsedBefore: Math.floor(triggerCountUsed),
+      trackChannelSpendBefore: Math.round(trackChannelSpend * 100) / 100,
     }
   }
 
@@ -10619,6 +10690,7 @@ App._pickMerchant = function(name, opts = {}) {
     const cashbackCfg = rule.cashback || {}
     const pointsCfg = rule.points || {}
     const trigger = rule.rewardTrigger || {}
+    const trackChannel = String(trigger.trackChannel || '').trim()
     const eligibility = getRuleEligibility(txDraft, rule)
     let eligibleAmount = amount
     let capApplied = false
@@ -10645,10 +10717,17 @@ App._pickMerchant = function(name, opts = {}) {
 
     const triggerMode = trigger.mode === 'cycle_spend_threshold' && Number(trigger.thresholdAmount || 0) > 0 ? 'cycle_spend_threshold' : 'none'
     const thresholdAmount = Number(trigger.thresholdAmount || 0)
-    const cycleSpendBefore = Math.round(Number(cycleUsage.eligibleSpendUsedBefore || 0) * 100) / 100
-    const cycleSpendAfter = Math.round((cycleSpendBefore + eligibleAmount) * 100) / 100
+    // ถ้ามี trackChannel: นับยอดจากทุก tx บนบัตรที่ตรง channel (ไม่จำกัดเฉพาะ tx ที่เลือกกฎนี้)
+    // ถ้าไม่มี: ใช้ eligible spend จาก tx ที่เลือกกฎนี้ (พฤติกรรมเดิม)
+    const cycleSpendBefore = trackChannel
+      ? Math.round(Number(cycleUsage.trackChannelSpendBefore || 0) * 100) / 100
+      : Math.round(Number(cycleUsage.eligibleSpendUsedBefore || 0) * 100) / 100
+    const currentTxContribution = trackChannel
+      ? (channelMatches(trackChannel, String(txDraft.channel || '').trim()) ? amount : 0)
+      : eligibleAmount
+    const cycleSpendAfter = Math.round((cycleSpendBefore + currentTxContribution) * 100) / 100
     let triggerCount = 0
-    if (triggerMode === 'cycle_spend_threshold' && eligibleAmount > 0) {
+    if (triggerMode === 'cycle_spend_threshold') {
       if (trigger.grantMode === 'every_threshold') {
         triggerCount = Math.max(0, Math.floor(cycleSpendAfter / thresholdAmount) - Math.floor(cycleSpendBefore / thresholdAmount))
       } else {
@@ -10656,7 +10735,12 @@ App._pickMerchant = function(name, opts = {}) {
       }
       if (triggerCount <= 0) {
         const remaining = Math.max(0, thresholdAmount - cycleSpendAfter)
-        warnings.push(remaining > 0 ? `ยอดสะสมยังขาด ${money(remaining)} จึงยังไม่ปลดสิทธิ์` : 'สิทธิ์ยอดสะสมรอบนี้ถูกปลดไปแล้ว')
+        if (remaining > 0) {
+          const chLabel = trackChannel ? (App.getBenefitChannelOptions?.().find(([v]) => v === trackChannel)?.[1] || trackChannel) : null
+          warnings.push(chLabel ? `ต้องสะสมผ่าน${chLabel}อีก ${money(remaining)} ในรอบนี้` : `ยอดสะสมยังขาด ${money(remaining)} จึงยังไม่ปลดสิทธิ์`)
+        } else {
+          warnings.push('สิทธิ์ยอดสะสมรอบนี้ถูกปลดไปแล้ว')
+        }
       }
     }
 
@@ -10753,6 +10837,9 @@ App._pickMerchant = function(name, opts = {}) {
       triggerMode,
       triggerThresholdAmount: triggerMode === 'cycle_spend_threshold' ? thresholdAmount : null,
       triggerGrantMode: trigger.grantMode === 'every_threshold' ? 'every_threshold' : 'once_per_cycle',
+      triggerTrackChannel: trackChannel || null,
+      triggerChannelSpendBefore: trackChannel ? cycleSpendBefore : null,
+      triggerChannelSpendAfter: trackChannel ? cycleSpendAfter : null,
       triggerCount,
       triggerCountUsedBefore: Math.floor(Number(cycleUsage.triggerCountUsedBefore || 0)),
       warnings,
@@ -10822,7 +10909,7 @@ App._pickMerchant = function(name, opts = {}) {
     let points = 0
     rules.forEach(rule => {
       const cycle = getCyclePeriodForDate(card.id, txDraft.date || today(), rule)
-      const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '')
+      const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '', rule.rewardTrigger?.trackChannel || '')
       const result = App.applyBenefitRule(txDraft, rule, usage)
       result.cycleStart = cycle.start
       result.cycleEnd = cycle.end
