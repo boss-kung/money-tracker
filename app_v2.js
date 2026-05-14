@@ -863,10 +863,11 @@ const App = {
     document.getElementById(id)?.classList.remove('open')
     if (id === 'overlay-tx-detail') S.deleteConfirm = false
   },
-  openSubScreen(html) {
+  openSubScreen(html, opts = {}) {
     const ss = document.getElementById('sub-screen')
     if (!ss) return
     ss.innerHTML = html
+    ss.classList.toggle('no-page-slide', opts.animate === false)
     ss.classList.remove('open')
     void ss.offsetHeight
     ss.classList.add('open')
@@ -1741,7 +1742,7 @@ App.render();
         <div class="form-group"><label class="form-label">ทุกกี่วัน</label><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.everyDays || 30)}" oninput="App._txField('everyDays', this.value)"></div>
       ` : `
         <div class="form-split-row">
-          <div><label class="form-label">ทุกวันที่ของเดือน</label><input class="form-input" type="number" min="1" max="31" inputmode="numeric" value="${esc(S.tx.recurringDayOfMonth || 1)}" oninput="App._txField('recurringDayOfMonth', this.value)"><div class="form-hint">ถ้าเดือนนั้นไม่มีวันนี้ ระบบจะใช้วันสุดท้ายของเดือน</div></div>
+          <div><label class="form-label">ทุกวันที่ของเดือน</label><input class="form-input" type="number" min="1" max="31" inputmode="numeric" value="${esc(S.tx.recurringDayOfMonth || 1)}" oninput="App._txField('recurringDayOfMonth', this.value)"><div class="form-hint">*ถ้าเดือนนั้นไม่มีวันนี้ ระบบจะใช้วันสุดท้ายของเดือน</div></div>
           <div><label class="form-label">ระยะเวลา (เดือน)</label><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.durationMonths || '')}" placeholder="ไม่จำกัด" oninput="App._txField('durationMonths', this.value)"></div>
         </div>
       `}
@@ -1794,13 +1795,12 @@ App.render();
       <div class="sheet-header"><h2>${esc(title)}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
       <div class="type-tabs">${tabs.map(([v,l,i]) => `<button class="type-tab type-${v}${S.tx.type === v ? ' active' : ''}" onclick="App._setTxType('${v}')"><span aria-hidden="true">${i}</span> ${l}</button>`).join('')}</div>
       <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 20px">
-        <div data-role="tx-type-label" style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">${esc(typeLabel(S.tx.type))}</div>
         <div class="amount-display" data-role="tx-amount-display" style="color:${canNext ? color : '#D1D5DB'}">${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}</div>
         <div class="quick-amount-row">${[50,100,200,500,1000].map(n => `<button type="button" data-quick-amount="${n}">฿${n}</button>`).join('')}</div>
       </div>
       <div style="padding-bottom:calc(12px + var(--app-bottom-gap, 0px))">
         <div class="numpad">${['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(k => `<button type="button" class="numpad-key${k === '⌫' ? ' del' : ''}" data-numpad-key="${esc(k)}">${k}</button>`).join('')}</div>
-        <div style="padding:8px 16px 0"><button class="btn btn-primary" data-role="tx-next-btn" style="background:${canNext ? color : '#D1D5DB'};box-shadow:${canNext ? `0 4px 16px ${color}44` : 'none'}" onclick="App._goToDetail()">${canNext ? `ถัดไป  ฿${display} →` : 'ใส่จำนวนเงิน'}</button></div>
+        <div style="padding:8px 16px 0"><button class="btn btn-primary" data-role="tx-next-btn" style="background:${canNext ? color : '#D1D5DB'};box-shadow:${canNext ? `0 4px 16px ${color}44` : 'none'}" onclick="App._goToDetail()">${canNext ? `ถัดไป →` : 'ใส่จำนวนเงิน'}</button></div>
       </div>
     </div>`
     App._bindAddTxAmountEvents()
@@ -3078,7 +3078,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'
         html += `<div style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px;gap:8px">
-            <span style="font-weight:800">${ESC(b.icon)} ${ESC(b.label)}</span>
+            <span style="font-weight:600">${ESC(b.icon)} ${ESC(b.label)}</span>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
               ${dailyChip(b)}
               <span style="color:${b.over ? 'var(--expense)' : 'var(--muted)'}">${FMT(b.spent)} / ${FMT(b.monthlyLimit)}</span>
@@ -4057,7 +4057,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const typeOpts = ['expense','income'].map(t =>
       `<option value="${t}"${(r?.type||'expense')===t?' selected':''}>${t==='expense'?'รายจ่าย':'รายรับ'}</option>`
     ).join('')
-    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
+    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted);font-weight:600">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openRecurringScreen()">←</button>
@@ -4334,7 +4334,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       <div class="card report-summary-card">
         <div class="report-summary-label">${label}</div>
         <div class="report-summary-value" style="color:${color}">${value}</div>
-        <div class="list-item-sub">${sub || ' '}</div>
+        <div class="list-item-sub" style="font-size:10px !important">${sub || ' '}</div>
       </div>`
 
     const renderCategoryCard = (title, rows, total, emptyState) => {
@@ -5023,13 +5023,13 @@ App._pickMerchant = function(name, opts = {}) {
   App.openCCBenefitScreen = function(cardId) {
     App.ensureCCBenefitRulesState?.()
     const w = walletById(cardId) || {}
-    const f = (id, label, value, hint='') => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="1" min="1" max="31" id="${id}" value="${value || ''}" placeholder="1–31">${hint ? `<div class="form-hint">${hint}</div>` : ''}</div>`
+    const f = (id, label, value) => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="1" min="1" max="31" id="${id}" value="${value || ''}" placeholder="1–31"></div>`
     const rules = App.getCreditCardBenefitRules(cardId)
     const statementCard = `<div class="card card-pad" style="margin-bottom:12px">
       <div style="font-size:14px;font-weight:700;margin-bottom:12px">📅 รอบบัญชีบัตร</div>
       <div class="benefit-form-grid">
-        ${f('ccb-cycleDay','วันตัดรอบ (1–31)', w.cycleDay, 'วันในทุกเดือนที่ระบบตัดรอบบัญชี')}
-        ${f('ccb-dueAfterCycleDays','ชำระหลังวันตัดยอดกี่วัน (1–30)', w.dueAfterCycleDays, 'ระบบจะคำนวณวันครบกำหนดจากวันตัดรอบ + จำนวนวันนี้')}
+        ${f('ccb-cycleDay','วันที่ตัดรอบ (1–31)', w.cycleDay)}
+        ${f('ccb-dueAfterCycleDays','ชำระหลังวันตัดยอด (1–30)', w.dueAfterCycleDays)}
       </div>
       <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit('${esc(cardId)}')">บันทึกรอบบัญชี</button></div>
     </div>`
@@ -5052,8 +5052,8 @@ App._pickMerchant = function(name, opts = {}) {
           </div>
           ${rule.rewardTrigger?.mode === 'cycle_spend_threshold' ? `<div class="list-item-sub" style="margin-top:4px">ยอดสะสมครบ ${money(rule.rewardTrigger.thresholdAmount)} · ${rule.rewardTrigger.grantMode === 'every_threshold' ? 'ให้ทุกครั้งที่ครบยอด' : 'ให้ครั้งเดียวต่อรอบ'}</div>` : ''}
           <div class="flex-row" style="margin-top:10px">
-            <button class="btn btn-outline" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">แก้ไข</button>
-            <button class="btn btn-outline" onclick="App.openCCBenefitRuleCopyDialog('${esc(cardId)}','${esc(rule.id)}')">คัดลอก</button>
+            <button class="btn btn-secondary" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">แก้ไข</button>
+            <button class="btn btn-secondary" onclick="App.openCCBenefitRuleCopyDialog('${esc(cardId)}','${esc(rule.id)}')">คัดลอก</button>
             <button class="btn btn-outline" onclick="App.deleteCCBenefitRule('${esc(rule.id)}')">ลบ</button>
           </div>
         </div>`).join('')
@@ -5116,7 +5116,7 @@ App._pickMerchant = function(name, opts = {}) {
       .map(([value, label]) => `<option value="${esc(value)}"${(rule.suggestedConditions.channels || [])[0] === value ? ' selected' : ''}>${esc(value ? label : 'ทุกช่องทาง')}</option>`)
       .join('')
     const v = n => n ?? ''
-    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
+    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted);font-weight:600">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App._onCCBenefitRuleFormBack('${esc(cardId)}')">←</button><h2>${ruleId ? 'แก้ไขกติกาสิทธิประโยชน์' : 'เพิ่มกติกาสิทธิประโยชน์'}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCCBenefitRule('${esc(cardId)}','${esc(ruleId)}')" style="width:auto">บันทึก</button></div>
       <div class="sub-scroll">
         <div class="form-hint" style="margin-bottom:10px">เลือกประเภทสิทธิ์ก่อน แล้วระบบจะแสดงเฉพาะส่วนที่เกี่ยวข้องให้</div>
@@ -5360,14 +5360,12 @@ App._pickMerchant = function(name, opts = {}) {
           </div>
           <div class="sheet-body" style="overflow-y:auto">
             <div class="form-group">
-              <label class="form-label">ลิงก์เว็บไซต์สิทธิประโยชน์</label>
-              <input class="form-input" id="cc-benefit-import-url" placeholder="https://..." onkeydown="if(event.key==='Enter'){event.preventDefault();App.analyzeCCBenefitLink('${esc(cardId)}')}">
-              <div class="form-hint">ระบบจะพยายามอ่านเงื่อนไขสิทธิประโยชน์จากหน้าเว็บ แล้วเตรียมกฎให้ตรวจสอบก่อนบันทึก</div>
+              <input class="form-input" id="cc-benefit-import-url" placeholder="วางลิงก์เว็บไซต์..." onkeydown="if(event.key==='Enter'){event.preventDefault();App.analyzeCCBenefitLink('${esc(cardId)}')}">
             </div>
             <div style="display:grid; grid-template-columns: 1fr 1fr;gap:10px;margin-bottom:12px">
               <button class="btn btn-secondary" onclick="document.getElementById('${dialogId}')?.remove()">ยกเลิก</button>
               <button class="btn btn-primary" onclick="App.analyzeCCBenefitLink('${esc(cardId)}')">วิเคราะห์ลิงก์</button>
-              ${window.MT_PROMO_SEARCH_ENDPOINT ? `<button class="btn btn-secondary btn-sm" onclick="App.verifyBenefitEndpoint()" style="width:auto;font-size:12px">ตรวจสอบ endpoint</button>` : ''}
+              ${window.MT_PROMO_SEARCH_ENDPOINT ? `<button class="btn btn-secondary btn-sm" onclick="App.verifyBenefitEndpoint()" style="width:auto;font-size:12px;font-weight:600">ตรวจสอบ endpoint</button>` : ''}
             </div>
             <div id="cc-benefit-import-result"></div>
           </div>
@@ -6966,7 +6964,7 @@ App._pickMerchant = function(name, opts = {}) {
     const type   = w?.type || 'bank'
     const isCC   = type === 'credit'
     const isInv  = ['gold','crypto','fcd'].includes(type)
-    const accordion = (id, title, body, open = false, extraStyle = '') => `<details id="${id}" class="card card-pad" style="margin-bottom:12px;${extraStyle}"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
+    const accordion = (id, title, body, open = false, extraStyle = '') => `<details id="${id}" class="card card-pad" style="margin-bottom:12px;${extraStyle}"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted);font-weight:600">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
 
     const creditLimitMode = w?.creditLimitMode || 'individual'
     const issuer          = w?.issuer || ''
@@ -7041,13 +7039,12 @@ App._pickMerchant = function(name, opts = {}) {
             </div>
           </div>
           <div class="benefit-form-grid">
-            <div class="form-group"><label class="form-label">ชำระหลังวันตัดยอดกี่วัน</label><input class="form-input" type="number" id="wf-due-after-cycle-days" min="1" max="30" value="${w?.dueAfterCycleDays||''}"></div>
             <div class="form-group"><label class="form-label">วันตัดรอบบัญชี</label><input class="form-input" type="number" id="wf-cycle-day" min="1" max="31" value="${w?.cycleDay||''}"></div>
+            <div class="form-group"><label class="form-label">ชำระหลังวันตัดยอดกี่วัน</label><input class="form-input" type="number" id="wf-due-after-cycle-days" min="1" max="30" value="${w?.dueAfterCycleDays||''}"></div>
           </div>
         `, true)}
-        ${accordion('wf-cc-reward-acc', 'บัญชีคะแนนและสิทธิประโยชน์', `
+        ${accordion('wf-cc-reward-acc', 'บัญชีคะแนนสะสม', `
           <div class="form-group">
-            <label class="form-label">บัญชีคะแนนสะสม</label>
             <select class="form-input" id="wf-reward-account-select" onchange="App._onRewardAccountChange()">
               ${acctOpts}
             </select>
@@ -7693,7 +7690,7 @@ App._pickMerchant = function(name, opts = {}) {
 
     const filterOpts = `<option value="">ทุกบัตร</option>` + cards.map(c => `<option value="${esc(c.id)}"${c.id===selected?' selected':''}>${esc(c.icon||'')} ${esc(c.name)}</option>`).join('')
 
-    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
+    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted);font-weight:600">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
@@ -9806,7 +9803,7 @@ App._pickMerchant = function(name, opts = {}) {
           </div>`
         }).join('')
       : App._emptyState?.('🪙', 'ยังไม่มี Crypto Holding', 'กด + เพิ่มเหรียญ เพื่อเริ่มต้น') || ''
-    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted)">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
+    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted);font-weight:600">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>Crypto Portfolio</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.refreshCryptoPrices()" style="width:auto">Sync ราคา</button><button class="btn btn-primary btn-sm" onclick="App.openCryptoHoldingForm()" style="width:auto">+ เพิ่มเหรียญ</button></div></div>
       <div class="sub-scroll">
         <div class="card card-pad crypto-portfolio-card" style="margin-bottom:12px">
@@ -9894,7 +9891,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (!content) return
     const gold = (S.marketPrices || {}).thaiGold || (S.marketPrices || {}).auroraGold
     const goldUpdated = gold?.fetchedAt ? new Date(gold.fetchedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : ''
-    const goldNote = `<div class="wallet-market-note"><b>ราคาทอง:</b><br>ทองรูปพรรณรับซื้อ${gold?.jewelryBuy ? ` ${plainMoney(gold.jewelryBuy)}/บาททอง` : ' ยังไม่ Sync'}${goldUpdated ? ` · อัปเดต ${esc(goldUpdated)}` : ''}</div>`
+    const goldNote = `<div class="wallet-market-note"><b>ราคาทอง:</b> ทองรูปพรรณรับซื้อ${gold?.jewelryBuy ? ` ${plainMoney(gold.jewelryBuy)}/บาททอง` : ' ยังไม่ Sync'}${goldUpdated ? ` · อัปเดต ${esc(goldUpdated)}` : ''}</div>`
     const empty = txt => `<div class="card card-pad wallet-empty-card">${esc(txt)}</div>`
     const section = (title, icon, list, emptyTxt, grid, extra = '') => `<section class="wallet-section-block"><div class="wallet-section-title wallet-section-title-row"><span>${icon} ${esc(title)}</span>${extra}</div>${list.length ? `<div class="${grid ? 'wallet-grid-2' : 'wallet-list-stack'}">${list.map(App._walletCard).join('')}</div>` : empty(emptyTxt)}</section>`
     const cryptoUpdated = cryptoSummary.lastUpdatedAt ? new Date(cryptoSummary.lastUpdatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : 'ยังไม่ sync'
@@ -10940,7 +10937,7 @@ App._pickMerchant = function(name, opts = {}) {
     const heroBreakdown = committedInstallments > 0
       ? `<div style="display:flex;justify-content:space-between;font-size:11px;opacity:.75;margin-top:6px;margin-bottom:2px"><span>ค้างชำระปัจจุบัน ${money(postedOwed)}</span><span>ผ่อนกันวงเงิน ${money(committedInstallments)}</span></div>`
       : ''
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon||'')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button></div></div><div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}"><div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0"><div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${esc(statementText)}</div><div style="font-size:13px;opacity:.72;margin-bottom:4px">วงเงินที่ใช้ทั้งหมด</div><div class="big">${money(owed)}</div>${heroBreakdown}${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}</div>${stHtml}<div class="card card-pad" style="margin-bottom:12px"><div class="cc-detail-header"><div><div style="font-size:14px;font-weight:800">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${thaiDate(period.start)} ถึง ${thaiDate(period.end)}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button></div><div class="reward-grid" style="margin-top:10px"><div class="reward-tile"><span>คะแนน</span><strong>${rewards.points.toLocaleString('en-US')}</strong></div><div class="reward-tile"><span>เงินคืน</span><strong>${money(rewards.cashback)}</strong></div><div class="reward-tile"><span>ส่วนลดทันที</span><strong>${money(rewards.discount || 0)}</strong></div></div>${rewardAcctHtml}${recordBtn}</div>${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : ''}<div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}</div></div>${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}<div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div></div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon||'')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button></div></div><div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}"><div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0"><div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${esc(statementText)}</div><div style="font-size:13px;opacity:.72;margin-bottom:4px">วงเงินที่ใช้ทั้งหมด</div><div class="big">${money(owed)}</div>${heroBreakdown}${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}</div>${stHtml}<div class="card card-pad" style="margin-bottom:12px"><div class="cc-detail-header"><div><div style="font-size:14px;font-weight:700">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${thaiDate(period.start)} ถึง ${thaiDate(period.end)}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button></div><div class="reward-grid" style="margin-top:10px"><div class="reward-tile"><span>คะแนน</span><strong>${rewards.points.toLocaleString('en-US')}</strong></div><div class="reward-tile"><span>เงินคืน</span><strong>${money(rewards.cashback)}</strong></div><div class="reward-tile"><span>ส่วนลดทันที</span><strong>${money(rewards.discount || 0)}</strong></div></div>${rewardAcctHtml}${recordBtn}</div>${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : ''}<div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}</div></div>${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}<div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div></div>`)
     setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
   }
 
@@ -12475,18 +12472,18 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     setPrivilegeDraftField(field, value)
   }
 
-  App.openPrivilegesScreen = function(filter = S.privilegesFilter || 'active', query = S.privilegeSearch || '') {
+  App.openPrivilegesScreen = function(filter = S.privilegesFilter || 'active', query = S.privilegeSearch || '', animate = true) {
     ensurePrivilegesState()
     S.privilegesFilter = PRIVILEGE_FILTERS.some(([key]) => key === filter) ? filter : 'active'
     S.privilegeSearch = String(query || '')
     const rows = getPrivilegeRows(S.privilegesFilter, S.privilegeSearch)
     const summary = getPrivilegesSummary()
-    const chips = PRIVILEGE_FILTERS.map(([key, label]) => `<button class="chip${S.privilegesFilter === key ? ' active' : ''}" onclick="App.openPrivilegesScreen('${key}', document.getElementById('privilege-search')?.value || '')">${label}</button>`).join('')
+    const chips = PRIVILEGE_FILTERS.map(([key, label]) => `<button class="chip${S.privilegesFilter === key ? ' active' : ''}" onclick="App.openPrivilegesScreen('${key}', document.getElementById('privilege-search')?.value || '', false)">${label}</button>`).join('')
     const html = `
       <div class="sub-header">
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
         <h2>สิทธิพิเศษ</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.openPrivilegeForm()" style="width:auto">เพิ่ม</button>
+        <button class="btn btn-primary btn-sm" ห onclick="App.openPrivilegeForm()" style="width:50px">เพิ่ม</button>
       </div>
       <div class="sub-scroll privilege-screen">
         <div class="card card-pad privilege-summary-card">
@@ -12509,7 +12506,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           ) || ''}
         </div>
       </div>`
-    App.openSubScreen(html)
+    App.openSubScreen(html, { animate })
   }
 
   App._renderPrivilegeCard = function(privilege) {
@@ -12736,10 +12733,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     block.className = 'card card-pad dashboard-privilege-alerts'
     block.innerHTML = `
       <button class="dashboard-privilege-alert-head" onclick="App.openPrivilegesScreen('expiring')">
-        <div>
           <div class="dashboard-privilege-alert-title">มี ${summary.expiringCount.toLocaleString('en-US')} สิทธิ์ใกล้หมดอายุ</div>
-          <div class="dashboard-privilege-alert-sub">เตือนก่อนลืมใช้ สิทธิ์นี้ไม่กระทบยอดเงินคงเหลือ</div>
-        </div>
         <span class="dashboard-privilege-alert-arrow">›</span>
       </button>
       <div class="dashboard-privilege-alert-list">

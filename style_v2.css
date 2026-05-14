@@ -234,8 +234,9 @@ select.form-input  { appearance: none; cursor: pointer; }
 #sub-screen {
   position: absolute; inset: 0; z-index: 600;
   background: var(--bg); display: none; flex-direction: column;
-  animation: pageSlideIn .22s ease both;
+  animation: pageSlideIn .3s ease both;
 }
+#sub-screen.no-page-slide { animation: none; }
 #sub-screen.open { display: flex; }
 .sub-header {
   display: flex; align-items: center;
@@ -386,7 +387,7 @@ select.form-input  { appearance: none; cursor: pointer; }
 @keyframes fadeIn       { from { opacity: 0 }             to { opacity: 1 } }
 @keyframes slideUp      { from { transform: translateY(100%) } to { transform: translateY(0) } }
 @keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
-@keyframes pageSlideIn  { from { transform: translateX(32px) } to { transform: translateX(0) } }
+@keyframes pageSlideIn  { from { transform: translateX(40px) } to { transform: translateX(0) } }
 @keyframes toastIn      { from { opacity: 0; transform: translateY(-10px) } to { opacity: 1; transform: translateY(0) } }
 
 /* ── Wallet Sections ─────────────────────────────────────── */
@@ -726,7 +727,7 @@ html.dark {
 #toast-container { position: absolute; }
 
 
-.page.active { animation: pageSlideIn .22s ease both; }
+.page.active { animation: pageSlideIn .3s ease both; }
 
 
 /* Bottom navigation: modern centered FAB, active dot, no heavy icon pill. */
@@ -965,7 +966,7 @@ html.dark .mt-alert-row-name { color: var(--text); }
   background:var(--elevated);
   color:var(--muted);
   font-size:13px;
-  font-weight:800;
+  font-weight:600;
   transition:all .15s;
 }
 .type-tab.active { color:#fff; background:var(--primary); box-shadow:none; }
@@ -1031,7 +1032,7 @@ html.dark .mt-alert-row-name { color: var(--text); }
   background:var(--surface);
   color:var(--muted);
   font-size:11px;
-  font-weight:800;
+  font-weight:600;
   line-height:1.25;
   text-align:center;
 }
@@ -1047,7 +1048,7 @@ html.dark .mt-alert-row-name { color: var(--text); }
   background:transparent;
   color:var(--muted);
   font-size:12px;
-  font-weight:800;
+  font-weight:600;
 }
 .flag-pill.active { color:var(--primary); background:var(--primary-soft); border-color:var(--primary); box-shadow:none; }
 .flag-pill.installment.active { color:var(--purple); background:var(--purple-soft); border-color:var(--purple); }
@@ -2035,7 +2036,7 @@ textarea.form-input {
 textarea.form-input { min-height: 72px !important; }
 .btn {
   font-size: 14.5px !important;
-  font-weight: 800 !important;
+  font-weight: 700 !important;
 }
 .btn-sm,
 .chip,
@@ -2053,11 +2054,10 @@ textarea.form-input { min-height: 72px !important; }
   min-height: 40px !important;
   padding: 8px 10px !important;
   border-radius: 14px !important;
-  font-size: 13px !important;
+  font-size: 14px !important;
 }
 .cat-btn {
   min-height: 76px !important;
-  padding: 10px 8px !important;
   border-radius: 16px !important;
   gap: 3px !important;
 }
@@ -2066,7 +2066,7 @@ textarea.form-input { min-height: 72px !important; }
 .numpad-key {
   min-height: 46px !important;
   border-radius: 16px !important;
-  font-size: 22px !important;
+  font-size: 28px !important;
 }
 .form-label { margin-bottom: 5px !important; }
 .form-input:focus,
@@ -2402,6 +2402,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   display:grid;
   grid-template-columns:repeat(2,minmax(0,1fr));
   gap:10px;
+  margin-top: 10px;
 }
 .benefit-form-grid .form-group { margin-bottom:0 !important; }
 @media (max-width: 360px) { .benefit-form-grid { grid-template-columns:1fr; } }
@@ -2781,7 +2782,7 @@ label.color-swatch {
   justify-content: center !important;
 }
 #reports-content .report-summary-label {
-  font-size: 11px !important;
+  font-size: 12px !important;
   color: var(--muted) !important;
   white-space: nowrap !important;
 }
@@ -3049,7 +3050,7 @@ body {
 }
 .statement-main span {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 2px;
 }
@@ -3244,7 +3245,7 @@ body {
 /* ── Wallet, credit, and report follow-up fixes ─────────────── */
 
 /* override old grid-column:2 so em auto-places as 2nd grid child */
-.cc-due-strip em{grid-column:auto;align-self:center}
+.cc-due-strip em{grid-column:auto;align-self:center;text-align: center;display: block;}
 
 /* Wallet section title row with right-aligned button */
 .wallet-section-title-row{display:flex!important;justify-content:space-between;align-items:center}
@@ -4155,7 +4156,7 @@ html.dark .icon-btn {
 }
 .v64-recurring-head span {
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--muted);
   text-align: right;
 }
@@ -4175,7 +4176,7 @@ html.dark .icon-btn {
   background: transparent;
   color: var(--muted);
   font-size: 12.5px;
-  font-weight: 800;
+  font-weight: 600;
 }
 .v64-rec-tab.active {
   background: var(--surface);
@@ -4576,6 +4577,7 @@ html.dark .crypto-summary-item {
 
 .wallet-available-block span{
   color: rgba(255,255,255,.8);
+  margin-bottom: 0px !important;
 }
 
 .upcoming-summary-grid strong,
@@ -4745,15 +4747,16 @@ html.dark .crypto-summary-item {
 .wallet-available-block,
 .wallet-detail-availability {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid rgba(255,255,255,.18);
 }
 
 .wallet-available-block strong,
 .wallet-detail-availability strong {
   color: #fff;
-  font-weight: 500;
+  font-weight: 500 !important;
+  font-size: 12px !important;
 }
 
 .wallet-detail-availability {
@@ -4870,7 +4873,7 @@ html.dark .crypto-summary-item {
 
 .privilege-card-title {
   font-size: 13.5px;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1.22;
   color: var(--text);
 }
@@ -5405,7 +5408,7 @@ svg text {
   font-family: inherit;
 }
 
-b,
+
 strong,
 h1,
 h2,
@@ -5419,4 +5422,8 @@ h6,
 .tx-amount,
 .report-summary-value {
   font-weight: 800 !important;
+}
+
+.b {
+  font-weight: 700 !important;
 }
