@@ -893,9 +893,18 @@ html.dark .mt-hide-btn {
   font-weight: 800;
 }
 .mt-net-split { display: flex; position:relative; z-index:1; }
-.mt-net-metric { min-width: 0; flex: 1; }
+.mt-net-metric { min-width: 0; flex: 1 1 0; overflow: hidden; }
 .mt-net-metric small { display: block; font-size: 11px; color: var(--slate-on-dark); }
-.mt-net-metric strong { display: block; font-size: 16px; font-weight: 800; margin-top: 2px; letter-spacing: -.04em; }
+.mt-net-metric strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  margin-top: 2px;
+  letter-spacing: -.055em;
+  line-height: 1.05;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .mt-divider { width:1px; background: rgba(255,255,255,.12); }
 .mt-alert-card {
   margin-top: 12px;
@@ -2013,7 +2022,7 @@ body.is-dashboard #dashboard-content {
   border-radius: 24px !important;
 }
 .mt-net-split { gap: 14px !important; margin-top: 10px !important; }
-.mt-net-metric strong { font-size: 15px !important; margin-top: 1px !important; }
+.mt-net-metric strong { font-size: 12.5px !important; margin-top: 1px !important; line-height: 1.05 !important; letter-spacing: -.055em !important; white-space: nowrap !important; }
 .mt-wallet-mini { padding: 9px 10px !important; border-radius: 16px !important; }
 .mt-stat-card { padding: 10px 12px !important; border-radius: 16px !important; }
 
@@ -2862,10 +2871,9 @@ label.color-swatch {
   word-break: break-word !important;
   font-variant-numeric: tabular-nums !important;
 }
-/* More page: sticky search header */
+/* More page: search header */
 .more-sticky-header {
-  position: sticky;
-  top: 0;
+  position: static;
   z-index: 10;
   background: var(--background, var(--surface));
   margin: 0 -16px;

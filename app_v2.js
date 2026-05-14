@@ -750,7 +750,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.14-custom-notifications1'
+const APP_VERSION = '2026.05.15-ui-polish1'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -1724,7 +1724,7 @@ App.render();
     const displayEl = box.querySelector('[data-role="tx-amount-display"]')
     const nextBtn = box.querySelector('[data-role="tx-next-btn"]')
     const typeLabelEl = box.querySelector('[data-role="tx-type-label"]')
-    if (!displayEl || !nextBtn || !typeLabelEl) return false
+    if (!displayEl || !nextBtn) return false
     const amount = String(S.tx.amount || '')
     const num = numericAmount(amount)
     const display = formatDraftAmount(amount)
@@ -1732,8 +1732,8 @@ App.render();
     const canNext = num > 0
     displayEl.style.color = canNext ? color : '#D1D5DB'
     displayEl.textContent = `${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}`
-    typeLabelEl.textContent = typeLabel(S.tx.type)
-    nextBtn.textContent = canNext ? `ถัดไป  ฿${display} →` : 'ใส่จำนวนเงิน'
+    if (typeLabelEl) typeLabelEl.textContent = typeLabel(S.tx.type)
+    nextBtn.textContent = canNext ? 'ถัดไป →' : 'ใส่จำนวนเงิน'
     nextBtn.style.background = canNext ? color : '#D1D5DB'
     nextBtn.style.boxShadow = canNext ? `0 4px 16px ${color}44` : 'none'
     return true
@@ -10075,8 +10075,9 @@ App._pickMerchant = function(name, opts = {}) {
     const target = document.getElementById(anchorId)
     const scrollEl = document.getElementById('wallets-content')
     if (!target || !scrollEl) return
-    // offsetTop is relative to the scroll container; subtract 8px for visual breathing room
-    const offsetInScroll = target.offsetTop - 8
+    const tabBar = document.querySelector('#page-wallets .wallet-tab-bar')
+    const stickyOffset = tabBar ? Math.ceil(tabBar.getBoundingClientRect().height) : 0
+    const offsetInScroll = Math.max(0, target.offsetTop - stickyOffset - 14)
     scrollEl.scrollTo({ top: offsetInScroll, behavior: 'smooth' })
     // Update active tab
     document.querySelectorAll('.wallet-tab').forEach(btn => {
