@@ -721,6 +721,7 @@ window.__mountUpcomingBillsFeature = function() {
   const prevRenderWallets = App.renderWallets?.bind(App)
   App.renderWallets = function() {
     prevRenderWallets?.()
+    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     injectWalletAvailabilityRows()
   }
 
@@ -733,6 +734,7 @@ window.__mountUpcomingBillsFeature = function() {
   const prevRenderDashboard = App.renderDashboard?.bind(App)
   App.renderDashboard = function() {
     prevRenderDashboard?.()
+    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     injectDashboardUpcomingAlerts()
   }
 
@@ -2198,6 +2200,8 @@ App.render();
     const isExpense = type === 'expense'
     const box = document.getElementById('add-tx-content')
     if (!box) return
+    const _scrollEl = box.querySelector('.add-detail-scroll')
+    const _savedScroll = _scrollEl ? _scrollEl.scrollTop : 0
     box.innerHTML = `<div class="sheet-header"><h2>${S.txMode === 'edit' ? 'แก้ไขรายละเอียด' : 'รายละเอียดรายการ'}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
       <div class="add-detail-shell">
         <div class="add-detail-scroll">
@@ -2290,6 +2294,10 @@ App.render();
         </div>
         <div class="add-detail-actions"><button class="btn btn-secondary" onclick="App._backToAmount()">← แก้จำนวน</button><button class="btn btn-primary" ${hasEnoughForTransfer ? `style="background:${color};box-shadow:0 4px 16px ${color}44"` : 'disabled style="opacity:.45;cursor:not-allowed"'} onclick="App.saveTx()">${S.txMode === 'edit' ? 'บันทึก' : `บันทึก ${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}`}</button></div>
       </div>`
+    if (_savedScroll > 0) {
+      const _newScrollEl = box.querySelector('.add-detail-scroll')
+      if (_newScrollEl) _newScrollEl.scrollTop = _savedScroll
+    }
   }
 
   App.getFinancialAdvisorInsights = function(month = S.rptMonth || THIS_MONTH) {
@@ -3071,7 +3079,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
           <div class="name">${card.name}</div>
         </div>`).join('')}</div>`
 
-    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:4px 0"></div>`
+    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
 
     html += `<div class="mt-stat-row">
       <div class="mt-stat-card income"><small>รายรับ</small><strong>+${FMT(stats.income)}</strong></div>
@@ -3080,7 +3088,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       <div class="mt-stat-card saving"><small>คงเหลือเดือนนี้</small><strong>${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(stats.net))}</strong></div>
     </div>`
 
-    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:4px 0"></div>`
+    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
 
     const budgetRows = [...expBudgets]
       .filter(b => Number(b.monthlyLimit || 0) > 0)
@@ -3103,7 +3111,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         </div>`
       })
       html += `</div>`
-      html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:4px 0"></div>`
+      html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     }
 
     html += secHdr('รายการล่าสุด', 'ดูทั้งหมด', "App.showPage('transactions')")
@@ -12764,6 +12772,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   const prevRenderDashboard = App.renderDashboard?.bind(App)
   App.renderDashboard = function() {
     prevRenderDashboard?.()
+    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     injectDashboardPrivilegeAlerts()
   }
 
@@ -13181,6 +13190,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   const _prevRenderDashboard = App.renderDashboard?.bind(App)
   App.renderDashboard = function() {
     _prevRenderDashboard?.()
+    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     _injectDashboardInsights()
   }
 
@@ -13213,6 +13223,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   const _prevRenderReports = App.renderReports?.bind(App)
   App.renderReports = function() {
     _prevRenderReports?.()
+    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     _upgradeReportsAI()
   }
 
@@ -13246,6 +13257,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   const _prevRenderDetail = App._renderAddTxDetail?.bind(App)
   App._renderAddTxDetail = function() {
     _prevRenderDetail?.()
+    html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     _injectBudgetChip()
   }
 
