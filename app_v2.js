@@ -3083,7 +3083,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       .sort((a, b) => Number(b.pct || 0) - Number(a.pct || 0))
       .slice(0, 3)
     if (budgetRows.length) {
-      html += secHdr('งบประมาณเดือนนี้', 'ดูรายงาน', "App.showPage('reports')")
+      html += secHdr('งบประมาณเดือนนี้', 'ดูรายงาน', "App.setRptView('budget');App.showPage('reports')")
       html += `<div class="card card-pad">`
       budgetRows.forEach(b => {
         const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'
