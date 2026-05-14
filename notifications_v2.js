@@ -516,7 +516,7 @@
         </div>
         <div class="recurring-actions">
           <button class="icon-btn" onclick="event.stopPropagation();App.toggleNotificationRule('${esc(rule.id)}')">${rule.enabled ? 'ปิด' : 'เปิด'}</button>
-          <button class="icon-btn" onclick="event.stopPropagation();App.testCustomNotificationRule('${esc(rule.id)}')">ทดสอบ</button>
+          <button class="icon-btn" onclick="event.stopPropagation();App.testCustomNotificationRule('${esc(rule.id)}')" style="width:auto">ทดสอบ</button>
         </div>
       </div>`).join('')
     App.openSubScreen(`
