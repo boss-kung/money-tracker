@@ -817,6 +817,15 @@
     if (open === 'recurring') setTimeout(() => App.openRecurringScreen?.(), 350)
     if (open === 'budgets') setTimeout(() => App.openBudgetScreen?.(), 350)
     if (open === 'privileges') setTimeout(() => App.openPrivilegesScreen?.(), 350)
+    if (open === 'creditCards') {
+      setTimeout(() => {
+        const sections = document.querySelectorAll('#wallets-content .wallet-section-block')
+        const creditSection = [...sections].find(s =>
+          s.querySelector('.wallet-section-title span')?.textContent?.includes('บัตรเครดิต')
+        )
+        creditSection?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 500)
+    }
   }
 
   window.addEventListener('hashchange', handleNotificationRoute, { passive: true })

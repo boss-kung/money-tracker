@@ -81,7 +81,7 @@ function routeHash(route: string) {
     reports: '#reports',
     more: '#more',
     upcomingBills: '#more?open=upcomingBills',
-    creditCards: '#wallets',
+    creditCards: '#wallets?open=creditCards',
     goals: '#more?open=goals',
     recurring: '#more?open=recurring',
     budgets: '#more?open=budgets',
