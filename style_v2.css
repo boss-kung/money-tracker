@@ -217,7 +217,7 @@ select.form-input  { appearance: none; cursor: pointer; }
   position: relative; width: 100%; max-height: 94dvh;
   background: var(--surface);
   display: flex; flex-direction: column;
-  animation: slideUp .28s cubic-bezier(.32,.72,0,1);
+  animation: pageSlideIn .22s ease both;
   overflow: hidden;
 }
 .sheet-handle {
@@ -234,7 +234,7 @@ select.form-input  { appearance: none; cursor: pointer; }
 #sub-screen {
   position: absolute; inset: 0; z-index: 600;
   background: var(--bg); display: none; flex-direction: column;
-  animation: slideInRight .22s ease;
+  animation: pageSlideIn .22s ease both;
 }
 #sub-screen.open { display: flex; }
 .sub-header {
@@ -386,6 +386,7 @@ select.form-input  { appearance: none; cursor: pointer; }
 @keyframes fadeIn       { from { opacity: 0 }             to { opacity: 1 } }
 @keyframes slideUp      { from { transform: translateY(100%) } to { transform: translateY(0) } }
 @keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
+@keyframes pageSlideIn  { from { transform: translateX(32px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
 @keyframes toastIn      { from { opacity: 0; transform: translateY(-10px) } to { opacity: 1; transform: translateY(0) } }
 
 /* ── Wallet Sections ─────────────────────────────────────── */
@@ -725,7 +726,7 @@ html.dark {
 #toast-container { position: absolute; }
 
 
-.page.active { animation: fadeInUp .18s ease both; }
+.page.active { animation: pageSlideIn .22s ease both; }
 
 
 /* Bottom navigation: modern centered FAB, active dot, no heavy icon pill. */

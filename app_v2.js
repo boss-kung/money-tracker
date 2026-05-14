@@ -867,6 +867,8 @@ const App = {
     const ss = document.getElementById('sub-screen')
     if (!ss) return
     ss.innerHTML = html
+    ss.classList.remove('open')
+    void ss.offsetHeight
     ss.classList.add('open')
   },
   closeSubScreen() {
@@ -5362,7 +5364,7 @@ App._pickMerchant = function(name, opts = {}) {
               <input class="form-input" id="cc-benefit-import-url" placeholder="https://..." onkeydown="if(event.key==='Enter'){event.preventDefault();App.analyzeCCBenefitLink('${esc(cardId)}')}">
               <div class="form-hint">ระบบจะพยายามอ่านเงื่อนไขสิทธิประโยชน์จากหน้าเว็บ แล้วเตรียมกฎให้ตรวจสอบก่อนบันทึก</div>
             </div>
-            <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+            <div style="display:grid; grid-template-columns: 1fr 1fr;gap:10px;margin-bottom:12px">
               <button class="btn btn-secondary" onclick="document.getElementById('${dialogId}')?.remove()">ยกเลิก</button>
               <button class="btn btn-primary" onclick="App.analyzeCCBenefitLink('${esc(cardId)}')">วิเคราะห์ลิงก์</button>
               ${window.MT_PROMO_SEARCH_ENDPOINT ? `<button class="btn btn-secondary btn-sm" onclick="App.verifyBenefitEndpoint()" style="width:auto;font-size:12px">ตรวจสอบ endpoint</button>` : ''}
