@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.05.14-notifications1'
+const APP_VERSION = '2026.05.14-custom-notifications1'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 
@@ -38,8 +38,8 @@ try {
         badge: './assets/icon.svg',
         tag: data.date ? `${data.type || 'money-tracker'}:${data.date}` : data.type || 'money-tracker',
         data,
-        actions: data.route === 'addTx'
-          ? [{ action: 'addTx', title: 'เพิ่มรายจ่าย' }, { action: 'open', title: 'เปิดแอป' }]
+        actions: data.route
+          ? [{ action: data.route, title: data.actionLabel || 'เปิดดู' }, { action: 'open', title: 'เปิดแอป' }]
           : [{ action: 'open', title: 'เปิดแอป' }],
       })
     })
@@ -115,13 +115,25 @@ self.addEventListener('message', event => {
   }
 })
 
+function routeHash(route = '') {
+  const map = {
+    dashboard: '#dashboard',
+    addTx: '#dashboard?open=addTx',
+    transactions: '#transactions',
+    wallets: '#wallets',
+    reports: '#reports',
+    more: '#more',
+    upcomingBills: '#more?open=upcomingBills',
+    creditCards: '#wallets',
+    goals: '#more?open=goals',
+    open: '#dashboard',
+  }
+  return map[route] || '#dashboard'
+}
+
 function notificationTargetUrl(data = {}, action = '') {
-  const route = action === 'addTx' || data.route === 'addTx'
-    ? '#dashboard?open=addTx'
-    : data.route === 'upcomingBills'
-      ? '#more?open=upcomingBills'
-      : '#dashboard'
-  return new URL(`./index.html${route}`, self.location.href).href
+  const route = action && action !== 'open' ? action : data.route
+  return new URL(`./index.html${routeHash(route)}`, self.location.href).href
 }
 
 self.addEventListener('notificationclick', event => {

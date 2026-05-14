@@ -5,13 +5,16 @@ This repo is wired for Firebase Cloud Messaging + Supabase Edge Functions.
 ## Already deployed
 
 - Supabase project: `bwtoyxxwwmsaoaitihqj`
-- Tables: `mt_notification_devices`, `mt_notification_preferences`, `mt_notification_snapshots`, `mt_notification_logs`
+- Tables: `mt_notification_devices`, `mt_notification_preferences`, `mt_notification_snapshots`, `mt_notification_logs`, `mt_notification_rules`
 - Edge Functions:
   - `register-notification-device`
   - `update-notification-preferences`
   - `sync-notification-snapshot`
   - `send-daily-expense-reminders`
+  - `sync-notification-rules`
+  - `send-custom-notification-rules`
 - Cron: every day at `13:30 UTC` (`20:30 Asia/Bangkok`)
+- Custom rule cron: every 15 minutes
 
 ## Firebase steps
 
@@ -66,3 +69,32 @@ supabase functions deploy send-daily-expense-reminders
 
 Use the Supabase dashboard function tester, or call the endpoint with `curl`.
 Include the Supabase anon key as both `apikey` and `Authorization: Bearer ...`.
+
+## Custom notification rules
+
+Open Money Tracker > More > การแจ้งเตือน > กฎแจ้งเตือนเอง.
+
+Each rule can set:
+
+- Title and description.
+- Trigger:
+  - daily time
+  - weekly days/time
+  - one-time date/time
+  - no transaction today
+  - upcoming bill due
+  - credit card due
+  - stale backup
+- Action route:
+  - dashboard
+  - add transaction
+  - transactions
+  - wallets
+  - reports
+  - more
+  - upcoming bills
+  - credit cards
+  - goals
+- Action button label.
+
+Rules are saved locally and synced to Supabase when Firebase/Supabase config is complete. Supabase calls `send-custom-notification-rules` every 15 minutes.
