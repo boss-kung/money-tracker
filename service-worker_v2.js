@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.05.13-benefit-link1'
+const APP_VERSION = '2026.05.14-notifications1'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 
@@ -11,11 +11,42 @@ const STATIC_ASSETS = [
   './calculations.js',
   './sample-data_v2.js',
   './ai_insights.js',
+  './notification_config.js',
+  './notifications_v2.js',
   './manifest.json',
+  './assets/icon.svg',
   './assets/fonts/LINESeedSansTH_Rg.ttf',
   './assets/fonts/LINESeedSansTH_Bd.ttf',
   './assets/fonts/LINESeedSansTH_XBd.ttf',
 ]
+
+try {
+  importScripts('./notification_config.js')
+  if (globalThis.MT_FIREBASE_CONFIG?.apiKey) {
+    importScripts(
+      'https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js',
+      'https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js'
+    )
+    firebase.initializeApp(globalThis.MT_FIREBASE_CONFIG)
+    const messaging = firebase.messaging()
+    messaging.onBackgroundMessage(payload => {
+      const notification = payload.notification || {}
+      const data = payload.data || {}
+      self.registration.showNotification(notification.title || 'Money Tracker', {
+        body: notification.body || '',
+        icon: './assets/icon.svg',
+        badge: './assets/icon.svg',
+        tag: data.date ? `${data.type || 'money-tracker'}:${data.date}` : data.type || 'money-tracker',
+        data,
+        actions: data.route === 'addTx'
+          ? [{ action: 'addTx', title: 'เพิ่มรายจ่าย' }, { action: 'open', title: 'เปิดแอป' }]
+          : [{ action: 'open', title: 'เปิดแอป' }],
+      })
+    })
+  }
+} catch (_) {
+  // Notification config is optional until Firebase is connected.
+}
 
 function isSameOrigin(request) {
   try { return new URL(request.url).origin === self.location.origin } catch (_) { return false }
@@ -84,6 +115,33 @@ self.addEventListener('message', event => {
   }
 })
 
+function notificationTargetUrl(data = {}, action = '') {
+  const route = action === 'addTx' || data.route === 'addTx'
+    ? '#dashboard?open=addTx'
+    : data.route === 'upcomingBills'
+      ? '#more?open=upcomingBills'
+      : '#dashboard'
+  return new URL(`./index.html${route}`, self.location.href).href
+}
+
+self.addEventListener('notificationclick', event => {
+  event.notification?.close()
+  const targetUrl = notificationTargetUrl(event.notification?.data || {}, event.action || '')
+  event.waitUntil((async () => {
+    const windowClients = await clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const client of windowClients) {
+      const url = new URL(client.url)
+      const target = new URL(targetUrl)
+      if (url.origin === target.origin && url.pathname === target.pathname) {
+        await client.focus()
+        try { client.navigate(targetUrl) } catch (_) {}
+        return
+      }
+    }
+    await clients.openWindow(targetUrl)
+  })())
+})
+
 self.addEventListener('fetch', event => {
   const request = event.request
   if (request.method !== 'GET' || !isSameOrigin(request)) return
@@ -91,7 +149,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url)
   const path = url.pathname.split('/').pop()
   const acceptsHtml = request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html')
-  const isCoreCode = ['app_v2.js', 'storage_v2.js', 'calculations.js', 'sample-data_v2.js', 'style_v2.css', 'LINESeedSansTH_Rg.ttf', 'LINESeedSansTH_Bd.ttf', 'LINESeedSansTH_XBd.ttf'].includes(path)
+  const isCoreCode = ['app_v2.js', 'storage_v2.js', 'calculations.js', 'sample-data_v2.js', 'ai_insights.js', 'notification_config.js', 'notifications_v2.js', 'style_v2.css', 'LINESeedSansTH_Rg.ttf', 'LINESeedSansTH_Bd.ttf', 'LINESeedSansTH_XBd.ttf'].includes(path)
 
   if (acceptsHtml) {
     event.respondWith(networkFirst(request, './index.html'))
