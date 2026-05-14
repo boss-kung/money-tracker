@@ -4988,6 +4988,28 @@ App._pickMerchant = function(name, opts = {}) {
   const money = n => `฿${fmt(n)}`
   const today = () => new Date().toISOString().slice(0, 10)
   const walletById = id => (S.wallets || []).find(w => w.id === id)
+  // Shared with the benefit-rules IIFE — needed by createPromotionDraft
+  function parseRuleNumber(value, fallback = null) {
+    const n = Number(value)
+    return Number.isFinite(n) && n > 0 ? n : fallback
+  }
+
+  function humanizeFetchError(msg) {
+    const m = String(msg || '').toLowerCase()
+    if (!msg || m === 'unknown') return 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ กรุณาลองใหม่'
+    if (/fetch|network|failed to fetch|networkerror/i.test(m)) return 'ไม่สามารถเชื่อมต่ออินเทอร์เน็ตได้ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่'
+    if (/timeout|abort|aborted/i.test(m)) return 'ใช้เวลานานเกินไป (timeout) — เว็บไซต์อาจช้าหรือไม่ตอบสนอง ลองใหม่อีกครั้ง'
+    if (/http 429|429/i.test(m)) return 'server รับคำขอมากเกินไป กรุณารอสักครู่แล้วลองใหม่'
+    if (/http 403|403/i.test(m)) return 'เว็บไซต์ไม่อนุญาตให้ดึงข้อมูล (403 Forbidden)'
+    if (/http 404|404/i.test(m)) return 'ไม่พบหน้าเว็บนี้ (404) — ลิงก์อาจผิดหรือหมดอายุแล้ว'
+    if (/http 5\d\d|500|502|503|504/i.test(m)) return 'เว็บไซต์มีปัญหาชั่วคราว กรุณาลองใหม่ในภายหลัง'
+    if (/cors|cross.?origin/i.test(m)) return 'เว็บไซต์ไม่อนุญาตให้แอปอื่นดึงข้อมูล (CORS)'
+    if (/not defined|is not a function|cannot read/i.test(m)) return 'เกิดข้อผิดพลาดภายในแอป กรุณาแจ้งผู้พัฒนา'
+    if (/gemini error|endpoint http/i.test(m)) return 'AI (Gemini) ตอบกลับผิดปกติ กรุณาลองใหม่'
+    if (/น้อยเกินไป|เนื้อหาน้อย/i.test(m)) return 'ดึงเนื้อหาจากหน้าเว็บได้น้อยเกินไป ลองใช้ลิงก์หน้าโปรโมชันโดยตรง'
+    // Fallback: ตัดชื่อ function ออกถ้ายังมีติดมา
+    return m.replace(/[a-z_][a-z0-9_]*\s+is not (a function|defined)/gi, 'ระบบเกิดข้อผิดพลาดภายใน').slice(0, 120)
+  }
   const persist = () => { try { Storage.saveAll(S) } catch (_) {} }
   const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
   const genId = () => (typeof Calc?.genId === 'function' ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2)))
@@ -6463,7 +6485,7 @@ App._pickMerchant = function(name, opts = {}) {
           if (/month must be in YYYY-MM/i.test(aiErrMsg)) {
             diagnostics.push('Endpoint ตอบกลับด้วย version เก่า (ยังไม่รองรับ analyzeBenefitUrl) — กด "ตรวจสอบ endpoint" เพื่อดู version ที่ deploy อยู่ จากนั้นไปที่ script.google.com → Deploy → Manage deployments → แก้ไข deployment เดิม → เลือก New version → Deploy')
           } else {
-            diagnostics.push('AI วิเคราะห์ไม่สำเร็จ (' + aiErrMsg + ')')
+            diagnostics.push('AI วิเคราะห์ไม่สำเร็จ — ' + humanizeFetchError(aiErrMsg))
           }
           const parsed = App._parseBenefitSourceDocument(sourceDocument)
           const promotions = Array.isArray(parsed.promotions) ? parsed.promotions : []
@@ -6500,7 +6522,7 @@ App._pickMerchant = function(name, opts = {}) {
       }
       App._renderBenefitImportPreview(App._ccBenefitImportPreview)
     } catch (err) {
-      if (resultEl) resultEl.innerHTML = `<div class="card card-pad"><div class="list-item-name">วิเคราะห์ไม่สำเร็จ</div><div class="list-item-sub">${esc(err?.message || 'ไม่สามารถอ่านหน้าเว็บไซต์ได้')}</div></div>`
+      if (resultEl) resultEl.innerHTML = `<div class="card card-pad"><div class="list-item-name">วิเคราะห์ไม่สำเร็จ</div><div class="list-item-sub">${esc(humanizeFetchError(err?.message))}</div></div>`
     }
   }
 
