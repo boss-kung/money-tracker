@@ -5551,13 +5551,15 @@ h6,
   font-weight: 400;
   font-size: 12px;
 }
-.ccbr-date-row {
+.ccbr-date-row,
+.ccbr-2col {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-bottom: 0;
 }
-.ccbr-date-row > div { min-width: 0; }
+.ccbr-date-row > div,
+.ccbr-2col > div { min-width: 0; }
 .ccbr-nav-row {
   display: flex;
   gap: 8px;
