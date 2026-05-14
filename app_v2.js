@@ -14324,19 +14324,35 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   // ─────────────────────────────────────────────────────────────
   // P3-A  Flash newly-saved tx row green + W5 FAB particles +
-  //       W12 checkmark
+  //       W12 checkmark — only when save actually succeeds
   // ─────────────────────────────────────────────────────────────
   const _origSaveTx = App.saveTx?.bind(App)
   App.saveTx = function (...args) {
-    _origSaveTx?.(...args)
-    // W12: checkmark overlay
-    _showCheckmark()
-    // W5: FAB particle burst
-    const fab = document.getElementById('fab')
-    if (fab) {
-      const r = fab.getBoundingClientRect()
-      _fabParticles(r.left + r.width / 2, r.top + r.height / 2, args[0])
+    // Intercept toast to detect real success (saveTx returns early on error)
+    let _succeeded = false
+    const _savedTxDraft = { ...(S.tx || {}) }
+    const _origToast = window.toast
+    window.toast = function (msg, type, ...rest) {
+      if (type === 'success') _succeeded = true
+      return _origToast?.(msg, type, ...rest)
     }
+    try { _origSaveTx?.(...args) } finally { window.toast = _origToast }
+
+    if (!_succeeded) return
+
+    // W12: checkmark overlay immediately on success
+    _showCheckmark()
+
+    // W5: FAB particle burst after 0.5s delay
+    setTimeout(() => {
+      const fab = document.getElementById('fab')
+      if (fab) {
+        const r = fab.getBoundingClientRect()
+        _fabParticles(r.left + r.width / 2, r.top + r.height / 2, _savedTxDraft)
+      }
+    }, 500)
+
+    // Green row flash
     setTimeout(() => {
       try {
         const first = document.querySelector(
