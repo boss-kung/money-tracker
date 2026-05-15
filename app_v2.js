@@ -3226,19 +3226,19 @@ Calc.getUsableMoney = function(wallets, state = null) {
           </div>
         </div>
         ${hasUsableBreakdown ? `<div class="mt-net-split mt-net-split-3">
-          <div class="mt-net-metric"><small>ความมั่งคั่งสุทธิ</small><strong style="color:${dashboardNetWorth >= 0 ? '#4ADE80' : '#F87171'};font-weight:600">${dashboardNetWorth < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(dashboardNetWorth))}</strong></div>
+          <div class="mt-net-metric"><small>ความมั่งคั่งสุทธิ</small><strong style="color:${dashboardNetWorth >= 0 ? '#4ADE80' : '#F87171'};font-weight:600 !important">${dashboardNetWorth < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(dashboardNetWorth))}</strong></div>
           <div class="mt-divider"></div>
-          <div class="mt-net-metric"><small>เงินสด</small><strong style="font-weight:600">${FMT(usable.liquid)}</strong></div>
-          ${usable.creditDebt > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>หนี้บัตร</small><strong style="color:#F87171;font-weight:600">-${FMT(usable.creditDebt)}</strong></div>` : ''}
-          ${usable.upcomingReserved > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>รายการรอจ่าย</small><strong style="color:#F59E0B;font-weight:600">-${FMT(usable.upcomingReserved)}</strong></div>` : ''}
+          <div class="mt-net-metric"><small>เงินสด</small><strong style="font-weight:600 !important">${FMT(usable.liquid)}</strong></div>
+          ${usable.creditDebt > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>หนี้บัตร</small><strong style="color:#F87171;font-weight:600 !important">-${FMT(usable.creditDebt)}</strong></div>` : ''}
+          ${usable.upcomingReserved > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>รายการรอจ่าย</small><strong style="color:#F59E0B;font-weight:600 !important">-${FMT(usable.upcomingReserved)}</strong></div>` : ''}
         </div>` : ''}
         <div class="mt-net-split">
-          <div class="mt-net-metric"><small>รายรับ</small><strong style="color:#4ADE80;font-weight:600">+${FMT(stats.income)}</strong></div>
+          <div class="mt-net-metric"><small>รายรับ</small><strong style="color:#4ADE80;font-weight:600 !important">+${FMT(stats.income)}</strong></div>
           <div class="mt-divider"></div>
-          <div class="mt-net-metric"><small>รายจ่าย</small><strong style="color:#F87171;font-weight:600">-${FMT(stats.expense)}</strong></div>
-          ${transferTotal > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>โอน</small><strong style="font-weight:600">${FMT(transferTotal)}</strong></div>` : ''}
+          <div class="mt-net-metric"><small>รายจ่าย</small><strong style="color:#F87171;font-weight:600 !important">-${FMT(stats.expense)}</strong></div>
+          ${transferTotal > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>โอน</small><strong style="font-weight:600 !important">${FMT(transferTotal)}</strong></div>` : ''}
           <div class="mt-divider"></div>
-          <div class="mt-net-metric"><small>คงเหลือ</small><strong style="color:${stats.net >= 0 ? '#4ADE80' : '#F87171'};font-weight:600">${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(stats.net))}</strong></div>
+          <div class="mt-net-metric"><small>คงเหลือ</small><strong style="color:${stats.net >= 0 ? '#4ADE80' : '#F87171'};font-weight:600 !important">${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(stats.net))}</strong></div>
         </div>
       </div>`
 
