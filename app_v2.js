@@ -14818,26 +14818,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
   })()
 
-  // ── N7: More page items stagger ────────────────────────────
-  ;(function _patchRenderMore() {
-    const _prev = App.renderMore?.bind(App)
-    if (!_prev) return
-    App.renderMore = function (...args) {
-      _prev?.(...args)
-      try {
-        setTimeout(() => {
-          document.querySelectorAll(
-            '#more-content .more-item:not(.mt-more-in), ' +
-            '#more-content .settings-row:not(.mt-more-in), ' +
-            '#more-content .card:not(.mt-more-in)'
-          ).forEach((el, i) => {
-            el.classList.add('mt-more-in')
-            el.style.animationDelay = `${i * 38}ms`
-          })
-        }, 30)
-      } catch (_) {}
-    }
-  })()
 
   // ── N9: CC payment progress ring ───────────────────────────
   ;(function _ccPayRing() {
@@ -15059,21 +15039,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true, characterData: true })
   })()
 
-  // ── N18: Wallet mini cards pop-in stagger ─────────────────
-  ;(function _patchRDashMini() {
-    const _prev = App.renderDashboard?.bind(App)
-    App.renderDashboard = function (...args) {
-      _prev?.(...args)
-      try {
-        document.querySelectorAll(
-          '#dashboard-content .mt-wallet-mini:not(.mt-wallet-mini-pop)'
-        ).forEach((card, i) => {
-          card.classList.add('mt-wallet-mini-pop')
-          card.style.animationDelay = `${i * 65}ms`
-        })
-      } catch (_) {}
-    }
-  })()
 
   // ── N22: Color swatch bounce ────────────────────────────────
   document.addEventListener('change', function (e) {

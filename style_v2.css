@@ -6079,13 +6079,6 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
 .toast { animation: mt-toast-in .4s cubic-bezier(.34, 1.56, .64, 1) both !important; }
 .toast.mt-hiding { animation: mt-toast-out .22s ease-in both !important; }
 
-/* ── N7: More page items cascade in ────────────────────────── */
-@keyframes mt-more-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0);    }
-}
-.mt-more-in { animation: mt-more-in .38s ease both !important; }
-
 /* ── N11: Recurring icon slow spin ─────────────────────────── */
 @keyframes mt-spin-slow { to { transform: rotate(360deg); } }
 .mt-rec-spin {
@@ -6140,16 +6133,6 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
   stroke: var(--muted);
   stroke-width: 1.5;
   stroke-linecap: round;
-}
-
-/* ── N18: Wallet mini card pop-in ───────────────────────────── */
-@keyframes mt-mini-pop {
-  0%   { opacity: 0; transform: scale(.8)    translateY(10px); }
-  68%  {             transform: scale(1.05)  translateY(-2px); }
-  100% { opacity: 1; transform: scale(1)     translateY(0);    }
-}
-.mt-wallet-mini-pop {
-  animation: mt-mini-pop .44s cubic-bezier(.34, 1.56, .64, 1) both !important;
 }
 
 /* ── N20: Search bar focus glow ─────────────────────────────── */
