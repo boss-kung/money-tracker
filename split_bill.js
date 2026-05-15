@@ -872,72 +872,67 @@
   // ══════════════════════════════════════════════════════════════
   //  PEOPLE MANAGEMENT
   // ══════════════════════════════════════════════════════════════
-  App.openSplitPeopleScreen = function (showArchived = false) {
-    const people = SbStore.loadPeople().filter(p => showArchived ? p.archived : !p.archived)
-    const rows = people.map(p => `
-      <div class="settings-row" onclick="App.openSplitPersonForm('${esc(p.id)}')">
-        <div class="s-icon" style="background:${esc(p.color||'#2563EB')}22;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center">
-          ${esc(p.emoji||'👤')}
-        </div>
-        <div class="s-label">${esc(p.name)}</div>
-        <div class="s-arrow">›</div>
-      </div>`).join('')
+  App.openSplitPeopleScreen = function (_editingId) {
+    const noAnim = { animate: false }
+    const people = SbStore.loadPeople()
+    const rows = people.map(p => {
+      if (_editingId === p.id) {
+        return `
+          <div class="settings-row" style="gap:8px;align-items:center">
+            <input class="form-input" id="sbp-edit-${esc(p.id)}" value="${esc(p.name)}"
+              style="flex:1;padding:8px 10px;font-size:14px"
+              onkeydown="if(event.key==='Enter')App._sbSaveEditPerson('${esc(p.id)}');if(event.key==='Escape')App.openSplitPeopleScreen()">
+            <button class="btn btn-primary btn-sm" onclick="App._sbSaveEditPerson('${esc(p.id)}')" style="width:auto;padding:8px 14px">บันทึก</button>
+            <button class="btn-icon" onclick="App.openSplitPeopleScreen()" style="color:var(--muted)">✕</button>
+          </div>`
+      }
+      return `
+        <div class="settings-row">
+          <div class="s-label" style="flex:1">${esc(p.name)}</div>
+          <button class="btn-icon" onclick="App.openSplitPeopleScreen('${esc(p.id)}')" style="color:var(--muted);font-size:13px" title="แก้ไข">✏️</button>
+          <button class="btn-icon" onclick="App._sbDeletePerson('${esc(p.id)}')" style="color:var(--expense);font-size:13px" title="ลบ">🗑</button>
+        </div>`
+    }).join('')
 
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openSplitBillScreen()">←</button>
         <h2>สมาชิก</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.openSplitPersonForm()" style="width:auto">+ เพิ่ม</button>
+        <div style="width:32px"></div>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="chips" style="padding:0 0 12px">
-          <button class="chip${showArchived?'':' active'}" onclick="App.openSplitPeopleScreen(false)">ใช้งาน</button>
-          <button class="chip${showArchived?' active':''}" onclick="App.openSplitPeopleScreen(true)">เก็บถาวร</button>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <input class="form-input" id="sbp-newname" placeholder="พิมพ์ชื่อสมาชิก..."
+            style="flex:1;padding:10px 14px;font-size:14px"
+            onkeydown="if(event.key==='Enter')App._sbAddPerson()">
+          <button class="btn btn-primary" onclick="App._sbAddPerson()" style="width:auto;padding:10px 18px;flex-shrink:0">+</button>
         </div>
-        ${rows.length
+        ${people.length
           ? `<div class="card card-pad">${rows}</div>`
           : `<div style="text-align:center;padding:32px 0;color:var(--muted)"><div style="font-size:32px">👥</div><div style="margin-top:8px">ยังไม่มีสมาชิก</div></div>`}
-      </div>`)
+      </div>`, noAnim)
+    if (_editingId) {
+      setTimeout(() => document.getElementById(`sbp-edit-${_editingId}`)?.focus(), 80)
+    } else {
+      setTimeout(() => document.getElementById('sbp-newname')?.focus(), 80)
+    }
   }
 
-  App.openSplitPersonForm = function (personId = '') {
-    const existing = personId ? SbStore.getPerson(personId) : null
-    const p = { emoji:'👤', name:'', color:'#2563EB', note:'', archived:false, ...(existing||{}) }
-    App.openSubScreen(`
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App.openSplitPeopleScreen()">←</button>
-        <h2>${existing?'แก้ไขสมาชิก':'เพิ่มสมาชิก'}</h2>
-        <button class="btn btn-primary btn-sm" onclick="App._sbSavePerson('${esc(personId)}')" style="width:auto">บันทึก</button>
-      </div>
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="form-group"><label class="form-label">ชื่อ</label><input class="form-input" id="sbp-name" value="${esc(p.name)}" placeholder="ชื่อ"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div class="form-group"><label class="form-label">Emoji</label><input class="form-input" id="sbp-emoji" value="${esc(p.emoji)}" maxlength="4" style="font-size:22px;text-align:center"></div>
-          <div class="form-group"><label class="form-label">สี</label><input class="form-input" type="color" id="sbp-color" value="${esc(p.color)}" style="height:42px;padding:4px 8px;cursor:pointer"></div>
-        </div>
-        ${existing?`<div style="display:flex;gap:8px;margin-top:8px">
-          <button class="btn btn-secondary flex-1" onclick="App._sbArchivePerson('${esc(personId)}')">${p.archived?'♻️ คืนสถานะ':'📦 เก็บถาวร'}</button>
-          <button class="btn btn-outline flex-1" onclick="App._sbDeletePerson('${esc(personId)}')">🗑 ลบ</button>
-        </div>`:''}
-      </div>`)
-  }
-
-  App._sbSavePerson = function (personId = '') {
-    const name  = document.getElementById('sbp-name')?.value.trim()
+  App._sbAddPerson = function () {
+    const name = document.getElementById('sbp-newname')?.value.trim()
     if (!name) return notify('กรุณากรอกชื่อ', 'error')
-    const emoji = document.getElementById('sbp-emoji')?.value.trim() || '👤'
-    const color = document.getElementById('sbp-color')?.value || '#2563EB'
-    const existing = personId ? SbStore.getPerson(personId) : null
-    SbStore.upsertPerson({ ...(existing||{}), id: personId||genId(), name, emoji, color, note:'', archived: existing?.archived||false, createdAt: existing?.createdAt||nowISO(), updatedAt: nowISO() })
-    notify(existing?'แก้ไขแล้ว':'เพิ่มสมาชิกแล้ว', 'success')
+    SbStore.upsertPerson({ id: genId(), name, emoji:'👤', color:'#2563EB', note:'', archived:false, createdAt: nowISO(), updatedAt: nowISO() })
+    notify('เพิ่มสมาชิกแล้ว', 'success')
     App.openSplitPeopleScreen()
   }
 
-  App._sbArchivePerson = function (personId) {
-    const p = SbStore.getPerson(personId); if (!p) return
-    p.archived = !p.archived; p.updatedAt = nowISO()
-    SbStore.upsertPerson(p); notify(p.archived?'เก็บถาวรแล้ว':'คืนสถานะแล้ว', 'success')
-    App.openSplitPeopleScreen(p.archived)
+  App._sbSaveEditPerson = function (personId) {
+    const name = document.getElementById(`sbp-edit-${personId}`)?.value.trim()
+    if (!name) return notify('กรุณากรอกชื่อ', 'error')
+    const existing = SbStore.getPerson(personId); if (!existing) return
+    SbStore.upsertPerson({ ...existing, name, updatedAt: nowISO() })
+    notify('แก้ไขแล้ว', 'success')
+    App.openSplitPeopleScreen()
   }
 
   App._sbDeletePerson = function (personId) {
