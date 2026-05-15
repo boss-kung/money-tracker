@@ -15616,4 +15616,160 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     })
   })()
 
+  // ── D4: Type tab active-state entrance on every render ────────
+  ;(function _patchRenderAddTxAmountD4() {
+    const _prev = App._renderAddTxAmount?.bind(App)
+    App._renderAddTxAmount = function (...args) {
+      _prev?.(...args)
+      try {
+        const btn = document.querySelector('#add-tx-content .type-tab.active')
+        if (!btn) return
+        btn.classList.remove('mt-type-active-in')
+        void btn.offsetWidth
+        btn.classList.add('mt-type-active-in')
+        setTimeout(() => btn.classList.remove('mt-type-active-in'), 260)
+      } catch (_) {}
+    }
+  })()
+
+  // ── D6: Cat-btn grid entrance stagger ─────────────────────────
+  ;(function _patchRenderAddTxDetailD6() {
+    const _prev = App._renderAddTxDetail?.bind(App)
+    App._renderAddTxDetail = function (...args) {
+      _prev?.(...args)
+      try {
+        document.querySelectorAll('#cat-grid .cat-btn:not(.mt-cat-in)').forEach((btn, i) => {
+          btn.classList.add('mt-cat-in')
+          btn.style.animationDelay = `${i * 28}ms`
+        })
+      } catch (_) {}
+    }
+  })()
+
+  // ── D7 + D38: tx-summary count-up + new-row slide-in ──────────
+  let _mt_txJustSaved = false
+
+  ;(function _patchRenderTxListD7D38() {
+    const _prev = App.renderTransactionsList?.bind(App)
+    App.renderTransactionsList = function (...args) {
+      _prev?.(...args)
+      try {
+        const incEl = document.getElementById('tx-income-total')
+        const expEl = document.getElementById('tx-expense-total')
+        if (incEl) _cu(incEl, 550)
+        if (expEl) _cu(expEl, 550)
+      } catch (_) {}
+      if (!_mt_txJustSaved) return
+      _mt_txJustSaved = false
+      try {
+        const first = document.querySelector(
+          '#tx-list-content .tx-group-card .tx-row, ' +
+          '#tx-list-content .tx-group-card .tx-row-modern'
+        )
+        if (!first) return
+        first.classList.remove('mt-tx-new')
+        void first.offsetWidth
+        first.classList.add('mt-tx-new')
+        setTimeout(() => first.classList.remove('mt-tx-new'), 500)
+      } catch (_) {}
+    }
+  })()
+
+  ;(function _patchSaveTxD38() {
+    const _prev = App.saveTx?.bind(App)
+    App.saveTx = function (...args) {
+      let _ok = false
+      const _origToast = window.toast
+      window.toast = function (msg, type, ...rest) {
+        if (type === 'success') _ok = true
+        return _origToast?.(msg, type, ...rest)
+      }
+      try { _prev?.(...args) } finally { window.toast = _origToast }
+      if (_ok) _mt_txJustSaved = true
+    }
+  })()
+
+  // ── D11: Amount summary card exit animation before back ────────
+  ;(function _patchBackToAmountD11() {
+    const _prev = App._backToAmount?.bind(App)
+    App._backToAmount = function (...args) {
+      const card = document.querySelector('#add-tx-content .amount-summary-card')
+      if (!card || card.classList.contains('mt-amount-card-out')) {
+        _prev?.(...args)
+        return
+      }
+      card.classList.add('mt-amount-card-out')
+      setTimeout(() => { try { _prev?.(...args) } catch (_) {} }, 185)
+    }
+  })()
+
+  // ── D14: Backspace directional nudge on amount display ─────────
+  ;(function _patchNumpadD14() {
+    const _prev = App._numpad?.bind(App)
+    App._numpad = function (key) {
+      if (key === '⌫') {
+        try {
+          const d = document.querySelector('#add-tx-content [data-role="tx-amount-display"]')
+          if (d && String(S.tx?.amount || '') !== '0') {
+            d.classList.remove('mt-amount-back')
+            void d.offsetWidth
+            d.classList.add('mt-amount-back')
+          }
+        } catch (_) {}
+      }
+      _prev?.(key)
+    }
+  })()
+
+  // ── D21: Merchant suggestion animated custom dropdown ──────────
+  ;(function _injectMerchantSuggestD21() {
+    function _close(wrap) {
+      wrap?.querySelector('.mt-merchant-suggest')?.remove()
+    }
+    function _show(input) {
+      const wrap = input.closest('.form-group') || input.parentElement
+      if (!wrap) return
+      _close(wrap)
+      const q = input.value.trim().toLowerCase()
+      const matches = (S.merchants || [])
+        .filter(m => !q || String(m.name || '').toLowerCase().includes(q))
+        .slice(0, 6)
+      if (!matches.length) return
+      if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative'
+      const dd = document.createElement('div')
+      dd.className = 'mt-merchant-suggest'
+      matches.forEach((m, i) => {
+        const item = document.createElement('div')
+        item.className = 'mt-merchant-suggest-item'
+        item.innerHTML = `<span style="font-size:17px;flex-shrink:0">${String(m.emoji || m.icon || '🏪')}</span><span>${String(m.name || '')}</span>`
+        item.style.animationDelay = `${i * 38}ms`
+        item.addEventListener('pointerdown', (e) => {
+          e.preventDefault()
+          input.value = m.name
+          App._txField?.('merchant', m.name)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          _close(wrap)
+        })
+        dd.appendChild(item)
+        requestAnimationFrame(() => requestAnimationFrame(() => item.classList.add('mt-si')))
+      })
+      wrap.appendChild(dd)
+    }
+    function _hookInput(input) {
+      if (!input) return
+      input.removeAttribute('list')
+      if (input.dataset.mtSugD21) return
+      input.dataset.mtSugD21 = '1'
+      const wrap = input.closest('.form-group') || input.parentElement
+      input.addEventListener('input',  () => _show(input))
+      input.addEventListener('focus',  () => { if (input.value.trim()) _show(input) })
+      input.addEventListener('blur',   () => setTimeout(() => _close(wrap), 180))
+    }
+    const _prev = App._renderAddTxDetail?.bind(App)
+    App._renderAddTxDetail = function (...args) {
+      _prev?.(...args)
+      try { _hookInput(document.getElementById('tx-merchant')) } catch (_) {}
+    }
+  })()
+
 })()
