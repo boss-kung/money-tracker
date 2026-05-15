@@ -1941,6 +1941,8 @@ App.render();
     if (calcOpRow && !calcOpRow.dataset.boundFastTap) {
       calcOpRow.dataset.boundFastTap = '1'
       calcOpRow.addEventListener('pointerdown', (event) => {
+        const evalBtn = event.target.closest('[data-calc-eval]')
+        if (evalBtn) { handleFastTap(event, () => App._evalCalc()); return }
         const btn = event.target.closest('[data-calc-op]')
         if (!btn) return
         handleFastTap(event, () => App._calcOp(btn.dataset.calcOp))
@@ -2001,7 +2003,7 @@ App.render();
           <button type="button" class="tx-amount-clear" data-role="tx-amount-clear" aria-label="ล้างจำนวนเงิน" onclick="App._clearTxAmount()"${canNext ? '' : ' hidden disabled'}>×</button>
         </div>
         <div class="calc-expr-hint" data-role="calc-expr-hint">${S.tx.calcOp ? `฿${formatDraftAmount(S.tx.calcLeft || '0')} ${S.tx.calcOp}` : ''}</div>
-        <div class="calc-op-row">${['+','-','×','÷'].map(op => `<button type="button" class="calc-op-btn${S.tx.calcOp === op ? ' active' : ''}" data-calc-op="${op}">${op}</button>`).join('')}</div>
+        <div class="calc-op-row">${['+','-','×','÷'].map(op => `<button type="button" class="calc-op-btn${S.tx.calcOp === op ? ' active' : ''}" data-calc-op="${op}">${op}</button>`).join('')}<button type="button" class="calc-op-btn calc-eval-btn${S.tx.calcOp ? ' ready' : ''}" data-calc-eval="1">=</button></div>
       </div>
       <div style="padding-bottom:calc(12px + var(--app-bottom-gap, 0px))">
         <div class="numpad">${['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(k => `<button type="button" class="numpad-key${k === '⌫' ? ' del' : ''}" data-numpad-key="${esc(k)}">${k}</button>`).join('')}</div>

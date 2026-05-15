@@ -1061,6 +1061,8 @@ html.dark .mt-alert-row-name { color: var(--text); }
   box-shadow:0 3px 12px var(--primary-shadow, rgba(99,102,241,0.35));
 }
 .calc-op-btn:active { opacity:0.75; }
+.calc-eval-btn { background:var(--elevated); color:var(--muted); }
+.calc-eval-btn.ready { background:var(--primary); border-color:var(--primary); color:#fff; box-shadow:0 3px 12px var(--primary-shadow, rgba(99,102,241,0.35)); }
 .numpad { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:0 16px; }
 .numpad-key { height:60px; border-radius:16px; border:0; background:var(--elevated); color:var(--text); font-size:22px; font-weight:800; touch-action:manipulation; -webkit-tap-highlight-color:transparent; user-select:none; transition:none; }
 .numpad-key.del { background:var(--expense-soft); color:var(--expense); }
