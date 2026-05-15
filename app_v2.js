@@ -5960,7 +5960,7 @@ App._pickMerchant = function(name, opts = {}) {
       },
       notes: {
         freeText: [
-          /Recurring/i.test(text) ? 'รายการ recurring หรือ auto-renew ไม่ร่วมรายการ' : '',
+          /Recurring/i.test(text) ? 'รายการประจำหรือต่ออายุอัตโนมัติไม่ร่วมรายการ' : '',
           /ไม่สามารถใช้ร่วมกับโปรโมชัน/i.test(text) ? 'ไม่สามารถใช้ร่วมกับโปรโมชันหรือคูปองอื่น' : '',
         ],
         rawSections: [
@@ -11530,7 +11530,7 @@ App._pickMerchant = function(name, opts = {}) {
     const order = ['ค้างอยู่', '7 วันข้างหน้า', 'เดือนนี้ / 30 วัน', 'ถัดไป']
     const itemHtml = row => `<div class="list-item upcoming-item ${row.status === 'overdue' ? 'overdue' : ''}" ${row.open ? `onclick="${row.open}"` : ''}>
       <div class="list-item-icon">${esc(row.icon)}</div>
-      <div class="list-item-info"><div class="list-item-name">${esc(row.title)}</div><div class="list-item-sub">${thaiDate(row.date)} · ${esc(row.type)} · ${row.status === 'overdue' ? 'เลยกำหนด' : 'กำลังจะถึง'}</div></div>
+      <div class="list-item-info"><div class="list-item-name">${esc(row.title)}</div><div class="list-item-sub">${thaiDate(row.date)} · ${{ recurring:'รายการประจำ', installment:'ผ่อนชำระ', credit_due:'ชำระบัตรเครดิต', scheduled:'ตามแผน', goal:'เป้าหมาย' }[row.type] || esc(row.type)} · ${row.status === 'overdue' ? 'เลยกำหนด' : 'กำลังจะถึง'}</div></div>
       <div style="text-align:right"><strong>${fmtHidden(row.amount)}</strong>${row.action ? `<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();${row.action}" style="width:auto">บันทึก</button>${row.skip ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();${row.skip}" style="width:auto">ข้าม</button>` : ''}</div>` : ''}</div>
     </div>`
     const html = order.filter(k => grouped[k]?.length).map(k => `<div class="sec-title">${k}</div><div class="card"><div style="padding:0 12px">${grouped[k].map(itemHtml).join('')}</div></div>`).join('')
@@ -14334,15 +14334,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     // W12: checkmark overlay immediately on success
     _showCheckmark()
 
-    // W5: FAB particle burst after 0.5s delay
-    setTimeout(() => {
-      const fab = document.getElementById('fab')
-      if (fab) {
-        const r = fab.getBoundingClientRect()
-        _fabParticles(r.left + r.width / 2, r.top + r.height / 2, _savedTxDraft)
-      }
-    }, 500)
-
     // Green row flash
     setTimeout(() => {
       try {
@@ -14574,24 +14565,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       }, 300)
     }
   }
-
-  // ─────────────────────────────────────────────────────────────
-  // W8: CC alert card glow — injected after renderDashboard /
-  //     renderWallets via MutationObserver on #app
-  // ─────────────────────────────────────────────────────────────
-  ;(function _watchAlertCards() {
-    const _seen = new WeakSet()
-    function _mark(root) {
-      root.querySelectorAll('.alert-card, .cc-alert, [class*="alert"]').forEach(el => {
-        if (_seen.has(el)) return
-        _seen.add(el)
-        el.classList.add('mt-alert-card')
-      })
-    }
-    const obs = new MutationObserver(() => _mark(document.getElementById('app') || document.body))
-    obs.observe(document.getElementById('app') || document.body, { childList: true, subtree: true })
-    _mark(document.body)
-  })()
 
   // ─────────────────────────────────────────────────────────────
   // W10: SVG bar draw on trend chart rects
@@ -15198,20 +15171,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       _prev?.(...args)
       try {
         // A2: wallet card entrance stagger
-        document.querySelectorAll('#wallets-content .wallet-card:not(.mt-anim-in)').forEach((card, i) => {
-          card.classList.add('mt-anim-in')
-          card.style.animationDelay = `${Math.min(i * 65, 390)}ms`
-        })
-        // B3: CC urgent pulse for cards due ≤ 7 days
-        ;(S.wallets || []).filter(w => w.type === 'credit').forEach(w => {
-          try {
-            const stmt = App.getCardStatement?.(w.id)
-            if (!stmt?.due?.daysLeft || stmt.due.daysLeft > 7) return
-            const card = document.querySelector(
-              `#wallets-content .wallet-card-credit[onclick*="${CSS.escape ? CSS.escape(w.id) : w.id}"]`
-            )
-            if (card) card.classList.add('mt-cc-urgent-pulse')
-          } catch (_) {}
+        document.querySelectorAll('#wallets-content .wallet-card:not(.mt-w2-in)').forEach((card, i) => {
+          card.classList.add('mt-w2-in')
+          card.style.animation = `mt-tx-in .45s ease ${Math.min(i * 65, 390)}ms both`
         })
         // B4: wallet summary count-up
         document.querySelectorAll('#wallets-summary strong').forEach(el => _cu(el, 900))
@@ -15358,31 +15320,36 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // ── B2: Search clear (×) button ───────────────────────────────
   ;(function _injectSearchClear() {
     const tx = document.getElementById('tx-search')
-    if (!tx) return
-    const wrapper = tx.parentElement
-    if (!wrapper || wrapper.querySelector('.mt-search-clear')) return
+    if (!tx || document.querySelector('.mt-search-clear')) return
+    const wrap = document.createElement('div')
+    wrap.style.cssText = 'position:relative;display:block'
+    tx.parentNode.insertBefore(wrap, tx)
+    wrap.appendChild(tx)
     const btn = document.createElement('button')
     btn.className = 'mt-search-clear'
     btn.setAttribute('aria-label', 'ล้างการค้นหา')
-    btn.innerHTML = '×'
+    btn.type = 'button'
+    btn.textContent = '×'
     btn.style.cssText = [
-      'position:absolute', 'right:12px', 'top:50%',
+      'position:absolute', 'right:10px', 'top:50%',
       'transform:translateY(-50%)', 'background:none', 'border:none',
       'font-size:20px', 'line-height:1', 'color:var(--muted)', 'cursor:pointer',
-      'padding:4px 6px', 'opacity:0',
-      'transition:opacity .2s ease', 'z-index:2',
+      'padding:4px 8px', 'opacity:0', 'pointer-events:none',
+      'transition:opacity .2s ease', 'z-index:10',
     ].join(';')
-    if (getComputedStyle(wrapper).position === 'static') {
-      wrapper.style.position = 'relative'
+    wrap.appendChild(btn)
+    tx.style.paddingRight = '36px'
+    function _sync() {
+      const has = tx.value.length > 0
+      btn.style.opacity = has ? '1' : '0'
+      btn.style.pointerEvents = has ? 'auto' : 'none'
     }
-    wrapper.appendChild(btn)
-    tx.addEventListener('input', () => {
-      btn.style.opacity = tx.value ? '1' : '0'
-    })
-    btn.addEventListener('click', () => {
+    tx.addEventListener('input', _sync)
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
       tx.value = ''
       tx.dispatchEvent(new Event('input', { bubbles: true }))
-      btn.style.opacity = '0'
+      _sync()
       tx.focus()
     })
   })()
