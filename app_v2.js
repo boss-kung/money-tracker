@@ -3226,19 +3226,19 @@ Calc.getUsableMoney = function(wallets, state = null) {
           </div>
         </div>
         ${hasUsableBreakdown ? `<div class="mt-net-split mt-net-split-3">
-          <div class="mt-net-metric"><small>ความมั่งคั่งสุทธิ</small><strong style="color:${dashboardNetWorth >= 0 ? '#4ADE80' : '#F87171'}">${dashboardNetWorth < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(dashboardNetWorth))}</strong></div>
+          <div class="mt-net-metric"><small>ความมั่งคั่งสุทธิ</small><strong style="color:${dashboardNetWorth >= 0 ? '#4ADE80' : '#F87171'};font-weight:600">${dashboardNetWorth < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(dashboardNetWorth))}</strong></div>
           <div class="mt-divider"></div>
-          <div class="mt-net-metric"><small>เงินสด</small><strong>${FMT(usable.liquid)}</strong></div>
-          ${usable.creditDebt > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>หนี้บัตร</small><strong style="color:#F87171">-${FMT(usable.creditDebt)}</strong></div>` : ''}
-          ${usable.upcomingReserved > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>รายการรอจ่าย</small><strong style="color:#F59E0B">-${FMT(usable.upcomingReserved)}</strong></div>` : ''}
+          <div class="mt-net-metric"><small>เงินสด</small><strong style="font-weight:600">${FMT(usable.liquid)}</strong></div>
+          ${usable.creditDebt > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>หนี้บัตร</small><strong style="color:#F87171;font-weight:600">-${FMT(usable.creditDebt)}</strong></div>` : ''}
+          ${usable.upcomingReserved > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>รายการรอจ่าย</small><strong style="color:#F59E0B;font-weight:600">-${FMT(usable.upcomingReserved)}</strong></div>` : ''}
         </div>` : ''}
         <div class="mt-net-split">
-          <div class="mt-net-metric"><small>รายรับ</small><strong style="color:#4ADE80">+${FMT(stats.income)}</strong></div>
+          <div class="mt-net-metric"><small>รายรับ</small><strong style="color:#4ADE80;font-weight:600">+${FMT(stats.income)}</strong></div>
           <div class="mt-divider"></div>
-          <div class="mt-net-metric"><small>รายจ่าย</small><strong style="color:#F87171">-${FMT(stats.expense)}</strong></div>
-          ${transferTotal > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>โอน</small><strong>${FMT(transferTotal)}</strong></div>` : ''}
+          <div class="mt-net-metric"><small>รายจ่าย</small><strong style="color:#F87171;font-weight:600">-${FMT(stats.expense)}</strong></div>
+          ${transferTotal > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>โอน</small><strong style="font-weight:600">${FMT(transferTotal)}</strong></div>` : ''}
           <div class="mt-divider"></div>
-          <div class="mt-net-metric"><small>คงเหลือ</small><strong style="color:${stats.net >= 0 ? '#4ADE80' : '#F87171'}">${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(stats.net))}</strong></div>
+          <div class="mt-net-metric"><small>คงเหลือ</small><strong style="color:${stats.net >= 0 ? '#4ADE80' : '#F87171'};font-weight:600">${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(stats.net))}</strong></div>
         </div>
       </div>`
 
@@ -3272,7 +3272,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     html += `<div class="mt-wallet-mini-grid">${miniCards.map(card => `
         <div class="mt-wallet-mini" onclick="${card.onclick}">
           <div class="icon">${card.icon}</div>
-          <div class="value">${S.settings?.hideMoney ? '฿*****' : FMT(card.value)}</div>
+          <div class="value" style="font-weight:600">${S.settings?.hideMoney ? '฿*****' : FMT(card.value)}</div>
           <div class="name">${card.name}</div>
         </div>`).join('')}</div>`
 
@@ -3290,7 +3290,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
             <span style="font-weight:600">${ESC(b.icon)} ${ESC(b.label)}</span>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
               ${dailyChip(b)}
-              <span style="color:${b.over ? 'var(--expense)' : 'var(--muted)'}">${FMT(b.spent)} / ${FMT(b.monthlyLimit)}</span>
+              <span style="color:${b.over ? 'var(--expense)' : 'var(--muted)'};font-weight:600">${FMT(b.spent)} / ${FMT(b.monthlyLimit)}</span>
             </div>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,Math.max(0,b.pct))}%;background:${barColor}"></div></div>
