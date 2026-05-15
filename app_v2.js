@@ -14755,21 +14755,31 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     pill.className = 'mt-chip-pill'
     container.style.position = 'relative'
     container.insertBefore(pill, container.firstChild)
+
     function _move() {
-      const active = container.querySelector('.chip.active, .chip-btn.active, .chip[class*="active"]')
-      if (!active) { pill.style.opacity = '0'; return }
+      // Re-inject if innerHTML was replaced and removed the pill
+      if (!container.contains(pill)) {
+        container.insertBefore(pill, container.firstChild)
+      }
+      // chips use class "chip active" or "chip mini active"
+      const active = container.querySelector('.chip.active')
+      if (!active || active === pill) { pill.style.opacity = '0'; return }
       const cr = container.getBoundingClientRect()
       const ar = active.getBoundingClientRect()
+      if (!ar.width) { pill.style.opacity = '0'; return }
       pill.style.opacity = '.18'
-      pill.style.left    = `${ar.left - cr.left}px`
-      pill.style.top     = `${ar.top  - cr.top}px`
-      pill.style.width   = `${ar.width}px`
-      pill.style.height  = `${ar.height}px`
+      pill.style.left   = `${ar.left - cr.left}px`
+      pill.style.top    = `${ar.top  - cr.top}px`
+      pill.style.width  = `${ar.width}px`
+      pill.style.height = `${ar.height}px`
     }
-    setTimeout(_move, 80)
+
+    // childList catches innerHTML replacements; attributes catches class toggling
     new MutationObserver(_move).observe(container, {
-      subtree: true, attributes: true, attributeFilter: ['class']
+      childList: true, subtree: true,
+      attributes: true, attributeFilter: ['class']
     })
+    setTimeout(_move, 60)
   }
   ;(function _initPills() {
     const ids = ['tx-month-chips','tx-type-chips','report-month-chips','report-view-chips']
@@ -14984,27 +14994,25 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // ── N16: Transfer row dashed animated arrow ────────────────
   ;(function _watchTransferRows() {
     const _seen = new WeakSet()
+    const _svgHtml = `<svg class="mt-transfer-svg" width="20" height="10" viewBox="0 0 20 10" style="vertical-align:middle;flex-shrink:0"><line x1="0" y1="5" x2="15" y2="5"/><polyline points="11,1 15,5 11,9"/></svg>`
+
     function _injectArrows(root) {
-      root.querySelectorAll(
-        '.tx-row[data-type="transfer"], .tx-row-modern[data-type="transfer"], ' +
-        '[data-txtype="transfer"]'
-      ).forEach(row => {
+      // Actual class from app: tx-row--transfer (e.g. "tx-row tx-row-modern tx-row--transfer")
+      root.querySelectorAll('.tx-row--transfer').forEach(row => {
         if (_seen.has(row)) return
         _seen.add(row)
-        const sub = row.querySelector('.tx-sub, .tx-meta, .tx-note, [class*="tx-detail"]')
+        const sub = row.querySelector('.tx-sub')
         if (!sub) return
-        if (sub.querySelector('.mt-transfer-svg')) return
-        const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-        arrow.setAttribute('width', '20'); arrow.setAttribute('height', '10')
-        arrow.setAttribute('viewBox', '0 0 20 10')
-        arrow.setAttribute('class', 'mt-transfer-svg')
-        arrow.style.verticalAlign = 'middle'
-        arrow.innerHTML = `<line x1="0" y1="5" x2="15" y2="5"/>
-          <polyline points="11,1 15,5 11,9"/>`
-        sub.innerHTML = sub.innerHTML.replace(/[→➜]|->/, '')
-        sub.insertAdjacentElement('afterbegin', arrow)
+        // The → lives inside a .tx-meta-pill span
+        const pill = Array.from(sub.querySelectorAll('.tx-meta-pill'))
+          .find(p => p.textContent.includes('→'))
+        if (!pill) return
+        if (pill.querySelector('.mt-transfer-svg')) return
+        // Replace the → character with the animated SVG arrow
+        pill.innerHTML = pill.innerHTML.replace('→', _svgHtml)
       })
     }
+
     new MutationObserver(() => {
       try {
         ['tx-list-content','dashboard-content'].forEach(id => {
