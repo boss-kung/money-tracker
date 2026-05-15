@@ -6624,3 +6624,41 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
   gap: 8px;
   margin-top: 14px;
 }
+
+/* ── Credit-card due-date mode: friendly toggle + preview ───────── */
+.cc-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--elevated);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.cc-toggle-row input[type="checkbox"] {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  flex-shrink: 0;
+}
+.cc-toggle-row span small {
+  display: block;
+  color: var(--muted);
+  font-weight: 500;
+  margin-top: 2px;
+}
+.cc-due-preview {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--primary) 35%, transparent);
+  color: var(--text);
+  font-size: 13px;
+}
+.cc-due-preview:empty {
+  display: none;
+}

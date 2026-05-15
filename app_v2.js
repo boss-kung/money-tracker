@@ -7377,9 +7377,66 @@ App._pickMerchant = function(name, opts = {}) {
             </div>
           </div>
           <div class="benefit-form-grid">
-            <div class="form-group"><label class="form-label">วันตัดรอบบัญชี</label><input class="form-input" type="number" id="wf-cycle-day" min="1" max="31" value="${w?.cycleDay||''}"></div>
-            <div class="form-group"><label class="form-label">ชำระหลังวันตัดยอดกี่วัน</label><input class="form-input" type="number" id="wf-due-after-cycle-days" min="1" max="30" value="${w?.dueAfterCycleDays||''}"></div>
+            <div class="form-group"><label class="form-label">วันตัดรอบบัญชี</label><input class="form-input" type="number" id="wf-cycle-day" min="1" max="31" value="${w?.cycleDay||''}" oninput="App._refreshDueDatePreview?.()"></div>
+            <div class="form-group"><label class="form-label">ชำระหลังวันตัดยอดกี่วัน</label><input class="form-input" type="number" id="wf-due-after-cycle-days" min="1" max="30" value="${w?.dueAfterCycleDays||''}" oninput="App._refreshDueDatePreview?.()"></div>
           </div>
+          ${(() => {
+            const dueMode        = w?.dueDateMode === 'fixedDay' ? 'fixedDay' : 'afterCycle'
+            const fixedDueDay    = Number(w?.fixedDueDay) || 23
+            const holidayShiftOn = w?.holidayShiftEnabled !== false
+            const defaultsOn     = w?.includeDefaultHolidays !== false
+            const customStr      = Array.isArray(w?.customHolidays) ? w.customHolidays.join('\n') : ''
+            return `
+            <div class="form-group" style="margin-top:4px">
+              <label class="form-label">วิธีคำนวณวันชำระ</label>
+              <div class="v5-limit-mode-tabs" id="wf-due-mode-tabs">
+                <button type="button" class="v5-lm-tab${dueMode==='afterCycle'?' active':''}" onclick="App._selectDueDateMode('afterCycle')">หลังวันตัดรอบ X วัน</button>
+                <button type="button" class="v5-lm-tab${dueMode==='fixedDay'?' active':''}" onclick="App._selectDueDateMode('fixedDay')">วันที่กำหนดของเดือนถัดไป</button>
+              </div>
+              <input type="hidden" id="wf-due-date-mode" value="${dueMode}">
+              <div class="form-hint" id="wf-due-mode-hint" style="margin-top:6px">
+                ${dueMode==='fixedDay'
+                  ? 'เหมาะกับบัตรที่กำหนดวันจ่ายตายตัว เช่น ทุกวันที่ 23 ของเดือนถัดไป และเลื่อนเมื่อตรงกับวันหยุด'
+                  : 'ใช้การคำนวณแบบเดิม นับจำนวนวันหลังวันตัดรอบ (default)'}
+              </div>
+            </div>
+            <div id="wf-due-fixed-block" style="${dueMode==='fixedDay'?'':'display:none'}">
+              <div class="form-group">
+                <label class="form-label">วันที่ครบกำหนดชำระ (1–31)</label>
+                <input class="form-input" type="number" id="wf-fixed-due-day" min="1" max="31" value="${fixedDueDay}" placeholder="23" oninput="App._refreshDueDatePreview?.()">
+                <div class="form-hint">ถ้าวันที่ที่กำหนดมากกว่าจำนวนวันในเดือนนั้น (เช่น 31 ในเดือน ก.พ.) ระบบจะใช้วันสุดท้ายของเดือนแทนอัตโนมัติ</div>
+              </div>
+              <div class="form-group">
+                <label class="cc-toggle-row">
+                  <input type="checkbox" id="wf-holiday-shift" ${holidayShiftOn?'checked':''} onchange="App._refreshDueDatePreview?.()">
+                  <span><strong>เลื่อนวันจ่ายเมื่อตรงกับเสาร์–อาทิตย์ / วันหยุดธนาคาร</strong><br><small>ถ้าตรงกับวันหยุด จะย้อนกลับไปจ่ายในวันทำการก่อนหน้า</small></span>
+                </label>
+              </div>
+              <div class="form-group">
+                <label class="cc-toggle-row">
+                  <input type="checkbox" id="wf-default-holidays" ${defaultsOn?'checked':''} onchange="App._refreshDueDatePreview?.()">
+                  <span>
+                    <strong>ใช้รายการวันหยุดธนาคารไทย (รวบรวมในแอป)</strong>
+                    <br><small id="wf-holidays-meta">${(() => {
+                      const meta = App._getThaiHolidayMeta?.()
+                      if (!meta) return 'ปีใหม่ • สงกรานต์ • แรงงาน • พ่อ • แม่ ฯลฯ'
+                      const full = (meta.coverageFull || []).map(y => `${y + 543}`).join('–')
+                      const fixed = (meta.coverageFixedOnly || []).map(y => `${y + 543}`)
+                      const fixedRange = fixed.length ? `${fixed[0]}–${fixed[fixed.length - 1]}` : ''
+                      return `อ้างอิงประกาศ ธปท. · ครอบคลุม พ.ศ. ${full} ครบ${fixedRange ? ` และ พ.ศ. ${fixedRange} เฉพาะวันที่ตายตัว` : ''} (ชุดข้อมูล ${meta.version})`
+                    })()}</small>
+                  </span>
+                </label>
+              </div>
+              <div class="form-group">
+                <label class="form-label">วันหยุดเพิ่มเติม (ไม่บังคับ)</label>
+                <textarea class="form-input" id="wf-custom-holidays" rows="2" placeholder="เช่น 2026-05-13 หรือ 12-31 (หนึ่งบรรทัด/วัน)" oninput="App._refreshDueDatePreview?.()">${esc(customStr)}</textarea>
+                <div class="form-hint">รองรับรูปแบบ YYYY-MM-DD (ครั้งเดียว) หรือ MM-DD (ทุกปี) — คั่นด้วยขึ้นบรรทัดใหม่หรือเครื่องหมายจุลภาค</div>
+              </div>
+            </div>
+            <div id="wf-due-preview" class="form-hint cc-due-preview" style="margin-top:8px"></div>
+            `
+          })()}
         `, true)}
         ${accordion('wf-cc-reward-acc', 'บัญชีคะแนนสะสม', `
           <div class="form-group">
@@ -7437,6 +7494,7 @@ App._pickMerchant = function(name, opts = {}) {
       </div>`
     App.openOverlay('overlay-wallet-form')
     App._syncWalletFormSections?.()
+    if (isCC) try { App._refreshDueDatePreview?.() } catch (_) {}
     if (isInv) try { syncInvestmentWalletForm?.(type) } catch (_) {}
   }
 
@@ -7500,6 +7558,52 @@ App._pickMerchant = function(name, opts = {}) {
     } else {
       hint.innerHTML = ''
     }
+  }
+
+  // ── Due-date mode toggle (afterCycle vs fixedDay) ───────────
+  App._selectDueDateMode = function(mode) {
+    const next = mode === 'fixedDay' ? 'fixedDay' : 'afterCycle'
+    const hidden = document.getElementById('wf-due-date-mode')
+    if (hidden) hidden.value = next
+    const tabs = document.getElementById('wf-due-mode-tabs')
+    if (tabs) {
+      tabs.querySelectorAll('.v5-lm-tab').forEach((btn, idx) => {
+        const matches = (idx === 0 && next === 'afterCycle') || (idx === 1 && next === 'fixedDay')
+        btn.classList.toggle('active', matches)
+      })
+    }
+    const block = document.getElementById('wf-due-fixed-block')
+    if (block) block.style.display = next === 'fixedDay' ? '' : 'none'
+    const hint = document.getElementById('wf-due-mode-hint')
+    if (hint) hint.textContent = next === 'fixedDay'
+      ? 'เหมาะกับบัตรที่กำหนดวันจ่ายตายตัว เช่น ทุกวันที่ 23 ของเดือนถัดไป และเลื่อนเมื่อตรงกับวันหยุด'
+      : 'ใช้การคำนวณแบบเดิม นับจำนวนวันหลังวันตัดรอบ (default)'
+    App._refreshDueDatePreview?.()
+  }
+
+  // ── Live preview of the next due date as the user edits the form ──
+  App._refreshDueDatePreview = function() {
+    const previewEl = document.getElementById('wf-due-preview')
+    if (!previewEl) return
+    const mode = document.getElementById('wf-due-date-mode')?.value === 'fixedDay' ? 'fixedDay' : 'afterCycle'
+    const cycleDay = parseInt(document.getElementById('wf-cycle-day')?.value, 10) || 25
+    const draft = { type: 'credit', cycleDay, dueDateMode: mode }
+    if (mode === 'fixedDay') {
+      draft.fixedDueDay         = parseInt(document.getElementById('wf-fixed-due-day')?.value, 10) || 23
+      draft.holidayShiftEnabled = !!document.getElementById('wf-holiday-shift')?.checked
+      draft.includeDefaultHolidays = !!document.getElementById('wf-default-holidays')?.checked
+      const raw = document.getElementById('wf-custom-holidays')?.value || ''
+      draft.customHolidays = raw.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean)
+    } else {
+      draft.dueAfterCycleDays = parseInt(document.getElementById('wf-due-after-cycle-days')?.value, 10) || 10
+    }
+    let next = ''
+    try { next = App._buildNextDueDateFromCycle?.(draft) || '' } catch (_) {}
+    if (!next) { previewEl.innerHTML = ''; return }
+    const label = (typeof Calc?.labelDate === 'function') ? Calc.labelDate(next) : next
+    const days  = (typeof Calc?.daysUntilDate === 'function') ? Calc.daysUntilDate(next) : null
+    const daysSuffix = (Number.isFinite(days) && days >= 0) ? ` · เหลืออีก ${days} วัน` : ''
+    previewEl.innerHTML = `📅 วันชำระรอบถัดไป (โดยประมาณ): <strong>${esc(label)}</strong>${daysSuffix}`
   }
 
   // ── Updated _selectWalletType ───────────────────────────────
@@ -7580,7 +7684,26 @@ App._pickMerchant = function(name, opts = {}) {
         rewardAccountId = null
       }
 
-      Object.assign(data, { limit, dueAfterCycleDays, cycleDay, issuer, creditLimitMode, creditLimitGroupId, rewardAccountId })
+      // New: due-date mode (fixedDay + holiday shift) ─────────────
+      const dueDateModeRaw = document.getElementById('wf-due-date-mode')?.value
+      const dueDateMode = dueDateModeRaw === 'fixedDay' ? 'fixedDay' : 'afterCycle'
+      let fixedDueDay = null
+      let holidayShiftEnabled = null
+      let includeDefaultHolidays = null
+      let customHolidays = null
+      if (dueDateMode === 'fixedDay') {
+        const rawFixed = parseInt(document.getElementById('wf-fixed-due-day')?.value, 10)
+        fixedDueDay = Math.max(1, Math.min(31, Number.isFinite(rawFixed) && rawFixed > 0 ? rawFixed : 23))
+        holidayShiftEnabled    = !!document.getElementById('wf-holiday-shift')?.checked
+        includeDefaultHolidays = !!document.getElementById('wf-default-holidays')?.checked
+        const raw = document.getElementById('wf-custom-holidays')?.value || ''
+        customHolidays = raw.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean)
+      }
+
+      Object.assign(data, { limit, dueAfterCycleDays, cycleDay, issuer, creditLimitMode, creditLimitGroupId, rewardAccountId, dueDateMode })
+      if (dueDateMode === 'fixedDay') {
+        Object.assign(data, { fixedDueDay, holidayShiftEnabled, includeDefaultHolidays, customHolidays })
+      }
     }
 
     if (isInv) {
@@ -10393,9 +10516,6 @@ App._pickMerchant = function(name, opts = {}) {
   function buildNextDueDateFromCycle(card, refDate = today()) {
     if (!card) return ''
     const cycleDay = clampCycleDay(card.cycleDay || 25)
-    const dueAfterCycleDays = clampDueAfter(
-      card.dueAfterCycleDays || deriveDueAfterCycleDays(cycleDay, card.dueDay || 5, refDate)
-    )
     const [ry, rm] = String(refDate || today()).split('-').map(Number)
     const baseYear = ry || new Date().getFullYear()
     const baseMonthIndex = (rm || 1) - 1
@@ -10403,12 +10523,13 @@ App._pickMerchant = function(name, opts = {}) {
       const day = Calc.clampDay(year, monthIndex, cycleDay)
       return `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
     }
-    let dueDate = Calc.getCreditCardDueDate(buildEndStr(baseYear, baseMonthIndex), dueAfterCycleDays)
+    let dueDate = resolveCardDueDate(card, buildEndStr(baseYear, baseMonthIndex), refDate)
     if (String(dueDate || '') < String(refDate || today())) {
       const nextBase = new Date(baseYear, baseMonthIndex + 1, 1)
-      dueDate = Calc.getCreditCardDueDate(
+      dueDate = resolveCardDueDate(
+        card,
         buildEndStr(nextBase.getFullYear(), nextBase.getMonth()),
-        dueAfterCycleDays
+        refDate
       )
     }
     return dueDate || ''
@@ -10421,6 +10542,162 @@ App._pickMerchant = function(name, opts = {}) {
     next.setDate(next.getDate() + Number(dayDelta || 0))
     return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`
   }
+
+  // ── Fixed-day due-date + bank-holiday shift (new optional logic) ──
+  // Default Thai bank holidays as MM-DD recurring entries. User can override
+  // / extend per card via card.customHolidays.
+  const DEFAULT_THAI_BANK_HOLIDAYS_MMDD = [
+    '01-01', // วันขึ้นปีใหม่
+    '04-06', // วันจักรี
+    '04-13', '04-14', '04-15', // สงกรานต์
+    '05-01', // วันแรงงาน
+    '05-05', // วันฉัตรมงคล
+    '06-03', // วันเฉลิมพระชนมพรรษาสมเด็จพระราชินี
+    '07-28', // วันเฉลิมพระชนมพรรษา ร.10
+    '08-12', // วันแม่
+    '10-13', // วันคล้ายวันสวรรคต ร.9
+    '10-23', // วันปิยมหาราช
+    '12-05', // วันพ่อ
+    '12-10', // วันรัฐธรรมนูญ
+    '12-31', // วันสิ้นปี
+  ]
+
+  function clampFixedDueDay(day) {
+    return Math.max(1, Math.min(31, Number(day) || 23))
+  }
+
+  function isWeekendDateStr(dateStr) {
+    const [y, m, d] = String(dateStr || '').split('-').map(Number)
+    if (!y || !m || !d) return false
+    const dow = new Date(y, m - 1, d).getDay()
+    return dow === 0 || dow === 6
+  }
+
+  function normalizeHolidayEntries(input) {
+    const list = Array.isArray(input)
+      ? input
+      : String(input || '').split(/[\n,;]+/)
+    return [...new Set(list
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+      .map(v => {
+        // YYYY-MM-DD
+        const m1 = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+        if (m1) return `${m1[1]}-${String(m1[2]).padStart(2,'0')}-${String(m1[3]).padStart(2,'0')}`
+        // MM-DD
+        const m2 = v.match(/^(\d{1,2})-(\d{1,2})$/)
+        if (m2) return `${String(m2[1]).padStart(2,'0')}-${String(m2[2]).padStart(2,'0')}`
+        // DD/MM[/YYYY]
+        const m3 = v.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/)
+        if (m3) {
+          if (m3[3]) {
+            let yr = Number(m3[3])
+            if (yr < 100) yr += 2000
+            return `${yr}-${String(m3[2]).padStart(2,'0')}-${String(m3[1]).padStart(2,'0')}`
+          }
+          return `${String(m3[2]).padStart(2,'0')}-${String(m3[1]).padStart(2,'0')}`
+        }
+        return null
+      })
+      .filter(Boolean)
+    )]
+  }
+
+  function isHolidayDateStr(dateStr, customHolidays = [], includeDefaults = true) {
+    if (!dateStr) return false
+    // 1) Bundled curated dataset (authoritative when year is covered)
+    try {
+      if (includeDefaults && typeof window !== 'undefined' && window.ThaiBankHolidays?.has?.(dateStr)) {
+        return true
+      }
+    } catch (_) {}
+    // 2) User-supplied customHolidays (always honoured)
+    const norm = normalizeHolidayEntries(customHolidays)
+    const mmdd = String(dateStr).slice(5)
+    const pool = new Set(norm)
+    // 3) Hardcoded MM-DD fallback for years outside the bundled dataset
+    if (includeDefaults) DEFAULT_THAI_BANK_HOLIDAYS_MMDD.forEach(d => pool.add(d))
+    return pool.has(dateStr) || pool.has(mmdd)
+  }
+
+  // Public surface — used by the wallet-form preview to render the data
+  // version + coverage hint without reaching into the dataset directly.
+  App._getThaiHolidayMeta = function() {
+    try {
+      const d = (typeof window !== 'undefined') ? window.ThaiBankHolidays : null
+      if (!d) return null
+      return {
+        version: d.version || '',
+        coverageFull: d.coverageFull || [],
+        coverageFixedOnly: d.coverageFixedOnly || [],
+      }
+    } catch (_) { return null }
+  }
+
+  function shiftBackwardsToBusinessDay(dateStr, opts = {}) {
+    const {
+      customHolidays = [],
+      includeDefaultHolidays = true,
+      maxIterations = 20,
+    } = opts
+    let cursor = dateStr
+    for (let i = 0; i < maxIterations; i++) {
+      if (!isWeekendDateStr(cursor) && !isHolidayDateStr(cursor, customHolidays, includeDefaultHolidays)) {
+        return cursor
+      }
+      const prev = shiftDateStr(cursor, -1)
+      if (!prev || prev === cursor) break
+      cursor = prev
+    }
+    return cursor
+  }
+
+  // Given the cycle-end date (YYYY-MM-DD), produce the calendar date for the
+  // configured fixed payment day. If fixedDay <= cycleDay we roll into the
+  // next month (e.g. cycle 31 → due 23 of next month).
+  function buildFixedDueDateForCycleEnd(endStr, cycleDay, fixedDueDay) {
+    const [y, m] = String(endStr || '').split('-').map(Number)
+    if (!y || !m) return ''
+    const fixedDay = clampFixedDueDay(fixedDueDay)
+    const cycle = clampCycleDay(cycleDay)
+    const monthOffset = fixedDay <= cycle ? 1 : 0
+    const ref = new Date(y, (m - 1) + monthOffset, 1)
+    const dueY = ref.getFullYear()
+    const dueM = ref.getMonth()
+    const clamped = Calc.clampDay(dueY, dueM, fixedDay)
+    return `${dueY}-${String(dueM + 1).padStart(2,'0')}-${String(clamped).padStart(2,'0')}`
+  }
+
+  // Single resolver that returns the *effective* due date for a card given
+  // a cycle-end date. Honours both legacy "afterCycle" mode and the new
+  // "fixedDay + holiday shift" mode.
+  function resolveCardDueDate(card, endStr, refDate = today()) {
+    if (!card || !endStr) return ''
+    const mode = String(card.dueDateMode || 'afterCycle')
+    if (mode === 'fixedDay') {
+      const cycleDay = clampCycleDay(card.cycleDay || 25)
+      const fixedDay = clampFixedDueDay(card.fixedDueDay || 23)
+      const raw = buildFixedDueDateForCycleEnd(endStr, cycleDay, fixedDay)
+      if (!raw) return ''
+      if (card.holidayShiftEnabled === false) return raw
+      return shiftBackwardsToBusinessDay(raw, {
+        customHolidays: card.customHolidays || [],
+        includeDefaultHolidays: card.includeDefaultHolidays !== false,
+      })
+    }
+    // Legacy after-cycle behaviour preserved verbatim
+    const dueAfterCycleDays = clampDueAfter(
+      card.dueAfterCycleDays || deriveDueAfterCycleDays(clampCycleDay(card.cycleDay || 25), card.dueDay || 5, refDate)
+    )
+    return Calc.getCreditCardDueDate(endStr, dueAfterCycleDays)
+  }
+  App._resolveCardDueDate = resolveCardDueDate
+  App._shiftBackwardsToBusinessDay = shiftBackwardsToBusinessDay
+  App._buildFixedDueDateForCycleEnd = buildFixedDueDateForCycleEnd
+  App._isHolidayDateStr = isHolidayDateStr
+  App._isWeekendDateStr = isWeekendDateStr
+  App._normalizeHolidayEntries = normalizeHolidayEntries
+  App._buildNextDueDateFromCycle = (card, refDate) => buildNextDueDateFromCycle(card, refDate)
 
   function normalizeCreditCardWallets() {
     let changed = false
@@ -10436,6 +10713,24 @@ App._pickMerchant = function(name, opts = {}) {
         const nextDue = Calc.getCreditCardDueDate(`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Calc.clampDay(new Date().getFullYear(), new Date().getMonth(), cycleDay)).padStart(2,'0')}`, dueAfterCycleDays)
         const legacyDueDay = Number(String(nextDue).slice(-2)) || 5
         if (w.dueDay !== legacyDueDay) { w.dueDay = legacyDueDay; changed = true }
+      }
+      // New fixed-day fields — only set defaults, don't override existing
+      if (!('dueDateMode' in w) || (w.dueDateMode !== 'afterCycle' && w.dueDateMode !== 'fixedDay')) {
+        w.dueDateMode = 'afterCycle'
+        changed = true
+      }
+      if (w.dueDateMode === 'fixedDay') {
+        const fd = clampFixedDueDay(w.fixedDueDay || 23)
+        if (w.fixedDueDay !== fd) { w.fixedDueDay = fd; changed = true }
+        if (typeof w.holidayShiftEnabled !== 'boolean') {
+          w.holidayShiftEnabled = true; changed = true
+        }
+        if (typeof w.includeDefaultHolidays !== 'boolean') {
+          w.includeDefaultHolidays = true; changed = true
+        }
+        if (!Array.isArray(w.customHolidays)) {
+          w.customHolidays = []; changed = true
+        }
       }
     })
     return changed
@@ -11298,9 +11593,12 @@ App._pickMerchant = function(name, opts = {}) {
         cursorRef = prevRef
       }
     }
+    // In fixedDay mode the cycle-based resolver is authoritative; skip the
+    // legacy dueDay-based fallback so it can't shadow the shifted date.
+    const useFixedDayMode = String(card.dueDateMode || 'afterCycle') === 'fixedDay'
     const candidates = [
       ...statementDueDates,
-      buildNextDueDateFromDay(card.dueDay, refDate),
+      useFixedDayMode ? '' : buildNextDueDateFromDay(card.dueDay, refDate),
       buildNextDueDateFromCycle(card, refDate),
     ]
       .filter(Boolean)
@@ -11323,7 +11621,7 @@ App._pickMerchant = function(name, opts = {}) {
     const start = new Date(prevOfEnd.getFullYear(), prevOfEnd.getMonth(), prevEndD + 1)
     const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}`
     const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2,'0')}-${String(start.getDate()).padStart(2,'0')}`
-    const dueStr = Calc.getCreditCardDueDate(endStr, dueAfterCycleDays)
+    const dueStr = resolveCardDueDate(card, endStr, refDate) || Calc.getCreditCardDueDate(endStr, dueAfterCycleDays)
     const id = `${cardId}:${startStr}:${endStr}`
     // Only include posted expenses — future-scheduled installment months must not
     // appear as current-cycle spending even if their date falls in the cycle range.
