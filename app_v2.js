@@ -14874,8 +14874,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     App.renderWallets = function (...args) {
       _prev?.(...args)
       try {
-        // N12: negative balance red glow
-        document.querySelectorAll('#wallets-content .wc-card, #wallets-content .wallet-card').forEach(card => {
+        // N12: negative balance red glow (skip credit cards — negative balance is expected)
+        document.querySelectorAll('#wallets-content .wc-card, #wallets-content .wallet-card:not(.wallet-card-credit)').forEach(card => {
           const balEl = card.querySelector('.wc-balance, [class*="balance"]')
           if (!balEl) return
           const neg = /^[-−]/.test(balEl.textContent.trim())
