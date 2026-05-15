@@ -8016,6 +8016,7 @@ App._pickMerchant = function(name, opts = {}) {
               <div class="v5-rr-label">ยอดที่ได้รับจริง</div>
               ${calcPoints ? `<div class="form-group"><label class="form-label">⭐ คะแนนที่ได้รับจริง</label><input class="form-input" type="number" min="0" step="1" id="v50-actual-points" value="${calcPoints}"><div class="form-hint">คำนวณโดยระบบ: ${calcPoints.toLocaleString('en-US')} คะแนน</div></div>` : ''}
               ${calcCashback ? `<div class="form-group"><label class="form-label">💰 เงินคืนที่ได้รับจริง (฿)</label><input class="form-input" type="number" min="0" step="0.01" id="v50-actual-cashback" value="${calcCashback.toFixed(2)}"><div class="form-hint">คำนวณโดยระบบ: ${money(calcCashback)}</div></div>` : ''}
+              <div class="form-group"><label class="form-label">📅 วันที่ได้รับ</label><input class="form-input" type="date" id="v50-actual-date" value="${today()}"></div>
             </div>
             ${calcCashback ? `<div class="v5-rr-section">
               <div class="v5-rr-label">เงินคืนบันทึกเป็น</div>
@@ -8064,6 +8065,7 @@ App._pickMerchant = function(name, opts = {}) {
     const actualCashback = parseFloat(document.getElementById('v50-actual-cashback')?.value) || 0
     const destination    = document.querySelector('input[name="v50-dest"]:checked')?.value || 'history_only'
     const incomeWalletId = document.getElementById('v50-income-wallet')?.value || ''
+    const recordDate     = document.getElementById('v50-actual-date')?.value || today()
 
     // Idempotency guard: if this statement was already recorded, require a second
     // deliberate confirmation rather than silently double-counting.
@@ -8101,9 +8103,9 @@ App._pickMerchant = function(name, opts = {}) {
     // ── Points → reward account ledger
     if (actualPoints > 0) {
       if (rewardAcct) {
-        S.rewardLedger.push({ id:genId(), type:'points_earned', accountId:rewardAcct.id, cardId, statementId, points:actualPoints, amount:0, date:today(), note:'รับคะแนนจากรอบบัญชี', createdAt:now })
+        S.rewardLedger.push({ id:genId(), type:'points_earned', accountId:rewardAcct.id, cardId, statementId, points:actualPoints, amount:0, date:recordDate, note:'รับคะแนนจากรอบบัญชี', createdAt:now })
       } else {
-        S.rewardLedger.push({ id:genId(), type:'points_received', cardId, statementId, points:actualPoints, amount:0, date:today(), note:'รับคะแนน (ยังไม่ได้เชื่อมบัญชีคะแนน)', createdAt:now })
+        S.rewardLedger.push({ id:genId(), type:'points_received', cardId, statementId, points:actualPoints, amount:0, date:recordDate, note:'รับคะแนน (ยังไม่ได้เชื่อมบัญชีคะแนน)', createdAt:now })
       }
     }
 
@@ -8112,9 +8114,9 @@ App._pickMerchant = function(name, opts = {}) {
       if (destination === 'income') {
         const wallet = walletById(incomeWalletId)
         if (wallet) {
-          const tx = { id:genId(), type:'income', amount:actualCashback, walletId:incomeWalletId, categoryId:'other_income', merchant:'Cashback', note:`รับ Cashback ${card?.name||''}`, date:today(), isRewardReceived:true, statementId, rewardLedgerId:ledgerId }
+          const tx = { id:genId(), type:'income', amount:actualCashback, walletId:incomeWalletId, categoryId:'other_income', merchant:'Cashback', note:`รับ Cashback ${card?.name||''}`, date:recordDate, isRewardReceived:true, statementId, rewardLedgerId:ledgerId }
           S.transactions.unshift(tx)
-          S.rewardLedger.push({ id:ledgerId, type:'cashback_received', cardId, statementId, amount:actualCashback, points:0, date:today(), note:'รับเป็นรายรับ', createdAt:now })
+          S.rewardLedger.push({ id:ledgerId, type:'cashback_received', cardId, statementId, amount:actualCashback, points:0, date:recordDate, note:'รับเป็นรายรับ', createdAt:now })
           App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
         } else {
           notify('กรุณาเลือกกระเป๋าที่รับเงินคืน', 'error'); return
@@ -8129,14 +8131,14 @@ App._pickMerchant = function(name, opts = {}) {
           id: genId(), type: 'income', amount: actualCashback,
           walletId: cardId, categoryId: 'other_income',
           merchant: 'Cashback', note: `Statement Credit – ${card?.name || ''}`,
-          date: today(), isRewardReceived: true, statementId, rewardLedgerId: ledgerId,
+          date: recordDate, isRewardReceived: true, statementId, rewardLedgerId: ledgerId,
         }
         S.transactions.unshift(stCreditTx)
-        S.rewardLedger.push({ id:ledgerId, type:'cashback_statement_credit', cardId, statementId, amount:actualCashback, points:0, date:today(), note:'เครดิตคืนลดหนี้บัตร', createdAt:now })
+        S.rewardLedger.push({ id:ledgerId, type:'cashback_statement_credit', cardId, statementId, amount:actualCashback, points:0, date:recordDate, note:'เครดิตคืนลดหนี้บัตร', createdAt:now })
         App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
       } else {
         // history_only
-        S.rewardLedger.push({ id:ledgerId, type:'cashback_received', cardId, statementId, amount:actualCashback, points:0, date:today(), note:'บันทึกเฉพาะประวัติ', createdAt:now })
+        S.rewardLedger.push({ id:ledgerId, type:'cashback_received', cardId, statementId, amount:actualCashback, points:0, date:recordDate, note:'บันทึกเฉพาะประวัติ', createdAt:now })
       }
     } else if (actualCashback === 0 && actualPoints === 0) {
       notify('ไม่มียอดที่บันทึก', 'warn'); return
