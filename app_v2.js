@@ -15660,15 +15660,17 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
   })()
 
-  // ── D6: Cat-btn grid entrance stagger ─────────────────────────
+  // ── D6: Cat-btn grid entrance stagger (first entrance only) ────
   ;(function _patchRenderAddTxDetailD6() {
     const _prev = App._renderAddTxDetail?.bind(App)
     App._renderAddTxDetail = function (...args) {
+      const isFirstEntrance = !document.getElementById('cat-grid')
       _prev?.(...args)
+      if (!isFirstEntrance) return
       try {
-        document.querySelectorAll('#cat-grid .cat-btn:not(.mt-cat-in)').forEach((btn, i) => {
+        document.querySelectorAll('#cat-grid .cat-btn').forEach((btn, i) => {
+          btn.style.animationDelay = `${i * 22}ms`
           btn.classList.add('mt-cat-in')
-          btn.style.animationDelay = `${i * 28}ms`
         })
       } catch (_) {}
     }

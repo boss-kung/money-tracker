@@ -6099,7 +6099,7 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
   z-index: 0;
 }
 .chips .chip,
-.chips [class*="chip"] { position: relative; z-index: 1; }
+.chips [class*="chip"]:not(.mt-chip-pill) { position: relative; z-index: 1; }
 
 /* ── N3: Amount display keystroke pulse ─────────────────────── */
 @keyframes mt-amount-pulse {
@@ -6413,11 +6413,11 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
 
 /* ── D6: Cat-btn grid entrance stagger ───────────────────────── */
 @keyframes mt-cat-entrance {
-  from { opacity: 0; transform: scale(.82) translateY(5px); }
-  to   { opacity: 1; transform: scale(1)   translateY(0);   }
+  from { opacity: 0; transform: scale(.88); }
+  to   { opacity: 1; transform: scale(1);   }
 }
 .cat-btn.mt-cat-in {
-  animation: mt-cat-entrance .26s cubic-bezier(.34, 1.56, .64, 1) both !important;
+  animation: mt-cat-entrance .22s ease-out both !important;
 }
 
 /* ── D11: Amount summary card exit on "แตะเพื่อแก้ไข" tap ──── */
