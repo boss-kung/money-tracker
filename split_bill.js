@@ -1605,10 +1605,10 @@
             <div class="s-arrow">›</div>
           </div>
         </div>`
-      // Insert before first .sec-title
-      const firstTitle = inner.querySelector('.sec-title')
-      if (firstTitle) inner.insertBefore(sec, firstTitle)
-      else inner.appendChild(sec)
+      // Insert after sticky header (before first section) so it's always top-most
+      const stickyHeader = inner.querySelector('.more-sticky-header')
+      if (stickyHeader) stickyHeader.insertAdjacentElement('afterend', sec)
+      else inner.prepend(sec)
     } catch(_) {}
   }
 
