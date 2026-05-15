@@ -1042,12 +1042,12 @@ html.dark .mt-alert-row-name { color: var(--text); }
 }
 .calc-op-btn {
   flex:1;
-  height:48px;
-  border-radius:14px;
+  height:40px;
+  border-radius:99px;
   border:1.5px solid var(--border);
   background:var(--elevated);
   color:var(--text);
-  font-size:22px;
+  font-size:22px !important;
   font-weight:700;
   touch-action:manipulation;
   -webkit-tap-highlight-color:transparent;
@@ -1994,6 +1994,7 @@ body.is-dashboard #dashboard-content {
   min-height: 76px !important;
   padding: 10px 16px 4px !important;
   line-height: 1.08 !important;
+  translate: -10px;
 }
 .mt-net-value,
 .nw-value {
@@ -3160,7 +3161,7 @@ body {
   border-radius: 999px;
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 20px;
+  font-size: 20px !important;
   line-height: 1;
   cursor: pointer;
 }
