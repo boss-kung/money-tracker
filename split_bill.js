@@ -216,12 +216,12 @@
   let _step  = 1
   let _editingItemIdx = -1
 
-  const STEP_TITLES = ['','ข้อมูลบิล','เพิ่มคน','รายการอาหาร','ส่วนลด / SC / VAT','ใครจ่ายไปแล้ว','สรุป']
+  const STEP_TITLES = ['','ข้อมูลบิล & คน','รายการอาหาร','ส่วนลด / SC / VAT','ใครจ่ายไปแล้ว','สรุป']
   const noAnim = { animate: false }
 
   function stepBar() {
     return `<div style="display:flex;gap:3px;padding:4px 16px 0">
-      ${[1,2,3,4,5,6].map(n=>`<div style="flex:1;height:3px;border-radius:2px;background:${_step>=n?'var(--primary)':'var(--border)'}"></div>`).join('')}
+      ${[1,2,3,4,5].map(n=>`<div style="flex:1;height:3px;border-radius:2px;background:${_step>=n?'var(--primary)':'var(--border)'}"></div>`).join('')}
     </div>`
   }
 
@@ -229,7 +229,7 @@
     return `<div class="sub-header">
       <button class="btn-icon" onclick="${backFn}">←</button>
       <h2 style="flex:1">${esc(STEP_TITLES[_step])}</h2>
-      <span style="font-size:12px;color:var(--muted)">${_step}/6</span>
+      <span style="font-size:12px;color:var(--muted)">${_step}/5</span>
     </div>${stepBar()}`
   }
 
@@ -427,53 +427,17 @@
   function _sbRender(opts) {
     switch (_step) {
       case 1: return _sbStep1(opts)
-      case 2: return _sbStep2(opts)
-      case 3: return _sbStep3(opts)
-      case 4: return _sbStep4(opts)
-      case 5: return _sbStep5(opts)
-      case 6: return _sbStep6(opts)
+      case 2: return _sbStep3(opts)
+      case 3: return _sbStep4(opts)
+      case 4: return _sbStep5(opts)
+      case 5: return _sbStep6(opts)
     }
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  STEP 1
+  //  STEP 1 — ข้อมูลบิล + คน (merged)
   // ══════════════════════════════════════════════════════════════
   function _sbStep1(opts) {
-    App.openSubScreen(`
-      ${stepHeader('App.openSplitBillScreen()')}
-      <div class="sub-scroll" style="padding:16px 16px 40px">
-        <div class="form-group">
-          <label class="form-label">ชื่อบิล</label>
-          <input class="form-input" id="sb1-title" value="${esc(_draft.title)}" placeholder="เช่น ข้าวเย็นวันศุกร์">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div class="form-group">
-            <label class="form-label">วันที่</label>
-            <input class="form-input" type="date" id="sb1-date" value="${esc(_draft.date)}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">ราคารวมจากบิล (฿)</label>
-            <input class="form-input" type="number" inputmode="decimal" id="sb1-total" value="${_draft.manualTotal||''}" placeholder="0 = ไม่ระบุ">
-          </div>
-        </div>
-        <div style="font-size:12px;color:var(--muted);margin-top:-4px;margin-bottom:12px">
-          ใส่ราคาจากใบเสร็จเพื่อให้ระบบเช็กว่าคำนวณตรงกัน
-        </div>
-        ${navRow('ถัดไป: เพิ่มคน →', 'App._sbNext1()')}
-      </div>`, opts)
-  }
-
-  App._sbNext1 = function () {
-    _draft.title       = document.getElementById('sb1-title')?.value.trim() || 'บิลใหม่'
-    _draft.date        = document.getElementById('sb1-date')?.value || todayStr()
-    _draft.manualTotal = Number(document.getElementById('sb1-total')?.value) || 0
-    _step = 2; _sbRender()
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  //  STEP 2
-  // ══════════════════════════════════════════════════════════════
-  function _sbStep2(opts) {
     const people   = SbStore.loadPeople().filter(p => !p.archived)
     const selected = _draft.peopleIds
 
@@ -485,17 +449,47 @@
     }).join('')
 
     App.openSubScreen(`
-      ${stepHeader('App._sbBack()')}
+      ${stepHeader('App.openSplitBillScreen()')}
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${chips ? `<div class="chips" style="flex-wrap:wrap;gap:8px;padding:0 0 16px">${chips}</div>` : ''}
-        <div style="display:flex;gap:8px;margin-bottom:16px">
+        <div class="form-group">
+          <label class="form-label">ชื่อบิล</label>
+          <input class="form-input" id="sb1-title" value="${esc(_draft.title)}" placeholder="เช่น ข้าวเย็นวันศุกร์">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">
+          <div class="form-group">
+            <label class="form-label">วันที่</label>
+            <input class="form-input" type="date" id="sb1-date" value="${esc(_draft.date)}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">ราคารวมจากบิล (฿)</label>
+            <input class="form-input" type="number" inputmode="decimal" id="sb1-total" value="${_draft.manualTotal||''}" placeholder="0 = ไม่ระบุ">
+          </div>
+        </div>
+
+        <div class="sec-title" style="margin-top:4px">คนในบิล</div>
+        ${chips ? `<div class="chips" style="flex-wrap:wrap;gap:8px;padding:0 0 12px">${chips}</div>` : ''}
+        <div style="display:flex;gap:8px;margin-bottom:4px">
           <input class="form-input" id="sb2-newname" placeholder="พิมพ์ชื่อแล้วกด +"
             style="flex:1" onkeydown="if(event.key==='Enter')App._sbQuickAdd()">
           <button class="btn btn-secondary" onclick="App._sbQuickAdd()"
             style="width:auto;padding:0 18px;font-size:20px;line-height:1">+</button>
         </div>
-        ${navRow(`ถัดไป →  (${selected.length} คน)`, 'App._sbNext2()', 'App._sbBack()')}
+
+        ${navRow(`ถัดไป: รายการอาหาร → (${selected.length} คน)`, 'App._sbNext1()')}
       </div>`, opts)
+  }
+
+  App._sbNext1 = function () {
+    _draft.title       = document.getElementById('sb1-title')?.value.trim() || 'บิลใหม่'
+    _draft.date        = document.getElementById('sb1-date')?.value || todayStr()
+    _draft.manualTotal = Number(document.getElementById('sb1-total')?.value) || 0
+    if (!_draft.peopleIds.length) return notify('เลือกอย่างน้อย 1 คน', 'error')
+    ;(_draft.items||[]).forEach(item => {
+      if (!item.participants?.length) {
+        item.participants = _draft.peopleIds.map(id => ({ personId: id, ratio: 1 }))
+      }
+    })
+    _step = 2; _sbRender()
   }
 
   App._sbTogglePerson = function (id) {
@@ -508,7 +502,7 @@
     } else {
       _draft.peopleIds.push(id)
     }
-    _sbStep2(noAnim)
+    _sbStep1(noAnim)
   }
 
   App._sbQuickAdd = function () {
@@ -518,17 +512,7 @@
     const person = { id: genId(), name, emoji: '👤', color: '#2563EB', note: '', archived: false, createdAt: nowISO(), updatedAt: nowISO() }
     SbStore.upsertPerson(person)
     _draft.peopleIds.push(person.id)
-    _sbStep2(noAnim)
-  }
-
-  App._sbNext2 = function () {
-    if (!_draft.peopleIds.length) return notify('เลือกอย่างน้อย 1 คน', 'error')
-    ;(_draft.items||[]).forEach(item => {
-      if (!item.participants?.length) {
-        item.participants = _draft.peopleIds.map(id => ({ personId: id, ratio: 1 }))
-      }
-    })
-    _step = 3; _sbRender()
+    _sbStep1(noAnim)
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -680,7 +664,7 @@
     _sbStep3(noAnim)
   }
 
-  App._sbNext3 = function () { _step = 4; _sbRender() }
+  App._sbNext3 = function () { _step = 3; _sbRender() }
 
   function _sbItemSaveFields() {
     const item = _draft.items[_editingItemIdx]
@@ -841,7 +825,7 @@
     })
   }
 
-  App._sbNext4 = function () { _sbPipeSaveAll(); _step = 5; _sbRender() }
+  App._sbNext4 = function () { _sbPipeSaveAll(); _step = 4; _sbRender() }
 
   // ══════════════════════════════════════════════════════════════
   //  STEP 5 — ใครจ่ายไปแล้ว
@@ -900,7 +884,7 @@
     })
   }
 
-  App._sbNext5 = function () { _sbSavePayments(); _step = 6; _sbRender() }
+  App._sbNext5 = function () { _sbSavePayments(); _step = 5; _sbRender() }
 
   // ══════════════════════════════════════════════════════════════
   //  STEP 6 — สรุป
@@ -975,7 +959,7 @@
 
   // ── Back helper ───────────────────────────────────────────────
   App._sbBack = function () {
-    if (_step === 3 && _editingItemIdx !== -1) {
+    if (_step === 2 && _editingItemIdx !== -1) {
       App._sbItemCancel()
       return
     }
