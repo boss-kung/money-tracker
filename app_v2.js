@@ -2504,6 +2504,13 @@ App.render();
                 const _typeText = rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : 'ส่วนลดทันที'
                 const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.trackLocked ? '🔒 ยังไม่ถึงยอด' : '', rule.allowStacking ? '' : 'อาจไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
                 const _trackHint = rule.trackLocked ? `<span class="list-item-sub" style="color:var(--expense)">สะสมผ่าน${esc(rule.trackChannelLabel)}อีก ${esc(money(rule.trackRemaining))} ในรอบนี้เพื่อปลดล็อก</span>` : ''
+                const _merchantHint = rule.merchantCashbackRemaining != null
+                  ? (rule.merchantCashbackRemaining <= 0
+                    ? `<span class="list-item-sub" style="color:var(--expense)">ใช้สิทธิ์ในร้านนี้เดือนนี้ครบแล้ว</span>`
+                    : `<span class="list-item-sub" style="color:var(--muted)">เหลือรับเงินคืนได้อีก ${esc(money(rule.merchantCashbackRemaining))} ในร้านนี้เดือนนี้</span>`)
+                  : (rule.merchantEligibleRemaining != null && rule.merchantEligibleRemaining <= 0
+                    ? `<span class="list-item-sub" style="color:var(--expense)">ยอดคำนวณในร้านนี้เดือนนี้เต็มแล้ว</span>`
+                    : '')
                 return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}${rule.trackLocked ? ' locked' : ''}" onclick="App._toggleTxRewardRule('${esc(rule.id)}')" aria-pressed="${_selected ? 'true' : 'false'}">
                   <span class="csr-main">
                     <span>
@@ -2511,6 +2518,7 @@ App.render();
                       <span class="list-item-sub">${esc(_meta)}</span>
                       ${rule.description ? `<span class="list-item-sub">${esc(rule.description)}</span>` : ''}
                       ${_trackHint}
+                      ${_merchantHint}
                     </span>
                   </span>
                   <span class="reward-rule-toggle${_selected ? ' on' : ''}" aria-hidden="true"><span class="reward-rule-toggle-knob"></span></span>
@@ -2518,7 +2526,7 @@ App.render();
               }).join('')
               const _warnings = (_estimate.warnings || []).map(msg => `<div class="form-hint" style="color:var(--expense)">${esc(msg)}</div>`).join('')
               const _caps = (_estimate.rules || [])
-                .filter(row => row.capApplied || row.cycleRewardRemainingBefore != null || row.triggerMode === 'cycle_spend_threshold')
+                .filter(row => row.capApplied || row.cycleRewardRemainingBefore != null || row.triggerMode === 'cycle_spend_threshold' || row.merchantCashbackRemainingBefore != null || row.merchantEligibleSpendRemainingBefore != null)
                 .map(row => {
                   const _text = App.buildBenefitCapAppliedText?.(row) || ''
                   return _text ? `<div class="form-hint">${esc(row.ruleName)}: ${esc(_text)}</div>` : ''
@@ -11389,6 +11397,15 @@ App._pickMerchant = function(name, opts = {}) {
       if (Number(remainingBefore || 0) <= 0) parts.push('ใช้สิทธิ์รอบนี้ครบแล้ว')
       else parts.push(`เหลือใช้ได้อีก ${formatBenefitCapValue(row.type, remainingBefore)} ${cycleLabel}`)
     }
+    const merchantCashbackRem = row.merchantCashbackRemainingBefore
+    const merchantEligibleRem = row.merchantEligibleSpendRemainingBefore
+    if (merchantCashbackRem != null) {
+      if (merchantCashbackRem <= 0) parts.push('ใช้สิทธิ์ในร้านนี้เดือนนี้ครบแล้ว')
+      else parts.push(`เหลือรับเงินคืนได้อีก ${formatBenefitCapValue(row.type, merchantCashbackRem)} ในร้านนี้เดือนนี้`)
+    } else if (merchantEligibleRem != null) {
+      if (merchantEligibleRem <= 0) parts.push('ยอดคำนวณในร้านนี้เดือนนี้เต็มแล้ว')
+      else parts.push(`เหลือยอดคำนวณอีก ${formatBenefitCapValue('', merchantEligibleRem)} ในร้านนี้เดือนนี้`)
+    }
     if (diffValue > 0) {
       parts.push(`ควรได้ ${formatBenefitCapValue(row.type, rawValue)} แต่หลังติด cap ได้จริง ${formatBenefitCapValue(row.type, finalValue)}`)
       parts.push(`ถูกตัดออก ${formatBenefitCapValue(row.type, diffValue)}`)
@@ -11443,9 +11460,22 @@ App._pickMerchant = function(name, opts = {}) {
           trackRemaining = Math.max(0, Number(trig.thresholdAmount) - spent)
           trackChannelLabel = formatTrackChannelLabel(trackChannels) || 'ทุกช่องทาง'
         }
+        let merchantCashbackRemaining = null
+        let merchantEligibleRemaining = null
+        const ruleLimits = rule.limits || {}
+        if (eligibility.matched && (Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle || 0) > 0)) {
+          const cycle = getCyclePeriodForDate(cardId, txDraft.date || today(), rule)
+          const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', [], txDraft.merchant || '')
+          if (Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0) {
+            merchantCashbackRemaining = Math.max(0, Number(ruleLimits.maxRewardAmountPerMerchantPerCycle) - Number(usage.cashbackUsedByMerchantBefore || 0))
+          }
+          if (Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle || 0) > 0) {
+            merchantEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle) - Number(usage.eligibleSpendUsedByMerchantBefore || 0))
+          }
+        }
         const suggested = !!rule.active && eligibility.matched
         const score = (suggested ? 100 : 0) + (rule.isBaseRule ? 15 : 0) + (specificity * 3) + Number(rule.priority || 0)
-        return { ...rule, suggested, timeMatch: eligibility.timeMatch, eligibility, suggestionScore: score, trackLocked, trackRemaining, trackChannelLabel }
+        return { ...rule, suggested, timeMatch: eligibility.timeMatch, eligibility, suggestionScore: score, trackLocked, trackRemaining, trackChannelLabel, merchantCashbackRemaining, merchantEligibleRemaining }
       })
       .sort((a, b) => Number(b.suggested) - Number(a.suggested) || Number(b.suggestionScore || 0) - Number(a.suggestionScore || 0) || String(a.name || '').localeCompare(String(b.name || '')))
   }
