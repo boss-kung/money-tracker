@@ -2636,6 +2636,8 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 #report-view-chips {
   overflow-x: visible !important;
   flex-wrap: wrap !important;
+  justify-content: flex-start !important;
+  align-content: flex-start !important;
   gap: 6px !important;
   padding: 6px 0 0 !important;
 }
@@ -3095,13 +3097,50 @@ body {
   padding: 8px 12px !important;
 }
 .tx-compact-search {
+  position: relative;
   margin-bottom: 7px;
 }
 .tx-compact-search .form-input {
-  padding: 9px 12px;
+  padding: 9px 38px 9px 12px;
   font-size: 14px;
   border-radius: 12px;
 }
+.tx-compact-search .mt-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tx-compact-search .mt-search-clear[hidden] { display: none; }
+
+.tx-amount-display-wrap {
+  position: relative;
+  width: min(100%, 360px);
+}
+.tx-amount-clear {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tx-amount-clear[hidden] { display: none; }
 .tx-month-row-compact {
   padding: 0 0 2px !important;
   gap: 6px;

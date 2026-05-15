@@ -1722,6 +1722,7 @@ App.render();
     const box = document.getElementById('add-tx-content')
     if (!box) return false
     const displayEl = box.querySelector('[data-role="tx-amount-display"]')
+    const clearBtn = box.querySelector('[data-role="tx-amount-clear"]')
     const nextBtn = box.querySelector('[data-role="tx-next-btn"]')
     const typeLabelEl = box.querySelector('[data-role="tx-type-label"]')
     if (!displayEl || !nextBtn) return false
@@ -1732,6 +1733,10 @@ App.render();
     const canNext = num > 0
     displayEl.style.color = canNext ? color : '#D1D5DB'
     displayEl.textContent = `${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}`
+    if (clearBtn) {
+      clearBtn.hidden = !canNext
+      clearBtn.disabled = !canNext
+    }
     if (typeLabelEl) typeLabelEl.textContent = typeLabel(S.tx.type)
     nextBtn.textContent = canNext ? 'ถัดไป →' : 'ใส่จำนวนเงิน'
     nextBtn.style.background = canNext ? color : '#D1D5DB'
@@ -1842,7 +1847,10 @@ App.render();
       <div class="sheet-header"><h2>${esc(title)}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
       <div class="type-tabs">${tabs.map(([v,l,i]) => `<button class="type-tab type-${v}${S.tx.type === v ? ' active' : ''}" onclick="App._setTxType('${v}')"><span aria-hidden="true">${i}</span> ${l}</button>`).join('')}</div>
       <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 20px">
-        <div class="amount-display" data-role="tx-amount-display" style="color:${canNext ? color : '#D1D5DB'}">${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}</div>
+        <div class="tx-amount-display-wrap">
+          <div class="amount-display" data-role="tx-amount-display" style="color:${canNext ? color : '#D1D5DB'}">${S.tx.type === 'income' ? '+' : S.tx.type === 'expense' ? '-' : ''}฿${display}</div>
+          <button type="button" class="tx-amount-clear" data-role="tx-amount-clear" aria-label="ล้างจำนวนเงิน" onclick="App._clearTxAmount()"${canNext ? '' : ' hidden disabled'}>×</button>
+        </div>
         <div class="quick-amount-row">${getSmartQuickAmounts(S.tx.type).map(n => `<button type="button" data-quick-amount="${n}">${fmtQuickAmt(n)}</button>`).join('')}</div>
       </div>
       <div style="padding-bottom:calc(12px + var(--app-bottom-gap, 0px))">
@@ -1855,6 +1863,11 @@ App.render();
 
   App._quickAmount = function(n) {
     S.tx.amount = String(n)
+    if (!App._syncAddTxAmountUI?.()) App._renderAddTxAmount()
+  }
+
+  App._clearTxAmount = function() {
+    S.tx.amount = '0'
     if (!App._syncAddTxAmountUI?.()) App._renderAddTxAmount()
   }
 
@@ -4852,7 +4865,10 @@ App._pickMerchant = function(name, opts = {}) {
     const activeCount = [S.txType && S.txType !== 'all', S.txWalletFilter, S.txCategoryFilter, S.txAmtMin, S.txAmtMax].filter(Boolean).length
     header.innerHTML = `<div class="tx-compact-top"><div><h1>รายการ</h1><p id="tx-compact-summary">กำลังคำนวณ...</p></div><button class="btn btn-secondary btn-sm tx-filter-toggle" onclick="App.toggleTxFilterPanel()">ตัวกรอง${activeCount ? ` (${activeCount})` : ''}</button></div>
       <div class="tx-summary-cards tx-summary-cards-compact"><div class="tx-summary-card income"><span>รายรับ</span><strong id="tx-income-total">${money(0)}</strong></div><div class="tx-summary-card expense"><span>รายจ่าย</span><strong id="tx-expense-total">${money(0)}</strong></div></div>
-      <div class="tx-compact-search"><input class="form-input" id="tx-search" placeholder="🔍 ค้นหารายการ ร้านค้า หมวด จำนวนเงิน" value="${esc(S.txSearch || '')}"></div>
+      <div class="tx-compact-search">
+        <input class="form-input" id="tx-search" placeholder="🔍 ค้นหารายการ ร้านค้า หมวด จำนวนเงิน" value="${esc(S.txSearch || '')}">
+        <button type="button" class="mt-search-clear" aria-label="ล้างการค้นหา"${S.txSearch ? '' : ' hidden'}>×</button>
+      </div>
       <div class="chips tx-month-row tx-month-row-compact" id="tx-month-chips">${monthChips}</div>
       <div id="tx-filter-panel" class="tx-filter-panel${S.txFilterOpen ? ' open' : ''}">
         <div class="chips tx-filter-row" id="tx-type-chips">${typeChips}</div>
@@ -4861,7 +4877,19 @@ App._pickMerchant = function(name, opts = {}) {
         <button class="btn btn-secondary btn-sm" onclick="App.clearTxFilters()">ล้างตัวกรอง</button>
       </div>`
     const search = document.getElementById('tx-search')
-    if (search) search.oninput = e => { S.txSearch = e.target.value; App.renderTransactionsList() }
+    const searchClear = header.querySelector('.mt-search-clear')
+    if (search) search.oninput = e => {
+      S.txSearch = e.target.value
+      if (searchClear) searchClear.hidden = !e.target.value
+      App.renderTransactionsList()
+    }
+    if (search && searchClear) searchClear.onclick = () => {
+      search.value = ''
+      S.txSearch = ''
+      searchClear.hidden = true
+      App.renderTransactionsList()
+      search.focus()
+    }
     App.renderTransactionsList()
   }
 
