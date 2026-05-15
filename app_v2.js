@@ -70,6 +70,131 @@
 })()
 
 /* ============================================================
+   Focused motion + UX refinements requested in May 2026
+   Non-invasive wrappers around the final render paths.
+   ============================================================ */
+;(function () {
+  if (!window.App || !window.S) return
+
+  const nextFrame = fn => requestAnimationFrame(() => requestAnimationFrame(fn))
+  const monthDirection = (from, to) => {
+    if (!from || !to || from === 'all' || to === 'all' || from === to) return 'next'
+    return String(to).localeCompare(String(from)) > 0 ? 'next' : 'prev'
+  }
+  const cssEscape = value => window.CSS?.escape ? CSS.escape(String(value)) : String(value).replace(/["\\]/g, '\\$&')
+
+  const prevSetTxMonth = App.setTxMonth?.bind(App)
+  App.setTxMonth = function (month) {
+    const list = document.getElementById('tx-list-content')
+    const dir = monthDirection(S.txMonth, month)
+    if (!list || !prevSetTxMonth) return prevSetTxMonth?.(month)
+    list.classList.remove('mt-month-in-next', 'mt-month-in-prev')
+    list.classList.add(`mt-month-out-${dir}`)
+    setTimeout(() => {
+      prevSetTxMonth(month)
+      const fresh = document.getElementById('tx-list-content')
+      fresh?.classList.remove(`mt-month-out-${dir}`)
+      fresh?.classList.add(`mt-month-in-${dir}`)
+      setTimeout(() => fresh?.classList.remove(`mt-month-in-${dir}`), 240)
+    }, 140)
+  }
+
+  let paidBillId = ''
+  const prevConfirmUpcomingBillPayment = App.confirmUpcomingBillPayment?.bind(App)
+  App.confirmUpcomingBillPayment = function (billId, ...rest) {
+    paidBillId = billId
+    return prevConfirmUpcomingBillPayment?.(billId, ...rest)
+  }
+  const prevOpenUpcomingBillsScreen = App.openUpcomingBillsScreen?.bind(App)
+  App.openUpcomingBillsScreen = function (...args) {
+    prevOpenUpcomingBillsScreen?.(...args)
+    if (!paidBillId) return
+    nextFrame(() => {
+      document.querySelector(`.upcoming-bill-card[data-bill-id="${cssEscape(paidBillId)}"]`)?.classList.add('mt-paid-complete')
+      paidBillId = ''
+    })
+  }
+
+  let toggledRecurringId = ''
+  const prevToggleRecurring = App.toggleRecurring?.bind(App)
+  App.toggleRecurring = function (id, ...rest) {
+    toggledRecurringId = id
+    return prevToggleRecurring?.(id, ...rest)
+  }
+  const prevOpenRecurringScreen = App.openRecurringScreen?.bind(App)
+  App.openRecurringScreen = function (...args) {
+    prevOpenRecurringScreen?.(...args)
+    if (!toggledRecurringId) return
+    nextFrame(() => {
+      document.querySelector(`.recurring-item[data-recurring-id="${cssEscape(toggledRecurringId)}"]`)?.classList.add('mt-recurring-state')
+      toggledRecurringId = ''
+    })
+  }
+
+  const rewardSnapshots = new Map()
+  const prevOpenCCDetail = App.openCCDetail?.bind(App)
+  App.openCCDetail = function (cardId, ...rest) {
+    const before = rewardSnapshots.get(cardId) || []
+    prevOpenCCDetail?.(cardId, ...rest)
+    nextFrame(() => {
+      const values = [...document.querySelectorAll('.cc-detail-screen .reward-grid .reward-tile strong')]
+      const current = values.map(el => el.textContent.trim())
+      values.forEach((el, i) => {
+        if (!before.length || before[i] === current[i]) return
+        el.classList.remove('mt-reward-replace')
+        void el.offsetWidth
+        el.classList.add('mt-reward-replace')
+      })
+      rewardSnapshots.set(cardId, current)
+    })
+  }
+
+  let ccbrDirection = 'next'
+  const prevCcbrNext = App._ccbrNext?.bind(App)
+  App._ccbrNext = function (...args) {
+    ccbrDirection = 'next'
+    return prevCcbrNext?.(...args)
+  }
+  const prevCcbrBack = App._ccbrBack?.bind(App)
+  App._ccbrBack = function (...args) {
+    ccbrDirection = 'prev'
+    return prevCcbrBack?.(...args)
+  }
+  const prevCcbrRenderStep = App._ccbrRenderStep?.bind(App)
+  App._ccbrRenderStep = function (...args) {
+    prevCcbrRenderStep?.(...args)
+    nextFrame(() => {
+      const scroll = document.querySelector('#sub-screen .sub-scroll')
+      if (!scroll) return
+      const cls = ccbrDirection === 'prev' ? 'ccbr-panel-prev' : 'ccbr-panel-next'
+      scroll.classList.add(cls)
+      setTimeout(() => scroll.classList.remove('ccbr-panel-prev', 'ccbr-panel-next'), 260)
+    })
+  }
+
+  const prevMonthlyReview = App.openMonthlyReview?.bind(App)
+  App.openMonthlyReview = function (month, animate = true) {
+    const currentMonth = S._mtMonthlyReviewMonth || ''
+    const targetMonth = month || currentMonth
+    const dir = monthDirection(currentMonth, targetMonth)
+    const screen = document.querySelector('#sub-screen .sub-scroll')
+    if (!animate && screen && currentMonth && targetMonth && currentMonth !== targetMonth) {
+      screen.classList.add(`monthly-review-out-${dir}`)
+      setTimeout(() => {
+        prevMonthlyReview?.(month, false)
+        S._mtMonthlyReviewMonth = targetMonth
+        const fresh = document.querySelector('#sub-screen .sub-scroll')
+        fresh?.classList.add(`monthly-review-in-${dir}`)
+        setTimeout(() => fresh?.classList.remove(`monthly-review-in-${dir}`), 240)
+      }, 140)
+      return
+    }
+    prevMonthlyReview?.(month, animate)
+    S._mtMonthlyReviewMonth = targetMonth || currentMonth
+  }
+})()
+
+/* ============================================================
    Upcoming Bills / รายการรอจ่าย
    Manual future payables that reserve available cash only
    ============================================================ */
@@ -277,7 +402,7 @@ window.__mountUpcomingBillsFeature = function() {
     const canReschedule = bill.status === 'pending'
     const canCancel = bill.status === 'pending'
     const metaLine = [formatThaiDate(bill.dueDate), ...subParts].filter(Boolean).join(' · ')
-    return `<div class="card card-pad upcoming-bill-card">
+    return `<div class="card card-pad upcoming-bill-card" data-bill-id="${esc(bill.id)}">
       <div class="upcoming-bill-head">
         <div>
           <div class="upcoming-bill-title">${esc(bill.title || 'ไม่ระบุชื่อ')}</div>
@@ -2020,7 +2145,7 @@ App.render();
         <div class="segmented-tabs segmented-tabs-2"><button class="segmented-tab ${active === 'expense' ? 'active' : ''}" onclick="App.openBudgetScreen('expense', false)">รายจ่าย</button><button class="segmented-tab ${active === 'income' ? 'active' : ''}" onclick="App.openBudgetScreen('income', false)">รายรับ</button></div>
         <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px">${active === 'income' ? 'ตั้งเป้ารายรับรายเดือนแต่ละหมวด' : 'ตั้งงบรายจ่ายรายเดือนแต่ละหมวด'} (0 = ไม่กำหนด)</p>
         <div class="card card-pad">${rowsHtml}</div>
-      </div>`)
+      </div>`, { animate })
   }
 
   App.saveBudgets = function(kind = S.budgetTab || 'expense') {
@@ -2136,7 +2261,7 @@ App.render();
   function renderEditorColor(prefix, current, targetId) {
     const normalized = current || '#2563EB'
     return `<div class="color-picker-row compact-colors">${COLORS.map(c => `<button type="button" class="color-swatch${c.toLowerCase() === String(normalized).toLowerCase() ? ' active' : ''}" data-color="${c}" style="background:${c}" onclick="App.pickColor('${prefix}','${c}')" aria-label="เลือกสี ${c}"></button>`).join('')}<label class="color-swatch color-swatch-custom" style="--picked:${esc(normalized)}" aria-label="เลือกสีเอง"><input type="color" id="${prefix}-color-native" value="${esc(normalized)}" oninput="App.pickColor('${prefix}', this.value)"><span>＋</span></label></div>
-      <input type="hidden" id="${targetId}" value="${esc(normalized)}"><div class="form-hint">เลือกจากสี preset หรือแตะวงกลมท้ายสุดเพื่อกำหนดสีเอง</div>`
+      <input type="hidden" id="${targetId}" value="${esc(normalized)}">`
   }
   App.renderEditorColor = renderEditorColor
 
@@ -2242,7 +2367,7 @@ App.render();
       ? [allCats.find(c => c.id === _suggestedCatId), ...allCats.filter(c => c.id !== _suggestedCatId)].filter(Boolean)
       : allCats
     const amount = numericAmount(S.tx.amount || 0)
-    const display = formatDraftAmount(S.tx.amount || '0')
+    const display = Number(String(S.tx.amount || '0').replace(/,/g, '') || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
     const color = typeColor(type)
     const INVEST_TYPES = new Set(['gold','crypto','fcd'])
     const isTransfer = type === 'transfer'
@@ -2263,7 +2388,7 @@ App.render();
     box.innerHTML = `<div class="sheet-header"><h2>${S.txMode === 'edit' ? 'แก้ไขรายละเอียด' : 'รายละเอียดรายการ'}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
       <div class="add-detail-shell">
         <div class="add-detail-scroll">
-          <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'} · แตะเพื่อแก้ไข</small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
+          <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small><b>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'}</b><span> · แตะเพื่อแก้ไข</span></small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div id="cat-grid" style="display:flex;flex-direction:row;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding:0 2px 6px;margin:0 -2px">${orderedCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')" style="flex:0 0 110px;width:110px;scroll-snap-align:start;font-size:12px;font-weight:600"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}</div></div>` : ''}
           ${isExpense ? `<div class="form-group"><label class="form-label">ช่องทางการใช้จ่าย</label><select class="form-input" id="tx-channel" onchange="App._txField('channel',this.value);App._renderAddTxDetail()">${(App.getBenefitChannelOptions?.() || [['','ไม่ระบุ'],['online','ออนไลน์'],['offline','หน้าร้าน / ออฟไลน์']]).map(([value,label]) => `<option value="${esc(value)}"${S.tx.channel === value ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></div>` : ''}
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);App._renderAddTxDetail()">${walletOptions}</select></div>
@@ -2277,18 +2402,21 @@ App.render();
     </div>`
   : `<div class="form-group">
       <label class="form-label">ร้านค้า / แหล่งที่มา</label>
-      <input
-        class="form-input"
-        id="tx-merchant"
-        autocomplete="off"
-        autocapitalize="none"
-        placeholder="เช่น Grab, Netflix, เงินเดือน"
-        value="${esc(S.tx.merchant)}"
-        oninput="App._txField('merchant', this.value); App._showMerchantDropdown?.(this.value)"
-        onfocus="App._showMerchantDropdown?.(this.value)"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();App._confirmTypedMerchant?.()}"
-        onblur="App._merchantBlurTimer=setTimeout(()=>App._hideMerchantDropdown?.(true),260)"
-      >
+      <div class="tx-merchant-input-wrap">
+        <input
+          class="form-input"
+          id="tx-merchant"
+          autocomplete="off"
+          autocapitalize="none"
+          placeholder="เช่น Grab, Netflix, เงินเดือน"
+          value="${esc(S.tx.merchant)}"
+          oninput="App._txField('merchant', this.value); App._showMerchantDropdown?.(this.value)"
+          onfocus="App._showMerchantDropdown?.(this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();App._confirmTypedMerchant?.()}"
+          onblur="App._merchantBlurTimer=setTimeout(()=>App._hideMerchantDropdown?.(true),260)"
+        >
+        <button type="button" class="tx-merchant-clear" aria-label="ล้างร้านค้า" onclick="App.clearTxMerchant()">×</button>
+      </div>
       ${S.tx.merchantSuggestionNote ? `<div class="form-hint">${esc(S.tx.merchantSuggestionNote)}</div>` : ''}
     </div>`}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value);App._renderAddTxDetail()"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
@@ -3134,7 +3262,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       .reduce((sum, w) => sum + Number(App._investmentValueTHB ? App._investmentValueTHB(w) : (w.balance || 0)), 0)
     const miniCards = [
       { icon:'💵', value: cashTotal, name:'เงินสด', onclick:"App.showPage('wallets')" },
-      { icon:'📈', value: investmentTotal, name:'การลงทุน', onclick:"App.showPage('wallets')" },
+      { icon:'📈', value: investmentTotal, name:'การลงทุน', onclick:"App.showPage('wallets');requestAnimationFrame(()=>requestAnimationFrame(()=>App._scrollToWalletSection?.('wallet-anchor-invest')))" },
       { icon:'🪙', value: cryptoSummary.totalValueTHB, name:'Crypto', onclick:'App.openCryptoPortfolioDetail()' },
     ]
     html += `<div class="mt-wallet-mini-grid">${miniCards.map(card => `
@@ -4968,7 +5096,7 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.openRecurringScreen = function() {
     const rows = (S.recurring || []).slice().sort((a,b) => String(a.nextDueDate || '').localeCompare(String(b.nextDueDate || '')))
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.openRecurringForm()" style="width:auto">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px">${rows.length ? rows.map(r => { const due = r.nextDueDate || today(); const dueNow = due <= today(); return `<div class="recurring-item ${r.paused?'paused':''}"><div class="list-item-icon" style="background:${esc(r.color || '#2563EB')}33">${esc(r.icon || '🔁')}</div><div class="list-item-info"><div class="list-item-name">${esc(r.name)}</div><div class="list-item-sub">${money(r.amount)} · ${r.type === 'income' ? 'รายรับ' : 'รายจ่าย'} · ครบกำหนด ${thaiDateShort(due)}${dueNow ? ' · ถึงกำหนดแล้ว' : ''}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.postRecurringNow('${esc(r.id)}')">✓</button><button class="icon-btn" onclick="App.snoozeRecurring('${esc(r.id)}',7)">+7</button><button class="icon-btn" onclick="App.skipRecurring('${esc(r.id)}')">ข้าม</button><button class="icon-btn" onclick="App.openRecurringForm('${esc(r.id)}')">✏️</button><button class="icon-btn" onclick="App.deleteRecurring('${esc(r.id)}')">🗑</button></div></div>` }).join('') : App._emptyState('🔁','ยังไม่มีรายการประจำ','')}</div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.openRecurringForm()" style="width:auto">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px">${rows.length ? rows.map(r => { const due = r.nextDueDate || today(); const dueNow = due <= today(); return `<div class="recurring-item ${r.paused?'paused':''}" data-recurring-id="${esc(r.id)}"><div class="list-item-icon" style="background:${esc(r.color || '#2563EB')}33">${esc(r.icon || '🔁')}</div><div class="list-item-info"><div class="list-item-name">${esc(r.name)}</div><div class="list-item-sub">${money(r.amount)} · ${r.type === 'income' ? 'รายรับ' : 'รายจ่าย'} · ครบกำหนด ${thaiDateShort(due)}${dueNow ? ' · ถึงกำหนดแล้ว' : ''}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.toggleRecurring('${esc(r.id)}')" aria-label="${r.paused ? 'เริ่มรายการประจำ' : 'หยุดรายการประจำ'}">${r.paused ? '▶' : '⏸'}</button><button class="icon-btn" onclick="App.postRecurringNow('${esc(r.id)}')">✓</button><button class="icon-btn" onclick="App.snoozeRecurring('${esc(r.id)}',7)">+7</button><button class="icon-btn" onclick="App.skipRecurring('${esc(r.id)}')">ข้าม</button><button class="icon-btn" onclick="App.openRecurringForm('${esc(r.id)}')">✏️</button><button class="icon-btn" onclick="App.deleteRecurring('${esc(r.id)}')">🗑</button></div></div>` }).join('') : App._emptyState('🔁','ยังไม่มีรายการประจำ','')}</div>`)
   }
 
   // 6) Restore AI financial advisor card on the rolled-back Reports screen.
@@ -12835,7 +12963,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     </div>`
   }
 
-  App.openPrivilegeForm = function(privilegeId = '', preserveDraft = false) {
+  App.openPrivilegeForm = function(privilegeId = '', preserveDraft = false, animate = true) {
     ensurePrivilegesState()
     const existing = privilegeId ? (S.privileges || []).find(row => row.id === privilegeId) : null
     S.editingPrivilegeId = privilegeId || ''
@@ -12855,7 +12983,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div class="form-group">
           <label class="form-label">Template สิทธิพิเศษ</label>
           <div class="chips privilege-template-row">
-            ${PRIVILEGE_TYPES.map(([key, label]) => `<button class="chip${draft.type === key ? ' active' : ''}" onclick="App._updatePrivilegeDraft('type', '${key}'); App.openPrivilegeForm('${esc(privilegeId)}', true)">${label}</button>`).join('')}
+            ${PRIVILEGE_TYPES.map(([key, label]) => `<button class="chip${draft.type === key ? ' active' : ''}" onclick="App._updatePrivilegeDraft('type', '${key}'); App.openPrivilegeForm('${esc(privilegeId)}', true, false)">${label}</button>`).join('')}
           </div>
           <div class="form-hint">${esc(template.hint)}</div>
         </div>
@@ -12873,7 +13001,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" rows="4" placeholder="เงื่อนไขเพิ่มเติม" oninput="App._updatePrivilegeDraft('note', this.value)">${esc(draft.note)}</textarea></div>
         ${existing ? `<button class="btn btn-outline privilege-delete-btn" onclick="App.deletePrivilege('${esc(existing.id)}')">ลบสิทธิพิเศษ</button>` : ''}
       </div>`
-    App.openSubScreen(html)
+    App.openSubScreen(html, { animate })
   }
 
   App.savePrivilege = function(privilegeId = '') {
@@ -13998,7 +14126,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div style="display:grid;grid-template-columns: 4fr 1fr;gap:8px;margin-bottom:12px">
           <input id="ask-q-input" class="form-input" placeholder="เช่น เดือนนี้ใช้จ่ายเท่าไร..." style="flex:1;padding:10px 12px;font-size:14px"
             onkeydown="if(event.key==='Enter')App.submitAskQuery()">
-          <button class="btn btn-primary" onclick="App.submitAskQuery()" style="padding:10px 16px;white-space:nowrap;min-width:60px">ถาม</button>
+          <button id="ask-submit-btn" class="btn btn-primary ask-submit-btn" onclick="App.submitAskQuery()" style="padding:10px 16px;white-space:nowrap;min-width:60px"><span>ถาม</span></button>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
           ${presets.map(p => `<button class="chip" onclick="App._askPreset(${esc(JSON.stringify(p))})" style="font-size:12px;padding:5px 10px">${esc(p)}</button>`).join('')}
@@ -14021,16 +14149,20 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (!q.trim()) return
     const box = document.getElementById('ask-answer-box')
     if (!box) return
+    const submit = document.getElementById('ask-submit-btn')
+    submit?.classList.add('is-sending')
     try {
       const r = buildAskAnswer(q)
+      const answerBlocks = String(r.body || '').split(/<br\s*\/?>/i).filter(Boolean)
       box.innerHTML = `
         <div class="card" style="padding:14px 16px;border-left:3px solid var(--primary)">
           <div style="font-size:12px;color:var(--muted);margin-bottom:6px">${esc(r.icon)} ${esc(r.title)}</div>
-          <div style="font-size:14px;line-height:1.7">${r.body}</div>
+          <div class="ask-answer-body" style="font-size:14px;line-height:1.7">${answerBlocks.map((part, i) => `<div class="ask-answer-block" style="animation-delay:${i * 55}ms">${part}</div>`).join('')}</div>
         </div>`
     } catch(_) {
       box.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px">ไม่สามารถประมวลผลได้</div>`
     }
+    setTimeout(() => submit?.classList.remove('is-sending'), 320)
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -15779,18 +15911,24 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       const q = input.value.trim().toLowerCase()
       const matches = (S.merchants || [])
         .filter(m => !q || String(m.name || '').toLowerCase().includes(q))
-        .slice(0, 6)
+        .slice(0, 12)
       if (!matches.length) return
       if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative'
       const dd = document.createElement('div')
       dd.className = 'mt-merchant-suggest'
+      dd.addEventListener('pointerdown', () => clearTimeout(App._merchantBlurTimer))
       matches.forEach((m, i) => {
         const item = document.createElement('div')
         item.className = 'mt-merchant-suggest-item'
         item.innerHTML = `<span style="font-size:17px;flex-shrink:0">${String(m.emoji || m.icon || '🏪')}</span><span>${String(m.name || '')}</span>`
         item.style.animationDelay = `${i * 38}ms`
-        item.addEventListener('pointerdown', (e) => {
-          e.preventDefault()
+        let startX = 0, startY = 0
+        item.addEventListener('pointerdown', e => {
+          startX = e.clientX
+          startY = e.clientY
+        })
+        item.addEventListener('pointerup', e => {
+          if (Math.abs(e.clientX - startX) > 8 || Math.abs(e.clientY - startY) > 8) return
           input.value = m.name
           App._txField?.('merchant', m.name)
           input.dispatchEvent(new Event('input', { bubbles: true }))
@@ -15818,4 +15956,139 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
   })()
 
+  App.clearTxMerchant = function () {
+    const input = document.getElementById('tx-merchant')
+    if (!input) return
+    input.value = ''
+    App._txField?.('merchant', '')
+    App._hideMerchantDropdown?.(true)
+    input.focus()
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+
+})()
+
+/* ============================================================
+   Focused motion + UX refinements requested in May 2026
+   Non-invasive wrappers around the final render paths.
+   ============================================================ */
+;(function () {
+  if (typeof App === 'undefined' || typeof S === 'undefined') return
+
+  const nextFrame = fn => requestAnimationFrame(() => requestAnimationFrame(fn))
+  const monthDirection = (from, to) => {
+    if (!from || !to || from === 'all' || to === 'all' || from === to) return 'next'
+    return String(to).localeCompare(String(from)) > 0 ? 'next' : 'prev'
+  }
+  const cssEscape = value => window.CSS?.escape ? CSS.escape(String(value)) : String(value).replace(/["\\]/g, '\\$&')
+
+  const prevSetTxMonth = App.setTxMonth?.bind(App)
+  App.setTxMonth = function (month) {
+    const list = document.getElementById('tx-list-content')
+    const dir = monthDirection(S.txMonth, month)
+    if (!list || !prevSetTxMonth) return prevSetTxMonth?.(month)
+    list.classList.remove('mt-month-in-next', 'mt-month-in-prev')
+    list.classList.add(`mt-month-out-${dir}`)
+    setTimeout(() => {
+      prevSetTxMonth(month)
+      const fresh = document.getElementById('tx-list-content')
+      fresh?.classList.remove(`mt-month-out-${dir}`)
+      fresh?.classList.add(`mt-month-in-${dir}`)
+      setTimeout(() => fresh?.classList.remove(`mt-month-in-${dir}`), 240)
+    }, 140)
+  }
+
+  let paidBillId = ''
+  const prevConfirmUpcomingBillPayment = App.confirmUpcomingBillPayment?.bind(App)
+  App.confirmUpcomingBillPayment = function (billId, ...rest) {
+    paidBillId = billId
+    return prevConfirmUpcomingBillPayment?.(billId, ...rest)
+  }
+  const prevOpenUpcomingBillsScreen = App.openUpcomingBillsScreen?.bind(App)
+  App.openUpcomingBillsScreen = function (...args) {
+    prevOpenUpcomingBillsScreen?.(...args)
+    if (!paidBillId) return
+    nextFrame(() => {
+      document.querySelector(`.upcoming-bill-card[data-bill-id="${cssEscape(paidBillId)}"]`)?.classList.add('mt-paid-complete')
+      paidBillId = ''
+    })
+  }
+
+  let toggledRecurringId = ''
+  const prevToggleRecurring = App.toggleRecurring?.bind(App)
+  App.toggleRecurring = function (id, ...rest) {
+    toggledRecurringId = id
+    return prevToggleRecurring?.(id, ...rest)
+  }
+  const prevOpenRecurringScreen = App.openRecurringScreen?.bind(App)
+  App.openRecurringScreen = function (...args) {
+    prevOpenRecurringScreen?.(...args)
+    if (!toggledRecurringId) return
+    nextFrame(() => {
+      document.querySelector(`.recurring-item[data-recurring-id="${cssEscape(toggledRecurringId)}"]`)?.classList.add('mt-recurring-state')
+      toggledRecurringId = ''
+    })
+  }
+
+  const rewardSnapshots = new Map()
+  const prevOpenCCDetail = App.openCCDetail?.bind(App)
+  App.openCCDetail = function (cardId, ...rest) {
+    const before = rewardSnapshots.get(cardId) || []
+    prevOpenCCDetail?.(cardId, ...rest)
+    nextFrame(() => {
+      const values = [...document.querySelectorAll('.cc-detail-screen .reward-grid .reward-tile strong')]
+      const current = values.map(el => el.textContent.trim())
+      values.forEach((el, i) => {
+        if (!before.length || before[i] === current[i]) return
+        el.classList.remove('mt-reward-replace')
+        void el.offsetWidth
+        el.classList.add('mt-reward-replace')
+      })
+      rewardSnapshots.set(cardId, current)
+    })
+  }
+
+  let ccbrDirection = 'next'
+  const prevCcbrNext = App._ccbrNext?.bind(App)
+  App._ccbrNext = function (...args) {
+    ccbrDirection = 'next'
+    return prevCcbrNext?.(...args)
+  }
+  const prevCcbrBack = App._ccbrBack?.bind(App)
+  App._ccbrBack = function (...args) {
+    ccbrDirection = 'prev'
+    return prevCcbrBack?.(...args)
+  }
+  const prevCcbrRenderStep = App._ccbrRenderStep?.bind(App)
+  App._ccbrRenderStep = function (...args) {
+    prevCcbrRenderStep?.(...args)
+    nextFrame(() => {
+      const scroll = document.querySelector('#sub-screen .sub-scroll')
+      if (!scroll) return
+      const cls = ccbrDirection === 'prev' ? 'ccbr-panel-prev' : 'ccbr-panel-next'
+      scroll.classList.add(cls)
+      setTimeout(() => scroll.classList.remove('ccbr-panel-prev', 'ccbr-panel-next'), 260)
+    })
+  }
+
+  const prevMonthlyReview = App.openMonthlyReview?.bind(App)
+  App.openMonthlyReview = function (month, animate = true) {
+    const currentMonth = S._mtMonthlyReviewMonth || ''
+    const targetMonth = month || currentMonth
+    const dir = monthDirection(currentMonth, targetMonth)
+    const screen = document.querySelector('#sub-screen .sub-scroll')
+    if (!animate && screen && currentMonth && targetMonth && currentMonth !== targetMonth) {
+      screen.classList.add(`monthly-review-out-${dir}`)
+      setTimeout(() => {
+        prevMonthlyReview?.(month, false)
+        S._mtMonthlyReviewMonth = targetMonth
+        const fresh = document.querySelector('#sub-screen .sub-scroll')
+        fresh?.classList.add(`monthly-review-in-${dir}`)
+        setTimeout(() => fresh?.classList.remove(`monthly-review-in-${dir}`), 240)
+      }, 140)
+      return
+    }
+    prevMonthlyReview?.(month, animate)
+    S._mtMonthlyReviewMonth = targetMonth || currentMonth
+  }
 })()

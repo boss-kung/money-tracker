@@ -6450,6 +6450,11 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
   border-radius: 14px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
   overflow: hidden;
+  max-height: min(260px, 38vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   z-index: 200;
 }
 .mt-merchant-suggest-item {
@@ -6481,3 +6486,133 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
 .mt-tx-new {
   animation: mt-tx-new-in .36s cubic-bezier(.16, 1, .3, 1) both !important;
 }
+
+/* ── Requested polish pass ───────────────────────────────────── */
+.amount-summary-card small b {
+  font-weight: 700;
+}
+.amount-summary-card small span {
+  color: var(--muted);
+  font-weight: 400;
+}
+.tx-merchant-input-wrap {
+  position: relative;
+}
+.tx-merchant-input-wrap .form-input {
+  padding-right: 38px;
+}
+.tx-merchant-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 7px;
+}
+.tx-merchant-input-wrap .form-input:placeholder-shown + .tx-merchant-clear {
+  opacity: 0;
+  pointer-events: none;
+}
+.compact-colors {
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.compact-colors::-webkit-scrollbar {
+  display: none;
+}
+@keyframes mt-tx-month-out-next {
+  to { opacity: 0; transform: translateX(-10px); }
+}
+@keyframes mt-tx-month-in-next {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes mt-tx-month-out-prev {
+  to { opacity: 0; transform: translateX(10px); }
+}
+@keyframes mt-tx-month-in-prev {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+#tx-list-content.mt-month-out-next { animation: mt-tx-month-out-next .14s ease both !important; }
+#tx-list-content.mt-month-in-next  { animation: mt-tx-month-in-next .22s ease both !important; }
+#tx-list-content.mt-month-out-prev { animation: mt-tx-month-out-prev .14s ease both !important; }
+#tx-list-content.mt-month-in-prev  { animation: mt-tx-month-in-prev .22s ease both !important; }
+@keyframes mt-upcoming-paid {
+  0% { opacity: 1; transform: scale(1); }
+  35% { opacity: 1; transform: scale(.985); }
+  100% { opacity: .72; transform: scale(.985); }
+}
+.upcoming-bill-card.mt-paid-complete {
+  animation: mt-upcoming-paid .42s ease both !important;
+}
+@keyframes mt-recurring-state {
+  from { opacity: .55; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.recurring-item.mt-recurring-state {
+  animation: mt-recurring-state .24s ease both !important;
+}
+@keyframes mt-reward-replace {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.reward-tile strong.mt-reward-replace {
+  animation: mt-reward-replace .24s ease both !important;
+}
+@keyframes mt-ccbr-panel-next {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes mt-ccbr-panel-prev {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.ccbr-panel-next { animation: mt-ccbr-panel-next .24s ease both !important; }
+.ccbr-panel-prev { animation: mt-ccbr-panel-prev .24s ease both !important; }
+.ask-submit-btn {
+  position: relative;
+}
+.ask-submit-btn.is-sending span {
+  opacity: 0;
+}
+.ask-submit-btn.is-sending::after {
+  content: '•••';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  letter-spacing: 2px;
+  animation: mt-ask-dots .6s ease-in-out infinite alternate;
+}
+@keyframes mt-ask-dots {
+  from { opacity: .45; transform: translateY(1px); }
+  to { opacity: 1; transform: translateY(-1px); }
+}
+.ask-answer-block {
+  opacity: 0;
+  animation: mt-card-in .28s ease both;
+}
+@keyframes mt-review-out-next {
+  to { opacity: 0; transform: translateX(-10px); }
+}
+@keyframes mt-review-in-next {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes mt-review-out-prev {
+  to { opacity: 0; transform: translateX(10px); }
+}
+@keyframes mt-review-in-prev {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.monthly-review-out-next { animation: mt-review-out-next .14s ease both !important; }
+.monthly-review-in-next  { animation: mt-review-in-next .22s ease both !important; }
+.monthly-review-out-prev { animation: mt-review-out-prev .14s ease both !important; }
+.monthly-review-in-prev  { animation: mt-review-in-prev .22s ease both !important; }
