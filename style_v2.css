@@ -6517,12 +6517,14 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
   opacity: 0;
   pointer-events: none;
 }
-.compact-colors {
+.color-picker-row.compact-colors,
+.color-row.compact-colors {
   flex-wrap: nowrap !important;
   overflow-x: auto;
   scrollbar-width: none;
 }
-.compact-colors::-webkit-scrollbar {
+.color-picker-row.compact-colors::-webkit-scrollbar,
+.color-row.compact-colors::-webkit-scrollbar {
   display: none;
 }
 @keyframes mt-tx-month-out-next {
@@ -6616,3 +6618,8 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
 .monthly-review-in-next  { animation: mt-review-in-next .22s ease both !important; }
 .monthly-review-out-prev { animation: mt-review-out-prev .14s ease both !important; }
 .monthly-review-in-prev  { animation: mt-review-in-prev .22s ease both !important; }
+.recurring-more-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}

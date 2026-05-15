@@ -464,7 +464,7 @@ window.__mountUpcomingBillsFeature = function() {
     if (set.has(day)) set.delete(day)
     else set.add(day)
     S.upcomingBillDraft.reminderDaysBefore = [...set].sort((a, b) => a - b)
-    App.openUpcomingBillForm(S.editingUpcomingBillId || '', true)
+    App.openUpcomingBillForm(S.editingUpcomingBillId || '', true, false)
   }
 
   App.openUpcomingBillsScreen = function(filter = S.upcomingBillsFilter || 'pending', animate = true) {
@@ -503,7 +503,7 @@ window.__mountUpcomingBillsFeature = function() {
     App.openSubScreen(html, { animate })
   }
 
-  App.openUpcomingBillForm = function(billId = '', preserveDraft = false) {
+  App.openUpcomingBillForm = function(billId = '', preserveDraft = false, animate = true) {
     ensureUpcomingBillsState()
     S.editingUpcomingBillId = billId || ''
     const existing = billId ? (S.upcomingBills || []).find(b => b.id === billId) : null
@@ -542,7 +542,7 @@ window.__mountUpcomingBillsFeature = function() {
           <div class="form-group"><label class="form-label">เตือนล่วงหน้า</label><div class="chips">${[1, 3, 7].map(reminderChip).join('')}</div></div>
           <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" rows="3" oninput="App._updateUpcomingBillDraft('note', this.value)" placeholder="หมายเหตุเพิ่มเติม">${esc(S.upcomingBillDraft.note || '')}</textarea></div>
         </div>
-      </div>`)
+      </div>`, { animate })
   }
 
   App.saveUpcomingBill = function(billId = '') {
@@ -850,8 +850,8 @@ window.__mountUpcomingBillsFeature = function() {
   }
 
   const prevOpenWalletDetail = App.openWalletDetail?.bind(App)
-  App.openWalletDetail = function(id) {
-    prevOpenWalletDetail?.(id)
+  App.openWalletDetail = function(id, ...rest) {
+    prevOpenWalletDetail?.(id, ...rest)
     try { injectWalletDetailAvailability(id) } catch (_) {}
   }
 
@@ -1642,14 +1642,14 @@ App.render();
 
   App.setWalletTxRange = function(range, walletId) {
     S.walletTxRange = range
-    App.openWalletDetail(walletId)
+    App.openWalletDetail(walletId, false)
   }
 
   App.setWalletTxCustom = function(walletId) {
     S.walletTxRange = 'custom'
     S.walletTxStart = document.getElementById('wallet-filter-start')?.value || ''
     S.walletTxEnd = document.getElementById('wallet-filter-end')?.value || ''
-    App.openWalletDetail(walletId)
+    App.openWalletDetail(walletId, false)
   }
 
   App._bindTxRows = function(containerId) {
@@ -1738,7 +1738,7 @@ App.render();
     toast('คัดลอกแล้ว แก้รายละเอียดก่อนบันทึกได้', 'info')
   }
 
-  App.openWalletDetail = function(id) {
+  App.openWalletDetail = function(id, animate = true) {
     const w = S.wallets.find(x => x.id === id)
     if (!w) return
     S.walletDetailId = id
@@ -1759,7 +1759,7 @@ App.render();
         ${custom}
         ${App._sectionHeader('รายการในกระเป๋านี้')}
         <div class="card"><div style="padding:0 16px">${tx.length ? tx.map(t => App._txRow(t)).join('') : App._emptyState('📋','ไม่พบรายการ','ลองเปลี่ยนช่วงเวลา')}</div></div>
-      </div>`)
+      </div>`, { animate })
     setTimeout(() => App._bindTxRows('sub-screen'), 0)
   }
 
@@ -2183,7 +2183,7 @@ App.render();
   const investTypes = new Set(['gold','crypto','fcd'])
   const AURORA_GOLD_URL = 'https://www.aurora.co.th/price/gold_pricelist'
   const EMOJIS = ['🍜','☕','🛒','🛍️','🚗','⛽','🏠','💡','📱','🎬','💊','🏥','🎁','💰','💼','📈','🍱','🥗','✈️','🚆','🐶','🎮','🧾','🏪','💳','🏦','🥇','₿','📦','✨','🔁','🛡️']
-  const COLORS = ['#2563EB','#16A34A','#DC2626','#F59E0B','#7C3AED','#0891B2','#BE185D','#475569','#0F766E','#EA580C','#4F46E5','#111827']
+  const COLORS = ['#2563EB','#16A34A','#DC2626','#F59E0B','#7C3AED','#0891B2','#BE185D']
 
   // ── Transfer wallet helpers ─────────────────────────────────
   const TRANSFERABLE_WALLET_TYPES = new Set(['cash', 'bank', 'ewallet', 'saving'])
@@ -4263,7 +4263,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const typeOpts = ['expense','income'].map(t =>
       `<option value="${t}"${(r?.type||'expense')===t?' selected':''}>${t==='expense'?'รายจ่าย':'รายรับ'}</option>`
     ).join('')
-    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted);font-weight:600">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
+    const section = (id, title, body) => `<div id="${id}" class="card card-pad recurring-form-section" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:12px">${title}</div>${body}</div>`
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openRecurringScreen()">←</button>
@@ -4271,14 +4271,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
         <button class="btn btn-primary btn-sm" onclick="App.saveRecurring('${esc(id||'')}')" style="width:auto">บันทึก</button>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        ${accordion('rec-basic-acc', 'ข้อมูลหลัก', `
+        ${section('rec-basic-acc', 'ข้อมูลหลัก', `
           <div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" id="rec-name" value="${esc(r?.name||'')}"></div>
           <div class="form-group"><label class="form-label">ประเภท</label><select class="form-input" id="rec-type">${typeOpts}</select></div>
           <div class="form-group"><label class="form-label">จำนวนเงิน</label><input class="form-input" type="number" inputmode="decimal" id="rec-amount" value="${esc(r?.amount||'')}"></div>
           <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="rec-cat">${cats.map(c=>`<option value="${esc(c.id)}"${r?.categoryId===c.id?' selected':''}>${esc(c.icon||'')} ${esc(c.label)}</option>`).join('')}</select></div>
           <div class="form-group"><label class="form-label">กระเป๋าเงิน</label><select class="form-input" id="rec-wallet">${walletOpts}</select></div>
-        `, true)}
-        ${accordion('rec-advanced-acc', 'ความถี่และช่วงเวลา', `
+        `)}
+        ${section('rec-advanced-acc', 'ความถี่และช่วงเวลา', `
           <div class="form-group">
             <label class="form-label">ความถี่</label>
             <select class="form-input" id="rec-rectype" onchange="(function(){var m=this.value==='monthly';document.getElementById('rec-monthly-fields').style.display=m?'':'none';document.getElementById('rec-days-field').style.display=m?'none':''}).call(this)">
@@ -4294,7 +4294,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
             <div class="form-group"><label class="form-label">จำนวนเดือน (ว่างไว้ = ไม่สิ้นสุด)</label><input class="form-input" type="number" inputmode="numeric" id="rec-duration-months" min="1" value="${esc(r?.durationMonths||'')}" placeholder="ไม่จำกัด"></div>
           </div>
           <div class="form-group"><label class="form-label">เริ่ม / ครบกำหนดถัดไป</label><input class="form-input" type="date" id="rec-next" value="${esc(r?.nextDueDate||r?.startDate||today())}"></div>
-        `, false)}
+        `)}
       </div>`)
   }
 
@@ -5096,7 +5096,27 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.openRecurringScreen = function() {
     const rows = (S.recurring || []).slice().sort((a,b) => String(a.nextDueDate || '').localeCompare(String(b.nextDueDate || '')))
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.openRecurringForm()" style="width:auto">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px">${rows.length ? rows.map(r => { const due = r.nextDueDate || today(); const dueNow = due <= today(); return `<div class="recurring-item ${r.paused?'paused':''}" data-recurring-id="${esc(r.id)}"><div class="list-item-icon" style="background:${esc(r.color || '#2563EB')}33">${esc(r.icon || '🔁')}</div><div class="list-item-info"><div class="list-item-name">${esc(r.name)}</div><div class="list-item-sub">${money(r.amount)} · ${r.type === 'income' ? 'รายรับ' : 'รายจ่าย'} · ครบกำหนด ${thaiDateShort(due)}${dueNow ? ' · ถึงกำหนดแล้ว' : ''}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.toggleRecurring('${esc(r.id)}')" aria-label="${r.paused ? 'เริ่มรายการประจำ' : 'หยุดรายการประจำ'}">${r.paused ? '▶' : '⏸'}</button><button class="icon-btn" onclick="App.postRecurringNow('${esc(r.id)}')">✓</button><button class="icon-btn" onclick="App.snoozeRecurring('${esc(r.id)}',7)">+7</button><button class="icon-btn" onclick="App.skipRecurring('${esc(r.id)}')">ข้าม</button><button class="icon-btn" onclick="App.openRecurringForm('${esc(r.id)}')">✏️</button><button class="icon-btn" onclick="App.deleteRecurring('${esc(r.id)}')">🗑</button></div></div>` }).join('') : App._emptyState('🔁','ยังไม่มีรายการประจำ','')}</div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.openRecurringForm()" style="width:auto">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px">${rows.length ? rows.map(r => { const due = r.nextDueDate || today(); const dueNow = due <= today(); return `<div class="recurring-item ${r.paused?'paused':''}" data-recurring-id="${esc(r.id)}"><div class="list-item-icon" style="background:${esc(r.color || '#2563EB')}33">${esc(r.icon || '🔁')}</div><div class="list-item-info"><div class="list-item-name">${esc(r.name)}</div><div class="list-item-sub">${money(r.amount)} · ${r.type === 'income' ? 'รายรับ' : 'รายจ่าย'} · ครบกำหนด ${thaiDateShort(due)}${dueNow ? ' · ถึงกำหนดแล้ว' : ''}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.postRecurringNow('${esc(r.id)}')" aria-label="บันทึกตอนนี้">✓</button><button class="icon-btn" onclick="App.openRecurringForm('${esc(r.id)}')" aria-label="แก้ไข">✏️</button><button class="icon-btn" onclick="App.openRecurringActions('${esc(r.id)}')" aria-label="ตัวเลือกเพิ่มเติม">⋯</button></div></div>` }).join('') : App._emptyState('🔁','ยังไม่มีรายการประจำ','')}</div>`)
+  }
+
+  App.openRecurringActions = function(id) {
+    const r = (S.recurring || []).find(x => x.id === id)
+    if (!r) return
+    document.getElementById('recurring-actions-overlay')?.remove()
+    const el = document.createElement('div')
+    el.id = 'recurring-actions-overlay'
+    el.className = 'v23-confirm-overlay'
+    el.innerHTML = `<div class="v23-confirm-sheet recurring-actions-sheet" role="dialog" aria-modal="true">
+      <div class="v23-confirm-title">${esc(r.name || 'รายการประจำ')}</div>
+      <div class="recurring-more-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.toggleRecurring('${esc(r.id)}')">${r.paused ? 'เริ่มใช้งาน' : 'หยุดชั่วคราว'}</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.snoozeRecurring('${esc(r.id)}',7)">เลื่อน +7 วัน</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.skipRecurring('${esc(r.id)}')">ข้ามรอบนี้</button>
+        <button class="btn btn-outline" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.deleteRecurring('${esc(r.id)}')">ลบ</button>
+      </div>
+    </div>`
+    el.addEventListener('click', e => { if (e.target === el) el.remove() })
+    document.body.appendChild(el)
   }
 
   // 6) Restore AI financial advisor card on the rolled-back Reports screen.
