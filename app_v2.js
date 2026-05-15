@@ -5308,8 +5308,13 @@ App._pickMerchant = function(name, opts = {}) {
     const w = walletById(cardId) || {}
     const f = (id, label, value) => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="1" min="1" max="31" id="${id}" value="${value || ''}" placeholder="1–31"></div>`
     const rules = App.getCreditCardBenefitRules(cardId)
+    const _dueMode        = w.dueDateMode === 'fixedDay' ? 'fixedDay' : 'afterCycle'
+    const _fixedDueDay    = Number(w.fixedDueDay) || 23
+    const _holidayShiftOn = w.holidayShiftEnabled !== false
+    const _defaultsOn     = w.includeDefaultHolidays !== false
+    const _customStr      = Array.isArray(w.customHolidays) ? w.customHolidays.join('\n') : ''
     const cycleSummary = w.cycleDay
-      ? `ตัดวันที่ ${w.cycleDay}${w.dueAfterCycleDays ? ` · ชำระใน ${w.dueAfterCycleDays} วัน` : ''}`
+      ? `ตัดวันที่ ${w.cycleDay}${_dueMode === 'fixedDay' ? ` · ชำระวันที่ ${_fixedDueDay} ของเดือนถัดไป` : w.dueAfterCycleDays ? ` · ชำระใน ${w.dueAfterCycleDays} วัน` : ''}`
       : 'ยังไม่ได้ตั้งค่า'
     const statementCard = `<details class="card card-pad cc-stmt-accordion" style="margin-bottom:12px"${w.cycleDay ? '' : ' open'}>
       <summary class="cc-stmt-summary">
@@ -5318,9 +5323,57 @@ App._pickMerchant = function(name, opts = {}) {
       </summary>
       <div style="padding-top:12px">
         <div class="benefit-form-grid">
-          ${f('ccb-cycleDay','วันที่ตัดรอบ (1–31)', w.cycleDay)}
-          ${f('ccb-dueAfterCycleDays','ชำระหลังวันตัดยอด (1–30)', w.dueAfterCycleDays)}
+          <div class="form-group"><label class="form-label">วันที่ตัดรอบ (1–31)</label><input class="form-input" type="number" step="1" min="1" max="31" id="ccb-cycleDay" value="${w.cycleDay || ''}" placeholder="1–31" oninput="App._refreshCCBDueDatePreview?.()"></div>
+          <div class="form-group"><label class="form-label">ชำระหลังวันตัดยอด (1–30)</label><input class="form-input" type="number" step="1" min="1" max="30" id="ccb-dueAfterCycleDays" value="${w.dueAfterCycleDays || ''}" placeholder="1–30" oninput="App._refreshCCBDueDatePreview?.()"></div>
         </div>
+        <div class="form-group" style="margin-top:4px">
+          <label class="form-label">วิธีคำนวณวันชำระ</label>
+          <div class="v5-limit-mode-tabs" id="ccb-due-mode-tabs">
+            <button type="button" class="v5-lm-tab${_dueMode==='afterCycle'?' active':''}" onclick="App._selectCCBDueDateMode('afterCycle')">หลังวันตัดรอบ X วัน</button>
+            <button type="button" class="v5-lm-tab${_dueMode==='fixedDay'?' active':''}" onclick="App._selectCCBDueDateMode('fixedDay')">วันที่กำหนดของเดือนถัดไป</button>
+          </div>
+          <input type="hidden" id="ccb-due-date-mode" value="${_dueMode}">
+          <div class="form-hint" id="ccb-due-mode-hint" style="margin-top:6px">
+            ${_dueMode==='fixedDay'
+              ? 'เหมาะกับบัตรที่กำหนดวันจ่ายตายตัว เช่น ทุกวันที่ 23 ของเดือนถัดไป และเลื่อนเมื่อตรงกับวันหยุด'
+              : 'ใช้การคำนวณแบบเดิม นับจำนวนวันหลังวันตัดรอบ (default)'}
+          </div>
+        </div>
+        <div id="ccb-due-fixed-block" style="${_dueMode==='fixedDay'?'':'display:none'}">
+          <div class="form-group">
+            <label class="form-label">วันที่ครบกำหนดชำระ (1–31)</label>
+            <input class="form-input" type="number" id="ccb-fixed-due-day" min="1" max="31" value="${_fixedDueDay}" placeholder="23" oninput="App._refreshCCBDueDatePreview?.()">
+            <div class="form-hint">ถ้าวันที่กำหนดมากกว่าจำนวนวันในเดือนนั้น ระบบจะใช้วันสุดท้ายของเดือนแทนอัตโนมัติ</div>
+          </div>
+          <div class="form-group">
+            <label class="cc-toggle-row">
+              <input type="checkbox" id="ccb-holiday-shift" ${_holidayShiftOn?'checked':''} onchange="App._refreshCCBDueDatePreview?.()">
+              <span><strong>เลื่อนวันจ่ายเมื่อตรงกับเสาร์–อาทิตย์ / วันหยุดธนาคาร</strong><br><small>ถ้าตรงกับวันหยุด จะย้อนกลับไปจ่ายในวันทำการก่อนหน้า</small></span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="cc-toggle-row">
+              <input type="checkbox" id="ccb-default-holidays" ${_defaultsOn?'checked':''} onchange="App._refreshCCBDueDatePreview?.()">
+              <span>
+                <strong>ใช้รายการวันหยุดธนาคารไทย (รวบรวมในแอป)</strong>
+                <br><small id="ccb-holidays-meta">${(() => {
+                  const meta = App._getThaiHolidayMeta?.()
+                  if (!meta) return 'ปีใหม่ • สงกรานต์ • แรงงาน • พ่อ • แม่ ฯลฯ'
+                  const full = (meta.coverageFull || []).map(y => `${y + 543}`).join('–')
+                  const fixed = (meta.coverageFixedOnly || []).map(y => `${y + 543}`)
+                  const fixedRange = fixed.length ? `${fixed[0]}–${fixed[fixed.length - 1]}` : ''
+                  return `อ้างอิงประกาศ ธปท. · ครอบคลุม พ.ศ. ${full} ครบ${fixedRange ? ` และ พ.ศ. ${fixedRange} เฉพาะวันที่ตายตัว` : ''} (ชุดข้อมูล ${meta.version})`
+                })()}</small>
+              </span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="form-label">วันหยุดเพิ่มเติม (ไม่บังคับ)</label>
+            <textarea class="form-input" id="ccb-custom-holidays" rows="2" placeholder="เช่น 2026-05-13 หรือ 12-31 (หนึ่งบรรทัด/วัน)" oninput="App._refreshCCBDueDatePreview?.()">${esc(_customStr)}</textarea>
+            <div class="form-hint">รองรับรูปแบบ YYYY-MM-DD (ครั้งเดียว) หรือ MM-DD (ทุกปี) — คั่นด้วยขึ้นบรรทัดใหม่หรือเครื่องหมายจุลภาค</div>
+          </div>
+        </div>
+        <div id="ccb-due-preview" class="form-hint cc-due-preview" style="margin-top:8px"></div>
         <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit('${esc(cardId)}')">บันทึกรอบบัญชี</button></div>
       </div>
     </details>`
@@ -5359,6 +5412,7 @@ App._pickMerchant = function(name, opts = {}) {
         <div class="sec-title">กฎของบัตรใบนี้</div>
         ${rulesHtml}
       </div>`)
+    try { App._refreshCCBDueDatePreview?.() } catch (_) {}
   }
 
   App._benefitRuleTemplate = function(template = 'base_cashback', cardId = '') {
@@ -7396,42 +7450,42 @@ App._pickMerchant = function(name, opts = {}) {
               <input type="hidden" id="wf-due-date-mode" value="${dueMode}">
               <div class="form-hint" id="wf-due-mode-hint" style="margin-top:6px">
                 ${dueMode==='fixedDay'
-                  ? 'เหมาะกับบัตรที่กำหนดวันจ่ายตายตัว เช่น ทุกวันที่ 23 ของเดือนถัดไป และเลื่อนเมื่อตรงกับวันหยุด'
-                  : 'ใช้การคำนวณแบบเดิม นับจำนวนวันหลังวันตัดรอบ (default)'}
+                  ? 'กำหนดวันชำระตายตัวในแต่ละเดือน'
+                  : 'นับจำนวนวันหลังวันตัดรอบแบบเดิม'}
               </div>
             </div>
             <div id="wf-due-fixed-block" style="${dueMode==='fixedDay'?'':'display:none'}">
               <div class="form-group">
-                <label class="form-label">วันที่ครบกำหนดชำระ (1–31)</label>
-                <input class="form-input" type="number" id="wf-fixed-due-day" min="1" max="31" value="${fixedDueDay}" placeholder="23" oninput="App._refreshDueDatePreview?.()">
-                <div class="form-hint">ถ้าวันที่ที่กำหนดมากกว่าจำนวนวันในเดือนนั้น (เช่น 31 ในเดือน ก.พ.) ระบบจะใช้วันสุดท้ายของเดือนแทนอัตโนมัติ</div>
+                <label class="form-label">วันกำหนดชำระในทุก ๆ เดือน</label>
+                <input class="form-input" type="number" id="wf-fixed-due-day" min="1" max="31" value="${fixedDueDay}" placeholder="(1–31)" oninput="App._refreshDueDatePreview?.()">
+                <div class="form-hint">หากวันที่กำหนดมากกว่าจำนวนวันในเดือนนั้น ระบบจะใช้วันสุดท้ายของเดือนแทนอัตโนมัติ</div>
               </div>
               <div class="form-group">
                 <label class="cc-toggle-row">
                   <input type="checkbox" id="wf-holiday-shift" ${holidayShiftOn?'checked':''} onchange="App._refreshDueDatePreview?.()">
-                  <span><strong>เลื่อนวันจ่ายเมื่อตรงกับเสาร์–อาทิตย์ / วันหยุดธนาคาร</strong><br><small>ถ้าตรงกับวันหยุด จะย้อนกลับไปจ่ายในวันทำการก่อนหน้า</small></span>
+                  <span><strong style="font-weight: 600 !important;">เลื่อนวันจ่ายเมื่อตรงกับเสาร์–อาทิตย์หรือวันหยุดธนาคาร</strong><br><small>เลื่อนวันชำระไปเป็นวันทำการก่อนหน้า</small></span>
                 </label>
               </div>
               <div class="form-group">
                 <label class="cc-toggle-row">
                   <input type="checkbox" id="wf-default-holidays" ${defaultsOn?'checked':''} onchange="App._refreshDueDatePreview?.()">
                   <span>
-                    <strong>ใช้รายการวันหยุดธนาคารไทย (รวบรวมในแอป)</strong>
+                    <strong style="font-weight: 600 !important;">ใช้รายการวันหยุดธนาคารไทย</strong>
                     <br><small id="wf-holidays-meta">${(() => {
                       const meta = App._getThaiHolidayMeta?.()
                       if (!meta) return 'ปีใหม่ • สงกรานต์ • แรงงาน • พ่อ • แม่ ฯลฯ'
                       const full = (meta.coverageFull || []).map(y => `${y + 543}`).join('–')
                       const fixed = (meta.coverageFixedOnly || []).map(y => `${y + 543}`)
                       const fixedRange = fixed.length ? `${fixed[0]}–${fixed[fixed.length - 1]}` : ''
-                      return `อ้างอิงประกาศ ธปท. · ครอบคลุม พ.ศ. ${full} ครบ${fixedRange ? ` และ พ.ศ. ${fixedRange} เฉพาะวันที่ตายตัว` : ''} (ชุดข้อมูล ${meta.version})`
+                      return `อ้างอิงประกาศ ธปท. · ครอบคลุม พ.ศ. ${full} : ''}`
                     })()}</small>
                   </span>
                 </label>
               </div>
               <div class="form-group">
                 <label class="form-label">วันหยุดเพิ่มเติม (ไม่บังคับ)</label>
-                <textarea class="form-input" id="wf-custom-holidays" rows="2" placeholder="เช่น 2026-05-13 หรือ 12-31 (หนึ่งบรรทัด/วัน)" oninput="App._refreshDueDatePreview?.()">${esc(customStr)}</textarea>
-                <div class="form-hint">รองรับรูปแบบ YYYY-MM-DD (ครั้งเดียว) หรือ MM-DD (ทุกปี) — คั่นด้วยขึ้นบรรทัดใหม่หรือเครื่องหมายจุลภาค</div>
+                <textarea class="form-input" id="wf-custom-holidays" rows="2" placeholder="เช่น 2026-05-13 หรือ 12-31" oninput="App._refreshDueDatePreview?.()">${esc(customStr)}</textarea>
+                <div class="form-hint">รูปแบบ YYYY-MM-DD (ครั้งเดียว) หรือ MM-DD (วันเดิมทุกปี) — คั่นด้วยขึ้นบรรทัดใหม่หรือเครื่องหมายจุลภาค</div>
               </div>
             </div>
             <div id="wf-due-preview" class="form-hint cc-due-preview" style="margin-top:8px"></div>
@@ -7606,6 +7660,51 @@ App._pickMerchant = function(name, opts = {}) {
     previewEl.innerHTML = `📅 วันชำระรอบถัดไป (โดยประมาณ): <strong>${esc(label)}</strong>${daysSuffix}`
   }
 
+  // ── CCB due-date mode helpers (benefit screen, ccb- IDs) ────
+  App._selectCCBDueDateMode = function(mode) {
+    const next = mode === 'fixedDay' ? 'fixedDay' : 'afterCycle'
+    const hidden = document.getElementById('ccb-due-date-mode')
+    if (hidden) hidden.value = next
+    const tabs = document.getElementById('ccb-due-mode-tabs')
+    if (tabs) {
+      tabs.querySelectorAll('.v5-lm-tab').forEach((btn, idx) => {
+        const matches = (idx === 0 && next === 'afterCycle') || (idx === 1 && next === 'fixedDay')
+        btn.classList.toggle('active', matches)
+      })
+    }
+    const block = document.getElementById('ccb-due-fixed-block')
+    if (block) block.style.display = next === 'fixedDay' ? '' : 'none'
+    const hint = document.getElementById('ccb-due-mode-hint')
+    if (hint) hint.textContent = next === 'fixedDay'
+      ? 'เหมาะกับบัตรที่กำหนดวันจ่ายตายตัว เช่น ทุกวันที่ 23 ของเดือนถัดไป และเลื่อนเมื่อตรงกับวันหยุด'
+      : 'ใช้การคำนวณแบบเดิม นับจำนวนวันหลังวันตัดรอบ (default)'
+    App._refreshCCBDueDatePreview?.()
+  }
+
+  App._refreshCCBDueDatePreview = function() {
+    const previewEl = document.getElementById('ccb-due-preview')
+    if (!previewEl) return
+    const mode = document.getElementById('ccb-due-date-mode')?.value === 'fixedDay' ? 'fixedDay' : 'afterCycle'
+    const cycleDay = parseInt(document.getElementById('ccb-cycleDay')?.value, 10) || 25
+    const draft = { type: 'credit', cycleDay, dueDateMode: mode }
+    if (mode === 'fixedDay') {
+      draft.fixedDueDay         = parseInt(document.getElementById('ccb-fixed-due-day')?.value, 10) || 23
+      draft.holidayShiftEnabled = !!document.getElementById('ccb-holiday-shift')?.checked
+      draft.includeDefaultHolidays = !!document.getElementById('ccb-default-holidays')?.checked
+      const raw = document.getElementById('ccb-custom-holidays')?.value || ''
+      draft.customHolidays = raw.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean)
+    } else {
+      draft.dueAfterCycleDays = parseInt(document.getElementById('ccb-dueAfterCycleDays')?.value, 10) || 10
+    }
+    let next = ''
+    try { next = App._buildNextDueDateFromCycle?.(draft) || '' } catch (_) {}
+    if (!next) { previewEl.innerHTML = ''; return }
+    const label = (typeof Calc?.labelDate === 'function') ? Calc.labelDate(next) : next
+    const days  = (typeof Calc?.daysUntilDate === 'function') ? Calc.daysUntilDate(next) : null
+    const daysSuffix = (Number.isFinite(days) && days >= 0) ? ` · เหลืออีก ${days} วัน` : ''
+    previewEl.innerHTML = `📅 วันชำระรอบถัดไป (โดยประมาณ): <strong>${esc(label)}</strong>${daysSuffix}`
+  }
+
   // ── Updated _selectWalletType ───────────────────────────────
   App._selectWalletType = function(type) {
     document.getElementById('wf-type').value = type
@@ -7747,8 +7846,29 @@ App._pickMerchant = function(name, opts = {}) {
     if (!w) return
     const cycleDay = parseInt(document.getElementById('ccb-cycleDay')?.value) || w.cycleDay || 25
     const dueAfterCycleDays = parseInt(document.getElementById('ccb-dueAfterCycleDays')?.value) || w.dueAfterCycleDays || 10
+    const dueDateModeRaw = document.getElementById('ccb-due-date-mode')?.value
+    const dueDateMode = dueDateModeRaw === 'fixedDay' ? 'fixedDay' : 'afterCycle'
+    let fixedDueDay = null, holidayShiftEnabled = null, includeDefaultHolidays = null, customHolidays = null
+    if (dueDateMode === 'fixedDay') {
+      const rawFixed = parseInt(document.getElementById('ccb-fixed-due-day')?.value, 10)
+      fixedDueDay = Number.isFinite(rawFixed) && rawFixed > 0 ? Math.max(1, Math.min(31, rawFixed)) : 23
+      holidayShiftEnabled    = !!document.getElementById('ccb-holiday-shift')?.checked
+      includeDefaultHolidays = !!document.getElementById('ccb-default-holidays')?.checked
+      const raw = document.getElementById('ccb-custom-holidays')?.value || ''
+      customHolidays = raw.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean)
+    }
     const idx = (S.wallets||[]).findIndex(x => x.id === id)
-    if (idx >= 0) { S.wallets[idx].cycleDay = cycleDay; S.wallets[idx].dueAfterCycleDays = dueAfterCycleDays }
+    if (idx >= 0) {
+      Object.assign(S.wallets[idx], { cycleDay, dueAfterCycleDays, dueDateMode })
+      if (dueDateMode === 'fixedDay') {
+        Object.assign(S.wallets[idx], { fixedDueDay, holidayShiftEnabled, includeDefaultHolidays, customHolidays })
+      } else {
+        delete S.wallets[idx].fixedDueDay
+        delete S.wallets[idx].holidayShiftEnabled
+        delete S.wallets[idx].includeDefaultHolidays
+        delete S.wallets[idx].customHolidays
+      }
+    }
     if (document.getElementById('ccb-points-enabled') || document.getElementById('ccb-cash-enabled')) {
       S.ccBenefits[id] = {
         enabled: false,
