@@ -6522,6 +6522,7 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
   flex-wrap: nowrap !important;
   overflow-x: auto;
   scrollbar-width: none;
+  padding:8px;
 }
 .color-picker-row.compact-colors::-webkit-scrollbar,
 .color-row.compact-colors::-webkit-scrollbar {
