@@ -392,11 +392,11 @@
   // ══════════════════════════════════════════════════════════════
   function _sbStep2(opts) {
     const people = SbStore.loadPeople().filter(p => !p.archived)
+    const selected = _draft.peopleIds
 
     const chips = people.map(p => {
-      const on = _draft.peopleIds.includes(p.id)
-      return `<button class="chip${on?' active':''}" onclick="App._sbTogglePerson('${esc(p.id)}')"
-        style="${on?'background:var(--primary);color:#fff;border-color:var(--primary)':''}">
+      const on = selected.includes(p.id)
+      return `<button class="chip sb-person-chip${on?' active':''}" onclick="App._sbTogglePerson('${esc(p.id)}')">
         ${esc(p.emoji||'👤')} ${esc(p.name)}
       </button>`
     }).join('')
@@ -404,20 +404,14 @@
     App.openSubScreen(`
       ${stepHeader('App._sbBack()')}
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        <div style="font-size:13px;color:var(--muted);margin-bottom:10px">แตะเลือกคนที่ร่วมบิลนี้</div>
-        ${people.length
-          ? `<div class="chips" style="flex-wrap:wrap;gap:6px;padding:0 0 16px">${chips}</div>`
-          : ''}
-        <div class="card card-pad" style="margin-bottom:12px">
-          <div style="font-weight:600;margin-bottom:8px">+ เพิ่มคนใหม่</div>
-          <div style="display:flex;gap:8px">
-            <input class="form-input" id="sb2-newname" placeholder="ชื่อ" style="flex:1">
-            <input class="form-input" id="sb2-newemoji" placeholder="😀" style="width:52px;text-align:center;font-size:18px">
-            <button class="btn btn-secondary btn-sm" onclick="App._sbQuickAdd()" style="width:auto;padding:0 14px">เพิ่ม</button>
-          </div>
+        ${chips ? `<div class="chips" style="flex-wrap:wrap;gap:8px;padding:0 0 16px">${chips}</div>` : ''}
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <input class="form-input" id="sb2-newname" placeholder="พิมพ์ชื่อแล้วกด +"
+            style="flex:1" onkeydown="if(event.key==='Enter')App._sbQuickAdd()">
+          <button class="btn btn-secondary" onclick="App._sbQuickAdd()"
+            style="width:auto;padding:0 18px;font-size:20px;line-height:1">+</button>
         </div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:4px">เลือกแล้ว: ${_draft.peopleIds.length} คน</div>
-        ${navRow('ถัดไป: รายการอาหาร →', 'App._sbNext2()', 'App._sbBack()')}
+        ${navRow(`ถัดไป →  (${selected.length} คน)`, 'App._sbNext2()', 'App._sbBack()')}
       </div>`, opts)
   }
 
@@ -425,7 +419,6 @@
     const i = _draft.peopleIds.indexOf(id)
     if (i >= 0) {
       _draft.peopleIds.splice(i, 1)
-      // remove from item participants
       ;(_draft.items||[]).forEach(item => {
         item.participants = (item.participants||[]).filter(p => p.personId !== id)
       })
@@ -436,10 +429,10 @@
   }
 
   App._sbQuickAdd = function () {
-    const name  = document.getElementById('sb2-newname')?.value.trim()
-    const emoji = document.getElementById('sb2-newemoji')?.value.trim() || '👤'
-    if (!name) return notify('กรอกชื่อก่อน', 'error')
-    const person = { id: genId(), name, emoji, color: '#2563EB', note: '', archived: false, createdAt: nowISO(), updatedAt: nowISO() }
+    const input = document.getElementById('sb2-newname')
+    const name  = input?.value.trim()
+    if (!name) return
+    const person = { id: genId(), name, emoji: '👤', color: '#2563EB', note: '', archived: false, createdAt: nowISO(), updatedAt: nowISO() }
     SbStore.upsertPerson(person)
     _draft.peopleIds.push(person.id)
     _sbStep2(noAnim)
