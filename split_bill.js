@@ -14,7 +14,7 @@
   const esc     = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))
   const nowISO  = () => new Date().toISOString()
   const genId   = () => Date.now().toString(36) + Math.random().toString(36).slice(2)
-  const fmt     = n => typeof Calc !== 'undefined' ? Calc.fmt(n) : ('฿' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2}))
+  const fmt     = n => '฿' + Number(n||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})
   const notify  = (msg, type='info') => { try { toast(msg, type) } catch(_) {} }
   const r2      = n => Math.round((Number(n)||0) * 100) / 100
   const todayStr = () => {
@@ -67,14 +67,36 @@
       items:       Array.isArray(base.items) ? JSON.parse(JSON.stringify(base.items)) : [],
       pipeline:    Array.isArray(base.pipeline) ? JSON.parse(JSON.stringify(base.pipeline)) : defaultPipeline(),
       payments:    base.payments ? { ...base.payments } : {},
+      rounding:    base.rounding ?? false,
       createdAt:   base.createdAt || nowISO(),
       updatedAt:   nowISO(),
     }
   }
 
   // ── Calculator ───────────────────────────────────────────────
+  function itemEffectivePrice(item) {
+    // Support legacy format (qty × pricePerUnit) and new format (price)
+    const base = item.price != null
+      ? Number(item.price) || 0
+      : (Number(item.qty)||1) * (Number(item.pricePerUnit)||0)
+    if (!item.discount?.enabled) return r2(base)
+    const disc = item.discount.mode === 'percent'
+      ? base * (Number(item.discount.value)||0) / 100
+      : Number(item.discount.value)||0
+    return r2(base - Math.max(0, disc))
+  }
+
   function itemSubtotal(draft) {
-    return (draft.items||[]).reduce((s, item) => s + (Number(item.qty)||1) * (Number(item.pricePerUnit)||0), 0)
+    return r2((draft.items||[]).reduce((s, item) => s + itemEffectivePrice(item), 0))
+  }
+
+  function roundSatang(satang) {
+    const s = satang % 100
+    if (s <= 12) return satang - s
+    if (s <= 37) return satang - s + 25
+    if (s <= 62) return satang - s + 50
+    if (s <= 87) return satang - s + 75
+    return satang - s + 100
   }
 
   function runPipeline(subtotal, pipeline) {
@@ -95,7 +117,7 @@
     draft.peopleIds.forEach(id => { byPerson[id] = 0 })
 
     ;(draft.items||[]).forEach(item => {
-      const total = (Number(item.qty)||1) * (Number(item.pricePerUnit)||0)
+      const total = itemEffectivePrice(item)
       const parts = (item.participants||[]).filter(p => draft.peopleIds.includes(p.personId))
       if (!parts.length) return
       if (item.splitMode === 'ratio') {
@@ -126,12 +148,26 @@
       })
     }
 
+    // Quarter-satang rounding — last person absorbs rounding error
+    if (draft.rounding && Object.keys(shares).length > 0) {
+      let roundedTotal = 0
+      const ids = Object.keys(shares)
+      ids.forEach((id, i) => {
+        if (i < ids.length - 1) {
+          shares[id] = roundSatang(Math.round(shares[id] * 100)) / 100
+          roundedTotal += shares[id]
+        } else {
+          shares[id] = r2(finalTotal - roundedTotal)
+        }
+      })
+    }
+
     return { shares, sub, finalTotal }
   }
 
   function calcResult(draft) {
     const people  = SbStore.loadPeople()
-    const pName   = id => { const p = people.find(x=>x.id===id); return p ? p.name : '?' }
+    const pNameFn = id => { const p = people.find(x=>x.id===id); return p ? p.name : '?' }
     const { shares, finalTotal } = calcShares(draft)
     const payments = draft.payments || {}
 
@@ -139,10 +175,9 @@
       const finalShare = r2(shares[id] || 0)
       const paid       = r2(payments[id] || 0)
       const net        = r2(paid - finalShare)
-      return { id, name: pName(id), finalShare, paid, net }
+      return { id, name: pNameFn(id), finalShare, paid, net }
     })
 
-    // Greedy settlement — minimum transfers
     const creditors = personResults.filter(p=>p.net> 0.005).map(p=>({...p,amt:Math.round(p.net*100)})).sort((a,b)=>b.amt-a.amt)
     const debtors   = personResults.filter(p=>p.net<-0.005).map(p=>({...p,amt:Math.round(-p.net*100)})).sort((a,b)=>b.amt-a.amt)
     const transfers = []
@@ -156,10 +191,9 @@
       if (d.amt <= 0) di++
     }
 
-    // Mismatch analysis
     const warnings = []
     const sub = itemSubtotal(draft)
-    const { finalTotal: calcTotal, steps } = runPipeline(sub, draft.pipeline)
+    const { finalTotal: calcTotal } = runPipeline(sub, draft.pipeline)
 
     if (draft.manualTotal > 0 && Math.abs(r2(draft.manualTotal - calcTotal)) > 0.5) {
       const diff = r2(draft.manualTotal - calcTotal)
@@ -211,18 +245,55 @@
     return p ? `${p.emoji||'👤'} ${p.name}` : '?'
   }
 
+  function _lineText(bill, result) {
+    const div = '──────────────'
+    const transferLines = result.transfers.length
+      ? result.transfers.map(t => `${t.fromName} โอนให้ ${t.toName} ${fmt(t.amount)}`).join('\n')
+      : 'ทุกคนเสมอกันแล้ว 🎉'
+    const shareLines = result.personResults.map(p => `${p.name}: ${fmt(p.finalShare)}`).join('\n')
+    return [
+      `🍽️ ${bill.title||'หารบิล'}  ${thaiDate(bill.date)}`,
+      div,
+      '💸 สรุปการโอน',
+      transferLines,
+      div,
+      '💰 ส่วนแบ่งต่อคน',
+      shareLines,
+      div,
+      `ยอดรวม ${fmt(result.finalTotal)}`,
+    ].join('\n')
+  }
+
+  function _fallbackCopy(elId) {
+    const el = document.getElementById(elId)
+    if (!el) return
+    const prev = el.style.cssText
+    el.style.cssText = 'position:static;opacity:1;left:auto'
+    el.select()
+    try { document.execCommand('copy'); notify('คัดลอกแล้ว', 'success') } catch(_) { notify('กรุณา copy เอง', 'info') }
+    el.style.cssText = prev
+  }
+
+  function _clipCopy(text, elId) {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => notify('คัดลอกแล้ว', 'success'))
+        .catch(() => _fallbackCopy(elId))
+    } else {
+      _fallbackCopy(elId)
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════
   //  HOME / HISTORY
   // ══════════════════════════════════════════════════════════════
   App.openSplitBillScreen = function () {
-    const bills  = SbStore.loadBills()
-    const people = SbStore.loadPeople()
+    const bills = SbStore.loadBills()
 
     const cards = bills.map(b => {
-      const sub = itemSubtotal(b)
-      const { finalTotal } = runPipeline(sub, b.pipeline)
-      const total = b.manualTotal > 0 ? b.manualTotal : finalTotal
-      const n = (b.peopleIds||[]).length
+      const sub   = itemSubtotal(b)
+      const total = b.manualTotal > 0 ? b.manualTotal : runPipeline(sub, b.pipeline).finalTotal
+      const n     = (b.peopleIds||[]).length
       return `<div class="card card-pad sb-bill-row" onclick="App.openSplitBillDetail('${esc(b.id)}')">
         <div style="display:flex;align-items:center;gap:10px">
           <div style="flex:1;min-width:0">
@@ -264,23 +335,28 @@
 
     const personRows = result.personResults.map(p => `
       <div class="detail-row">
-        <div style="flex:1"><div style="font-weight:600">${esc(p.name)}</div>
-          <div style="font-size:12px;color:var(--muted)">ส่วนแบ่ง ${fmt(p.finalShare)} · จ่าย ${fmt(p.paid)}</div></div>
+        <div style="flex:1">
+          <div style="font-weight:600">${esc(p.name)}</div>
+          <div style="font-size:12px;color:var(--muted)">ส่วนแบ่ง ${fmt(p.finalShare)} · จ่าย ${fmt(p.paid)}</div>
+        </div>
         <div style="text-align:right;font-weight:700;color:${p.net>0?'var(--income)':p.net<0?'var(--expense)':'var(--muted)'}">
-          ${p.net>0?`ได้คืน ${fmt(p.net)}`:p.net<0?`ต้องจ่าย ${fmt(-p.net)}`:'เสมอกัน'}</div>
+          ${p.net>0?`ได้คืน ${fmt(p.net)}`:p.net<0?`ต้องจ่าย ${fmt(-p.net)}`:'เสมอกัน'}
+        </div>
       </div>`).join('')
 
     const transferRows = result.transfers.length
       ? result.transfers.map(t=>`
           <div class="detail-row">
-            <div>${esc(t.fromName)} → ${esc(t.toName)}</div>
+            <div style="font-weight:600">${esc(t.fromName)}<span style="color:var(--muted);font-weight:400;font-size:13px"> โอนให้ </span>${esc(t.toName)}</div>
             <div style="font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
           </div>`).join('')
-      : `<div style="color:var(--muted);font-size:13px;padding:8px 0">ทุกคนเสมอกันแล้ว</div>`
+      : `<div style="color:var(--muted);font-size:13px;padding:8px 0">ทุกคนเสมอกันแล้ว 🎉</div>`
 
     const warnHtml = result.warnings.map(w =>
       `<div style="background:var(--elevated);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px;color:var(--expense)">⚠️ ${esc(w)}</div>`
     ).join('')
+
+    const copyText = _lineText(bill, result)
 
     App.openSubScreen(`
       <div class="sub-header">
@@ -306,7 +382,10 @@
         <div class="sec-title">โอนเงิน</div>
         <div class="card card-pad">${transferRows}</div>
 
-        <div style="display:flex;gap:8px;margin-top:20px">
+        <button class="btn btn-secondary" onclick="App._sbDetailCopyLine()" style="margin-top:16px;width:100%">📋 คัดลอกสำหรับส่ง LINE</button>
+        <textarea id="sb-detail-copy" style="position:absolute;left:-9999px;top:0;opacity:0;width:1px;height:1px">${esc(copyText)}</textarea>
+
+        <div style="display:flex;gap:8px;margin-top:8px">
           <button class="btn btn-secondary flex-1" onclick="App.openSplitBillForm('${esc(billId)}')">✏️ แก้ไข</button>
           <button class="btn btn-secondary flex-1" onclick="App._sbCopy('${esc(billId)}')">⧉ ทำซ้ำ</button>
           <button class="btn btn-outline flex-1" onclick="App._sbDelete('${esc(billId)}')">🗑</button>
@@ -314,9 +393,13 @@
       </div>`)
   }
 
+  App._sbDetailCopyLine = function () {
+    const el = document.getElementById('sb-detail-copy')
+    if (el) _clipCopy(el.value, 'sb-detail-copy')
+  }
+
   App._sbCopy = function (billId) {
-    const bill = SbStore.getBill(billId)
-    if (!bill) return
+    const bill = SbStore.getBill(billId); if (!bill) return
     const copy = { ...JSON.parse(JSON.stringify(bill)), id: genId(), title: (bill.title||'บิล') + ' (สำเนา)', date: todayStr(), payments: {}, createdAt: nowISO(), updatedAt: nowISO() }
     SbStore.upsertBill(copy)
     notify('ทำสำเนาบิลแล้ว', 'success')
@@ -324,8 +407,7 @@
   }
 
   App._sbDelete = function (billId) {
-    const bill = SbStore.getBill(billId)
-    if (!bill) return
+    const bill = SbStore.getBill(billId); if (!bill) return
     const go = () => { SbStore.deleteBill(billId); notify('ลบบิลแล้ว', 'success'); App.openSplitBillScreen() }
     if (App.showConfirm) App.showConfirm({ title:'ลบบิล', danger:true, confirmLabel:'ลบ', body:`ลบ "${bill.title||'บิล'}"?`, onConfirm: go })
     else if (confirm(`ลบ "${bill.title||'บิล'}"?`)) go()
@@ -338,6 +420,7 @@
     const existing = billId ? SbStore.getBill(billId) : null
     _draft = newDraft(existing ? JSON.parse(JSON.stringify(existing)) : {})
     _step  = 1
+    _editingItemIdx = -1
     _sbRender()
   }
 
@@ -353,7 +436,7 @@
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  STEP 1 — ชื่อบิล + ราคารวม
+  //  STEP 1
   // ══════════════════════════════════════════════════════════════
   function _sbStep1(opts) {
     App.openSubScreen(`
@@ -388,10 +471,10 @@
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  STEP 2 — เพิ่มคน
+  //  STEP 2
   // ══════════════════════════════════════════════════════════════
   function _sbStep2(opts) {
-    const people = SbStore.loadPeople().filter(p => !p.archived)
+    const people   = SbStore.loadPeople().filter(p => !p.archived)
     const selected = _draft.peopleIds
 
     const chips = people.map(p => {
@@ -440,7 +523,6 @@
 
   App._sbNext2 = function () {
     if (!_draft.peopleIds.length) return notify('เลือกอย่างน้อย 1 คน', 'error')
-    // ensure new items default-include all current people
     ;(_draft.items||[]).forEach(item => {
       if (!item.participants?.length) {
         item.participants = _draft.peopleIds.map(id => ({ personId: id, ratio: 1 }))
@@ -450,165 +532,168 @@
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  STEP 3 — รายการอาหาร
+  //  STEP 3 — รายการอาหาร (inline form, no sub-screen)
   // ══════════════════════════════════════════════════════════════
-  function _sbStep3(opts) {
-    const items = _draft.items || []
-    const sub   = r2(items.reduce((s,item) => s + (Number(item.qty)||1)*(Number(item.pricePerUnit)||0), 0))
-
-    const rows = items.map((item, i) => {
-      const total = r2((Number(item.qty)||1)*(Number(item.pricePerUnit)||0))
-      const who = (item.participants||[]).map(p => {
-        const person = SbStore.getPerson(p.personId)
-        return person ? (person.emoji||'👤') : '?'
-      }).join('')
-      return `<div class="card card-pad sb-item-row" onclick="App._sbEditItem(${i})">
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(item.name||'รายการที่'+(i+1))}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:2px">
-              ${Number(item.qty)||1} × ${fmt(Number(item.pricePerUnit)||0)}
-              ${item.splitMode==='ratio'?' · สัดส่วน':''} · ${who||'ไม่มีคน'}
-            </div>
-          </div>
-          <div style="font-weight:700;color:var(--primary);flex-shrink:0">${fmt(total)}</div>
-          <button class="btn-icon" onclick="event.stopPropagation();App._sbDeleteItem(${i})" style="color:var(--muted)">✕</button>
-        </div>
-      </div>`
-    }).join('')
-
-    App.openSubScreen(`
-      ${stepHeader('App._sbBack()')}
-      <div class="sub-scroll" style="padding:16px 16px 40px">
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">${rows}</div>
-        <button class="btn btn-secondary" onclick="App._sbAddItem()" style="margin-bottom:16px">+ เพิ่มรายการ</button>
-        ${items.length ? `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <span style="font-size:13px;color:var(--muted)">ยอดรายการรวม</span>
-          <span style="font-weight:800;color:var(--primary)">${fmt(sub)}</span>
-        </div>` : ''}
-        ${navRow('ถัดไป: ส่วนลด / SC / VAT →', 'App._sbNext3()', 'App._sbBack()')}
-      </div>`, opts)
-  }
-
-  App._sbAddItem = function () {
-    if (!_draft.items) _draft.items = []
-    const newItem = {
-      id: genId(), name: '', qty: 1, pricePerUnit: 0, splitMode: 'equal',
-      participants: _draft.peopleIds.map(id => ({ personId: id, ratio: 1 })),
-      note: ''
-    }
-    _draft.items.push(newItem)
-    _editingItemIdx = _draft.items.length - 1
-    _sbItemEditScreen()
-  }
-
-  App._sbEditItem = function (i) {
-    _editingItemIdx = i
-    _sbItemEditScreen()
-  }
-
-  App._sbDeleteItem = function (i) {
-    _draft.items.splice(i, 1)
-    _sbStep3(noAnim)
-  }
-
-  App._sbNext3 = function () {
-    _step = 4; _sbRender()
-  }
-
-  // ── Item edit screen ─────────────────────────────────────────
-  function _sbItemEditScreen(opts) {
-    const item = _draft.items[_editingItemIdx]
-    if (!item) return _sbStep3()
-
+  function _sbItemFormHtml(item) {
     const personChips = _draft.peopleIds.map(id => {
-      const ip  = (item.participants||[]).find(p=>p.personId===id)
-      const on  = !!ip
+      const ip     = (item.participants||[]).find(p=>p.personId===id)
+      const on     = !!ip
       const person = SbStore.getPerson(id)
-      const label  = person ? `${person.emoji||'👤'} ${person.name}` : '?'
+      const label  = person ? person.name : '?'
       return `<button class="chip${on?' active':''}" onclick="App._sbItemTogglePerson('${esc(id)}')"
         style="${on?'background:var(--primary);color:#fff;border-color:var(--primary)':''}">
         ${esc(label)}
       </button>`
     }).join('')
 
-    // ratio inputs (only if splitMode='ratio')
     let ratioInputs = ''
     if (item.splitMode === 'ratio') {
       const activeParts = (item.participants||[]).filter(p => _draft.peopleIds.includes(p.personId))
-      ratioInputs = `<div class="sec-title" style="margin-top:12px">สัดส่วน</div>
-        <div class="card card-pad">
-          ${activeParts.map(p => `
-            <div class="detail-row" style="font-size:13px">
-              <div>${esc(pName(p.personId))}</div>
-              <div style="display:flex;align-items:center;gap:4px">
-                <input class="form-input" type="number" inputmode="decimal"
-                  id="sbi-ratio-${esc(p.personId)}" value="${p.ratio||1}" style="width:70px;text-align:center">
-                <span style="color:var(--muted)">ส่วน</span>
-              </div>
-            </div>`).join('')}
-        </div>`
+      ratioInputs = `<div style="margin-top:8px">${activeParts.map(p => `
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+          <span style="flex:1;font-size:13px">${esc(pName(p.personId))}</span>
+          <input class="form-input" type="number" inputmode="decimal" id="sbi-ratio-${esc(p.personId)}" value="${p.ratio||1}" style="width:70px;text-align:center">
+          <span style="color:var(--muted);font-size:13px">ส่วน</span>
+        </div>`).join('')}</div>`
     }
 
-    App.openSubScreen(`
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App._sbItemSave()">←</button>
-        <h2 style="flex:1">${_editingItemIdx < _draft.items.length-1 || item.name ? 'แก้ไขรายการ' : 'เพิ่มรายการ'}</h2>
-        <button class="btn btn-primary btn-sm" onclick="App._sbItemSave()" style="width:auto">ตกลง</button>
+    const discEnabled = item.discount?.enabled
+    const discMode    = item.discount?.mode || 'percent'
+    const discVal     = item.discount?.value || ''
+    // For legacy items with qty/pricePerUnit, compute display price
+    const displayPrice = item.price != null ? (item.price || '') : ((Number(item.qty)||1) * (Number(item.pricePerUnit)||0) || '')
+
+    return `<div class="card" style="padding:14px;border:2px solid var(--primary)">
+      <input class="form-input" id="sbi-name" value="${esc(item.name)}" placeholder="ชื่อรายการ เช่น ผัดไทย" style="margin-bottom:8px;font-weight:600">
+
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="color:var(--muted);font-size:13px;white-space:nowrap">ราคา ฿</span>
+        <input class="form-input" type="number" inputmode="decimal" id="sbi-price" value="${displayPrice}" placeholder="0" style="flex:1;text-align:right">
       </div>
-      <div class="sub-scroll" style="padding:16px 16px 40px">
-        <div class="form-group">
-          <label class="form-label">ชื่อรายการ</label>
-          <input class="form-input" id="sbi-name" value="${esc(item.name)}" placeholder="เช่น ผัดไทย">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div class="form-group">
-            <label class="form-label">จำนวน</label>
-            <input class="form-input" type="number" inputmode="decimal" id="sbi-qty" value="${item.qty||1}" min="0.1" step="0.1">
-          </div>
-          <div class="form-group">
-            <label class="form-label">ราคาต่อหน่วย (฿)</label>
-            <input class="form-input" type="number" inputmode="decimal" id="sbi-price" value="${item.pricePerUnit||''}">
-          </div>
-        </div>
 
-        <div class="sec-title">วิธีหาร</div>
-        <div class="chips" style="padding:0 0 12px">
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 0;margin-bottom:${discEnabled?'0':'6'}px">
+        <button class="toggle${discEnabled?' on':''}" onclick="App._sbItemToggleDiscount()" aria-label="ส่วนลดรายการนี้"></button>
+        <span style="font-size:13px;color:var(--muted)">ส่วนลดรายการนี้</span>
+      </div>
+      ${discEnabled ? `
+      <div style="display:flex;gap:6px;margin-bottom:8px;margin-top:4px">
+        <select class="form-input" id="sbi-disc-mode" style="flex:0 0 auto;width:135px">
+          <option value="percent" ${discMode==='percent'?'selected':''}>% เปอร์เซ็นต์</option>
+          <option value="fixed"   ${discMode==='fixed'  ?'selected':''}>฿ จำนวนเงิน</option>
+        </select>
+        <input class="form-input" type="number" inputmode="decimal" id="sbi-disc-val" value="${discVal}" placeholder="0" style="flex:1;text-align:right">
+      </div>` : ''}
+
+      <div style="margin-bottom:8px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">วิธีหาร</div>
+        <div class="chips" style="padding:0;gap:6px">
           <button class="chip${item.splitMode!=='ratio'?' active':''}" onclick="App._sbItemSetMode('equal')">เท่ากัน</button>
-          <button class="chip${item.splitMode==='ratio'?' active':''}" onclick="App._sbItemSetMode('ratio')">สัดส่วน %</button>
+          <button class="chip${item.splitMode==='ratio'?' active':''}" onclick="App._sbItemSetMode('ratio')">สัดส่วน</button>
         </div>
+      </div>
 
-        <div class="sec-title">ใครกินรายการนี้</div>
-        <div class="chips" style="flex-wrap:wrap;gap:6px;padding:0 0 12px">${personChips}</div>
+      <div style="margin-bottom:10px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">ใครกินรายการนี้</div>
+        <div class="chips" style="flex-wrap:wrap;gap:6px;padding:0">${personChips}</div>
+      </div>
 
-        ${ratioInputs}
+      ${ratioInputs}
+
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-secondary" onclick="App._sbItemCancel()" style="flex:1">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="App._sbItemSave()" style="flex:1">ตกลง</button>
+      </div>
+    </div>`
+  }
+
+  function _sbStep3(opts) {
+    const items = _draft.items || []
+    const sub   = itemSubtotal(_draft)
+
+    const rows = items.map((item, i) => {
+      if (i === _editingItemIdx) return _sbItemFormHtml(item)
+
+      const price    = itemEffectivePrice(item)
+      const discHtml = item.discount?.enabled
+        ? `<span style="color:var(--income);font-size:11px;margin-left:4px">-${item.discount.mode==='percent'?item.discount.value+'%':fmt(item.discount.value)}</span>`
+        : ''
+      const who = (item.participants||[]).map(p => {
+        const person = SbStore.getPerson(p.personId)
+        return person ? (person.emoji||'👤') : '?'
+      }).join('')
+
+      return `<div class="card card-pad sb-item-row" onclick="App._sbEditItem(${i})">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(item.name||'รายการที่'+(i+1))}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">
+              ${item.splitMode==='ratio'?'สัดส่วน · ':''}${who||'ไม่มีคน'}${discHtml}
+            </div>
+          </div>
+          <div style="font-weight:700;color:var(--primary);flex-shrink:0">${fmt(price)}</div>
+          <button class="btn-icon" onclick="event.stopPropagation();App._sbDeleteItem(${i})" style="color:var(--muted)">✕</button>
+        </div>
+      </div>`
+    }).join('')
+
+    const editing = _editingItemIdx !== -1
+
+    App.openSubScreen(`
+      ${stepHeader('App._sbBack()')}
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">${rows}</div>
+        ${!editing ? `<button class="btn btn-secondary" onclick="App._sbAddItem()" style="margin-bottom:16px">+ เพิ่มรายการ</button>` : ''}
+        ${items.length && !editing ? `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:13px;color:var(--muted)">ยอดรายการรวม</span>
+          <span style="font-weight:800;color:var(--primary)">${fmt(sub)}</span>
+        </div>` : ''}
+        ${!editing ? navRow('ถัดไป: ส่วนลด / SC / VAT →', 'App._sbNext3()', 'App._sbBack()') : ''}
       </div>`, opts)
+
+    if (editing) {
+      setTimeout(() => document.getElementById('sbi-name')?.focus(), 80)
+    }
   }
 
-  App._sbItemTogglePerson = function (personId) {
-    _sbItemSaveFields()
-    const item = _draft.items[_editingItemIdx]
-    if (!item) return
-    const i = (item.participants||[]).findIndex(p => p.personId === personId)
-    if (i >= 0) item.participants.splice(i, 1)
-    else (item.participants = item.participants||[]).push({ personId, ratio: 1 })
-    _sbItemEditScreen(noAnim)
+  App._sbAddItem = function () {
+    if (!_draft.items) _draft.items = []
+    _draft.items.push({
+      id: genId(), name: '', price: 0,
+      discount: { enabled: false, mode: 'percent', value: 0 },
+      splitMode: 'equal',
+      participants: _draft.peopleIds.map(id => ({ personId: id, ratio: 1 })),
+    })
+    _editingItemIdx = _draft.items.length - 1
+    _sbStep3(noAnim)
   }
 
-  App._sbItemSetMode = function (mode) {
-    _sbItemSaveFields()
-    const item = _draft.items[_editingItemIdx]
-    if (!item) return
-    item.splitMode = mode
-    _sbItemEditScreen(noAnim)
+  App._sbEditItem = function (i) {
+    if (_editingItemIdx !== -1) _sbItemSaveFields()
+    _editingItemIdx = i
+    _sbStep3(noAnim)
   }
+
+  App._sbDeleteItem = function (i) {
+    if (_editingItemIdx === i)       _editingItemIdx = -1
+    else if (_editingItemIdx > i)    _editingItemIdx--
+    _draft.items.splice(i, 1)
+    _sbStep3(noAnim)
+  }
+
+  App._sbNext3 = function () { _step = 4; _sbRender() }
 
   function _sbItemSaveFields() {
     const item = _draft.items[_editingItemIdx]
     if (!item) return
-    item.name         = document.getElementById('sbi-name')?.value.trim() || ''
-    item.qty          = Number(document.getElementById('sbi-qty')?.value) || 1
-    item.pricePerUnit = Number(document.getElementById('sbi-price')?.value) || 0
+    item.name  = document.getElementById('sbi-name')?.value.trim() || ''
+    item.price = Number(document.getElementById('sbi-price')?.value) || 0
+    // Clear legacy fields if present
+    delete item.qty; delete item.pricePerUnit
+    if (!item.discount) item.discount = { enabled: false, mode: 'percent', value: 0 }
+    const discModeEl = document.getElementById('sbi-disc-mode')
+    const discValEl  = document.getElementById('sbi-disc-val')
+    if (discModeEl) item.discount.mode  = discModeEl.value
+    if (discValEl)  item.discount.value = Number(discValEl.value) || 0
     if (item.splitMode === 'ratio') {
       ;(item.participants||[]).forEach(p => {
         const el = document.getElementById(`sbi-ratio-${p.personId}`)
@@ -617,25 +702,57 @@
     }
   }
 
+  App._sbItemTogglePerson = function (personId) {
+    _sbItemSaveFields()
+    const item = _draft.items[_editingItemIdx]; if (!item) return
+    const i = (item.participants||[]).findIndex(p => p.personId === personId)
+    if (i >= 0) item.participants.splice(i, 1)
+    else (item.participants = item.participants||[]).push({ personId, ratio: 1 })
+    _sbStep3(noAnim)
+  }
+
+  App._sbItemSetMode = function (mode) {
+    _sbItemSaveFields()
+    const item = _draft.items[_editingItemIdx]; if (!item) return
+    item.splitMode = mode
+    _sbStep3(noAnim)
+  }
+
+  App._sbItemToggleDiscount = function () {
+    _sbItemSaveFields()
+    const item = _draft.items[_editingItemIdx]; if (!item) return
+    if (!item.discount) item.discount = { enabled: false, mode: 'percent', value: 0 }
+    item.discount.enabled = !item.discount.enabled
+    _sbStep3(noAnim)
+  }
+
   App._sbItemSave = function () {
     _sbItemSaveFields()
-    _step = 3; _sbRender()
+    const item = _draft.items[_editingItemIdx]
+    if (item && !item.name && !item.price) _draft.items.splice(_editingItemIdx, 1)
+    _editingItemIdx = -1
+    _sbStep3(noAnim)
+  }
+
+  App._sbItemCancel = function () {
+    // Check draft (not DOM) — new items have name='' and price=0
+    const item = _draft.items[_editingItemIdx]
+    if (item && !item.name && !item.price) _draft.items.splice(_editingItemIdx, 1)
+    _editingItemIdx = -1
+    _sbStep3(noAnim)
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  STEP 4 — ส่วนลด / SC / VAT (pipeline)
+  //  STEP 4 — ส่วนลด / SC / VAT + rounding
   // ══════════════════════════════════════════════════════════════
   function _sbStep4(opts) {
     const sub = itemSubtotal(_draft)
-    // sync pipeline from any live inputs before rendering
     const pipeline = _draft.pipeline
-
-    // live preview
     const { finalTotal, steps } = runPipeline(sub, pipeline)
 
     const pipelineRows = pipeline.map((p, i) => {
-      const isFirst = i === 0
-      const isLast  = i === pipeline.length - 1
+      const isFirst   = i === 0
+      const isLast    = i === pipeline.length - 1
       const signLabel = p.type === 'discount' ? '−' : '+'
       return `<div class="card card-pad" style="margin-bottom:6px;opacity:${p.enabled?1:0.5}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:${p.enabled?'8':'0'}px">
@@ -663,7 +780,6 @@
       </div>`
     }).join('')
 
-    // preview table
     const previewRows = steps.map((s, i) => `
       <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;${i===steps.length-1?'font-weight:800;border-top:1px solid var(--border);padding-top:8px;margin-top:4px':''}">
         <span style="color:${i===0||i===steps.length-1?'var(--text)':'var(--muted)'}">${esc(s.label)}</span>
@@ -679,10 +795,25 @@
         ${sub > 0
           ? `<div class="card" style="padding:12px 14px;margin-bottom:14px">${previewRows}</div>`
           : `<div style="color:var(--muted);font-size:13px;margin-bottom:14px">ยังไม่มีรายการอาหาร (ยอดจะคำนวณเมื่อเพิ่มรายการแล้ว)</div>`}
-        <div style="font-size:13px;color:var(--muted);margin-bottom:8px">เปิด/ปิด และลากลำดับการคำนวณ</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:8px">เปิด/ปิด และลำดับการคำนวณ</div>
         ${pipelineRows}
+        <div class="card card-pad" style="margin-top:8px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <button class="toggle${_draft.rounding?' on':''}" onclick="App._sbToggleRounding()" aria-label="ปัดเศษ"></button>
+            <div>
+              <div style="font-weight:600">ปัดเศษ (ทุก 25 สตางค์)</div>
+              <div style="font-size:12px;color:var(--muted)">ปัดยอดต่อคนเป็น 0 / 25 / 50 / 75 สตางค์</div>
+            </div>
+          </div>
+        </div>
         ${navRow('ถัดไป: ใครจ่าย →', 'App._sbNext4()', 'App._sbBack()')}
       </div>`, opts)
+  }
+
+  App._sbToggleRounding = function () {
+    _sbPipeSaveAll()
+    _draft.rounding = !_draft.rounding
+    _sbStep4(noAnim)
   }
 
   App._sbPipeToggle = function (i) {
@@ -699,13 +830,7 @@
     _sbStep4(noAnim)
   }
 
-  App._sbPipeSave = function () {
-    _sbPipeSaveAll()
-    // re-render preview only (no full re-render to avoid losing focus)
-    const sub = itemSubtotal(_draft)
-    const { steps } = runPipeline(sub, _draft.pipeline)
-    // minimal update: just recalc shown in preview card (skip — live oninput is enough for UX)
-  }
+  App._sbPipeSave = function () { _sbPipeSaveAll() }
 
   function _sbPipeSaveAll() {
     ;(_draft.pipeline||[]).forEach((p, i) => {
@@ -716,10 +841,7 @@
     })
   }
 
-  App._sbNext4 = function () {
-    _sbPipeSaveAll()
-    _step = 5; _sbRender()
-  }
+  App._sbNext4 = function () { _sbPipeSaveAll(); _step = 5; _sbRender() }
 
   // ══════════════════════════════════════════════════════════════
   //  STEP 5 — ใครจ่ายไปแล้ว
@@ -728,13 +850,22 @@
     const { finalTotal } = runPipeline(itemSubtotal(_draft), _draft.pipeline)
 
     const rows = _draft.peopleIds.map(id => {
-      const paid = _draft.payments[id] || ''
+      const paid    = _draft.payments[id] || ''
+      const hasPaid = Number(paid) > 0
+      const safeId  = esc(id)
       return `<div class="detail-row" style="align-items:center">
         <div style="flex:1;font-weight:600">${esc(pName(id))}</div>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="color:var(--muted)">฿</span>
-          <input class="form-input" type="number" inputmode="decimal" id="pay-${esc(id)}" value="${paid}" placeholder="0" style="width:110px;text-align:right">
-          <button class="btn btn-secondary btn-sm" onclick="App._sbPayAll('${esc(id)}')" style="width:auto;padding:0 10px;font-size:12px">ทั้งหมด</button>
+          <div style="position:relative;display:flex;align-items:center">
+            <input class="form-input" type="number" inputmode="decimal" id="pay-${safeId}"
+              value="${paid}" placeholder="0"
+              style="width:110px;text-align:right;padding-right:${hasPaid?'28':'10'}px"
+              oninput="(function(v,id){var x=document.getElementById('pay-x-'+id);if(x){x.style.display=v?'flex':'none'};document.getElementById('pay-'+id).style.paddingRight=v?'28px':'10px'})(this.value,'${safeId}')">
+            <button id="pay-x-${safeId}" onclick="App._sbPayClear('${safeId}')"
+              style="display:${hasPaid?'flex':'none'};position:absolute;right:6px;background:none;border:none;cursor:pointer;color:var(--muted);padding:2px;align-items:center;font-size:13px;line-height:1">✕</button>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="App._sbPayAll('${safeId}')" style="width:auto;padding:0 10px;font-size:12px">ทั้งหมด</button>
         </div>
       </div>`
     }).join('')
@@ -756,6 +887,12 @@
     _sbStep5(noAnim)
   }
 
+  App._sbPayClear = function (personId) {
+    _sbSavePayments()
+    _draft.payments[personId] = 0
+    _sbStep5(noAnim)
+  }
+
   function _sbSavePayments() {
     _draft.peopleIds.forEach(id => {
       const el = document.getElementById(`pay-${id}`)
@@ -763,10 +900,7 @@
     })
   }
 
-  App._sbNext5 = function () {
-    _sbSavePayments()
-    _step = 6; _sbRender()
-  }
+  App._sbNext5 = function () { _sbSavePayments(); _step = 6; _sbRender() }
 
   // ══════════════════════════════════════════════════════════════
   //  STEP 6 — สรุป
@@ -777,12 +911,8 @@
     const transferRows = result.transfers.length
       ? result.transfers.map(t => `
           <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-size:18px">→</span>
-              <div>
-                <div style="font-weight:600">${esc(t.fromName)}</div>
-                <div style="font-size:12px;color:var(--muted)">โอนให้ ${esc(t.toName)}</div>
-              </div>
+            <div style="font-weight:600;font-size:15px">
+              ${esc(t.fromName)}<span style="color:var(--muted);font-weight:400;font-size:13px"> โอนให้ </span>${esc(t.toName)}
             </div>
             <div style="font-size:20px;font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
           </div>`).join('')
@@ -798,12 +928,7 @@
       `<div style="font-size:12px;color:var(--expense);margin-bottom:4px">⚠️ ${esc(w)}</div>`
     ).join('')
 
-    // Copy text for LINE
-    const copyLines = [
-      `หารบิล: ${_draft.title||'บิล'}`,
-      ...result.transfers.map(t => `${t.fromName} โอนให้ ${t.toName}: ${fmt(t.amount)}`),
-      `ยอดรวม: ${fmt(result.finalTotal)}`
-    ].join('\n')
+    const copyText = _lineText(_draft, result)
 
     App.openSubScreen(`
       ${stepHeader('App._sbBack()')}
@@ -824,8 +949,8 @@
           <div class="card card-pad" style="margin-top:8px">${detailRows}</div>
         </details>
 
-        <button class="btn btn-secondary" onclick="App._sbCopyLine()" style="margin-bottom:8px">📋 คัดลอกสำหรับส่ง LINE</button>
-        <textarea id="sb6-copy-text" style="display:none">${esc(copyLines)}</textarea>
+        <button class="btn btn-secondary" onclick="App._sbCopyLine()" style="margin-bottom:8px;width:100%">📋 คัดลอกสำหรับส่ง LINE</button>
+        <textarea id="sb6-copy-text" style="position:absolute;left:-9999px;top:0;opacity:0;width:1px;height:1px">${esc(copyText)}</textarea>
 
         <div style="display:flex;gap:8px;margin-top:8px">
           <button class="btn btn-secondary" onclick="App._sbBack()" style="width:auto;padding:0 20px">←</button>
@@ -836,22 +961,7 @@
 
   App._sbCopyLine = function () {
     const el = document.getElementById('sb6-copy-text')
-    if (!el) return
-    const text = el.value
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).then(() => notify('คัดลอกแล้ว', 'success')).catch(() => _sbFallbackCopy(text))
-    } else {
-      _sbFallbackCopy(text)
-    }
-  }
-
-  function _sbFallbackCopy(text) {
-    const el = document.getElementById('sb6-copy-text')
-    if (!el) return
-    el.style.display = 'block'
-    el.select()
-    try { document.execCommand('copy'); notify('คัดลอกแล้ว', 'success') } catch(_) { notify('กรุณา copy เอง', 'info') }
-    el.style.display = 'none'
+    if (el) _clipCopy(el.value, 'sb6-copy-text')
   }
 
   App._sbSaveBill = function () {
@@ -863,8 +973,12 @@
     App.openSplitBillDetail(id)
   }
 
-  // ── Back / forward helpers ────────────────────────────────────
+  // ── Back helper ───────────────────────────────────────────────
   App._sbBack = function () {
+    if (_step === 3 && _editingItemIdx !== -1) {
+      App._sbItemCancel()
+      return
+    }
     if (_step <= 1) return App.openSplitBillScreen()
     _step--; _sbRender()
   }
@@ -873,7 +987,6 @@
   //  PEOPLE MANAGEMENT
   // ══════════════════════════════════════════════════════════════
   App.openSplitPeopleScreen = function (_editingId) {
-    const noAnim = { animate: false }
     const people = SbStore.loadPeople()
     const rows = people.map(p => {
       if (_editingId === p.id) {
