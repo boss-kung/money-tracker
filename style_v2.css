@@ -6411,13 +6411,14 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
   animation: mt-type-active-in .22s cubic-bezier(.34, 1.56, .64, 1) both !important;
 }
 
-/* ── D6: Cat-btn grid entrance stagger ───────────────────────── */
-@keyframes mt-cat-entrance {
-  from { opacity: 0; transform: scale(.88); }
-  to   { opacity: 1; transform: scale(1);   }
-}
+/* ── D6: Cat-btn grid stagger fade-in ────────────────────────── */
 .cat-btn.mt-cat-in {
-  animation: mt-cat-entrance .22s ease-out both !important;
+  opacity: 0;
+  animation: mt-fade-in .28s ease-out both !important;
+}
+@keyframes mt-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ── D11: Amount summary card exit on "แตะเพื่อแก้ไข" tap ──── */
