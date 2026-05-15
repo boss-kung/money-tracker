@@ -347,7 +347,11 @@
     const transferRows = result.transfers.length
       ? result.transfers.map(t=>`
           <div class="detail-row">
-            <div style="font-weight:600">${esc(t.fromName)}<span style="color:var(--muted);font-weight:400;font-size:13px"> โอนให้ </span>${esc(t.toName)}</div>
+            <div style="display:flex;align-items:center;gap:6px;font-weight:600">
+              <span>${esc(t.fromName)}</span>
+              <span style="color:var(--primary);font-size:18px;line-height:1">→</span>
+              <span>${esc(t.toName)}</span>
+            </div>
             <div style="font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
           </div>`).join('')
       : `<div style="color:var(--muted);font-size:13px;padding:8px 0">ทุกคนเสมอกันแล้ว 🎉</div>`
@@ -382,14 +386,15 @@
         <div class="sec-title">โอนเงิน</div>
         <div class="card card-pad">${transferRows}</div>
 
-        <button class="btn btn-secondary" onclick="App._sbDetailCopyLine()" style="margin-top:16px;width:100%">📋 คัดลอกสำหรับส่ง LINE</button>
         <textarea id="sb-detail-copy" style="position:absolute;left:-9999px;top:0;opacity:0;width:1px;height:1px">${esc(copyText)}</textarea>
 
-        <div style="display:flex;gap:8px;margin-top:8px">
+        <div style="display:flex;gap:8px;margin-top:16px">
           <button class="btn btn-secondary flex-1" onclick="App.openSplitBillForm('${esc(billId)}')">✏️ แก้ไข</button>
           <button class="btn btn-secondary flex-1" onclick="App._sbCopy('${esc(billId)}')">⧉ ทำซ้ำ</button>
-          <button class="btn btn-outline flex-1" onclick="App._sbDelete('${esc(billId)}')">🗑</button>
+          <button class="btn btn-secondary flex-1" onclick="App._sbDetailCopyLine()">📋 LINE</button>
         </div>
+        <div style="height:1px;background:var(--border);margin:12px 0"></div>
+        <button class="btn btn-outline" onclick="App._sbDelete('${esc(billId)}')" style="width:100%;color:var(--expense);border-color:var(--expense)">🗑 ลบบิล</button>
       </div>`)
   }
 
@@ -461,8 +466,8 @@
             <input class="form-input" type="date" id="sb1-date" value="${esc(_draft.date)}">
           </div>
           <div class="form-group">
-            <label class="form-label">ราคารวมจากบิล (฿)</label>
-            <input class="form-input" type="number" inputmode="decimal" id="sb1-total" value="${_draft.manualTotal||''}" placeholder="0 = ไม่ระบุ">
+            <label class="form-label">ยอดบิล (฿)</label>
+            <input class="form-input" type="number" inputmode="decimal" id="sb1-total" value="${_draft.manualTotal||''}" placeholder="ไม่ระบุ">
           </div>
         </div>
 
@@ -779,7 +784,6 @@
         ${sub > 0
           ? `<div class="card" style="padding:12px 14px;margin-bottom:14px">${previewRows}</div>`
           : `<div style="color:var(--muted);font-size:13px;margin-bottom:14px">ยังไม่มีรายการอาหาร (ยอดจะคำนวณเมื่อเพิ่มรายการแล้ว)</div>`}
-        <div style="font-size:13px;color:var(--muted);margin-bottom:8px">เปิด/ปิด และลำดับการคำนวณ</div>
         ${pipelineRows}
         <div class="card card-pad" style="margin-top:8px">
           <div style="display:flex;align-items:center;gap:10px">
@@ -833,12 +837,19 @@
   function _sbStep5(opts) {
     const { finalTotal } = runPipeline(itemSubtotal(_draft), _draft.pipeline)
 
+    const { shares } = calcShares(_draft)
     const rows = _draft.peopleIds.map(id => {
+      const person  = SbStore.getPerson(id)
+      const name    = person ? person.name : '?'
+      const share   = r2(shares[id] || 0)
       const paid    = _draft.payments[id] || ''
       const hasPaid = Number(paid) > 0
       const safeId  = esc(id)
       return `<div class="detail-row" style="align-items:center">
-        <div style="flex:1;font-weight:600">${esc(pName(id))}</div>
+        <div style="flex:1">
+          <div style="font-weight:600">${esc(name)}</div>
+          <div style="font-size:12px;color:var(--muted)">ส่วนแบ่ง ${fmt(share)}</div>
+        </div>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="color:var(--muted)">฿</span>
           <div style="position:relative;display:flex;align-items:center">
@@ -858,8 +869,10 @@
       ${stepHeader('App._sbBack()')}
       <div class="sub-scroll" style="padding:16px 16px 40px">
         <div style="font-size:13px;color:var(--muted);margin-bottom:10px">ระบุว่าใครจ่ายเงินไปแล้วเท่าไหร่ ถ้าไม่ได้จ่ายเว้นว่างไว้</div>
-        <div class="card card-pad">${rows||'<div style="color:var(--muted)">ยังไม่มีคน</div>'}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:8px">"ทั้งหมด" = ${fmt(finalTotal)}</div>
+        <div class="card card-pad">
+          ${rows||'<div style="color:var(--muted)">ยังไม่มีคน</div>'}
+          <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;font-size:12px;color:var(--muted)">กด "ทั้งหมด" เพื่อใส่ยอดรวม ${fmt(finalTotal)} อัตโนมัติ</div>
+        </div>
         ${navRow('ถัดไป: สรุป →', 'App._sbNext5()', 'App._sbBack()')}
       </div>`, opts)
   }
@@ -895,8 +908,10 @@
     const transferRows = result.transfers.length
       ? result.transfers.map(t => `
           <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-            <div style="font-weight:600;font-size:15px">
-              ${esc(t.fromName)}<span style="color:var(--muted);font-weight:400;font-size:13px"> โอนให้ </span>${esc(t.toName)}
+            <div style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:15px">
+              <span>${esc(t.fromName)}</span>
+              <span style="color:var(--primary);font-size:18px;line-height:1">→</span>
+              <span>${esc(t.toName)}</span>
             </div>
             <div style="font-size:20px;font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
           </div>`).join('')
@@ -929,17 +944,13 @@
         <div style="margin-bottom:16px">${transferRows}</div>
 
         <details style="margin-bottom:16px">
-          <summary style="font-size:13px;color:var(--muted);cursor:pointer;padding:4px 0">ดูรายละเอียดต่อคน</summary>
+          <summary style="font-size:13px;color:var(--muted);cursor:pointer;padding:4px 0">ส่วนแบ่งต่อคน</summary>
           <div class="card card-pad" style="margin-top:8px">${detailRows}</div>
         </details>
 
-        <button class="btn btn-secondary" onclick="App._sbCopyLine()" style="margin-bottom:8px;width:100%">📋 คัดลอกสำหรับส่ง LINE</button>
         <textarea id="sb6-copy-text" style="position:absolute;left:-9999px;top:0;opacity:0;width:1px;height:1px">${esc(copyText)}</textarea>
-
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button class="btn btn-secondary" onclick="App._sbBack()" style="width:auto;padding:0 20px">←</button>
-          <button class="btn btn-primary" onclick="App._sbSaveBill()" style="flex:1">💾 บันทึกบิล</button>
-        </div>
+        <button class="btn btn-primary" onclick="App._sbSaveBill()" style="width:100%;margin-bottom:8px">💾 บันทึกบิล</button>
+        <button class="btn btn-secondary" onclick="App._sbCopyLine()" style="width:100%">📋 คัดลอกสำหรับส่ง LINE</button>
       </div>`, opts)
   }
 
