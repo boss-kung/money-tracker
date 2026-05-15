@@ -15660,16 +15660,32 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
   })()
 
-  // ── D6: Cat-btn grid entrance stagger (first entrance only) ────
+  // ── D6: Cat-btn grid — sort + stagger fade-in (first entrance) ──
   ;(function _patchRenderAddTxDetailD6() {
     const _prev = App._renderAddTxDetail?.bind(App)
     App._renderAddTxDetail = function (...args) {
       const isFirstEntrance = !document.getElementById('cat-grid')
       _prev?.(...args)
+      try {
+        // #2: "อื่น" always last, except when merchant suggestion pins a category
+        const grid = document.getElementById('cat-grid')
+        if (grid) {
+          const hasSuggestion = !!(S.tx?.txSuggestedFields?.categoryId)
+          if (!hasSuggestion) {
+            const otherBtn = Array.from(grid.children).find(b => {
+              const lbl = b.querySelector('span:last-child')?.textContent?.trim()
+              return lbl === 'อื่น' || lbl === 'อื่นๆ'
+            })
+            if (otherBtn) grid.appendChild(otherBtn)
+          }
+        }
+      } catch (_) {}
+      // #1: stagger fade-in only on first entrance to detail step
       if (!isFirstEntrance) return
       try {
         document.querySelectorAll('#cat-grid .cat-btn').forEach((btn, i) => {
-          btn.style.animationDelay = `${i * 22}ms`
+          // setProperty 'important' needed to beat CSS animation !important shorthand
+          btn.style.setProperty('animation-delay', `${i * 30}ms`, 'important')
           btn.classList.add('mt-cat-in')
         })
       } catch (_) {}
