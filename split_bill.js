@@ -1,502 +1,236 @@
 /* ============================================================
-   Split Bill — Phase 1-5
-   Standalone module. No dependency on wallet/transaction/report.
-   Attaches to window.App and window.SplitBillCalc.
+   Split Bill v2 — 6-step flow
+   Standalone module. No wallet/transaction/report dependency.
    ============================================================ */
 ;(function () {
   'use strict'
   if (typeof App === 'undefined') return
 
   // ── Constants ────────────────────────────────────────────────
-  const BILLS_KEY   = 'mt_split_bills'
-  const PEOPLE_KEY  = 'mt_split_people'
+  const BILLS_KEY  = 'mt_split_bills'
+  const PEOPLE_KEY = 'mt_split_people'
 
   // ── Utilities ────────────────────────────────────────────────
   const esc     = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))
   const nowISO  = () => new Date().toISOString()
   const genId   = () => Date.now().toString(36) + Math.random().toString(36).slice(2)
-  const fmt     = n  => typeof Calc !== 'undefined' ? Calc.fmt(n) : ('฿' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2}))
+  const fmt     = n => typeof Calc !== 'undefined' ? Calc.fmt(n) : ('฿' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2}))
   const notify  = (msg, type='info') => { try { toast(msg, type) } catch(_) {} }
-
-  // Integer satang helpers to avoid float drift
-  const toSatang   = n => Math.round((Number(n) || 0) * 100)
-  const fromSatang = n => n / 100
-
-  // YYYY-MM-DD local today
+  const r2      = n => Math.round((Number(n)||0) * 100) / 100
   const todayStr = () => {
     try { if (typeof getTODAY === 'function') return getTODAY() } catch(_) {}
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
   }
-
-  const thaiDate = dateStr => {
-    if (!dateStr) return ''
-    const [y,m,d] = dateStr.split('-').map(Number)
-    const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
-    return `${d} ${months[m-1]} ${y+543}`
+  const thaiDate = s => {
+    if (!s) return ''
+    const [y,m,d] = s.split('-').map(Number)
+    return `${d} ${['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][m-1]} ${y+543}`
   }
 
-  // ── Store ─────────────────────────────────────────────────────
+  // ── Store ────────────────────────────────────────────────────
   const SbStore = {
-    loadBills()         { try { return JSON.parse(localStorage.getItem(BILLS_KEY) || '[]') || [] } catch(_) { return [] } },
-    saveBills(bills)    { try { localStorage.setItem(BILLS_KEY, JSON.stringify(bills)); return true } catch(_) { return false } },
-    loadPeople()        { try { return JSON.parse(localStorage.getItem(PEOPLE_KEY) || '[]') || [] } catch(_) { return [] } },
-    savePeople(people)  { try { localStorage.setItem(PEOPLE_KEY, JSON.stringify(people)); return true } catch(_) { return false } },
-    getBill(id)         { return this.loadBills().find(b => b.id === id) || null },
-    getPerson(id)       { return this.loadPeople().find(p => p.id === id) || null },
-    upsertBill(bill) {
-      const bills = this.loadBills()
-      const idx = bills.findIndex(b => b.id === bill.id)
-      if (idx >= 0) bills[idx] = bill; else bills.unshift(bill)
-      return this.saveBills(bills)
+    loadBills:    () => { try { return JSON.parse(localStorage.getItem(BILLS_KEY)||'[]')||[] } catch(_) { return [] } },
+    saveBills:    b  => { try { localStorage.setItem(BILLS_KEY,  JSON.stringify(b)); return true } catch(_) { return false } },
+    loadPeople:   () => { try { return JSON.parse(localStorage.getItem(PEOPLE_KEY)||'[]')||[] } catch(_) { return [] } },
+    savePeople:   p  => { try { localStorage.setItem(PEOPLE_KEY, JSON.stringify(p)); return true } catch(_) { return false } },
+    getBill:      id => SbStore.loadBills().find(b => b.id === id) || null,
+    getPerson:    id => SbStore.loadPeople().find(p => p.id === id) || null,
+    upsertBill:   bill => {
+      const list = SbStore.loadBills(); const i = list.findIndex(b => b.id === bill.id)
+      if (i >= 0) list[i] = bill; else list.unshift(bill); return SbStore.saveBills(list)
     },
-    deleteBill(id) {
-      const bills = this.loadBills().filter(b => b.id !== id)
-      return this.saveBills(bills)
+    deleteBill:   id => SbStore.saveBills(SbStore.loadBills().filter(b => b.id !== id)),
+    upsertPerson: person => {
+      const list = SbStore.loadPeople(); const i = list.findIndex(p => p.id === person.id)
+      if (i >= 0) list[i] = person; else list.unshift(person); return SbStore.savePeople(list)
     },
-    upsertPerson(person) {
-      const people = this.loadPeople()
-      const idx = people.findIndex(p => p.id === person.id)
-      if (idx >= 0) people[idx] = person; else people.unshift(person)
-      return this.savePeople(people)
-    },
-    deletePerson(id) {
-      const people = this.loadPeople().filter(p => p.id !== id)
-      return this.savePeople(people)
-    },
+    deletePerson: id => SbStore.savePeople(SbStore.loadPeople().filter(p => p.id !== id)),
   }
 
-  // ── Data normalizers ─────────────────────────────────────────
-  function normalizePerson(raw = {}) {
-    return {
-      id:        raw.id        || genId(),
-      name:      raw.name      || 'ไม่ระบุชื่อ',
-      emoji:     raw.emoji     || '👤',
-      color:     raw.color     || '#2563EB',
-      note:      raw.note      || '',
-      archived:  raw.archived  || false,
-      createdAt: raw.createdAt || nowISO(),
-      updatedAt: raw.updatedAt || nowISO(),
-    }
+  // ── Data helpers ─────────────────────────────────────────────
+  function defaultPipeline() {
+    return [
+      { id: 'discount', type: 'discount', label: 'ส่วนลด',         enabled: false, mode: 'percent', value: 0  },
+      { id: 'service',  type: 'service',  label: 'Service Charge', enabled: false, mode: 'percent', value: 10 },
+      { id: 'vat',      type: 'vat',      label: 'VAT',            enabled: false, mode: 'percent', value: 7  },
+    ]
   }
 
-  function normalizeBill(raw = {}) {
+  function newDraft(base = {}) {
     return {
-      id:         raw.id         || genId(),
-      title:      raw.title      || 'บิลใหม่',
-      date:       raw.date       || todayStr(),
-      note:       raw.note       || '',
-      currency:   'THB',
-      totalMode:  raw.totalMode  || 'manual',
-      manualTotal: Number(raw.manualTotal) || 0,
-      breakdown: {
-        baseAmount: Number(raw.breakdown?.baseAmount) || 0,
-        service:  { enabled: false, type: 'percent', value: 10, allocation: 'proportional', ...(raw.breakdown?.service  || {}) },
-        vat:      { enabled: false, type: 'percent', value: 7, base: 'base', allocation: 'proportional', ...(raw.breakdown?.vat      || {}) },
-        tip:      { enabled: false, amount: 0, allocation: 'proportional', ...(raw.breakdown?.tip      || {}) },
-        discount: { enabled: false, type: 'fixed', value: 0, allocation: 'proportional', ...(raw.breakdown?.discount  || {}) },
-      },
-      deposits:     Array.isArray(raw.deposits)     ? raw.deposits     : [],
-      participants: Array.isArray(raw.participants) ? raw.participants : [],
-      items:        Array.isArray(raw.items)        ? raw.items        : [],
-      splitMethod:  raw.splitMethod  || 'equal',
-      rounding: {
-        mode: 'cent', assignTo: 'largestPayer', personId: '', ...(raw.rounding || {})
-      },
-      overrides: raw.overrides || {},
-      createdAt: raw.createdAt || nowISO(),
-      updatedAt: raw.updatedAt || nowISO(),
+      id:          base.id       || genId(),
+      title:       base.title    || '',
+      date:        base.date     || todayStr(),
+      manualTotal: Number(base.manualTotal) || 0,
+      peopleIds:   Array.isArray(base.peopleIds) ? [...base.peopleIds] : [],
+      items:       Array.isArray(base.items) ? JSON.parse(JSON.stringify(base.items)) : [],
+      pipeline:    Array.isArray(base.pipeline) ? JSON.parse(JSON.stringify(base.pipeline)) : defaultPipeline(),
+      payments:    base.payments ? { ...base.payments } : {},
+      createdAt:   base.createdAt || nowISO(),
+      updatedAt:   nowISO(),
     }
   }
 
   // ── Calculator ───────────────────────────────────────────────
-  const SplitBillCalc = {
-
-    calculateBill(bill, allPeople) {
-      const b = JSON.parse(JSON.stringify(bill))
-      const warnings = []
-
-      const included = (b.participants || []).filter(p => p.included !== false)
-      if (!included.length) {
-        warnings.push({ code: 'NO_PARTICIPANTS', msg: 'ยังไม่มีผู้เข้าร่วม' })
-        return { totalToSplit: 0, people: [], settlementPlan: [], warnings, roundingAdjustment: 0 }
-      }
-
-      // Step 2: totalToSplit
-      const totalToSplit = this._calcTotal(b, warnings)
-      const totalSatang  = toSatang(totalToSplit)
-      if (totalSatang <= 0) warnings.push({ code: 'ZERO_TOTAL', msg: 'ยอดรวมต้องมากกว่า 0' })
-
-      // Step 3: base shares (in satang)
-      const baseShares = this._calcBaseShares(b, included, totalSatang, warnings)
-
-      // Step 6: personal adjustments
-      const adjShares = this._applyAdjustments(b, baseShares)
-
-      // Step 7: share overrides
-      const { shares: rawShares, overrideApplied } = this._applyShareOverrides(b, adjShares)
-
-      // Step 8: rounding
-      const { shares: finalShares, roundingAdjustment } = this._applyRounding(rawShares, totalSatang)
-
-      // Step 9: paid amounts (in satang)
-      const paidMap = this._calcPaidAmounts(b)
-
-      // Check paid vs total
-      const totalPaidSatang = Object.values(paidMap).reduce((s, v) => s + v, 0)
-      const paidDiff = Math.abs(totalPaidSatang - totalSatang)
-      if (paidDiff > 5) {
-        warnings.push({
-          code: totalPaidSatang < totalSatang ? 'UNDERPAID' : 'OVERPAID',
-          msg: totalPaidSatang < totalSatang
-            ? `ยอดที่จ่ายน้อยกว่าบิล ${fmt(fromSatang(totalSatang - totalPaidSatang))}`
-            : `ยอดที่จ่ายเกินบิล ${fmt(fromSatang(totalPaidSatang - totalSatang))}`
-        })
-      }
-
-      // Step 10: net per person
-      const people = included.map(p => {
-        const finalShare = fromSatang(finalShares[p.personId] || 0)
-        const paidAmount = fromSatang(paidMap[p.personId] || 0)
-        const net = Math.round((paidAmount - finalShare) * 100) / 100
-        return {
-          personId: p.personId,
-          finalShare,
-          paidAmount,
-          net,
-          status: Math.abs(net) < 0.005 ? 'even' : net > 0 ? 'getsBack' : 'owes',
-          isOverridden: overrideApplied[p.personId] || false,
-        }
-      })
-
-      // Step 11: settlement
-      let settlementPlan = this._generateSettlement(people)
-
-      // Step 12: settlement overrides
-      if (Array.isArray(b.overrides?.settlementPlan)) {
-        settlementPlan = b.overrides.settlementPlan.map(t => ({ ...t, isOverridden: true }))
-      }
-
-      return { totalToSplit, people, settlementPlan, warnings, roundingAdjustment }
-    },
-
-    _calcTotal(b, warnings) {
-      if (b.overrides?.total != null) return Number(b.overrides.total) || 0
-
-      if (b.totalMode === 'breakdown') {
-        const br = b.breakdown || {}
-        const base = Number(br.baseAmount) || 0
-
-        let service = 0
-        if (br.service?.enabled) {
-          service = br.service.type === 'percent'
-            ? base * (Number(br.service.value) || 0) / 100
-            : Number(br.service.value) || 0
-        }
-
-        let vatBase = base
-        if (br.vat?.base === 'afterService') vatBase = base + service
-
-        let vat = 0
-        if (br.vat?.enabled) {
-          vat = br.vat.type === 'percent'
-            ? vatBase * (Number(br.vat.value) || 0) / 100
-            : Number(br.vat.value) || 0
-        }
-
-        const tip      = br.tip?.enabled      ? (Number(br.tip.amount) || 0) : 0
-        const discount = br.discount?.enabled
-          ? (br.discount.type === 'percent' ? base * (Number(br.discount.value)||0)/100 : Number(br.discount.value)||0)
-          : 0
-
-        return Math.max(0, base + service + vat + tip - discount)
-      }
-
-      return Number(b.manualTotal) || 0
-    },
-
-    _calcBaseShares(b, included, totalSatang, warnings) {
-      const method = b.splitMethod || 'equal'
-      const shares = {}
-
-      // payerOnly → share = 0
-      const shareRecipients = included.filter(p => p.role !== 'payerOnly')
-      included.filter(p => p.role === 'payerOnly').forEach(p => { shares[p.personId] = 0 })
-
-      if (!shareRecipients.length) return shares
-
-      switch (method) {
-        case 'equal': {
-          const n = shareRecipients.length
-          const base = Math.floor(totalSatang / n)
-          let rem = totalSatang - base * n
-          shareRecipients.forEach(p => { shares[p.personId] = base })
-          const assignee = this._roundingAssignee(b, shareRecipients)
-          if (assignee) shares[assignee] = (shares[assignee] || 0) + rem
-          break
-        }
-        case 'shareUnit': {
-          const totalUnits = shareRecipients.reduce((s, p) => s + (Number(p.shareInput?.unit) || 0), 0)
-          if (!totalUnits) {
-            warnings.push({ code: 'ZERO_UNITS', msg: 'หน่วยรวมต้องมากกว่า 0' })
-            shareRecipients.forEach(p => { shares[p.personId] = 0 })
-            break
-          }
-          let allocated = 0
-          shareRecipients.forEach((p, i) => {
-            const u = Number(p.shareInput?.unit) || 0
-            if (i < shareRecipients.length - 1) {
-              shares[p.personId] = Math.floor((u / totalUnits) * totalSatang)
-            } else {
-              shares[p.personId] = totalSatang - allocated
-            }
-            allocated += shares[p.personId]
-          })
-          break
-        }
-        case 'percent': {
-          const totalPct = shareRecipients.reduce((s, p) => s + (Number(p.shareInput?.percent) || 0), 0)
-          if (Math.abs(totalPct - 100) > 0.01) {
-            warnings.push({ code: 'PERCENT_MISMATCH', msg: `เปอร์เซ็นต์รวมได้ ${totalPct.toFixed(2)}% (ควรได้ 100%)` })
-          }
-          let allocated = 0
-          shareRecipients.forEach((p, i) => {
-            const pct = Number(p.shareInput?.percent) || 0
-            if (i < shareRecipients.length - 1) {
-              shares[p.personId] = Math.round((pct / 100) * totalSatang)
-            } else {
-              shares[p.personId] = totalSatang - allocated
-            }
-            allocated += shares[p.personId]
-          })
-          break
-        }
-        case 'fixed': {
-          let fixedTotal = 0
-          shareRecipients.forEach(p => {
-            const s = toSatang(Number(p.shareInput?.fixedAmount) || 0)
-            shares[p.personId] = s
-            fixedTotal += s
-          })
-          if (Math.abs(fixedTotal - totalSatang) > 1) {
-            warnings.push({ code: 'FIXED_MISMATCH', msg: `ยอดที่กำหนด ${fmt(fromSatang(fixedTotal))} ไม่ตรงกับบิล ${fmt(fromSatang(totalSatang))}` })
-          }
-          break
-        }
-        case 'manual': {
-          let manTotal = 0
-          shareRecipients.forEach(p => {
-            const s = toSatang(Number(p.shareInput?.manualAmount) || 0)
-            shares[p.personId] = s
-            manTotal += s
-          })
-          if (Math.abs(manTotal - totalSatang) > 1) {
-            warnings.push({ code: 'MANUAL_MISMATCH', msg: `ยอดที่กรอกรวม ${fmt(fromSatang(manTotal))} ไม่ตรงกับบิล ${fmt(fromSatang(totalSatang))}` })
-          }
-          break
-        }
-        case 'itemized':
-        case 'hybrid': {
-          included.forEach(p => { shares[p.personId] = 0 })
-          const items = b.items || []
-          let itemTotalSatang = 0
-
-          items.forEach(item => {
-            const itemSatang = toSatang(Number(item.amount) || 0)
-            itemTotalSatang += itemSatang
-            const itemParts = (item.participants || []).filter(ip =>
-              included.some(p => p.personId === ip.personId)
-            )
-            if (!itemParts.length || item.splitMode === 'exclude') return
-
-            switch (item.splitMode || 'equal') {
-              case 'equal': {
-                const n = itemParts.length
-                const base = Math.floor(itemSatang / n)
-                const rem  = itemSatang - base * n
-                itemParts.forEach(ip => { shares[ip.personId] = (shares[ip.personId]||0) + base })
-                if (rem && itemParts[0]) shares[itemParts[0].personId] += rem
-                break
-              }
-              case 'singleOwner':
-                if (itemParts[0]) shares[itemParts[0].personId] = (shares[itemParts[0].personId]||0) + itemSatang
-                break
-              case 'shareUnit': {
-                const tu = itemParts.reduce((s, ip) => s + (Number(ip.unit)||0), 0)
-                if (!tu) break
-                let al = 0
-                itemParts.forEach((ip, i) => {
-                  const amt = i < itemParts.length - 1 ? Math.floor((Number(ip.unit)||0)/tu*itemSatang) : itemSatang - al
-                  shares[ip.personId] = (shares[ip.personId]||0) + amt
-                  al += amt
-                })
-                break
-              }
-              case 'percent': {
-                let al = 0
-                itemParts.forEach((ip, i) => {
-                  const amt = i < itemParts.length - 1 ? Math.round((Number(ip.percent)||0)/100*itemSatang) : itemSatang - al
-                  shares[ip.personId] = (shares[ip.personId]||0) + amt
-                  al += amt
-                })
-                break
-              }
-              case 'fixed':
-                itemParts.forEach(ip => { shares[ip.personId] = (shares[ip.personId]||0) + toSatang(Number(ip.fixedAmount)||0) })
-                break
-            }
-          })
-
-          if (items.length && Math.abs(itemTotalSatang - totalSatang) > 100) {
-            warnings.push({ code: 'ITEM_TOTAL_MISMATCH', msg: `ยอดรายการ ${fmt(fromSatang(itemTotalSatang))} ไม่ตรงกับบิล ${fmt(fromSatang(totalSatang))}` })
-          }
-
-          // hybrid: remaining distributed equally among non-itemized
-          if (method === 'hybrid') {
-            const itemized = toSatang(Object.values(shares).reduce((s,v)=>s+v,0))
-            const remaining = totalSatang - itemized
-            if (remaining > 0) {
-              const eq = shareRecipients.filter(p => !p.shareInput?.mode || p.shareInput?.mode === 'equal')
-              if (eq.length) {
-                const base = Math.floor(remaining / eq.length)
-                const rem  = remaining - base * eq.length
-                eq.forEach(p => { shares[p.personId] = (shares[p.personId]||0) + base })
-                if (rem && eq[0]) shares[eq[0].personId] += rem
-              }
-            }
-          }
-          break
-        }
-        default:
-          shareRecipients.forEach(p => { shares[p.personId] = 0 })
-      }
-
-      return shares
-    },
-
-    _roundingAssignee(b, recipients) {
-      if (!recipients.length) return null
-      const mode = b.rounding?.assignTo || 'largestPayer'
-      if (mode === 'specificPerson' && b.rounding?.personId) return b.rounding.personId
-      if (mode === 'lastPerson') return recipients[recipients.length - 1]?.personId
-      if (mode === 'firstPerson') return recipients[0]?.personId
-      // largestPayer → first by default (largest is determined by context)
-      return recipients[0]?.personId
-    },
-
-    _applyAdjustments(b, shares) {
-      const result = { ...shares }
-      ;(b.participants || []).filter(p => p.included !== false).forEach(p => {
-        const adj = p.personalAdjustments || {}
-        const delta = toSatang(Number(adj.extraCharge)||0)
-                    + toSatang(Number(adj.manualAdd)||0)
-                    - toSatang(Number(adj.discount)||0)
-                    - toSatang(Number(adj.manualSubtract)||0)
-        if (delta) result[p.personId] = (result[p.personId] || 0) + delta
-      })
-      return result
-    },
-
-    _applyShareOverrides(b, shares) {
-      const result = { ...shares }
-      const overrideApplied = {}
-      if (b.overrides?.sharesByPerson && typeof b.overrides.sharesByPerson === 'object') {
-        Object.entries(b.overrides.sharesByPerson).forEach(([pid, amt]) => {
-          result[pid] = toSatang(Number(amt) || 0)
-          overrideApplied[pid] = true
-        })
-      }
-      return { shares: result, overrideApplied }
-    },
-
-    _applyRounding(shares, totalSatang) {
-      const result = {}
-      Object.entries(shares).forEach(([id, s]) => { result[id] = Math.round(s) })
-      const sumShares = Object.values(result).reduce((s,v)=>s+v,0)
-      return { shares: result, roundingAdjustment: fromSatang(totalSatang - sumShares) }
-    },
-
-    _calcPaidAmounts(b) {
-      const paid = {}
-      ;(b.participants || []).filter(p => p.included !== false).forEach(p => {
-        let s = 0
-        ;(p.paidInputs || []).forEach(inp => {
-          const a = toSatang(Number(inp.amount) || 0)
-          s += inp.type === 'refund' ? -a : a
-        })
-        paid[p.personId] = s
-      })
-      ;(b.deposits || []).forEach(d => {
-        if (!d.personId) return
-        const used     = toSatang(Number(d.amountUsedInBill) || 0)
-        const refunded = toSatang(Number(d.amountRefunded)   || 0)
-        paid[d.personId] = (paid[d.personId] || 0) + Math.max(0, used - refunded)
-      })
-      return paid
-    },
-
-    _generateSettlement(people) {
-      const creditors = people.filter(p => p.net >  0.005).map(p => ({ personId: p.personId, amt: Math.round(p.net*100) })).sort((a,b)=>b.amt-a.amt)
-      const debtors   = people.filter(p => p.net < -0.005).map(p => ({ personId: p.personId, amt: Math.round(-p.net*100) })).sort((a,b)=>b.amt-a.amt)
-      const plan = []
-      let ci = 0, di = 0
-      while (ci < creditors.length && di < debtors.length) {
-        const c = creditors[ci], d = debtors[di]
-        const amt = Math.min(c.amt, d.amt)
-        if (amt > 0) plan.push({ fromPersonId: d.personId, toPersonId: c.personId, amount: fromSatang(amt), isOverridden: false })
-        c.amt -= amt; d.amt -= amt
-        if (c.amt <= 0) ci++
-        if (d.amt <= 0) di++
-      }
-      return plan
-    },
+  function itemSubtotal(draft) {
+    return (draft.items||[]).reduce((s, item) => s + (Number(item.qty)||1) * (Number(item.pricePerUnit)||0), 0)
   }
 
-  // Expose globally so tests can call SplitBillCalc.calculateBill directly
-  window.SplitBillCalc = SplitBillCalc
+  function runPipeline(subtotal, pipeline) {
+    let amount = r2(subtotal)
+    const steps = [{ label: 'ยอดอาหาร', amount, delta: 0, type: 'base' }]
+    for (const p of (pipeline||[])) {
+      if (!p.enabled) continue
+      let raw = p.mode === 'percent' ? amount * (Number(p.value)||0) / 100 : (Number(p.value)||0)
+      const delta = p.type === 'discount' ? -Math.abs(r2(raw)) : Math.abs(r2(raw))
+      amount = r2(amount + delta)
+      steps.push({ label: p.label, amount, delta, type: p.type, mode: p.mode, value: p.value })
+    }
+    return { finalTotal: amount, steps }
+  }
 
-  // ── Wizard State ─────────────────────────────────────────────
-  let _draft = null       // current bill being edited
-  let _draftStep = 1      // 1-7
+  function calcShares(draft) {
+    const byPerson = {}
+    draft.peopleIds.forEach(id => { byPerson[id] = 0 })
 
-  function draftBill() {
-    if (!_draft) _draft = normalizeBill({})
-    return _draft
+    ;(draft.items||[]).forEach(item => {
+      const total = (Number(item.qty)||1) * (Number(item.pricePerUnit)||0)
+      const parts = (item.participants||[]).filter(p => draft.peopleIds.includes(p.personId))
+      if (!parts.length) return
+      if (item.splitMode === 'ratio') {
+        const sum = parts.reduce((s,p) => s + (Number(p.ratio)||1), 0)
+        parts.forEach(p => { byPerson[p.personId] = r2(byPerson[p.personId] + (Number(p.ratio)||1)/sum * total) })
+      } else {
+        parts.forEach(p => { byPerson[p.personId] = r2(byPerson[p.personId] + total / parts.length) })
+      }
+    })
+
+    const sub = r2(Object.values(byPerson).reduce((s,v)=>s+v,0))
+    const { finalTotal } = runPipeline(sub, draft.pipeline)
+    const shares = {}
+
+    if (sub > 0) {
+      let alloc = 0
+      const ids = Object.keys(byPerson)
+      ids.forEach((id, i) => {
+        if (i < ids.length - 1) { shares[id] = r2(byPerson[id] / sub * finalTotal); alloc += shares[id] }
+        else                     { shares[id] = r2(finalTotal - alloc) }
+      })
+    } else if (draft.peopleIds.length) {
+      const n = draft.peopleIds.length
+      let alloc = 0
+      draft.peopleIds.forEach((id, i) => {
+        if (i < n-1) { shares[id] = r2(finalTotal / n); alloc += shares[id] }
+        else          { shares[id] = r2(finalTotal - alloc) }
+      })
+    }
+
+    return { shares, sub, finalTotal }
+  }
+
+  function calcResult(draft) {
+    const people  = SbStore.loadPeople()
+    const pName   = id => { const p = people.find(x=>x.id===id); return p ? p.name : '?' }
+    const { shares, finalTotal } = calcShares(draft)
+    const payments = draft.payments || {}
+
+    const personResults = draft.peopleIds.map(id => {
+      const finalShare = r2(shares[id] || 0)
+      const paid       = r2(payments[id] || 0)
+      const net        = r2(paid - finalShare)
+      return { id, name: pName(id), finalShare, paid, net }
+    })
+
+    // Greedy settlement — minimum transfers
+    const creditors = personResults.filter(p=>p.net> 0.005).map(p=>({...p,amt:Math.round(p.net*100)})).sort((a,b)=>b.amt-a.amt)
+    const debtors   = personResults.filter(p=>p.net<-0.005).map(p=>({...p,amt:Math.round(-p.net*100)})).sort((a,b)=>b.amt-a.amt)
+    const transfers = []
+    let ci=0, di=0
+    while (ci < creditors.length && di < debtors.length) {
+      const c = creditors[ci], d = debtors[di]
+      const amt = Math.min(c.amt, d.amt)
+      if (amt > 0) transfers.push({ from: d.id, fromName: d.name, to: c.id, toName: c.name, amount: r2(amt/100) })
+      c.amt -= amt; d.amt -= amt
+      if (c.amt <= 0) ci++
+      if (d.amt <= 0) di++
+    }
+
+    // Mismatch analysis
+    const warnings = []
+    const sub = itemSubtotal(draft)
+    const { finalTotal: calcTotal, steps } = runPipeline(sub, draft.pipeline)
+
+    if (draft.manualTotal > 0 && Math.abs(r2(draft.manualTotal - calcTotal)) > 0.5) {
+      const diff = r2(draft.manualTotal - calcTotal)
+      if (diff > 0) warnings.push(`ยอดคำนวณ ${fmt(calcTotal)} น้อยกว่ายอดบิล ${fmt(draft.manualTotal)} อยู่ ${fmt(diff)} — อาจมีรายการที่ยังไม่ได้เพิ่ม หรือยังไม่ได้เปิด VAT/SC`)
+      else          warnings.push(`ยอดคำนวณ ${fmt(calcTotal)} มากกว่ายอดบิล ${fmt(draft.manualTotal)} อยู่ ${fmt(Math.abs(diff))} — กรุณาตรวจสอบราคารายการ`)
+    }
+
+    const totalPaid = draft.peopleIds.reduce((s,id) => s + r2(payments[id]||0), 0)
+    if (draft.peopleIds.length && Math.abs(r2(totalPaid - finalTotal)) > 0.5) {
+      warnings.push(`ยอดที่จ่ายรวม ${fmt(totalPaid)} ${totalPaid < finalTotal ? 'น้อยกว่า' : 'มากกว่า'} ยอดสุดท้าย ${fmt(finalTotal)}`)
+    }
+
+    return { personResults, transfers, finalTotal, calcTotal, warnings }
+  }
+
+  window.SplitBillCalc = { calcResult, runPipeline, itemSubtotal, calcShares }
+
+  // ── Wizard state ─────────────────────────────────────────────
+  let _draft = null
+  let _step  = 1
+  let _editingItemIdx = -1
+
+  const STEP_TITLES = ['','ข้อมูลบิล','เพิ่มคน','รายการอาหาร','ส่วนลด / SC / VAT','ใครจ่ายไปแล้ว','สรุป']
+  const noAnim = { animate: false }
+
+  function stepBar() {
+    return `<div style="display:flex;gap:3px;padding:4px 16px 0">
+      ${[1,2,3,4,5,6].map(n=>`<div style="flex:1;height:3px;border-radius:2px;background:${_step>=n?'var(--primary)':'var(--border)'}"></div>`).join('')}
+    </div>`
+  }
+
+  function stepHeader(backFn) {
+    return `<div class="sub-header">
+      <button class="btn-icon" onclick="${backFn}">←</button>
+      <h2 style="flex:1">${esc(STEP_TITLES[_step])}</h2>
+      <span style="font-size:12px;color:var(--muted)">${_step}/6</span>
+    </div>${stepBar()}`
+  }
+
+  function navRow(nextLabel, nextFn, backFn) {
+    return `<div style="display:flex;gap:8px;padding:16px 0 0">
+      ${backFn ? `<button class="btn btn-secondary" onclick="${backFn}" style="width:auto;padding:0 20px">←</button>` : ''}
+      <button class="btn btn-primary" onclick="${nextFn}" style="flex:1">${nextLabel}</button>
+    </div>`
+  }
+
+  function pName(id) {
+    const p = SbStore.getPerson(id)
+    return p ? `${p.emoji||'👤'} ${p.name}` : '?'
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  HOME SCREEN
+  //  HOME / HISTORY
   // ══════════════════════════════════════════════════════════════
   App.openSplitBillScreen = function () {
     const bills  = SbStore.loadBills()
     const people = SbStore.loadPeople()
 
-    // Compute my net across all bills
-    let totalOwes = 0, totalGetsBack = 0
-    bills.forEach(b => {
-      try {
-        const r = SplitBillCalc.calculateBill(b, people)
-        r.people.forEach(p => {
-          if (p.net < 0) totalOwes    += Math.abs(p.net)
-          if (p.net > 0) totalGetsBack += p.net
-        })
-      } catch(_) {}
-    })
-
-    const billCards = bills.map(b => {
-      const pCount = (b.participants||[]).filter(p=>p.included!==false).length
-      let totalToSplit = 0
-      try { totalToSplit = SplitBillCalc._calcTotal(b, []) } catch(_) {}
+    const cards = bills.map(b => {
+      const sub = itemSubtotal(b)
+      const { finalTotal } = runPipeline(sub, b.pipeline)
+      const total = b.manualTotal > 0 ? b.manualTotal : finalTotal
+      const n = (b.peopleIds||[]).length
       return `<div class="card card-pad sb-bill-row" onclick="App.openSplitBillDetail('${esc(b.id)}')">
         <div style="display:flex;align-items:center;gap:10px">
-          <div style="font-size:26px;line-height:1">🧾</div>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.title)}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:2px">${thaiDate(b.date)} · ${pCount} คน</div>
+            <div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.title||'ไม่มีชื่อ')}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">${thaiDate(b.date)} · ${n} คน</div>
           </div>
           <div style="text-align:right;flex-shrink:0">
-            <div style="font-weight:700;color:var(--primary)">${fmt(totalToSplit)}</div>
-            <div style="font-size:11px;color:var(--muted)">ยอดรวม</div>
+            <div style="font-weight:800;color:var(--primary)">${fmt(total)}</div>
           </div>
         </div>
       </div>`
@@ -505,40 +239,18 @@
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
-        <h2>หารบิล</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.openSplitBillForm()" style="width:auto">+ เพิ่มบิล</button>
+        <h2 style="flex:1">หารบิล</h2>
+        <button class="btn btn-secondary btn-sm" onclick="App.openSplitPeopleScreen()" style="width:auto">👥</button>
+        <button class="btn btn-primary btn-sm" onclick="App.openSplitBillForm()" style="width:auto;margin-left:6px">+ บิล</button>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
-          <div class="card" style="padding:12px;text-align:center">
-            <div style="font-size:12px;color:var(--muted)">ต้องจ่ายเพิ่ม</div>
-            <div style="font-size:16px;font-weight:800;color:var(--expense);margin-top:2px">${fmt(totalOwes)}</div>
-          </div>
-          <div class="card" style="padding:12px;text-align:center">
-            <div style="font-size:12px;color:var(--muted)">ได้รับคืน</div>
-            <div style="font-size:16px;font-weight:800;color:var(--income);margin-top:2px">${fmt(totalGetsBack)}</div>
-          </div>
-          <div class="card" style="padding:12px;text-align:center">
-            <div style="font-size:12px;color:var(--muted)">บิลทั้งหมด</div>
-            <div style="font-size:16px;font-weight:800;color:var(--primary);margin-top:2px">${bills.length}</div>
-          </div>
-        </div>
-
-        <div class="settings-row" onclick="App.openSplitPeopleScreen()" style="margin-bottom:4px">
-          <div class="s-icon">👥</div>
-          <div class="s-label">จัดการสมาชิก</div>
-          <div class="s-value">${SbStore.loadPeople().filter(p=>!p.archived).length} คน</div>
-          <div class="s-arrow">›</div>
-        </div>
-
-        ${bills.length ? `
-          <div class="sec-title" style="margin-top:8px">บิลล่าสุด</div>
-          <div style="display:flex;flex-direction:column;gap:8px">${billCards}</div>
-        ` : `<div style="text-align:center;padding:40px 0;color:var(--muted)">
-          <div style="font-size:36px;margin-bottom:8px">🧾</div>
-          <div style="font-weight:700">ยังไม่มีบิล</div>
-          <div style="font-size:13px;margin-top:4px">แตะ + เพิ่มบิล เพื่อเริ่ม</div>
-        </div>`}
+        ${bills.length
+          ? `<div style="display:flex;flex-direction:column;gap:8px">${cards}</div>`
+          : `<div style="text-align:center;padding:48px 0;color:var(--muted)">
+              <div style="font-size:40px">🍽️</div>
+              <div style="font-weight:700;margin-top:8px">ยังไม่มีบิล</div>
+              <div style="font-size:13px;margin-top:4px">แตะ + บิล เพื่อเริ่ม</div>
+            </div>`}
       </div>`)
   }
 
@@ -546,85 +258,66 @@
   //  BILL DETAIL
   // ══════════════════════════════════════════════════════════════
   App.openSplitBillDetail = function (billId) {
-    const bill   = SbStore.getBill(billId)
+    const bill = SbStore.getBill(billId)
     if (!bill) return notify('ไม่พบบิล', 'error')
-    const people = SbStore.loadPeople()
-    const result = SplitBillCalc.calculateBill(bill, people)
+    const result = calcResult(bill)
 
-    const personName = pid => {
-      const p = people.find(x => x.id === pid)
-      return p ? `${p.emoji} ${p.name}` : '?'
-    }
-
-    const statusBadge = s => {
-      if (s === 'getsBack') return `<span style="color:var(--income);font-weight:700">ได้รับคืน</span>`
-      if (s === 'owes')     return `<span style="color:var(--expense);font-weight:700">ต้องจ่ายเพิ่ม</span>`
-      return `<span style="color:var(--muted)">เสมอกัน</span>`
-    }
-
-    const peopleRows = result.people.map(p => `
+    const personRows = result.personResults.map(p => `
       <div class="detail-row">
-        <div style="flex:1">
-          <div style="font-weight:600">${esc(personName(p.personId))}</div>
-          <div style="font-size:12px;color:var(--muted)">ส่วนแบ่ง ${fmt(p.finalShare)} · จ่ายแล้ว ${fmt(p.paidAmount)}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-weight:700;color:${p.net>0?'var(--income)':p.net<0?'var(--expense)':'var(--muted)'}">${p.net>0?'+':''}${fmt(Math.abs(p.net))}</div>
-          <div style="font-size:11px">${statusBadge(p.status)}${p.isOverridden?' <span class="sb-override-badge">แก้เอง</span>':''}</div>
-        </div>
+        <div style="flex:1"><div style="font-weight:600">${esc(p.name)}</div>
+          <div style="font-size:12px;color:var(--muted)">ส่วนแบ่ง ${fmt(p.finalShare)} · จ่าย ${fmt(p.paid)}</div></div>
+        <div style="text-align:right;font-weight:700;color:${p.net>0?'var(--income)':p.net<0?'var(--expense)':'var(--muted)'}">
+          ${p.net>0?`ได้คืน ${fmt(p.net)}`:p.net<0?`ต้องจ่าย ${fmt(-p.net)}`:'เสมอกัน'}</div>
       </div>`).join('')
 
-    const settlementRows = result.settlementPlan.length
-      ? result.settlementPlan.map(t => `
-        <div class="detail-row">
-          <div>${esc(personName(t.fromPersonId))} → ${esc(personName(t.toPersonId))}</div>
-          <div style="font-weight:700;color:var(--primary)">${fmt(t.amount)}${t.isOverridden?' <span class="sb-override-badge">แก้เอง</span>':''}</div>
-        </div>`).join('')
-      : `<div style="color:var(--muted);font-size:13px;padding:8px 0">ไม่มีรายการโอน</div>`
+    const transferRows = result.transfers.length
+      ? result.transfers.map(t=>`
+          <div class="detail-row">
+            <div>${esc(t.fromName)} → ${esc(t.toName)}</div>
+            <div style="font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
+          </div>`).join('')
+      : `<div style="color:var(--muted);font-size:13px;padding:8px 0">ทุกคนเสมอกันแล้ว</div>`
 
-    const warnHtml = result.warnings.length
-      ? `<div style="background:var(--elevated);border-radius:8px;padding:10px 12px;margin-bottom:12px">
-          ${result.warnings.map(w=>`<div style="font-size:13px;color:var(--expense)">⚠️ ${esc(w.msg)}</div>`).join('')}
-        </div>` : ''
+    const warnHtml = result.warnings.map(w =>
+      `<div style="background:var(--elevated);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px;color:var(--expense)">⚠️ ${esc(w)}</div>`
+    ).join('')
 
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openSplitBillScreen()">←</button>
-        <h2 style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(bill.title)}</h2>
+        <h2 style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(bill.title||'ไม่มีชื่อ')}</h2>
         <button class="btn btn-secondary btn-sm" onclick="App.openSplitBillForm('${esc(billId)}')" style="width:auto">✏️</button>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div style="display:flex;gap:8px;font-size:13px;color:var(--muted);margin-bottom:8px">
-          <span>📅 ${thaiDate(bill.date)}</span>
-          ${bill.note?`<span>· ${esc(bill.note)}</span>`:''}
-        </div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px">📅 ${thaiDate(bill.date)}</div>
 
-        <div class="card" style="padding:14px;margin-bottom:12px">
-          <div style="font-size:13px;color:var(--muted)">ยอดรวม</div>
-          <div style="font-size:24px;font-weight:800;color:var(--primary)">${fmt(result.totalToSplit)}</div>
-          ${result.roundingAdjustment ? `<div style="font-size:11px;color:var(--muted)">ปัดเศษ ${result.roundingAdjustment>0?'+':''}${result.roundingAdjustment}</div>` : ''}
+        <div class="card" style="padding:14px;margin-bottom:12px;text-align:center">
+          <div style="font-size:12px;color:var(--muted)">ยอดสุดท้าย</div>
+          <div style="font-size:28px;font-weight:800;color:var(--primary)">${fmt(result.finalTotal)}</div>
+          ${bill.manualTotal&&Math.abs(r2(bill.manualTotal-result.finalTotal))>0.5
+            ?`<div style="font-size:12px;color:var(--muted)">ยอดบิล: ${fmt(bill.manualTotal)}</div>`:''}
         </div>
 
         ${warnHtml}
 
         <div class="sec-title">สรุปต่อคน</div>
-        <div class="card card-pad">${peopleRows || '<div style="color:var(--muted);padding:8px">ไม่มีผู้เข้าร่วม</div>'}</div>
+        <div class="card card-pad">${personRows||'<div style="color:var(--muted)">ยังไม่มีคน</div>'}</div>
 
-        <div class="sec-title">แผนการโอนเงิน</div>
-        <div class="card card-pad">${settlementRows}</div>
+        <div class="sec-title">โอนเงิน</div>
+        <div class="card card-pad">${transferRows}</div>
 
         <div style="display:flex;gap:8px;margin-top:20px">
           <button class="btn btn-secondary flex-1" onclick="App.openSplitBillForm('${esc(billId)}')">✏️ แก้ไข</button>
-          <button class="btn btn-secondary flex-1" onclick="App._sbDuplicate('${esc(billId)}')">⧉ ทำซ้ำ</button>
-          <button class="btn btn-outline flex-1" onclick="App._sbDelete('${esc(billId)}')">🗑 ลบ</button>
+          <button class="btn btn-secondary flex-1" onclick="App._sbCopy('${esc(billId)}')">⧉ ทำซ้ำ</button>
+          <button class="btn btn-outline flex-1" onclick="App._sbDelete('${esc(billId)}')">🗑</button>
         </div>
       </div>`)
   }
 
-  App._sbDuplicate = function (billId) {
+  App._sbCopy = function (billId) {
     const bill = SbStore.getBill(billId)
     if (!bill) return
-    const copy = { ...JSON.parse(JSON.stringify(bill)), id: genId(), title: bill.title + ' (สำเนา)', createdAt: nowISO(), updatedAt: nowISO() }
+    const copy = { ...JSON.parse(JSON.stringify(bill)), id: genId(), title: (bill.title||'บิล') + ' (สำเนา)', date: todayStr(), payments: {}, createdAt: nowISO(), updatedAt: nowISO() }
     SbStore.upsertBill(copy)
     notify('ทำสำเนาบิลแล้ว', 'success')
     App.openSplitBillDetail(copy.id)
@@ -633,20 +326,554 @@
   App._sbDelete = function (billId) {
     const bill = SbStore.getBill(billId)
     if (!bill) return
-    App.showConfirm?.({
-      title: 'ลบบิล', danger: true, confirmLabel: 'ลบ',
-      body: `ลบบิล "${bill.title}"? ไม่สามารถกู้คืนได้`,
-      onConfirm() {
-        SbStore.deleteBill(billId)
-        notify('ลบบิลแล้ว', 'success')
-        App.openSplitBillScreen()
+    const go = () => { SbStore.deleteBill(billId); notify('ลบบิลแล้ว', 'success'); App.openSplitBillScreen() }
+    if (App.showConfirm) App.showConfirm({ title:'ลบบิล', danger:true, confirmLabel:'ลบ', body:`ลบ "${bill.title||'บิล'}"?`, onConfirm: go })
+    else if (confirm(`ลบ "${bill.title||'บิล'}"?`)) go()
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  WIZARD ENTRY
+  // ══════════════════════════════════════════════════════════════
+  App.openSplitBillForm = function (billId = '') {
+    const existing = billId ? SbStore.getBill(billId) : null
+    _draft = newDraft(existing ? JSON.parse(JSON.stringify(existing)) : {})
+    _step  = 1
+    _sbRender()
+  }
+
+  function _sbRender(opts) {
+    switch (_step) {
+      case 1: return _sbStep1(opts)
+      case 2: return _sbStep2(opts)
+      case 3: return _sbStep3(opts)
+      case 4: return _sbStep4(opts)
+      case 5: return _sbStep5(opts)
+      case 6: return _sbStep6(opts)
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  STEP 1 — ชื่อบิล + ราคารวม
+  // ══════════════════════════════════════════════════════════════
+  function _sbStep1(opts) {
+    App.openSubScreen(`
+      ${stepHeader('App.openSplitBillScreen()')}
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div class="form-group">
+          <label class="form-label">ชื่อบิล</label>
+          <input class="form-input" id="sb1-title" value="${esc(_draft.title)}" placeholder="เช่น ข้าวเย็นวันศุกร์">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="form-group">
+            <label class="form-label">วันที่</label>
+            <input class="form-input" type="date" id="sb1-date" value="${esc(_draft.date)}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">ราคารวมจากบิล (฿)</label>
+            <input class="form-input" type="number" inputmode="decimal" id="sb1-total" value="${_draft.manualTotal||''}" placeholder="0 = ไม่ระบุ">
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:-4px;margin-bottom:12px">
+          ใส่ราคาจากใบเสร็จเพื่อให้ระบบเช็กว่าคำนวณตรงกัน
+        </div>
+        ${navRow('ถัดไป: เพิ่มคน →', 'App._sbNext1()')}
+      </div>`, opts)
+  }
+
+  App._sbNext1 = function () {
+    _draft.title       = document.getElementById('sb1-title')?.value.trim() || 'บิลใหม่'
+    _draft.date        = document.getElementById('sb1-date')?.value || todayStr()
+    _draft.manualTotal = Number(document.getElementById('sb1-total')?.value) || 0
+    _step = 2; _sbRender()
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  STEP 2 — เพิ่มคน
+  // ══════════════════════════════════════════════════════════════
+  function _sbStep2(opts) {
+    const people = SbStore.loadPeople().filter(p => !p.archived)
+
+    const chips = people.map(p => {
+      const on = _draft.peopleIds.includes(p.id)
+      return `<button class="chip${on?' active':''}" onclick="App._sbTogglePerson('${esc(p.id)}')"
+        style="${on?'background:var(--primary);color:#fff;border-color:var(--primary)':''}">
+        ${esc(p.emoji||'👤')} ${esc(p.name)}
+      </button>`
+    }).join('')
+
+    App.openSubScreen(`
+      ${stepHeader('App._sbBack()')}
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px">แตะเลือกคนที่ร่วมบิลนี้</div>
+        ${people.length
+          ? `<div class="chips" style="flex-wrap:wrap;gap:6px;padding:0 0 16px">${chips}</div>`
+          : ''}
+        <div class="card card-pad" style="margin-bottom:12px">
+          <div style="font-weight:600;margin-bottom:8px">+ เพิ่มคนใหม่</div>
+          <div style="display:flex;gap:8px">
+            <input class="form-input" id="sb2-newname" placeholder="ชื่อ" style="flex:1">
+            <input class="form-input" id="sb2-newemoji" placeholder="😀" style="width:52px;text-align:center;font-size:18px">
+            <button class="btn btn-secondary btn-sm" onclick="App._sbQuickAdd()" style="width:auto;padding:0 14px">เพิ่ม</button>
+          </div>
+        </div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px">เลือกแล้ว: ${_draft.peopleIds.length} คน</div>
+        ${navRow('ถัดไป: รายการอาหาร →', 'App._sbNext2()', 'App._sbBack()')}
+      </div>`, opts)
+  }
+
+  App._sbTogglePerson = function (id) {
+    const i = _draft.peopleIds.indexOf(id)
+    if (i >= 0) {
+      _draft.peopleIds.splice(i, 1)
+      // remove from item participants
+      ;(_draft.items||[]).forEach(item => {
+        item.participants = (item.participants||[]).filter(p => p.personId !== id)
+      })
+    } else {
+      _draft.peopleIds.push(id)
+    }
+    _sbStep2(noAnim)
+  }
+
+  App._sbQuickAdd = function () {
+    const name  = document.getElementById('sb2-newname')?.value.trim()
+    const emoji = document.getElementById('sb2-newemoji')?.value.trim() || '👤'
+    if (!name) return notify('กรอกชื่อก่อน', 'error')
+    const person = { id: genId(), name, emoji, color: '#2563EB', note: '', archived: false, createdAt: nowISO(), updatedAt: nowISO() }
+    SbStore.upsertPerson(person)
+    _draft.peopleIds.push(person.id)
+    _sbStep2(noAnim)
+  }
+
+  App._sbNext2 = function () {
+    if (!_draft.peopleIds.length) return notify('เลือกอย่างน้อย 1 คน', 'error')
+    // ensure new items default-include all current people
+    ;(_draft.items||[]).forEach(item => {
+      if (!item.participants?.length) {
+        item.participants = _draft.peopleIds.map(id => ({ personId: id, ratio: 1 }))
       }
-    }) || (() => {
-      if (!confirm(`ลบบิล "${bill.title}"?`)) return
-      SbStore.deleteBill(billId)
-      notify('ลบบิลแล้ว', 'success')
-      App.openSplitBillScreen()
-    })()
+    })
+    _step = 3; _sbRender()
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  STEP 3 — รายการอาหาร
+  // ══════════════════════════════════════════════════════════════
+  function _sbStep3(opts) {
+    const items = _draft.items || []
+    const sub   = r2(items.reduce((s,item) => s + (Number(item.qty)||1)*(Number(item.pricePerUnit)||0), 0))
+
+    const rows = items.map((item, i) => {
+      const total = r2((Number(item.qty)||1)*(Number(item.pricePerUnit)||0))
+      const who = (item.participants||[]).map(p => {
+        const person = SbStore.getPerson(p.personId)
+        return person ? (person.emoji||'👤') : '?'
+      }).join('')
+      return `<div class="card card-pad sb-item-row" onclick="App._sbEditItem(${i})">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(item.name||'รายการที่'+(i+1))}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">
+              ${Number(item.qty)||1} × ${fmt(Number(item.pricePerUnit)||0)}
+              ${item.splitMode==='ratio'?' · สัดส่วน':''} · ${who||'ไม่มีคน'}
+            </div>
+          </div>
+          <div style="font-weight:700;color:var(--primary);flex-shrink:0">${fmt(total)}</div>
+          <button class="btn-icon" onclick="event.stopPropagation();App._sbDeleteItem(${i})" style="color:var(--muted)">✕</button>
+        </div>
+      </div>`
+    }).join('')
+
+    App.openSubScreen(`
+      ${stepHeader('App._sbBack()')}
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">${rows}</div>
+        <button class="btn btn-secondary" onclick="App._sbAddItem()" style="margin-bottom:16px">+ เพิ่มรายการ</button>
+        ${items.length ? `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:13px;color:var(--muted)">ยอดรายการรวม</span>
+          <span style="font-weight:800;color:var(--primary)">${fmt(sub)}</span>
+        </div>` : ''}
+        ${navRow('ถัดไป: ส่วนลด / SC / VAT →', 'App._sbNext3()', 'App._sbBack()')}
+      </div>`, opts)
+  }
+
+  App._sbAddItem = function () {
+    if (!_draft.items) _draft.items = []
+    const newItem = {
+      id: genId(), name: '', qty: 1, pricePerUnit: 0, splitMode: 'equal',
+      participants: _draft.peopleIds.map(id => ({ personId: id, ratio: 1 })),
+      note: ''
+    }
+    _draft.items.push(newItem)
+    _editingItemIdx = _draft.items.length - 1
+    _sbItemEditScreen()
+  }
+
+  App._sbEditItem = function (i) {
+    _editingItemIdx = i
+    _sbItemEditScreen()
+  }
+
+  App._sbDeleteItem = function (i) {
+    _draft.items.splice(i, 1)
+    _sbStep3(noAnim)
+  }
+
+  App._sbNext3 = function () {
+    _step = 4; _sbRender()
+  }
+
+  // ── Item edit screen ─────────────────────────────────────────
+  function _sbItemEditScreen(opts) {
+    const item = _draft.items[_editingItemIdx]
+    if (!item) return _sbStep3()
+
+    const personChips = _draft.peopleIds.map(id => {
+      const ip  = (item.participants||[]).find(p=>p.personId===id)
+      const on  = !!ip
+      const person = SbStore.getPerson(id)
+      const label  = person ? `${person.emoji||'👤'} ${person.name}` : '?'
+      return `<button class="chip${on?' active':''}" onclick="App._sbItemTogglePerson('${esc(id)}')"
+        style="${on?'background:var(--primary);color:#fff;border-color:var(--primary)':''}">
+        ${esc(label)}
+      </button>`
+    }).join('')
+
+    // ratio inputs (only if splitMode='ratio')
+    let ratioInputs = ''
+    if (item.splitMode === 'ratio') {
+      const activeParts = (item.participants||[]).filter(p => _draft.peopleIds.includes(p.personId))
+      ratioInputs = `<div class="sec-title" style="margin-top:12px">สัดส่วน</div>
+        <div class="card card-pad">
+          ${activeParts.map(p => `
+            <div class="detail-row" style="font-size:13px">
+              <div>${esc(pName(p.personId))}</div>
+              <div style="display:flex;align-items:center;gap:4px">
+                <input class="form-input" type="number" inputmode="decimal"
+                  id="sbi-ratio-${esc(p.personId)}" value="${p.ratio||1}" style="width:70px;text-align:center">
+                <span style="color:var(--muted)">ส่วน</span>
+              </div>
+            </div>`).join('')}
+        </div>`
+    }
+
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App._sbItemSave()">←</button>
+        <h2 style="flex:1">${_editingItemIdx < _draft.items.length-1 || item.name ? 'แก้ไขรายการ' : 'เพิ่มรายการ'}</h2>
+        <button class="btn btn-primary btn-sm" onclick="App._sbItemSave()" style="width:auto">ตกลง</button>
+      </div>
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div class="form-group">
+          <label class="form-label">ชื่อรายการ</label>
+          <input class="form-input" id="sbi-name" value="${esc(item.name)}" placeholder="เช่น ผัดไทย">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="form-group">
+            <label class="form-label">จำนวน</label>
+            <input class="form-input" type="number" inputmode="decimal" id="sbi-qty" value="${item.qty||1}" min="0.1" step="0.1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">ราคาต่อหน่วย (฿)</label>
+            <input class="form-input" type="number" inputmode="decimal" id="sbi-price" value="${item.pricePerUnit||''}">
+          </div>
+        </div>
+
+        <div class="sec-title">วิธีหาร</div>
+        <div class="chips" style="padding:0 0 12px">
+          <button class="chip${item.splitMode!=='ratio'?' active':''}" onclick="App._sbItemSetMode('equal')">เท่ากัน</button>
+          <button class="chip${item.splitMode==='ratio'?' active':''}" onclick="App._sbItemSetMode('ratio')">สัดส่วน %</button>
+        </div>
+
+        <div class="sec-title">ใครกินรายการนี้</div>
+        <div class="chips" style="flex-wrap:wrap;gap:6px;padding:0 0 12px">${personChips}</div>
+
+        ${ratioInputs}
+      </div>`, opts)
+  }
+
+  App._sbItemTogglePerson = function (personId) {
+    _sbItemSaveFields()
+    const item = _draft.items[_editingItemIdx]
+    if (!item) return
+    const i = (item.participants||[]).findIndex(p => p.personId === personId)
+    if (i >= 0) item.participants.splice(i, 1)
+    else (item.participants = item.participants||[]).push({ personId, ratio: 1 })
+    _sbItemEditScreen(noAnim)
+  }
+
+  App._sbItemSetMode = function (mode) {
+    _sbItemSaveFields()
+    const item = _draft.items[_editingItemIdx]
+    if (!item) return
+    item.splitMode = mode
+    _sbItemEditScreen(noAnim)
+  }
+
+  function _sbItemSaveFields() {
+    const item = _draft.items[_editingItemIdx]
+    if (!item) return
+    item.name         = document.getElementById('sbi-name')?.value.trim() || ''
+    item.qty          = Number(document.getElementById('sbi-qty')?.value) || 1
+    item.pricePerUnit = Number(document.getElementById('sbi-price')?.value) || 0
+    if (item.splitMode === 'ratio') {
+      ;(item.participants||[]).forEach(p => {
+        const el = document.getElementById(`sbi-ratio-${p.personId}`)
+        if (el) p.ratio = Number(el.value) || 1
+      })
+    }
+  }
+
+  App._sbItemSave = function () {
+    _sbItemSaveFields()
+    _step = 3; _sbRender()
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  STEP 4 — ส่วนลด / SC / VAT (pipeline)
+  // ══════════════════════════════════════════════════════════════
+  function _sbStep4(opts) {
+    const sub = itemSubtotal(_draft)
+    // sync pipeline from any live inputs before rendering
+    const pipeline = _draft.pipeline
+
+    // live preview
+    const { finalTotal, steps } = runPipeline(sub, pipeline)
+
+    const pipelineRows = pipeline.map((p, i) => {
+      const isFirst = i === 0
+      const isLast  = i === pipeline.length - 1
+      const signLabel = p.type === 'discount' ? '−' : '+'
+      return `<div class="card card-pad" style="margin-bottom:6px;opacity:${p.enabled?1:0.5}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${p.enabled?'8':'0'}px">
+          <button class="toggle${p.enabled?' on':''}" onclick="App._sbPipeToggle(${i})" aria-label="${esc(p.label)}"></button>
+          <span style="font-weight:600;flex:1">${signLabel} ${esc(p.label)}</span>
+          <div style="display:flex;gap:4px">
+            ${!isFirst?`<button class="btn-icon" onclick="App._sbPipeMove(${i},-1)">↑</button>`:'<div style="width:32px"></div>'}
+            ${!isLast ?`<button class="btn-icon" onclick="App._sbPipeMove(${i}, 1)">↓</button>`:'<div style="width:32px"></div>'}
+          </div>
+        </div>
+        ${p.enabled ? `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <div class="form-group" style="margin:0">
+              <label class="form-label">ประเภท</label>
+              <select class="form-input" id="pipe-mode-${i}" onchange="App._sbPipeSave()">
+                <option value="percent" ${p.mode==='percent'?'selected':''}>% (เปอร์เซ็นต์)</option>
+                <option value="fixed"   ${p.mode==='fixed'?'selected':''}>฿ (จำนวนเงิน)</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label">${p.mode==='percent'?'%':'฿'}</label>
+              <input class="form-input" type="number" inputmode="decimal" id="pipe-val-${i}" value="${p.value||''}" oninput="App._sbPipeSave()">
+            </div>
+          </div>` : ''}
+      </div>`
+    }).join('')
+
+    // preview table
+    const previewRows = steps.map((s, i) => `
+      <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;${i===steps.length-1?'font-weight:800;border-top:1px solid var(--border);padding-top:8px;margin-top:4px':''}">
+        <span style="color:${i===0||i===steps.length-1?'var(--text)':'var(--muted)'}">${esc(s.label)}</span>
+        <span style="${s.delta<0?'color:var(--income)':s.delta>0?'color:var(--expense)':''}">
+          ${i>0&&i<steps.length-1?(s.delta>=0?'+':'')+fmt(Math.abs(s.delta)):''}
+          ${i>0?`= ${fmt(s.amount)}`:fmt(s.amount)}
+        </span>
+      </div>`).join('')
+
+    App.openSubScreen(`
+      ${stepHeader('App._sbBack()')}
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        ${sub > 0
+          ? `<div class="card" style="padding:12px 14px;margin-bottom:14px">${previewRows}</div>`
+          : `<div style="color:var(--muted);font-size:13px;margin-bottom:14px">ยังไม่มีรายการอาหาร (ยอดจะคำนวณเมื่อเพิ่มรายการแล้ว)</div>`}
+        <div style="font-size:13px;color:var(--muted);margin-bottom:8px">เปิด/ปิด และลากลำดับการคำนวณ</div>
+        ${pipelineRows}
+        ${navRow('ถัดไป: ใครจ่าย →', 'App._sbNext4()', 'App._sbBack()')}
+      </div>`, opts)
+  }
+
+  App._sbPipeToggle = function (i) {
+    _sbPipeSaveAll()
+    _draft.pipeline[i].enabled = !_draft.pipeline[i].enabled
+    _sbStep4(noAnim)
+  }
+
+  App._sbPipeMove = function (i, dir) {
+    _sbPipeSaveAll()
+    const j = i + dir
+    if (j < 0 || j >= _draft.pipeline.length) return
+    ;[_draft.pipeline[i], _draft.pipeline[j]] = [_draft.pipeline[j], _draft.pipeline[i]]
+    _sbStep4(noAnim)
+  }
+
+  App._sbPipeSave = function () {
+    _sbPipeSaveAll()
+    // re-render preview only (no full re-render to avoid losing focus)
+    const sub = itemSubtotal(_draft)
+    const { steps } = runPipeline(sub, _draft.pipeline)
+    // minimal update: just recalc shown in preview card (skip — live oninput is enough for UX)
+  }
+
+  function _sbPipeSaveAll() {
+    ;(_draft.pipeline||[]).forEach((p, i) => {
+      const modeEl = document.getElementById(`pipe-mode-${i}`)
+      const valEl  = document.getElementById(`pipe-val-${i}`)
+      if (modeEl) p.mode  = modeEl.value
+      if (valEl)  p.value = Number(valEl.value) || 0
+    })
+  }
+
+  App._sbNext4 = function () {
+    _sbPipeSaveAll()
+    _step = 5; _sbRender()
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  STEP 5 — ใครจ่ายไปแล้ว
+  // ══════════════════════════════════════════════════════════════
+  function _sbStep5(opts) {
+    const { finalTotal } = runPipeline(itemSubtotal(_draft), _draft.pipeline)
+
+    const rows = _draft.peopleIds.map(id => {
+      const paid = _draft.payments[id] || ''
+      return `<div class="detail-row" style="align-items:center">
+        <div style="flex:1;font-weight:600">${esc(pName(id))}</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="color:var(--muted)">฿</span>
+          <input class="form-input" type="number" inputmode="decimal" id="pay-${esc(id)}" value="${paid}" placeholder="0" style="width:110px;text-align:right">
+          <button class="btn btn-secondary btn-sm" onclick="App._sbPayAll('${esc(id)}')" style="width:auto;padding:0 10px;font-size:12px">ทั้งหมด</button>
+        </div>
+      </div>`
+    }).join('')
+
+    App.openSubScreen(`
+      ${stepHeader('App._sbBack()')}
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px">ระบุว่าใครจ่ายเงินไปแล้วเท่าไหร่ ถ้าไม่ได้จ่ายเว้นว่างไว้</div>
+        <div class="card card-pad">${rows||'<div style="color:var(--muted)">ยังไม่มีคน</div>'}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px">"ทั้งหมด" = ${fmt(finalTotal)}</div>
+        ${navRow('ถัดไป: สรุป →', 'App._sbNext5()', 'App._sbBack()')}
+      </div>`, opts)
+  }
+
+  App._sbPayAll = function (personId) {
+    _sbSavePayments()
+    const { finalTotal } = runPipeline(itemSubtotal(_draft), _draft.pipeline)
+    _draft.payments[personId] = finalTotal
+    _sbStep5(noAnim)
+  }
+
+  function _sbSavePayments() {
+    _draft.peopleIds.forEach(id => {
+      const el = document.getElementById(`pay-${id}`)
+      _draft.payments[id] = el ? (Number(el.value) || 0) : (_draft.payments[id] || 0)
+    })
+  }
+
+  App._sbNext5 = function () {
+    _sbSavePayments()
+    _step = 6; _sbRender()
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  STEP 6 — สรุป
+  // ══════════════════════════════════════════════════════════════
+  function _sbStep6(opts) {
+    const result = calcResult(_draft)
+
+    const transferRows = result.transfers.length
+      ? result.transfers.map(t => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:18px">→</span>
+              <div>
+                <div style="font-weight:600">${esc(t.fromName)}</div>
+                <div style="font-size:12px;color:var(--muted)">โอนให้ ${esc(t.toName)}</div>
+              </div>
+            </div>
+            <div style="font-size:20px;font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
+          </div>`).join('')
+      : `<div style="text-align:center;padding:16px 0;color:var(--muted)">ทุกคนเสมอกันแล้ว 🎉</div>`
+
+    const detailRows = result.personResults.map(p => `
+      <div class="detail-row" style="font-size:13px">
+        <div style="flex:1">${esc(p.name)}</div>
+        <div style="text-align:right;color:var(--muted)">ส่วนแบ่ง ${fmt(p.finalShare)}</div>
+      </div>`).join('')
+
+    const warnHtml = result.warnings.map(w =>
+      `<div style="font-size:12px;color:var(--expense);margin-bottom:4px">⚠️ ${esc(w)}</div>`
+    ).join('')
+
+    // Copy text for LINE
+    const copyLines = [
+      `หารบิล: ${_draft.title||'บิล'}`,
+      ...result.transfers.map(t => `${t.fromName} โอนให้ ${t.toName}: ${fmt(t.amount)}`),
+      `ยอดรวม: ${fmt(result.finalTotal)}`
+    ].join('\n')
+
+    App.openSubScreen(`
+      ${stepHeader('App._sbBack()')}
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div class="card" style="padding:14px;margin-bottom:12px;text-align:center">
+          <div style="font-size:12px;color:var(--muted)">ยอดสุดท้าย</div>
+          <div style="font-size:28px;font-weight:800;color:var(--primary)">${fmt(result.finalTotal)}</div>
+          ${_draft.manualTotal&&Math.abs(r2(_draft.manualTotal-result.finalTotal))>0.5
+            ?`<div style="font-size:12px;color:var(--muted)">ยอดบิล: ${fmt(_draft.manualTotal)}</div>`:''}
+        </div>
+
+        ${warnHtml}
+
+        <div style="margin-bottom:16px">${transferRows}</div>
+
+        <details style="margin-bottom:16px">
+          <summary style="font-size:13px;color:var(--muted);cursor:pointer;padding:4px 0">ดูรายละเอียดต่อคน</summary>
+          <div class="card card-pad" style="margin-top:8px">${detailRows}</div>
+        </details>
+
+        <button class="btn btn-secondary" onclick="App._sbCopyLine()" style="margin-bottom:8px">📋 คัดลอกสำหรับส่ง LINE</button>
+        <textarea id="sb6-copy-text" style="display:none">${esc(copyLines)}</textarea>
+
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-secondary" onclick="App._sbBack()" style="width:auto;padding:0 20px">←</button>
+          <button class="btn btn-primary" onclick="App._sbSaveBill()" style="flex:1">💾 บันทึกบิล</button>
+        </div>
+      </div>`, opts)
+  }
+
+  App._sbCopyLine = function () {
+    const el = document.getElementById('sb6-copy-text')
+    if (!el) return
+    const text = el.value
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => notify('คัดลอกแล้ว', 'success')).catch(() => _sbFallbackCopy(text))
+    } else {
+      _sbFallbackCopy(text)
+    }
+  }
+
+  function _sbFallbackCopy(text) {
+    const el = document.getElementById('sb6-copy-text')
+    if (!el) return
+    el.style.display = 'block'
+    el.select()
+    try { document.execCommand('copy'); notify('คัดลอกแล้ว', 'success') } catch(_) { notify('กรุณา copy เอง', 'info') }
+    el.style.display = 'none'
+  }
+
+  App._sbSaveBill = function () {
+    if (!_draft) return
+    _draft.updatedAt = nowISO()
+    SbStore.upsertBill(_draft)
+    notify('บันทึกบิลแล้ว 🎉', 'success')
+    const id = _draft.id; _draft = null
+    App.openSplitBillDetail(id)
+  }
+
+  // ── Back / forward helpers ────────────────────────────────────
+  App._sbBack = function () {
+    if (_step <= 1) return App.openSplitBillScreen()
+    _step--; _sbRender()
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -656,8 +883,10 @@
     const people = SbStore.loadPeople().filter(p => showArchived ? p.archived : !p.archived)
     const rows = people.map(p => `
       <div class="settings-row" onclick="App.openSplitPersonForm('${esc(p.id)}')">
-        <div class="s-icon" style="background:${esc(p.color)}22;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center">${esc(p.emoji)}</div>
-        <div class="s-label">${esc(p.name)}${p.note?`<br><small style="color:var(--muted);font-weight:400">${esc(p.note)}</small>`:''}</div>
+        <div class="s-icon" style="background:${esc(p.color||'#2563EB')}22;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center">
+          ${esc(p.emoji||'👤')}
+        </div>
+        <div class="s-label">${esc(p.name)}</div>
         <div class="s-arrow">›</div>
       </div>`).join('')
 
@@ -669,989 +898,126 @@
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="chips" style="padding:0 0 12px">
-          <button class="chip ${showArchived?'':'active'}" onclick="App.openSplitPeopleScreen(false)">กำลังใช้งาน</button>
-          <button class="chip ${showArchived?'active':''}" onclick="App.openSplitPeopleScreen(true)">เก็บถาวร</button>
+          <button class="chip${showArchived?'':' active'}" onclick="App.openSplitPeopleScreen(false)">ใช้งาน</button>
+          <button class="chip${showArchived?' active':''}" onclick="App.openSplitPeopleScreen(true)">เก็บถาวร</button>
         </div>
         ${rows.length
           ? `<div class="card card-pad">${rows}</div>`
-          : `<div style="text-align:center;padding:32px 0;color:var(--muted)">
-              <div style="font-size:32px">👥</div>
-              <div style="margin-top:8px">${showArchived?'ยังไม่มีสมาชิกที่เก็บถาวร':'ยังไม่มีสมาชิก'}</div>
-            </div>`}
+          : `<div style="text-align:center;padding:32px 0;color:var(--muted)"><div style="font-size:32px">👥</div><div style="margin-top:8px">ยังไม่มีสมาชิก</div></div>`}
       </div>`)
   }
 
   App.openSplitPersonForm = function (personId = '') {
     const existing = personId ? SbStore.getPerson(personId) : null
-    const p = normalizePerson(existing || {})
-
+    const p = { emoji:'👤', name:'', color:'#2563EB', note:'', archived:false, ...(existing||{}) }
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openSplitPeopleScreen()">←</button>
-        <h2>${existing ? 'แก้ไขสมาชิก' : 'เพิ่มสมาชิก'}</h2>
+        <h2>${existing?'แก้ไขสมาชิก':'เพิ่มสมาชิก'}</h2>
         <button class="btn btn-primary btn-sm" onclick="App._sbSavePerson('${esc(personId)}')" style="width:auto">บันทึก</button>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="form-group">
-          <label class="form-label">ชื่อ</label>
-          <input class="form-input" id="sbp-name" value="${esc(p.name)}" placeholder="ชื่อสมาชิก">
-        </div>
+        <div class="form-group"><label class="form-label">ชื่อ</label><input class="form-input" id="sbp-name" value="${esc(p.name)}" placeholder="ชื่อ"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div class="form-group">
-            <label class="form-label">Emoji</label>
-            <input class="form-input" id="sbp-emoji" value="${esc(p.emoji)}" maxlength="4" style="font-size:22px;text-align:center">
-          </div>
-          <div class="form-group">
-            <label class="form-label">สี</label>
-            <input class="form-input" type="color" id="sbp-color" value="${esc(p.color)}" style="height:42px;padding:4px 8px;cursor:pointer">
-          </div>
+          <div class="form-group"><label class="form-label">Emoji</label><input class="form-input" id="sbp-emoji" value="${esc(p.emoji)}" maxlength="4" style="font-size:22px;text-align:center"></div>
+          <div class="form-group"><label class="form-label">สี</label><input class="form-input" type="color" id="sbp-color" value="${esc(p.color)}" style="height:42px;padding:4px 8px;cursor:pointer"></div>
         </div>
-        <div class="form-group">
-          <label class="form-label">หมายเหตุ</label>
-          <input class="form-input" id="sbp-note" value="${esc(p.note)}" placeholder="(ไม่บังคับ)">
-        </div>
-        ${existing ? `
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <button class="btn btn-secondary flex-1" onclick="App._sbArchivePerson('${esc(personId)}')">
-              ${p.archived ? '♻️ คืนสถานะ' : '📦 เก็บถาวร'}
-            </button>
-            <button class="btn btn-outline flex-1" onclick="App._sbDeletePerson('${esc(personId)}')">🗑 ลบ</button>
-          </div>` : ''}
+        ${existing?`<div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-secondary flex-1" onclick="App._sbArchivePerson('${esc(personId)}')">${p.archived?'♻️ คืนสถานะ':'📦 เก็บถาวร'}</button>
+          <button class="btn btn-outline flex-1" onclick="App._sbDeletePerson('${esc(personId)}')">🗑 ลบ</button>
+        </div>`:''}
       </div>`)
   }
 
   App._sbSavePerson = function (personId = '') {
     const name  = document.getElementById('sbp-name')?.value.trim()
+    if (!name) return notify('กรุณากรอกชื่อ', 'error')
     const emoji = document.getElementById('sbp-emoji')?.value.trim() || '👤'
     const color = document.getElementById('sbp-color')?.value || '#2563EB'
-    const note  = document.getElementById('sbp-note')?.value.trim() || ''
-    if (!name) return notify('กรุณากรอกชื่อสมาชิก', 'error')
     const existing = personId ? SbStore.getPerson(personId) : null
-    const person = normalizePerson({ ...(existing||{}), id: personId || undefined, name, emoji, color, note, updatedAt: nowISO() })
-    SbStore.upsertPerson(person)
-    notify(existing ? 'แก้ไขสมาชิกแล้ว' : 'เพิ่มสมาชิกแล้ว', 'success')
+    SbStore.upsertPerson({ ...(existing||{}), id: personId||genId(), name, emoji, color, note:'', archived: existing?.archived||false, createdAt: existing?.createdAt||nowISO(), updatedAt: nowISO() })
+    notify(existing?'แก้ไขแล้ว':'เพิ่มสมาชิกแล้ว', 'success')
     App.openSplitPeopleScreen()
   }
 
   App._sbArchivePerson = function (personId) {
-    const p = SbStore.getPerson(personId)
-    if (!p) return
-    p.archived = !p.archived
-    p.updatedAt = nowISO()
-    SbStore.upsertPerson(p)
-    notify(p.archived ? 'เก็บถาวรแล้ว' : 'คืนสถานะแล้ว', 'success')
+    const p = SbStore.getPerson(personId); if (!p) return
+    p.archived = !p.archived; p.updatedAt = nowISO()
+    SbStore.upsertPerson(p); notify(p.archived?'เก็บถาวรแล้ว':'คืนสถานะแล้ว', 'success')
     App.openSplitPeopleScreen(p.archived)
   }
 
   App._sbDeletePerson = function (personId) {
-    const p = SbStore.getPerson(personId)
-    if (!p) return
-    App.showConfirm?.({
-      title: 'ลบสมาชิก', danger: true, confirmLabel: 'ลบ',
-      body: `ลบ "${p.name}"? บิลเก่าที่มีสมาชิกนี้จะยังแสดงชื่อได้`,
-      onConfirm() { SbStore.deletePerson(personId); notify('ลบสมาชิกแล้ว', 'success'); App.openSplitPeopleScreen() }
-    }) || (() => {
-      if (!confirm(`ลบ "${p.name}"?`)) return
-      SbStore.deletePerson(personId)
-      notify('ลบสมาชิกแล้ว', 'success')
-      App.openSplitPeopleScreen()
-    })()
+    const p = SbStore.getPerson(personId); if (!p) return
+    const go = () => { SbStore.deletePerson(personId); notify('ลบแล้ว', 'success'); App.openSplitPeopleScreen() }
+    if (App.showConfirm) App.showConfirm({ title:'ลบสมาชิก', danger:true, confirmLabel:'ลบ', body:`ลบ "${p.name}"?`, onConfirm: go })
+    else if (confirm(`ลบ "${p.name}"?`)) go()
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  BILL WIZARD — multi-step form
-  // ══════════════════════════════════════════════════════════════
-
-  App.openSplitBillForm = function (billId = '') {
-    const existing = billId ? SbStore.getBill(billId) : null
-    _draft = normalizeBill(existing ? JSON.parse(JSON.stringify(existing)) : {})
-    _draftStep = 1
-    App._sbRenderStep()
-  }
-
-  App._sbRenderStep = function () {
-    switch (_draftStep) {
-      case 1: return _sbStep1()
-      case 2: return _sbStep2()
-      case 3: return _sbStep3()
-      case 4: return _sbStep4()
-      case 5: return _sbStep5()
-      case 6: return _sbStep6()
-      case 7: return _sbStep7()
-      default: return _sbStep1()
-    }
-  }
-
-  const _sbStepHeader = (title, showBack = true, backFn = "App._sbPrev()") => `
-    <div class="sub-header">
-      ${showBack ? `<button class="btn-icon" onclick="${backFn}">←</button>` : ''}
-      <h2 style="flex:1">${title}</h2>
-    </div>
-    <div style="display:flex;gap:4px;padding:6px 16px 0">
-      ${[1,2,3,4,5,6,7].map(n=>`<div style="flex:1;height:3px;border-radius:2px;background:${_draftStep>=n?'var(--primary)':'var(--border)'}"></div>`).join('')}
-    </div>`
-
-  const _sbNav = (prevFn, nextLabel, nextFn) => `
-    <div style="display:flex;gap:8px;padding:12px 0 0">
-      ${prevFn ? `<button class="btn btn-secondary" onclick="${prevFn}" style="width:auto;padding:0 20px">←</button>` : ''}
-      <button class="btn btn-primary" onclick="${nextFn}" style="flex:1">${nextLabel}</button>
-    </div>`
-
-  // ── Step 1: Basic info + total mode ──────────────────────────
-  function _sbStep1() {
-    const d = _draft
-    App.openSubScreen(`
-      ${_sbStepHeader('ข้อมูลบิล', true, 'App.openSplitBillScreen()')}
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="sec-title">ข้อมูลพื้นฐาน</div>
-        <div class="form-group">
-          <label class="form-label">ชื่อบิล</label>
-          <input class="form-input" id="sb1-title" value="${esc(d.title)}" placeholder="เช่น ข้าวเย็นกลุ่ม">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div class="form-group">
-            <label class="form-label">วันที่</label>
-            <input class="form-input" type="date" id="sb1-date" value="${esc(d.date)}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">หมายเหตุ</label>
-            <input class="form-input" id="sb1-note" value="${esc(d.note)}" placeholder="(ไม่บังคับ)">
-          </div>
-        </div>
-
-        <div class="sec-title">ยอดรวม</div>
-        <div class="chips" style="padding:0 0 12px">
-          <button class="chip ${d.totalMode==='manual'?'active':''}" onclick="App._sbSetTotalMode('manual')">กรอกเอง</button>
-          <button class="chip ${d.totalMode==='breakdown'?'active':''}" onclick="App._sbSetTotalMode('breakdown')">คำนวณจากรายละเอียด</button>
-        </div>
-        <div id="sb1-manual" style="${d.totalMode!=='manual'?'display:none':''}">
-          <div class="form-group">
-            <label class="form-label">ยอดรวมบิล (฿)</label>
-            <input class="form-input" type="number" inputmode="decimal" id="sb1-total" value="${d.manualTotal||''}" placeholder="0" style="font-size:20px;font-weight:700">
-          </div>
-        </div>
-        <div id="sb1-breakdown-preview" style="${d.totalMode!=='breakdown'?'display:none':''}">
-          <div class="form-group">
-            <label class="form-label">ยอดก่อนบวกค่าอื่น (฿)</label>
-            <input class="form-input" type="number" inputmode="decimal" id="sb1-base" value="${d.breakdown?.baseAmount||''}" placeholder="0">
-          </div>
-          <div style="font-size:13px;color:var(--muted)">กำหนดรายละเอียดเพิ่มเติมในขั้นตอนถัดไป</div>
-        </div>
-        ${_sbNav(null, 'ถัดไป: เงินมัดจำ →', "App._sbNext(1)")}
-      </div>`)
-  }
-
-  App._sbSetTotalMode = function (mode) {
-    _draft.totalMode = mode
-    document.getElementById('sb1-manual')?.style.setProperty('display', mode==='manual'?'':'none')
-    document.getElementById('sb1-breakdown-preview')?.style.setProperty('display', mode==='breakdown'?'':'none')
-    document.querySelectorAll('#sub-screen .chips .chip').forEach(btn => {
-      btn.classList.toggle('active', btn.textContent.includes(mode==='manual'?'กรอกเอง':'คำนวณ'))
-    })
-  }
-
-  App._sbNext = function (fromStep) {
-    if (fromStep === 1) {
-      _draft.title = document.getElementById('sb1-title')?.value.trim() || 'บิลใหม่'
-      _draft.date  = document.getElementById('sb1-date')?.value  || todayStr()
-      _draft.note  = document.getElementById('sb1-note')?.value.trim() || ''
-      if (_draft.totalMode === 'manual') {
-        _draft.manualTotal = Number(document.getElementById('sb1-total')?.value) || 0
-        if (!(_draft.manualTotal > 0)) return notify('กรุณากรอกยอดรวมมากกว่า 0', 'error')
-      } else {
-        _draft.breakdown.baseAmount = Number(document.getElementById('sb1-base')?.value) || 0
-        if (!(_draft.breakdown.baseAmount > 0)) return notify('กรุณากรอกยอดก่อนบวกค่าอื่นมากกว่า 0', 'error')
-      }
-      _draftStep = _draft.totalMode === 'breakdown' ? 2 : 3
-    }
-    App._sbRenderStep()
-  }
-
-  App._sbPrev = function () {
-    if (_draftStep <= 1) return App.openSplitBillScreen()
-    if (_draftStep === 3 && _draft.totalMode === 'manual') { _draftStep = 1 }
-    else if (_draftStep > 1) { _draftStep-- }
-    App._sbRenderStep()
-  }
-
-  // ── Step 2: Breakdown details (only if breakdown mode) ────────
-  function _sbStep2() {
-    const br = _draft.breakdown
-    App.openSubScreen(`
-      ${_sbStepHeader('รายละเอียดบิล')}
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="sec-title">ค่าธรรมเนียมและส่วนลด</div>
-        <div class="card card-pad" style="display:flex;flex-direction:column;gap:10px">
-
-          <!-- Service charge -->
-          <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <span style="font-weight:600">Service Charge</span>
-              <label class="toggle-wrap" style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                <span style="font-size:12px;color:var(--muted)">เปิด</span>
-                <button class="toggle${br.service.enabled?' on':''}" id="sb2-svc-toggle" onclick="App._sbToggleBreakdown('service')" aria-label="service"></button>
-              </label>
-            </div>
-            <div id="sb2-svc-inputs" style="${br.service.enabled?'':'display:none'}">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                <div class="form-group" style="margin:0">
-                  <label class="form-label">ประเภท</label>
-                  <select class="form-input" id="sb2-svc-type">
-                    <option value="percent" ${br.service.type==='percent'?'selected':''}>เปอร์เซ็นต์ (%)</option>
-                    <option value="fixed"   ${br.service.type==='fixed'?'selected':''}>จำนวนเงิน (฿)</option>
-                  </select>
-                </div>
-                <div class="form-group" style="margin:0">
-                  <label class="form-label" id="sb2-svc-lbl">${br.service.type==='percent'?'% Service':'฿ Service'}</label>
-                  <input class="form-input" type="number" inputmode="decimal" id="sb2-svc-val" value="${br.service.value||10}">
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- VAT -->
-          <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <span style="font-weight:600">VAT (ภาษีมูลค่าเพิ่ม)</span>
-              <button class="toggle${br.vat.enabled?' on':''}" id="sb2-vat-toggle" onclick="App._sbToggleBreakdown('vat')" aria-label="vat"></button>
-            </div>
-            <div id="sb2-vat-inputs" style="${br.vat.enabled?'':'display:none'}">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                <div class="form-group" style="margin:0">
-                  <label class="form-label">คิดจาก</label>
-                  <select class="form-input" id="sb2-vat-base">
-                    <option value="base"         ${br.vat.base==='base'?'selected':''}>ยอดก่อน service</option>
-                    <option value="afterService" ${br.vat.base==='afterService'?'selected':''}>ยอดหลัง service</option>
-                  </select>
-                </div>
-                <div class="form-group" style="margin:0">
-                  <label class="form-label">VAT (%)</label>
-                  <input class="form-input" type="number" inputmode="decimal" id="sb2-vat-val" value="${br.vat.value||7}">
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tip -->
-          <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <span style="font-weight:600">ทิป (Tip)</span>
-              <button class="toggle${br.tip.enabled?' on':''}" id="sb2-tip-toggle" onclick="App._sbToggleBreakdown('tip')" aria-label="tip"></button>
-            </div>
-            <div id="sb2-tip-inputs" style="${br.tip.enabled?'':'display:none'}">
-              <div class="form-group" style="margin:0">
-                <label class="form-label">จำนวนทิป (฿)</label>
-                <input class="form-input" type="number" inputmode="decimal" id="sb2-tip-val" value="${br.tip.amount||''}">
-              </div>
-            </div>
-          </div>
-
-          <!-- Discount -->
-          <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <span style="font-weight:600">ส่วนลด</span>
-              <button class="toggle${br.discount.enabled?' on':''}" id="sb2-disc-toggle" onclick="App._sbToggleBreakdown('discount')" aria-label="discount"></button>
-            </div>
-            <div id="sb2-disc-inputs" style="${br.discount.enabled?'':'display:none'}">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                <div class="form-group" style="margin:0">
-                  <label class="form-label">ประเภท</label>
-                  <select class="form-input" id="sb2-disc-type">
-                    <option value="fixed"   ${br.discount.type==='fixed'?'selected':''}>จำนวนเงิน (฿)</option>
-                    <option value="percent" ${br.discount.type==='percent'?'selected':''}>เปอร์เซ็นต์ (%)</option>
-                  </select>
-                </div>
-                <div class="form-group" style="margin:0">
-                  <label class="form-label">ส่วนลด</label>
-                  <input class="form-input" type="number" inputmode="decimal" id="sb2-disc-val" value="${br.discount.value||''}">
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card" id="sb2-preview" style="padding:12px;margin-top:10px;text-align:center">
-          <div style="font-size:12px;color:var(--muted)">ยอดประมาณ</div>
-          <div style="font-size:20px;font-weight:800;color:var(--primary)" id="sb2-total-preview">...</div>
-        </div>
-
-        ${_sbNav("App._sbPrev()", 'ถัดไป: เงินมัดจำ →', "App._sbSaveStep2()")}
-      </div>`)
-    App._sbUpdateBreakdownPreview()
-  }
-
-  App._sbToggleBreakdown = function (field) {
-    const toggle = document.getElementById(`sb2-${field==='service'?'svc':field==='discount'?'disc':field}-toggle`)
-    const inputs = document.getElementById(`sb2-${field==='service'?'svc':field==='discount'?'disc':field}-inputs`)
-    if (toggle && inputs) {
-      const on = !toggle.classList.contains('on')
-      toggle.classList.toggle('on', on)
-      inputs.style.display = on ? '' : 'none'
-    }
-    App._sbUpdateBreakdownPreview()
-  }
-
-  App._sbUpdateBreakdownPreview = function () {
-    const base = _draft.breakdown.baseAmount
-    const svcOn  = document.getElementById('sb2-svc-toggle')?.classList.contains('on')
-    const vatOn  = document.getElementById('sb2-vat-toggle')?.classList.contains('on')
-    const tipOn  = document.getElementById('sb2-tip-toggle')?.classList.contains('on')
-    const discOn = document.getElementById('sb2-disc-toggle')?.classList.contains('on')
-
-    const svcType = document.getElementById('sb2-svc-type')?.value || 'percent'
-    const svcVal  = Number(document.getElementById('sb2-svc-val')?.value) || 0
-    const vatBase = document.getElementById('sb2-vat-base')?.value || 'base'
-    const vatVal  = Number(document.getElementById('sb2-vat-val')?.value) || 0
-    const tipVal  = Number(document.getElementById('sb2-tip-val')?.value) || 0
-    const discType = document.getElementById('sb2-disc-type')?.value || 'fixed'
-    const discVal  = Number(document.getElementById('sb2-disc-val')?.value) || 0
-
-    let svc = svcOn ? (svcType==='percent' ? base*svcVal/100 : svcVal) : 0
-    let vb  = vatBase==='afterService' ? base+svc : base
-    let vat = vatOn ? vatVal/100*vb : 0
-    let tip = tipOn ? tipVal : 0
-    let disc = discOn ? (discType==='percent' ? base*discVal/100 : discVal) : 0
-
-    const total = Math.max(0, base+svc+vat+tip-disc)
-    const el = document.getElementById('sb2-total-preview')
-    if (el) el.textContent = fmt(total)
-  }
-
-  App._sbSaveStep2 = function () {
-    const br = _draft.breakdown
-    br.service.enabled = document.getElementById('sb2-svc-toggle')?.classList.contains('on') || false
-    br.service.type    = document.getElementById('sb2-svc-type')?.value || 'percent'
-    br.service.value   = Number(document.getElementById('sb2-svc-val')?.value) || 0
-    br.vat.enabled     = document.getElementById('sb2-vat-toggle')?.classList.contains('on') || false
-    br.vat.base        = document.getElementById('sb2-vat-base')?.value || 'base'
-    br.vat.value       = Number(document.getElementById('sb2-vat-val')?.value) || 0
-    br.tip.enabled     = document.getElementById('sb2-tip-toggle')?.classList.contains('on') || false
-    br.tip.amount      = Number(document.getElementById('sb2-tip-val')?.value) || 0
-    br.discount.enabled = document.getElementById('sb2-disc-toggle')?.classList.contains('on') || false
-    br.discount.type    = document.getElementById('sb2-disc-type')?.value || 'fixed'
-    br.discount.value   = Number(document.getElementById('sb2-disc-val')?.value) || 0
-    _draftStep = 3
-    App._sbRenderStep()
-  }
-
-  // ── Step 3: Deposits ────────────────────────────────────────
-  function _sbStep3() {
-    const people  = SbStore.loadPeople().filter(p => !p.archived)
-    const deposits = _draft.deposits || []
-
-    const depRows = deposits.map((dep, i) => {
-      const person = people.find(p => p.id === dep.personId) || { name: '?', emoji: '👤' }
-      return `<div class="card card-pad" style="margin-bottom:6px" id="sb-dep-${i}">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span>${esc(person.emoji)} ${esc(person.name)}</span>
-          <button class="btn-icon" style="margin-left:auto" onclick="App._sbRemoveDeposit(${i})">🗑</button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-          <div class="form-group" style="margin:0">
-            <label class="form-label">มัดจำทั้งหมด (฿)</label>
-            <input class="form-input" type="number" inputmode="decimal" id="dep-paid-${i}" value="${dep.amountPaid||''}">
-          </div>
-          <div class="form-group" style="margin:0">
-            <label class="form-label">ใช้ในบิลนี้ (฿)</label>
-            <input class="form-input" type="number" inputmode="decimal" id="dep-used-${i}" value="${dep.amountUsedInBill||''}">
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
-          <div class="form-group" style="margin:0">
-            <label class="form-label">คืนเงิน (฿)</label>
-            <input class="form-input" type="number" inputmode="decimal" id="dep-refund-${i}" value="${dep.amountRefunded||''}">
-          </div>
-          <div class="form-group" style="margin:0">
-            <label class="form-label">ช่วงเวลา</label>
-            <select class="form-input" id="dep-timing-${i}">
-              <option value="afterFees"  ${dep.timing==='afterFees'?'selected':''}>หลังคิดค่าธรรมเนียม</option>
-              <option value="beforeFees" ${dep.timing==='beforeFees'?'selected':''}>ก่อนคิดค่าธรรมเนียม</option>
-              <option value="manual"     ${dep.timing==='manual'?'selected':''}>กำหนดเอง</option>
-            </select>
-          </div>
-        </div>
-      </div>`
-    }).join('')
-
-    const personOptions = people.map(p =>
-      `<option value="${esc(p.id)}">${esc(p.emoji)} ${esc(p.name)}</option>`
-    ).join('')
-
-    App.openSubScreen(`
-      ${_sbStepHeader('เงินมัดจำ')}
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
-          เงินมัดจำ = เงินที่จ่ายล่วงหน้าเพื่อจองโต๊ะหรือบริการ จะนับเป็นยอดที่จ่ายแล้วของบุคคลนั้น
-        </div>
-        ${depRows}
-        ${people.length ? `
-          <div class="card card-pad" style="margin-bottom:8px">
-            <div style="font-weight:600;margin-bottom:8px">+ เพิ่มเงินมัดจำ</div>
-            <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:end">
-              <div class="form-group" style="margin:0">
-                <label class="form-label">สมาชิก</label>
-                <select class="form-input" id="sb3-new-person">${personOptions}</select>
-              </div>
-              <button class="btn btn-secondary btn-sm" onclick="App._sbAddDeposit()" style="width:auto;padding:0 16px;height:42px">+ เพิ่ม</button>
-            </div>
-          </div>` : `<div style="color:var(--muted);font-size:13px">ยังไม่มีสมาชิก — ไปที่ "จัดการสมาชิก" ก่อน</div>`}
-        ${_sbNav("App._sbPrev()", 'ถัดไป: สมาชิก →', "App._sbSaveStep3()")}
-      </div>`)
-  }
-
-  App._sbAddDeposit = function () {
-    App._sbSaveStep3(true)
-    const personId = document.getElementById('sb3-new-person')?.value
-    if (!personId) return
-    _draft.deposits.push({ id: genId(), personId, amountPaid: 0, amountUsedInBill: 0, amountRefunded: 0, timing: 'afterFees', note: '' })
-    _sbStep3()
-  }
-
-  App._sbRemoveDeposit = function (idx) {
-    App._sbSaveStep3(true)
-    _draft.deposits.splice(idx, 1)
-    _sbStep3()
-  }
-
-  App._sbSaveStep3 = function (quiet = false) {
-    ;(_draft.deposits || []).forEach((dep, i) => {
-      dep.amountPaid       = Number(document.getElementById(`dep-paid-${i}`)?.value) || 0
-      dep.amountUsedInBill = Number(document.getElementById(`dep-used-${i}`)?.value) || 0
-      dep.amountRefunded   = Number(document.getElementById(`dep-refund-${i}`)?.value) || 0
-      dep.timing           = document.getElementById(`dep-timing-${i}`)?.value || 'afterFees'
-    })
-    if (!quiet) { _draftStep = 4; App._sbRenderStep() }
-  }
-
-  // ── Step 4: People + roles ───────────────────────────────────
-  function _sbStep4() {
-    const people = SbStore.loadPeople().filter(p => !p.archived)
-    const parts  = _draft.participants
-
-    const roleOptions = role => ['participant','payerOnly','guestOnly','excluded','custom'].map(r =>
-      `<option value="${r}" ${role===r?'selected':''}>${{
-        participant:'ผู้เข้าร่วม',payerOnly:'ผู้จ่ายเท่านั้น',guestOnly:'แขกรับเชิญ (ไม่ร่วมจ่าย)',excluded:'ยกเว้น',custom:'กำหนดเอง'
-      }[r]}</option>`
-    ).join('')
-
-    const rows = people.map(p => {
-      const part = parts.find(x => x.personId === p.id)
-      const included = part?.included !== false
-      return `<div class="detail-row" style="align-items:center">
-        <div style="display:flex;align-items:center;gap:8px;flex:1">
-          <input type="checkbox" id="sbp-chk-${esc(p.id)}" ${included?'checked':''} onchange="App._sbToggleParticipant('${esc(p.id)}', this.checked)" style="width:18px;height:18px;cursor:pointer;accent-color:var(--primary)">
-          <span style="font-size:16px">${esc(p.emoji)}</span>
-          <span style="font-weight:600">${esc(p.name)}</span>
-        </div>
-        <select class="form-input" id="sbp-role-${esc(p.id)}" style="width:auto;font-size:12px;padding:4px 8px" ${included?'':'disabled'}>
-          ${roleOptions(part?.role || 'participant')}
-        </select>
-      </div>`
-    }).join('')
-
-    App.openSubScreen(`
-      ${_sbStepHeader('เลือกสมาชิก')}
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        ${people.length
-          ? `<div class="card card-pad">${rows}</div>`
-          : `<div style="text-align:center;padding:24px;color:var(--muted)">
-              <div>ยังไม่มีสมาชิกในระบบ</div>
-              <button class="btn btn-secondary" style="margin-top:10px" onclick="App.openSplitPeopleScreen()">จัดการสมาชิก</button>
-            </div>`}
-        <div style="margin-top:8px">
-          <button class="btn btn-secondary btn-sm" onclick="App.openSplitPeopleScreen()" style="width:auto">+ เพิ่มสมาชิกใหม่</button>
-        </div>
-        ${_sbNav("App._sbPrev()", 'ถัดไป: วิธีหาร →', "App._sbSaveStep4()")}
-      </div>`)
-  }
-
-  App._sbToggleParticipant = function (personId, checked) {
-    const role = document.getElementById(`sbp-role-${personId}`)
-    if (role) role.disabled = !checked
-  }
-
-  App._sbSaveStep4 = function () {
-    const people = SbStore.loadPeople().filter(p => !p.archived)
-    _draft.participants = people.map(p => {
-      const chk    = document.getElementById(`sbp-chk-${p.id}`)
-      const roleEl = document.getElementById(`sbp-role-${p.id}`)
-      const existing = _draft.participants.find(x => x.personId === p.id) || {}
-      return {
-        ...existing,
-        personId: p.id,
-        included: chk?.checked ?? false,
-        role: roleEl?.value || 'participant',
-        shareInput: existing.shareInput || { mode: 'equal' },
-        paidInputs: existing.paidInputs || [],
-        personalAdjustments: existing.personalAdjustments || {},
-        note: existing.note || '',
-      }
-    })
-    const hasIncluded = _draft.participants.some(p => p.included)
-    if (!hasIncluded) return notify('กรุณาเลือกอย่างน้อย 1 คน', 'error')
-    _draftStep = 5
-    App._sbRenderStep()
-  }
-
-  // ── Step 5: Split method + inputs ─────────────────────────────
-  function _sbStep5() {
-    const d = _draft
-    const method = d.splitMethod || 'equal'
-    const included = d.participants.filter(p => p.included && p.role !== 'payerOnly')
-    const people = SbStore.loadPeople()
-    const pName  = pid => { const p = people.find(x=>x.id===pid); return p?`${p.emoji} ${p.name}`:pid }
-
-    const methodChips = ['equal','shareUnit','percent','fixed','manual','itemized','hybrid'].map(m =>
-      `<button class="chip ${method===m?'active':''}" onclick="App._sbSetMethod('${m}')">${{
-        equal:'เท่ากัน',shareUnit:'สัดส่วน',percent:'เปอร์เซ็นต์',fixed:'กำหนดจำนวน',manual:'กรอกเอง',itemized:'แยกรายการ',hybrid:'ผสม'
-      }[m]}</button>`
-    ).join('')
-
-    const methodDesc = {
-      equal:'หารเท่าๆ กัน',shareUnit:'หารตามสัดส่วนหน่วย (เช่น 1:1:0.5)',
-      percent:'ระบุ % ต่อคน',fixed:'ระบุจำนวนเงินต่อคน',
-      manual:'กรอกยอดต่อคนเอง',itemized:'แยกหารตามรายการอาหาร',hybrid:'ผสม: บางรายการแยก บางส่วนหารเท่า'
-    }[method] || ''
-
-    // Per-person input fields
-    let inputFields = ''
-    if (method === 'shareUnit') {
-      inputFields = included.map(p => `
-        <div class="detail-row">
-          <div style="flex:1">${esc(pName(p.personId))}</div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <input class="form-input" type="number" inputmode="decimal" id="sb5-unit-${esc(p.personId)}" value="${p.shareInput?.unit||1}" style="width:80px;text-align:center">
-            <span style="color:var(--muted);font-size:12px">หน่วย</span>
-          </div>
-        </div>`).join('')
-    } else if (method === 'percent') {
-      inputFields = included.map(p => `
-        <div class="detail-row">
-          <div style="flex:1">${esc(pName(p.personId))}</div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <input class="form-input" type="number" inputmode="decimal" id="sb5-pct-${esc(p.personId)}" value="${p.shareInput?.percent||''}" style="width:80px;text-align:center">
-            <span style="color:var(--muted);font-size:12px">%</span>
-          </div>
-        </div>`).join('')
-    } else if (method === 'fixed' || method === 'manual') {
-      const key = method === 'fixed' ? 'fixedAmount' : 'manualAmount'
-      inputFields = included.map(p => `
-        <div class="detail-row">
-          <div style="flex:1">${esc(pName(p.personId))}</div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <span style="color:var(--muted)">฿</span>
-            <input class="form-input" type="number" inputmode="decimal" id="sb5-amt-${esc(p.personId)}" value="${p.shareInput?.[key]||''}" style="width:100px">
-          </div>
-        </div>`).join('')
-    } else if (method === 'itemized' || method === 'hybrid') {
-      const items = d.items || []
-      inputFields = `
-        <div style="margin-top:4px">
-          ${items.map((item, i) => `
-            <div class="card card-pad" style="margin-bottom:6px">
-              <div style="display:flex;gap:8px;align-items:center">
-                <div style="flex:1;font-weight:600">${esc(item.name||'รายการที่'+(i+1))}</div>
-                <div style="font-weight:700;color:var(--primary)">${fmt(item.amount)}</div>
-                <button class="btn-icon" onclick="App._sbEditItem(${i})">✏️</button>
-                <button class="btn-icon" onclick="App._sbDeleteItem(${i})">🗑</button>
-              </div>
-              <div style="font-size:12px;color:var(--muted);margin-top:4px">
-                ${(item.participants||[]).map(ip => pName(ip.personId)).join(', ') || 'ยังไม่ระบุผู้เข้าร่วม'}
-                · ${item.splitMode||'equal'}
-              </div>
-            </div>`).join('')}
-          <button class="btn btn-secondary btn-sm" onclick="App._sbAddItem()" style="width:100%">+ เพิ่มรายการ</button>
-        </div>`
-    } else {
-      inputFields = `<div style="color:var(--muted);font-size:13px;padding:8px 0">หารเท่ากัน ${included.length} คน = ${fmt((SplitBillCalc._calcTotal(d,[]) || 0) / (included.length || 1))} ต่อคน</div>`
-    }
-
-    App.openSubScreen(`
-      ${_sbStepHeader('วิธีหารบิล')}
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="chips" style="flex-wrap:wrap;gap:4px;padding:0 0 8px">${methodChips}</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">${esc(methodDesc)}</div>
-        <div class="card card-pad">${inputFields || '<div style="color:var(--muted)">ไม่มีผู้เข้าร่วม</div>'}</div>
-        ${_sbNav("App._sbPrev()", 'ถัดไป: ยอดที่จ่าย →', "App._sbSaveStep5()")}
-      </div>`)
-  }
-
-  App._sbSetMethod = function (method) {
-    App._sbSaveStep5(true) // silent save current inputs
-    _draft.splitMethod = method
-    _sbStep5()
-  }
-
-  App._sbSaveStep5 = function (quiet = false) {
-    const method  = _draft.splitMethod
-    const included = _draft.participants.filter(p => p.included && p.role !== 'payerOnly')
-    included.forEach(p => {
-      const si = p.shareInput || {}
-      if (method === 'shareUnit') si.unit = Number(document.getElementById(`sb5-unit-${p.personId}`)?.value) || 1
-      else if (method === 'percent') si.percent = Number(document.getElementById(`sb5-pct-${p.personId}`)?.value) || 0
-      else if (method === 'fixed')  si.fixedAmount  = Number(document.getElementById(`sb5-amt-${p.personId}`)?.value) || 0
-      else if (method === 'manual') si.manualAmount  = Number(document.getElementById(`sb5-amt-${p.personId}`)?.value) || 0
-      si.mode = method
-      p.shareInput = si
-    })
-    if (!quiet) { _draftStep = 6; App._sbRenderStep() }
-  }
-
-  // Item management for itemized/hybrid
-  App._sbAddItem = function () {
-    App._sbSaveStep5(true)
-    if (!_draft.items) _draft.items = []
-    _draft.items.push({ id: genId(), name: '', amount: 0, splitMode: 'equal', participants: [], taxable: true, serviceable: true, discountAmount: 0, note: '' })
-    App._sbEditItem(_draft.items.length - 1)
-  }
-
-  App._sbEditItem = function (idx) {
-    const item = (_draft.items || [])[idx]
-    if (!item) return
-    const included = _draft.participants.filter(p => p.included)
-    const people   = SbStore.loadPeople()
-    const pName    = pid => { const p = people.find(x=>x.id===pid); return p?`${p.emoji} ${p.name}`:pid }
-
-    const pChecks = included.map(p => {
-      const ip = (item.participants||[]).find(x=>x.personId===p.personId)
-      return `<div style="display:flex;align-items:center;gap:6px;padding:6px 0">
-        <input type="checkbox" id="sbitem-chk-${esc(p.personId)}" ${ip?'checked':''} style="width:16px;height:16px;accent-color:var(--primary)">
-        <span>${esc(pName(p.personId))}</span>
-      </div>`
-    }).join('')
-
-    App.openSubScreen(`
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App._sbRenderStep()">←</button>
-        <h2>${item.name || 'รายการที่'+(idx+1)}</h2>
-        <button class="btn btn-primary btn-sm" onclick="App._sbSaveItem(${idx})" style="width:auto">ตกลง</button>
-      </div>
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="form-group"><label class="form-label">ชื่อรายการ</label><input class="form-input" id="sbitem-name" value="${esc(item.name)}" placeholder="เช่น ผัดไทย"></div>
-        <div class="form-group"><label class="form-label">ราคา (฿)</label><input class="form-input" type="number" inputmode="decimal" id="sbitem-amount" value="${item.amount||''}"></div>
-        <div class="form-group">
-          <label class="form-label">วิธีแบ่ง</label>
-          <select class="form-input" id="sbitem-mode">
-            <option value="equal"       ${item.splitMode==='equal'?'selected':''}>เท่ากัน</option>
-            <option value="singleOwner" ${item.splitMode==='singleOwner'?'selected':''}>คนเดียวจ่าย</option>
-            <option value="shareUnit"   ${item.splitMode==='shareUnit'?'selected':''}>สัดส่วนหน่วย</option>
-            <option value="percent"     ${item.splitMode==='percent'?'selected':''}>เปอร์เซ็นต์</option>
-            <option value="fixed"       ${item.splitMode==='fixed'?'selected':''}>กำหนดจำนวน</option>
-            <option value="exclude"     ${item.splitMode==='exclude'?'selected':''}>ยกเว้น (ไม่นับ)</option>
-          </select>
-        </div>
-        <div class="sec-title">ผู้ร่วมรับผิดชอบ</div>
-        <div class="card card-pad">${pChecks || '<div style="color:var(--muted)">ยังไม่มีสมาชิก</div>'}</div>
-      </div>`)
-  }
-
-  App._sbSaveItem = function (idx) {
-    const item = (_draft.items || [])[idx]
-    if (!item) return
-    item.name      = document.getElementById('sbitem-name')?.value.trim() || ''
-    item.amount    = Number(document.getElementById('sbitem-amount')?.value) || 0
-    item.splitMode = document.getElementById('sbitem-mode')?.value || 'equal'
-    const included = _draft.participants.filter(p => p.included)
-    item.participants = included
-      .filter(p => document.getElementById(`sbitem-chk-${p.personId}`)?.checked)
-      .map(p => ({ personId: p.personId, unit: 1, percent: 0, fixedAmount: 0 }))
-    _draftStep = 5
-    App._sbRenderStep()
-  }
-
-  App._sbDeleteItem = function (idx) {
-    App._sbSaveStep5(true)
-    _draft.items.splice(idx, 1)
-    _draftStep = 5
-    App._sbRenderStep()
-  }
-
-  // ── Step 6: Paid amounts ──────────────────────────────────────
-  function _sbStep6() {
-    const d       = _draft
-    const people  = SbStore.loadPeople()
-    const pName   = pid => { const p = people.find(x=>x.id===pid); return p?`${p.emoji} ${p.name}`:pid }
-    const included = d.participants.filter(p => p.included)
-
-    const personPaidHtml = included.map(p => {
-      const paid = p.paidInputs || []
-      const inputRows = paid.map((inp, i) => `
-        <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
-          <select class="form-input" id="sb6-type-${esc(p.personId)}-${i}" style="flex:1;font-size:12px;padding:4px 6px">
-            ${['restaurant_payment','cash','transfer','refund','manual'].map(t =>
-              `<option value="${t}" ${inp.type===t?'selected':''}>${{
-                restaurant_payment:'จ่ายที่ร้าน',cash:'เงินสด',transfer:'โอน',refund:'คืนเงิน',manual:'อื่นๆ'
-              }[t]}</option>`
-            ).join('')}
-          </select>
-          <div style="display:flex;align-items:center;gap:2px">
-            <span style="color:var(--muted)">฿</span>
-            <input class="form-input" type="number" inputmode="decimal" id="sb6-amt-${esc(p.personId)}-${i}" value="${inp.amount||''}" style="width:90px">
-          </div>
-          <button class="btn-icon" onclick="App._sbRemovePaid('${esc(p.personId)}',${i})">✕</button>
-        </div>`).join('')
-
-      return `<div class="card card-pad" style="margin-bottom:8px">
-        <div style="font-weight:700;margin-bottom:8px">${esc(pName(p.personId))}</div>
-        <div id="sb6-paid-rows-${esc(p.personId)}">${inputRows}</div>
-        <button class="btn btn-secondary btn-sm" onclick="App._sbAddPaid('${esc(p.personId)}')" style="width:auto;margin-top:4px">+ เพิ่มรายการจ่าย</button>
-      </div>`
-    }).join('')
-
-    App.openSubScreen(`
-      ${_sbStepHeader('ยอดที่จ่าย')}
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
-          ระบุว่าแต่ละคนจ่ายอะไรไปบ้างสำหรับบิลนี้ (อาจไม่มีก็ได้ ถ้ายังไม่ได้จ่าย)
-        </div>
-        ${personPaidHtml}
-        ${_sbNav("App._sbPrev()", 'ถัดไป: ตรวจสอบ →', "App._sbSaveStep6()")}
-      </div>`)
-  }
-
-  App._sbAddPaid = function (personId) {
-    App._sbSaveStep6(true)
-    const part = _draft.participants.find(p => p.personId === personId)
-    if (!part) return
-    if (!Array.isArray(part.paidInputs)) part.paidInputs = []
-    part.paidInputs.push({ id: genId(), type: 'restaurant_payment', amount: 0, note: '' })
-    _sbStep6()
-  }
-
-  App._sbRemovePaid = function (personId, idx) {
-    App._sbSaveStep6(true)
-    const part = _draft.participants.find(p => p.personId === personId)
-    if (!part || !Array.isArray(part.paidInputs)) return
-    part.paidInputs.splice(idx, 1)
-    _sbStep6()
-  }
-
-  App._sbSaveStep6 = function (quiet = false) {
-    _draft.participants.filter(p => p.included).forEach(p => {
-      ;(p.paidInputs || []).forEach((inp, i) => {
-        const typeEl = document.getElementById(`sb6-type-${p.personId}-${i}`)
-        const amtEl  = document.getElementById(`sb6-amt-${p.personId}-${i}`)
-        if (typeEl) inp.type   = typeEl.value
-        if (amtEl)  inp.amount = Number(amtEl.value) || 0
-      })
-    })
-    if (!quiet) { _draftStep = 7; App._sbRenderStep() }
-  }
-
-  // ── Step 7: Preview + overrides + save ────────────────────────
-  function _sbStep7() {
-    const d      = _draft
-    const people = SbStore.loadPeople()
-    const pName  = pid => { const p = people.find(x=>x.id===pid); return p?`${p.emoji} ${p.name}`:pid }
-    let result
-    try { result = SplitBillCalc.calculateBill(d, people) }
-    catch(e) { result = { totalToSplit:0, people:[], settlementPlan:[], warnings:[{code:'ERR',msg:e.message}], roundingAdjustment:0 } }
-
-    const warnHtml = result.warnings.length
-      ? `<div style="background:var(--elevated);border-radius:8px;padding:10px 12px;margin-bottom:10px">
-          ${result.warnings.map(w=>`<div style="font-size:13px;color:var(--expense)">⚠️ ${esc(w.msg)}</div>`).join('')}
-        </div>` : ''
-
-    const peopleRows = result.people.map(p => `
-      <div class="detail-row" style="font-size:13px">
-        <div style="flex:1">
-          <div style="font-weight:600">${esc(pName(p.personId))}</div>
-          <div style="color:var(--muted)">ส่วนแบ่ง ${fmt(p.finalShare)}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="color:var(--muted)">จ่าย ${fmt(p.paidAmount)}</div>
-          <div style="font-weight:700;color:${p.net>0?'var(--income)':p.net<0?'var(--expense)':'var(--muted)'}">${p.net>0?'ได้คืน':'จ่ายเพิ่ม'} ${fmt(Math.abs(p.net))}${p.isOverridden?' <span class="sb-override-badge">แก้เอง</span>':''}</div>
-        </div>
-      </div>`).join('')
-
-    const settlRows = result.settlementPlan.length
-      ? result.settlementPlan.map(t => `
-          <div class="detail-row">
-            <div>${esc(pName(t.fromPersonId))} → ${esc(pName(t.toPersonId))}</div>
-            <div style="font-weight:700;color:var(--primary)">${fmt(t.amount)}</div>
-          </div>`).join('')
-      : `<div style="color:var(--muted);font-size:13px;padding:8px 0">ไม่มีรายการโอน (เสมอกัน)</div>`
-
-    // Override section (collapsed by default)
-    const ovr = d.overrides || {}
-    const shareOverridesHtml = result.people.map(p => `
-      <div class="detail-row" style="font-size:13px">
-        <div>${esc(pName(p.personId))}</div>
-        <div style="display:flex;align-items:center;gap:4px">
-          <span style="color:var(--muted)">฿</span>
-          <input class="form-input" type="number" inputmode="decimal" id="ovr-share-${esc(p.personId)}"
-            value="${ovr.sharesByPerson?.[p.personId] ?? ''}" placeholder="${p.finalShare.toFixed(2)}" style="width:100px">
-        </div>
-      </div>`).join('')
-
-    App.openSubScreen(`
-      ${_sbStepHeader('ตรวจสอบผล')}
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="card" style="padding:14px;margin-bottom:12px;text-align:center">
-          <div style="font-size:13px;color:var(--muted)">ยอดรวมบิล</div>
-          <div style="font-size:26px;font-weight:800;color:var(--primary)">${fmt(result.totalToSplit)}</div>
-        </div>
-
-        ${warnHtml}
-
-        <div class="sec-title">สรุปต่อคน</div>
-        <div class="card card-pad">${peopleRows||'<div style="color:var(--muted)">ไม่มีผู้เข้าร่วม</div>'}</div>
-
-        <div class="sec-title">แผนการโอนเงิน</div>
-        <div class="card card-pad">${settlRows}</div>
-
-        <!-- Override toggle -->
-        <div style="margin-top:12px">
-          <button class="btn btn-secondary btn-sm" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'" style="width:100%">
-            ⚙️ แก้ไขส่วนแบ่งด้วยตัวเอง
-          </button>
-          <div style="display:none;margin-top:10px">
-            <div class="sec-title">Override ยอดรวม</div>
-            <div class="form-group">
-              <label class="form-label">ยอดรวมที่แก้เอง (฿) — เว้นว่างถ้าไม่แก้</label>
-              <input class="form-input" type="number" inputmode="decimal" id="ovr-total" value="${ovr.total??''}" placeholder="${result.totalToSplit}">
-            </div>
-            <div class="sec-title">Override ส่วนแบ่งต่อคน</div>
-            <div class="card card-pad">${shareOverridesHtml}</div>
-            <button class="btn btn-secondary btn-sm" style="width:100%;margin-top:8px" onclick="App._sbApplyOverrides()">บันทึก Override</button>
-            <button class="btn btn-outline btn-sm" style="width:100%;margin-top:6px" onclick="App._sbClearOverrides()">ล้าง Override ทั้งหมด</button>
-          </div>
-        </div>
-
-        <div style="display:flex;gap:8px;margin-top:16px">
-          <button class="btn btn-secondary" onclick="App._sbPrev()" style="width:auto;padding:0 20px">←</button>
-          <button class="btn btn-primary" onclick="App._sbSaveBill()" style="flex:1">💾 บันทึกบิล</button>
-        </div>
-      </div>`)
-  }
-
-  App._sbApplyOverrides = function () {
-    if (!_draft.overrides) _draft.overrides = {}
-    const totalEl = document.getElementById('ovr-total')
-    const totalVal = Number(totalEl?.value)
-    _draft.overrides.total = totalEl?.value.trim() ? totalVal : undefined
-
-    const sharesByPerson = {}
-    _draft.participants.filter(p=>p.included).forEach(p => {
-      const el = document.getElementById(`ovr-share-${p.personId}`)
-      if (el?.value.trim()) sharesByPerson[p.personId] = Number(el.value)
-    })
-    _draft.overrides.sharesByPerson = Object.keys(sharesByPerson).length ? sharesByPerson : undefined
-    notify('บันทึก override แล้ว', 'success')
-    _sbStep7()
-  }
-
-  App._sbClearOverrides = function () {
-    _draft.overrides = {}
-    notify('ล้าง override แล้ว', 'success')
-    _sbStep7()
-  }
-
-  App._sbSaveBill = function () {
-    if (!_draft) return
-    _draft.updatedAt = nowISO()
-    if (!_draft.createdAt) _draft.createdAt = nowISO()
-    SbStore.upsertBill(_draft)
-    notify('บันทึกบิลแล้ว', 'success')
-    const id = _draft.id
-    _draft = null
-    App.openSplitBillDetail(id)
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  //  CSS INJECTION (Split Bill specific styles)
+  //  CSS
   // ══════════════════════════════════════════════════════════════
   if (!document.getElementById('sb-styles')) {
-    const style = document.createElement('style')
-    style.id = 'sb-styles'
-    style.textContent = `
-      .sb-bill-row { cursor:pointer; transition:opacity .15s; }
-      .sb-bill-row:active { opacity:.8; }
-      .sb-override-badge {
-        display:inline-block; font-size:10px; font-weight:700;
-        background:var(--primary); color:#fff;
-        padding:1px 5px; border-radius:4px; vertical-align:middle; margin-left:3px;
-      }
-      .flex-1 { flex:1; }
-    `
-    document.head.appendChild(style)
+    const s = document.createElement('style'); s.id = 'sb-styles'
+    s.textContent = `.sb-bill-row{cursor:pointer;transition:opacity .15s}.sb-bill-row:active{opacity:.8}.sb-item-row{cursor:pointer;transition:opacity .15s}.sb-item-row:active{opacity:.8}.flex-1{flex:1}`
+    document.head.appendChild(s)
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  PATCH renderMore — add หารบิล entry
+  //  PATCH renderMore
   // ══════════════════════════════════════════════════════════════
   const _prevRenderMoreSB = App.renderMore?.bind(App)
   App.renderMore = function () {
     _prevRenderMoreSB?.()
     try {
-      const content = document.getElementById('more-content')
-      if (!content) return
-      const inner = content.firstElementChild
-      if (!inner) return
-
-      // Don't inject twice
+      const content = document.getElementById('more-content'); if (!content) return
+      const inner   = content.firstElementChild;               if (!inner)   return
       if (inner.querySelector('.sb-more-section')) return
-
       const billCount = SbStore.loadBills().length
-      const sec = document.createElement('div')
-      sec.className = 'sb-more-section'
+      const sec = document.createElement('div'); sec.className = 'sb-more-section'
       sec.innerHTML = `
         <div class="sec-title">คำนวณ</div>
         <div class="card card-pad">
           <div class="settings-row" onclick="App.openSplitBillScreen()">
-            <div class="s-icon">🍽️</div>
-            <div class="s-label">หารบิล</div>
-            ${billCount ? `<div class="s-value">${billCount} บิล</div>` : ''}
+            <div class="s-icon">🍽️</div><div class="s-label">หารบิล</div>
+            ${billCount?`<div class="s-value">${billCount} บิล`:''}
             <div class="s-arrow">›</div>
           </div>
         </div>`
-      // Insert after sticky header (before first section) so it's always top-most
-      const stickyHeader = inner.querySelector('.more-sticky-header')
-      if (stickyHeader) stickyHeader.insertAdjacentElement('afterend', sec)
+      const header = inner.querySelector('.more-sticky-header')
+      if (header) header.insertAdjacentElement('afterend', sec)
       else inner.prepend(sec)
     } catch(_) {}
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  EXPORT / IMPORT INTEGRATION
+  //  EXPORT / IMPORT
   // ══════════════════════════════════════════════════════════════
-  const _prevExportData = App.exportData?.bind(App)
+  const _prevExport = App.exportData?.bind(App)
   App.exportData = function () {
-    // Patch Storage.buildExportPayload to include split bill data
-    const _prevBuild = Storage.buildExportPayload?.bind(Storage)
-    if (_prevBuild && Storage.buildExportPayload) {
+    const _orig = Storage.buildExportPayload?.bind(Storage)
+    if (_orig) {
       Storage.buildExportPayload = function (state) {
-        const payload = _prevBuild(state)
-        try {
-          payload.splitBills  = SbStore.loadBills()
-          payload.splitPeople = SbStore.loadPeople()
-        } catch(_) {}
-        Storage.buildExportPayload = _prevBuild // restore
-        return payload
+        const p = _orig(state)
+        try { p.splitBills = SbStore.loadBills(); p.splitPeople = SbStore.loadPeople() } catch(_) {}
+        Storage.buildExportPayload = _orig; return p
       }
     }
-    _prevExportData?.()
+    _prevExport?.()
   }
 
-  const _prevImportData = App.importData?.bind(App)
+  const _prevImport = App.importData?.bind(App)
   App.importData = function (input) {
-    // After import, restore split bill data if present in backup
-    const _origImport = App.importData
-    App.importData = function (inp) {
-      _prevImportData?.(inp)
-    }
-    // We intercept by wrapping Storage.normalizeBackupPayload
-    const _prevNorm = Storage.normalizeBackupPayload?.bind(Storage)
-    if (_prevNorm && Storage.normalizeBackupPayload) {
+    const _origNorm = Storage.normalizeBackupPayload?.bind(Storage)
+    if (_origNorm) {
       Storage.normalizeBackupPayload = function (raw) {
-        const normalized = _prevNorm(raw)
-        if (Array.isArray(raw.splitBills))  { try { SbStore.saveBills(raw.splitBills) } catch(_) {} }
-        if (Array.isArray(raw.splitPeople)) { try { SbStore.savePeople(raw.splitPeople) } catch(_) {} }
-        Storage.normalizeBackupPayload = _prevNorm // restore
-        return normalized
+        const n = _origNorm(raw)
+        if (Array.isArray(raw.splitBills))  try { SbStore.saveBills(raw.splitBills)   } catch(_) {}
+        if (Array.isArray(raw.splitPeople)) try { SbStore.savePeople(raw.splitPeople) } catch(_) {}
+        Storage.normalizeBackupPayload = _origNorm; return n
       }
     }
-    _prevImportData?.(input)
+    _prevImport?.(input)
   }
 
   // ── Init ──────────────────────────────────────────────────────
