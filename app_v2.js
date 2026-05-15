@@ -3140,6 +3140,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
       .slice(0, 5)
     const visibleAssets = (typeof visibleWallets === 'function' ? visibleWallets() : S.wallets.filter(w => !w.hiddenFromWalletList)).filter(w => w.type !== 'credit')
     const cryptoSummary = App.getCryptoPortfolioSummary?.() || { holdings: [], totalValueTHB: 0 }
+    const currentNetWorth = Calc.getNetWorth ? Calc.getNetWorth(S.wallets) : { assets: usable.liquid || 0 }
+    const dashboardNetWorth = Number(currentNetWorth.assets || 0) - Number(usable.creditDebt || 0)
     const alertCards = (typeof visibleWallets === 'function' ? visibleWallets() : S.wallets.filter(w => !w.hiddenFromWalletList))
       .filter(w => w.type === 'credit' && Math.abs(Number(w.balance || 0)) > 0)
       .map(w => {
@@ -3224,6 +3226,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
           </div>
         </div>
         ${hasUsableBreakdown ? `<div class="mt-net-split mt-net-split-3">
+          <div class="mt-net-metric"><small>ความมั่งคั่งสุทธิ</small><strong style="color:${dashboardNetWorth >= 0 ? '#4ADE80' : '#F87171'}">${dashboardNetWorth < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(dashboardNetWorth))}</strong></div>
+          <div class="mt-divider"></div>
           <div class="mt-net-metric"><small>เงินสด</small><strong>${FMT(usable.liquid)}</strong></div>
           ${usable.creditDebt > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>หนี้บัตร</small><strong style="color:#F87171">-${FMT(usable.creditDebt)}</strong></div>` : ''}
           ${usable.upcomingReserved > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>รายการรอจ่าย</small><strong style="color:#F59E0B">-${FMT(usable.upcomingReserved)}</strong></div>` : ''}
@@ -4497,7 +4501,15 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const budget = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, month)
     const creditSummary = Calc.getCreditLiabilitySummary(S.wallets, { refDate: today() })
     const cryptoSummary = App.getCryptoPortfolioSummary?.() || { totalValueTHB: 0, holdings: [] }
-    const assetBreakdown = Calc.getAssetBreakdown(S.wallets, { cryptoTotal: cryptoSummary.totalValueTHB })
+    const rawAssetBreakdown = Calc.getAssetBreakdown(S.wallets, { cryptoTotal: cryptoSummary.totalValueTHB })
+    const committedInstallmentDebt = (S.wallets || [])
+      .filter(w => w?.type === 'credit' && !w.hiddenFromWalletList)
+      .reduce((sum, w) => sum + Number(App._getUnpostedInstallmentDebt?.(w.id) || 0), 0)
+    const assetBreakdown = {
+      ...rawAssetBreakdown,
+      liabilities: rawAssetBreakdown.liabilities + committedInstallmentDebt,
+      netWorth: rawAssetBreakdown.assets - rawAssetBreakdown.liabilities - committedInstallmentDebt,
+    }
     const postedMonthTx = Calc.getMonthlyTransactions(S.transactions, month)
     const expenseTxCount = postedMonthTx.filter(t => t.type === 'expense').length
     const incomeTxCount = postedMonthTx.filter(t => t.type === 'income').length
