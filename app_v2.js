@@ -2108,7 +2108,7 @@ App.render();
 ;(function(){
   const esc = App._esc
   const fmt = n => moneyFmt(Number(n) || 0)
-  const numFmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
+  const numFmt = n => Calc.fmtNum(n)
   const clampPct = n => Math.max(0, Math.min(100, Number(n) || 0))
   const investTypes = new Set(['gold','crypto','fcd'])
   const isInvest = w => investTypes.has(w?.type)
@@ -2367,7 +2367,7 @@ App.render();
       ? [allCats.find(c => c.id === _suggestedCatId), ...allCats.filter(c => c.id !== _suggestedCatId)].filter(Boolean)
       : allCats
     const amount = numericAmount(S.tx.amount || 0)
-    const display = Number(String(S.tx.amount || '0').replace(/,/g, '') || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
+    const display = Calc.fmtNum(Number(String(S.tx.amount || '0').replace(/,/g, '') || 0))
     const color = typeColor(type)
     const INVEST_TYPES = new Set(['gold','crypto','fcd'])
     const isTransfer = type === 'transfer'
@@ -2466,8 +2466,8 @@ App.render();
                 ${_rules.length ? `<div class="reward-rule-results">${_rows}</div>` : `<div class="card card-pad" style="margin-top:10px; padding:12px; border-radius:12px !important;"><div class="list-item-name">บัตรนี้ยังไม่มีสิทธิประโยชน์</div><div class="list-item-sub">ไปที่รายละเอียดบัตรเครดิต แล้วกด ตั้งค่า เพื่อเพิ่มสิทธิประโยชน์</div></div>`}
                 <div class="card card-pad" style="margin-top:10px; padding:12px; border-radius:12px !important;">
                   <div class="list-item-name">สรุปสิทธิประโยชน์</div>
-                  ${Number(_estimate.cashback || 0) > 0 ? `<div class="list-item-sub">เงินคืนโดยประมาณ: ฿${Number(_estimate.cashback).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>` : ''}
-                  ${Number(_estimate.discount || 0) > 0 ? `<div class="list-item-sub">ส่วนลดทันทีโดยประมาณ: ฿${Number(_estimate.discount).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>` : ''}
+                  ${Number(_estimate.cashback || 0) > 0 ? `<div class="list-item-sub">เงินคืนโดยประมาณ: ${fmt(Number(_estimate.cashback || 0))}</div>` : ''}
+                  ${Number(_estimate.discount || 0) > 0 ? `<div class="list-item-sub">ส่วนลดทันทีโดยประมาณ: ${fmt(Number(_estimate.discount || 0))}</div>` : ''}
                   ${Number(_estimate.points || 0) > 0 ? `<div class="list-item-sub">คะแนนโดยประมาณ: ${Number(_estimate.points).toLocaleString('en-US')} คะแนน</div>` : ''}
                   ${_selectedNames.length ? `<div class="list-item-sub">ใช้สิทธิ์: ${esc(_selectedNames.join(', '))}</div>` : `<div class="list-item-sub">ยังไม่ได้เลือกสิทธิประโยชน์</div>`}
                   ${_caps}

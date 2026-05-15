@@ -1,7 +1,15 @@
 const Calc = {
   // ── Formatting ──────────────────────────────────────────────
   fmt(n) {
-    return '฿' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    const val = Math.abs(Number(n) || 0)
+    const isWhole = val === Math.floor(val)
+    return '฿' + val.toLocaleString('en-US', { minimumFractionDigits: isWhole ? 0 : 2, maximumFractionDigits: 2 })
+  },
+
+  fmtNum(n) {
+    const val = Math.abs(Number(n) || 0)
+    const isWhole = val === Math.floor(val)
+    return val.toLocaleString('en-US', { minimumFractionDigits: isWhole ? 0 : 2, maximumFractionDigits: 2 })
   },
 
   fmtSigned(n, type) {

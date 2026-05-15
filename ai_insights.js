@@ -280,7 +280,7 @@ const InsightEngine = (() => {
         const urgency = Math.max(1, 10 - daysLeft)
         add('03', card.id + (daysLeft <= 3 ? '-urgent' : '-7d'), {
           title: `${card.name} ครบกำหนดใน ${daysLeft} วัน`,
-          body: `ยอดค้างชำระ ฿${amount.toLocaleString('en-US')}${canPay ? ' — เงินพร้อมใช้เพียงพอ' : ' — ควรโอนเงินเตรียมไว้ล่วงหน้า'}`,
+          body: `ยอดค้างชำระ ฿${Calc.fmtNum(amount)}${canPay ? ' — เงินพร้อมใช้เพียงพอ' : ' — ควรโอนเงินเตรียมไว้ล่วงหน้า'}`,
           severity: daysLeft <= 3 ? 'critical' : 'warning', urgency, impact: 8,
           action: { label: 'ชำระบัตร', fn: `App.openCCPayOverlay?.('${card.id}')` },
           evidence: { cardId: card.id, daysLeft, amount, canPay },
@@ -300,7 +300,7 @@ const InsightEngine = (() => {
         const bodyExtra = b.daysLeft < 0 ? ` — เลยกำหนดไป ${Math.abs(b.daysLeft)} วัน ควรจัดการทันที` : ''
         add('04', (b.id || bname) + String(b.daysLeft), {
           title: label,
-          body: `฿${Number(b.amount||0).toLocaleString('en-US')}${bodyExtra}`,
+          body: `฿${Calc.fmtNum(b.amount)}${bodyExtra}`,
           severity: b.daysLeft < 0 ? 'critical' : 'warning',
           urgency: b.daysLeft < 0 ? 10 : 8, impact: 6,
           action: { label: 'ดูรายการรอจ่าย', fn: "App.openUpcomingBillsScreen()" },
@@ -337,7 +337,7 @@ const InsightEngine = (() => {
         if (d < 0) return
         add('06', p.id || p.title, {
           title: `"${p.title}" หมดอายุใน ${d} วัน`,
-          body: `มูลค่าประมาณ ฿${Number(p.estimatedSaving||0).toLocaleString('en-US')} — อย่าลืมใช้ก่อนหมดอายุ`,
+          body: `มูลค่าประมาณ ฿${Calc.fmtNum(p.estimatedSaving)} — อย่าลืมใช้ก่อนหมดอายุ`,
           severity: d <= 2 ? 'warning' : 'info', urgency: 6, impact: 4,
           action: { label: 'ดูสิทธิพิเศษ', fn: "App.openPrivilegesScreen?.('expiring')" },
           evidence: { privId: p.id, daysLeft: d, value: p.estimatedSaving },
@@ -416,7 +416,7 @@ const InsightEngine = (() => {
         const t = dup[0]
         add('10', `${t.amount}-${t.merchant||''}`, {
           title: 'อาจมีรายการซ้ำกัน',
-          body: `"${t.merchant||'รายการ'}" ฿${Number(t.amount).toLocaleString('en-US')} บันทึก ${dup.length} ครั้งวันนี้ — ตรวจสอบว่าไม่ได้บันทึกซ้ำ`,
+          body: `"${t.merchant||'รายการ'}" ฿${Calc.fmtNum(t.amount)} บันทึก ${dup.length} ครั้งวันนี้ — ตรวจสอบว่าไม่ได้บันทึกซ้ำ`,
           severity: 'warning', urgency: 7, impact: 5,
           action: { label: 'ดูรายการวันนี้', fn: "App.showPage('transactions')" },
           evidence: { merchant: t.merchant, amount: t.amount, count: dup.length },
