@@ -1761,10 +1761,10 @@ body { font-feature-settings: "tnum" 1; }
 .wallet-summary-grid { gap: 10px !important; }
 .wallet-section-title { font-size: 15px !important; font-weight: 800 !important; color: var(--text) !important; margin: 16px 0 10px !important; }
 
-/* Budget tabs */
+/* Shared segmented tabs */
+.segmented-tabs,
 .budget-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 14px;
   padding: 4px;
@@ -1772,6 +1772,14 @@ body { font-feature-settings: "tnum" 1; }
   background: var(--elevated);
   border: 1px solid var(--border);
 }
+.segmented-tabs-2,
+.budget-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.segmented-tabs-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.segmented-tab,
 .budget-tab {
   min-height: 42px;
   border: 0;
@@ -1780,6 +1788,7 @@ body { font-feature-settings: "tnum" 1; }
   color: var(--muted);
   font-weight: 800;
 }
+.segmented-tab.active,
 .budget-tab.active {
   color: #fff;
   background: var(--primary);
@@ -2010,6 +2019,7 @@ body.is-dashboard #dashboard-content {
 .installment-month-grid,
 .quick-amount-row,
 .color-picker-row,
+.segmented-tabs,
 .budget-tabs {
   gap: var(--compact-gap) !important;
 }
@@ -2058,6 +2068,7 @@ body.is-dashboard #dashboard-content {
 .wc-action-row { gap: 6px !important; margin-top: 10px !important; }
 .wallet-detail-hero,
 .cc-hero { padding: 16px !important; border-radius: 22px !important; margin-bottom: 10px !important; }
+.segmented-tabs,
 .budget-tabs { margin-bottom: 10px !important; padding: 3px !important; border-radius: 16px !important; }
 .budget-row { padding: 10px 0 !important; }
 .budget-row-top { margin-bottom: 6px !important; gap: 10px !important; }
@@ -2084,6 +2095,7 @@ textarea.form-input { min-height: 72px !important; }
 .wallet-chip-btn,
 .quick-amount-row button,
 .installment-month-grid button,
+.segmented-tab,
 .budget-tab {
   min-height: var(--touch-h-sm) !important;
   font-size: 12px !important;

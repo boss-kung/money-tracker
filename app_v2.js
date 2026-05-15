@@ -342,7 +342,7 @@ window.__mountUpcomingBillsFeature = function() {
     App.openUpcomingBillForm(S.editingUpcomingBillId || '', true)
   }
 
-  App.openUpcomingBillsScreen = function(filter = S.upcomingBillsFilter || 'pending') {
+  App.openUpcomingBillsScreen = function(filter = S.upcomingBillsFilter || 'pending', animate = true) {
     ensureUpcomingBillsState()
     S.upcomingBillsFilter = filter
     const rows = getBillsForFilter(filter)
@@ -353,7 +353,7 @@ window.__mountUpcomingBillsFeature = function() {
       ['overdue', 'เลยกำหนด'],
       ['paid', 'จ่ายแล้ว'],
       ['cancelled', 'ยกเลิก'],
-    ].map(([key, label]) => `<button class="chip${filter === key ? ' active' : ''}" onclick="App.openUpcomingBillsScreen('${key}')">${label}</button>`).join('')
+    ].map(([key, label]) => `<button class="chip${filter === key ? ' active' : ''}" onclick="App.openUpcomingBillsScreen('${key}', false)">${label}</button>`).join('')
     const html = `<div class="sub-header">
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
         <h2>รายการรอจ่าย</h2>
@@ -375,7 +375,7 @@ window.__mountUpcomingBillsFeature = function() {
           ${rows.length ? rows.map(buildUpcomingBillRow).join('') : (App._emptyState?.('🧾', 'ยังไม่มีรายการรอจ่าย', filter === 'pending' ? 'แตะ + เพื่อเพิ่มบิลที่ต้องกันเงินไว้จ่าย' : 'ยังไม่มีรายการในตัวกรองนี้') || '')}
         </div>
       </div>`
-    App.openSubScreen(html)
+    App.openSubScreen(html, { animate })
   }
 
   App.openUpcomingBillForm = function(billId = '', preserveDraft = false) {
@@ -1178,10 +1178,10 @@ Object.assign(App, {
     const existingList = document.getElementById('cat-list-items')
     if (existingList) {
       existingList.innerHTML = listHtml
-      document.querySelectorAll('#sub-screen .tab-btn').forEach(btn => btn.classList.toggle('active', btn.textContent.trim() === (type === 'expense' ? 'รายจ่าย' : 'รายรับ')))
+      document.querySelectorAll('#sub-screen .segmented-tab').forEach(btn => btn.classList.toggle('active', btn.textContent.trim() === (type === 'expense' ? 'รายจ่าย' : 'รายรับ')))
       return
     }
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="tab-strip"><button class="tab-btn ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="tab-btn ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${q}" oninput="App.openCategoryScreen('${type}', this.value)"><div class="card mt-12"><div id="cat-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="segmented-tabs segmented-tabs-2"><button class="segmented-tab ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="segmented-tab ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${q}" oninput="App.openCategoryScreen('${type}', this.value)"><div class="card mt-12"><div id="cat-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
   },
   saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { toast('กรุณากรอกชื่อหมวดหมู่','error'); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
 
@@ -1982,7 +1982,7 @@ App.render();
   }
 
   // Budget screen with separate income/expense tabs.
-  App.openBudgetScreen = function(kind = S.budgetTab || 'expense') {
+  App.openBudgetScreen = function(kind = S.budgetTab || 'expense', animate = true) {
     S.budgetTab = kind === 'income' ? 'income' : 'expense'
     const active = S.budgetTab
     const listKey = active === 'income' ? 'incomeBudgets' : 'budgets'
@@ -2004,7 +2004,7 @@ App.render();
 
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ตั้งงบประมาณ</h2><button class="btn btn-primary btn-sm" onclick="App.saveBudgets('${active}')" style="width:auto;padding:8px 16px">บันทึก</button></div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="budget-tabs"><button class="budget-tab ${active === 'expense' ? 'active' : ''}" onclick="App.openBudgetScreen('expense')">รายจ่าย</button><button class="budget-tab ${active === 'income' ? 'active' : ''}" onclick="App.openBudgetScreen('income')">รายรับ</button></div>
+        <div class="segmented-tabs segmented-tabs-2"><button class="segmented-tab ${active === 'expense' ? 'active' : ''}" onclick="App.openBudgetScreen('expense', false)">รายจ่าย</button><button class="segmented-tab ${active === 'income' ? 'active' : ''}" onclick="App.openBudgetScreen('income', false)">รายรับ</button></div>
         <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px">${active === 'income' ? 'ตั้งเป้ารายรับรายเดือนแต่ละหมวด' : 'ตั้งงบรายจ่ายรายเดือนแต่ละหมวด'} (0 = ไม่กำหนด)</p>
         <div class="card card-pad">${rowsHtml}</div>
       </div>`)
@@ -4477,7 +4477,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
       ${buildSummaryCard('รายรับ', `+${money(monthly.income)}`, 'var(--income)', hasPrevData ? compareText(comparison.incomePctChange, true) : neutralComparison)}
       ${buildSummaryCard('รายจ่าย', `-${money(monthly.expense)}`, 'var(--expense)', hasPrevData ? compareText(comparison.expensePctChange, false) : neutralComparison)}
       ${buildSummaryCard('กระแสเงินสดสุทธิ', `${monthly.netCashflow < 0 ? '-' : ''}${money(Math.abs(monthly.netCashflow))}`, monthly.netCashflow >= 0 ? 'var(--income)' : 'var(--expense)', previous ? `${comparison.netCashflowDelta === null ? 'ไม่มีข้อมูลเดือนก่อน' : `ต่างจากเดือนก่อน ${comparison.netCashflowDelta >= 0 ? '+' : '-'}${money(Math.abs(comparison.netCashflowDelta || 0))}`}` : 'ไม่มีข้อมูลเดือนก่อน')}
-      ${buildSummaryCard('อัตราออม', monthly.savingsRate === null ? '—' : `${monthly.savingsRate.toFixed(1)}%`, monthly.savingsRate === null ? 'var(--muted)' : monthly.savingsRate >= 0 ? 'var(--income)' : 'var(--expense)', monthly.income > 0 ? 'รายรับหลังหักรายจ่าย' : 'ยังไม่มีรายรับในเดือนนี้')}
     </div>`
 
     html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head" style="display:flex;align-items:center;justify-content:space-between"><strong>AI Financial Coach</strong><button class="btn btn-secondary btn-sm" onclick="InsightEngine.invalidate();App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${
@@ -7762,8 +7761,9 @@ App._pickMerchant = function(name, opts = {}) {
   // CENTRALIZED REWARDS BOOK
   // ══════════════════════════════════════════════════════════
 
-  App.openRewardLedgerScreen = function(cardId = '') {
+  App.openRewardLedgerScreen = function(cardId = '', tab = S.rewardLedgerTab || 'accounts', animate = true) {
     migrateToV5()
+    S.rewardLedgerTab = ['accounts', 'pending', 'history'].includes(tab) ? tab : 'accounts'
     const cards    = (S.wallets||[]).filter(w => w.type === 'credit')
     const accounts = S.rewardAccounts || []
 
@@ -7841,7 +7841,16 @@ App._pickMerchant = function(name, opts = {}) {
 
     const filterOpts = `<option value="">ทุกบัตร</option>` + cards.map(c => `<option value="${esc(c.id)}"${c.id===selected?' selected':''}>${esc(c.icon||'')} ${esc(c.name)}</option>`).join('')
 
-    const accordion = (id, title, body, open = false) => `<details id="${id}" class="card card-pad" style="margin-bottom:12px"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted);font-weight:600">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
+    const tabContent = {
+      accounts: `<div class="card card-pad" style="margin-bottom:12px">${acctSummaryHtml}</div>`,
+      pending: `<div class="card card-pad" style="margin-bottom:12px">${pendingHtml || '<div style="font-size:13px;color:var(--muted)">ไม่มีสิทธิประโยชน์รอรับในขณะนี้</div>'}</div>`,
+      history: `<div class="card card-pad" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <select style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border);background:var(--elevated);color:var(--text)" onchange="App.openRewardLedgerScreen(this.value, 'history', false)">${filterOpts}</select>
+        </div>
+        ${histHtml}
+      </div>`,
+    }[S.rewardLedgerTab]
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
@@ -7849,21 +7858,13 @@ App._pickMerchant = function(name, opts = {}) {
         <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm()" style="width:auto">+ บัญชีคะแนน</button>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="sec-title">บัญชีคะแนนสะสม</div>
-        <div class="card card-pad" style="margin-bottom:12px">${acctSummaryHtml}</div>
-
-        <div class="sec-title">สิทธิประโยชน์รอรับ</div>
-        <div class="card card-pad" style="margin-bottom:12px">
-          ${pendingHtml || '<div style="font-size:13px;color:var(--muted)">ไม่มีสิทธิประโยชน์รอรับในขณะนี้</div>'}
+        <div class="segmented-tabs segmented-tabs-3">
+          <button class="segmented-tab ${S.rewardLedgerTab === 'accounts' ? 'active' : ''}" onclick="App.openRewardLedgerScreen('${esc(selected)}', 'accounts', false)">บัญชีคะแนนสะสม</button>
+          <button class="segmented-tab ${S.rewardLedgerTab === 'pending' ? 'active' : ''}" onclick="App.openRewardLedgerScreen('${esc(selected)}', 'pending', false)">สิทธิ์รอรับ</button>
+          <button class="segmented-tab ${S.rewardLedgerTab === 'history' ? 'active' : ''}" onclick="App.openRewardLedgerScreen('${esc(selected)}', 'history', false)">ประวัติรับสิทธิ์</button>
         </div>
-
-        ${accordion('reward-history-acc', `ประวัติรับสิทธิ์ <span style="font-size:12px;color:var(--muted);font-weight:600;margin-left:6px">${histRows.length} รายการ</span>`, `
-          <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-            <select style="font-size:12px;padding:4px 8px;border-radius:8px;border:1px solid var(--border);background:var(--elevated);color:var(--text)" onchange="App.openRewardLedgerScreen(this.value)">${filterOpts}</select>
-          </div>
-          ${histHtml}
-        `, false)}
-      </div>`)
+        ${tabContent}
+      </div>`, { animate })
     setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
   }
 
@@ -11384,7 +11385,7 @@ App._pickMerchant = function(name, opts = {}) {
     return { target, current, remaining, pct, daysLeft, suggestedMonthly, estimatedCompletionDate }
   }
 
-  App.openGoalsScreen = function(showArchived = false) {
+  App.openGoalsScreen = function(showArchived = false, animate = true) {
     ensureGoalsState()
     const rows = (S.goals || []).filter(g => showArchived ? g.status === 'archived' : g.status !== 'archived')
     const card = g => {
@@ -11407,9 +11408,9 @@ App._pickMerchant = function(name, opts = {}) {
     }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ตั้งเป้าหมายทางการเงิน</h2><button class="btn btn-primary btn-sm" onclick="App.openGoalForm()" style="width:auto">+ เพิ่ม</button></div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="chips" style="padding:0 0 12px"><button class="chip ${showArchived ? '' : 'active'}" onclick="App.openGoalsScreen(false)">กำลังใช้งาน</button><button class="chip ${showArchived ? 'active' : ''}" onclick="App.openGoalsScreen(true)">เก็บถาวร</button></div>
+        <div class="chips" style="padding:0 0 12px"><button class="chip ${showArchived ? '' : 'active'}" onclick="App.openGoalsScreen(false, false)">กำลังใช้งาน</button><button class="chip ${showArchived ? 'active' : ''}" onclick="App.openGoalsScreen(true, false)">เก็บถาวร</button></div>
         ${rows.length ? rows.map(card).join('') : App._emptyState?.('🎯', showArchived ? 'ยังไม่มีเป้าหมายที่เก็บถาวร' : 'ยังไม่มีเป้าหมาย', 'ใช้วางแผนเงินฉุกเฉิน ท่องเที่ยว ภาษี หรือรายจ่ายประจำปี') || ''}
-      </div>`)
+      </div>`, { animate })
   }
 
   App.openGoalForm = function(goalId = '') {
@@ -13620,7 +13621,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return                         { grade:'F',  color:'#DC2626', label:'วิกฤต' }
   }
 
-  App.openMonthlyReview = function(month) {
+  App.openMonthlyReview = function(month, animate = true) {
     month = month || now()
     const today = new Date().toISOString().slice(0,7)
     const isCurrent    = month === today
@@ -13793,8 +13794,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
         <h2>สรุปรายเดือน</h2>
         <div style="display:flex;gap:2px">
-          <button class="btn-icon" onclick="App.openMonthlyReview('${esc(prev)}')" title="${esc(mlbl(prev))}">‹</button>
-          <button class="btn-icon" ${isNextFuture?'disabled style="opacity:.35;pointer-events:none"':`onclick="App.openMonthlyReview('${esc(next)}')" title="${esc(mlbl(next))}"`}>›</button>
+          <button class="btn-icon" onclick="App.openMonthlyReview('${esc(prev)}', false)" title="${esc(mlbl(prev))}">‹</button>
+          <button class="btn-icon" ${isNextFuture?'disabled style="opacity:.35;pointer-events:none"':`onclick="App.openMonthlyReview('${esc(next)}', false)" title="${esc(mlbl(next))}"`}>›</button>
         </div>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
@@ -13808,7 +13809,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         ${catHtml}
         ${compHtml}
         ${goalsHtml}
-      </div>`)
+      </div>`, { animate })
   }
 
   // ─────────────────────────────────────────────────────────────
