@@ -10636,23 +10636,20 @@ App._pickMerchant = function(name, opts = {}) {
   function buildNextDueDateFromCycle(card, refDate = today()) {
     if (!card) return ''
     const cycleDay = clampCycleDay(card.cycleDay || 25)
-    const [ry, rm] = String(refDate || today()).split('-').map(Number)
+    const ref = String(refDate || today())
+    const [ry, rm] = ref.split('-').map(Number)
     const baseYear = ry || new Date().getFullYear()
     const baseMonthIndex = (rm || 1) - 1
     const buildEndStr = (year, monthIndex) => {
       const day = Calc.clampDay(year, monthIndex, cycleDay)
       return `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
     }
-    let dueDate = resolveCardDueDate(card, buildEndStr(baseYear, baseMonthIndex), refDate)
-    if (String(dueDate || '') < String(refDate || today())) {
-      const nextBase = new Date(baseYear, baseMonthIndex + 1, 1)
-      dueDate = resolveCardDueDate(
-        card,
-        buildEndStr(nextBase.getFullYear(), nextBase.getMonth()),
-        refDate
-      )
-    }
-    return dueDate || ''
+    // Check prev/current/next cycle ends and return the earliest due date >= today
+    const candidates = [-1, 0, 1].map(offset => {
+      const d = new Date(baseYear, baseMonthIndex + offset, 1)
+      return resolveCardDueDate(card, buildEndStr(d.getFullYear(), d.getMonth()), ref)
+    }).filter(d => d && String(d) >= ref).sort()
+    return candidates[0] || ''
   }
 
   function shiftDateStr(dateStr, dayDelta = 0) {
