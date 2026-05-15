@@ -2503,11 +2503,11 @@ App.render();
                 const _selected = S.tx.rewardRuleIds.includes(rule.id)
                 const _typeText = rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : 'ส่วนลดทันที'
                 const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.trackLocked ? '🔒 ยังไม่ถึงยอด' : '', rule.allowStacking ? '' : 'อาจไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
-                const _trackHint = rule.trackLocked ? `<span class="list-item-sub" style="color:var(--expense)">สะสมผ่าน${esc(rule.trackChannelLabel)}อีก ${esc(money(rule.trackRemaining))} ในรอบนี้เพื่อปลดล็อก</span>` : ''
+                const _trackHint = rule.trackLocked ? `<span class="list-item-sub" style="color:var(--expense)">สะสมผ่าน${esc(rule.trackChannelLabel)}อีก ${esc(fmt(rule.trackRemaining))} ในรอบนี้เพื่อปลดล็อก</span>` : ''
                 const _merchantHint = rule.merchantCashbackRemaining != null
                   ? (rule.merchantCashbackRemaining <= 0
                     ? `<span class="list-item-sub" style="color:var(--expense)">ใช้สิทธิ์ในร้านนี้เดือนนี้ครบแล้ว</span>`
-                    : `<span class="list-item-sub" style="color:var(--muted)">เหลือรับเงินคืนได้อีก ${esc(money(rule.merchantCashbackRemaining))} ในร้านนี้เดือนนี้</span>`)
+                    : `<span class="list-item-sub" style="color:var(--muted)">เหลือรับเงินคืนได้อีก ${esc(fmt(rule.merchantCashbackRemaining))} ในร้านนี้เดือนนี้</span>`)
                   : (rule.merchantEligibleRemaining != null && rule.merchantEligibleRemaining <= 0
                     ? `<span class="list-item-sub" style="color:var(--expense)">ยอดคำนวณในร้านนี้เดือนนี้เต็มแล้ว</span>`
                     : '')
