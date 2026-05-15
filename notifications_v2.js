@@ -527,7 +527,7 @@
       </div>
       <div class="sub-scroll">
         <div class="card card-pad" style="margin-bottom:12px;display:flex;gap:8px">
-          <button class="btn btn-secondary btn-sm" onclick="App.syncAllNotificationData()" style="width:auto">Sync ข้อมูลแจ้งเตือน</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.syncAllNotificationData()" style="width:auto">ซิงค์การแจ้งเตือน</button>
           <button class="btn btn-secondary btn-sm" onclick="App.testLocalNotification()" style="width:auto">ทดสอบในเครื่อง</button>
         </div>
         <div class="card"><div style="padding:0 16px">${rows || App._emptyState?.('🔔','ยังไม่มีกฎแจ้งเตือน','สร้างกฎเพื่อกำหนดข้อความ เงื่อนไข และปลายทางเอง') || ''}</div></div>
@@ -711,7 +711,7 @@
       createdAt: existing?.createdAt,
       updatedAt: new Date().toISOString(),
     })
-    if (!rule.title) return notify('กรุณากรอก Title ของแจ้งเตือน', 'error')
+    if (!rule.title) return notify('กรุณากรอกหัวข้อการแจ้งเตือน', 'error')
     const idx = rules.findIndex(item => item.id === rule.id)
     if (idx >= 0) rules[idx] = rule
     else rules.unshift(rule)
@@ -757,8 +757,8 @@
       syncSnapshot({ force: true }),
       syncCustomRules(),
     ])
-      .then(() => notify('Sync ข้อมูลแจ้งเตือนแล้ว', 'success'))
-      .catch(err => notify(err.message || 'Sync ไม่สำเร็จ', 'error'))
+      .then(() => notify('ซิงค์การแจ้งเตือนแล้ว', 'success'))
+      .catch(err => notify(err.message || 'ซิงค์ไม่สำเร็จ', 'error'))
   }
 
   App.syncCustomNotificationRules = function(showToast = false) {
@@ -799,8 +799,8 @@
 
   App.syncNotificationSnapshot = function(force = false) {
     syncSnapshot({ force: Boolean(force) })
-      .then(ok => notify(ok ? 'Sync ข้อมูลแจ้งเตือนแล้ว' : 'ยังไม่ได้ตั้งค่า Notification', ok ? 'success' : 'warn'))
-      .catch(err => notify(err.message || 'Sync ไม่สำเร็จ', 'error'))
+      .then(ok => notify(ok ? 'ซิงค์การแจ้งเตือนแล้ว' : 'ยังไม่ได้ตั้งค่า Notification', ok ? 'success' : 'warn'))
+      .catch(err => notify(err.message || 'ซิงค์ไม่สำเร็จ', 'error'))
   }
 
   App.testLocalNotification = async function() {

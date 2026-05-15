@@ -620,7 +620,7 @@ window.__mountUpcomingBillsFeature = function() {
             const fullSaved = persist()
             if (!directSaved && !fullSaved) throw new Error('persist failed')
           } catch (_) {
-            toast('ลบรายการแล้ว แต่บันทึกสถานะล่าสุดไม่สำเร็จ', 'warn')
+            toast('ลบรายการแล้ว', 'success')
           }
           App.closeOverlay?.('overlay-tx-detail')
           App.render?.()
@@ -650,7 +650,7 @@ window.__mountUpcomingBillsFeature = function() {
             const fullSaved = persist()
             if (!directSaved && !fullSaved) throw new Error('persist failed')
           } catch (_) {
-            toast('ลบรายการแล้ว แต่บันทึกสถานะล่าสุดไม่สำเร็จ', 'warn')
+            toast('ลบรายการแล้ว', 'success')
           }
           if (backType === 'cc' && backId) App.openCCDetail?.(backId)
           else if (backType === 'wallet' && backId) App.openWalletDetail?.(backId)
@@ -808,7 +808,7 @@ function persist() {
   try { App.ensurePrivilegesState?.() } catch (_) {}
   const ok = Storage.saveAll(S)
   if (!ok) {
-    try { toast('บันทึกข้อมูลไม่สำเร็จ กรุณาส่งออก JSON สำรองไว้ก่อน', 'error') } catch (_) {}
+    try { toast('บันทึกไม่สำเร็จ — แนะนำสำรองข้อมูลก่อนลองใหม่', 'error') } catch (_) {}
   }
   return ok
 }
@@ -1610,7 +1610,7 @@ App.render();
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
-    toast('คัดลอกรายการแล้ว แก้จำนวนเงินก่อนบันทึกได้', 'info')
+    toast('คัดลอกแล้ว แก้รายละเอียดก่อนบันทึกได้', 'info')
   }
 
   App.openWalletDetail = function(id) {
@@ -2510,7 +2510,7 @@ App.render();
     }
     const tempWallet = { ...(w || {}), type, symbol: symbol?.value || w?.symbol, currency: symbol?.value || w?.currency }
     const unitPrice = App._investmentUnitPriceTHB(tempWallet)
-    priceBox.innerHTML = `<div><strong>ราคาจริง</strong><span>${esc(marketSourceLabel(type))}${unitPrice ? ` · ${fmt(unitPrice)}/${esc(assetUnitLabel(type))}` : ' · ยังไม่ sync'}</span></div><a href="${esc(marketUrlFor(type, w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a>`
+    priceBox.innerHTML = `<div><strong>ราคาจริง</strong><span>${esc(marketSourceLabel(type))}${unitPrice ? ` · ${fmt(unitPrice)}/${esc(assetUnitLabel(type))}` : ' · ยังไม่อัปเดต'}</span></div><a href="${esc(marketUrlFor(type, w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a>`
   }
 
   try { App.render?.() } catch (_) {}
@@ -3613,7 +3613,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (!hasBaseline) {
       App.showConfirm({
         title: 'ตั้งค่า Baseline',
-        body: 'ระบบจะบันทึกยอดปัจจุบันเป็น Baseline เพื่อตรวจจับการเบี่ยงเบนในอนาคต ยืนยัน?',
+        body: 'บันทึกยอดตอนนี้เป็นจุดอ้างอิง ดำเนินการต่อ?',
         confirmLabel: 'ตั้งค่า',
         onConfirm() { App._snapshotOpeningBalances(); toast('บันทึก Baseline แล้ว', 'success') }
       })
@@ -4326,7 +4326,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const tx = (S.transactions || []).find(t => t.id === id)
     if (!tx) return
     const back = backType === 'cc' ? `App.openCCDetail('${esc(backId)}')` : backType === 'wallet' ? `App.openWalletDetail('${esc(backId)}')` : 'App.closeSubScreen()'
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>รายละเอียดรายการ</h2></div><div class="sub-scroll tx-detail-sub-screen">${App._txDetailRowsHtml(tx)}<div class="tx-action-grid"><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openEditTx('${esc(tx.id)}')">✏️ แก้ไข</button><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openDuplicateTx('${esc(tx.id)}')">⧉ ทำซ้ำ</button></div><button class="btn btn-outline mt-8" onclick="App.deleteTxFromSub('${esc(tx.id)}','${esc(backType || '')}','${esc(backId || '')}')">🗑 ลบรายการ</button>${tx.isRewardReceived ? '<div class="form-hint" style="margin-top:8px">เมื่อลบ Cashback ระบบจะ rollback ให้กลับไปรับ Cashback รอบนี้ได้อีกครั้ง</div>' : ''}</div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>รายละเอียดรายการ</h2></div><div class="sub-scroll tx-detail-sub-screen">${App._txDetailRowsHtml(tx)}<div class="tx-action-grid"><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openEditTx('${esc(tx.id)}')">✏️ แก้ไข</button><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openDuplicateTx('${esc(tx.id)}')">⧉ ทำซ้ำ</button></div><button class="btn btn-outline mt-8" onclick="App.deleteTxFromSub('${esc(tx.id)}','${esc(backType || '')}','${esc(backId || '')}')">🗑 ลบรายการ</button>${tx.isRewardReceived ? '<div class="form-hint" style="margin-top:8px">ถ้าลบรายการนี้ จะรับ Cashback รอบนี้ได้ใหม่</div>' : ''}</div>`)
   }
 
   // ── 4. Reports rollback: restore previous report structure ─────────────────
@@ -5097,16 +5097,16 @@ App._pickMerchant = function(name, opts = {}) {
     if (!msg || m === 'unknown') return 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ กรุณาลองใหม่'
     if (/fetch|network|failed to fetch|networkerror/i.test(m)) return 'ไม่สามารถเชื่อมต่ออินเทอร์เน็ตได้ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่'
     if (/timeout|abort|aborted/i.test(m)) return 'ใช้เวลานานเกินไป (timeout) — เว็บไซต์อาจช้าหรือไม่ตอบสนอง ลองใหม่อีกครั้ง'
-    if (/http 429|429/i.test(m)) return 'server รับคำขอมากเกินไป กรุณารอสักครู่แล้วลองใหม่'
+    if (/http 429|429/i.test(m)) return 'เซิร์ฟเวอร์ยุ่งอยู่ ลองใหม่สักครู่'
     if (/http 403|403/i.test(m)) return 'เว็บไซต์ไม่อนุญาตให้ดึงข้อมูล (403 Forbidden)'
     if (/http 404|404/i.test(m)) return 'ไม่พบหน้าเว็บนี้ (404) — ลิงก์อาจผิดหรือหมดอายุแล้ว'
     if (/http 5\d\d|500|502|503|504/i.test(m)) return 'เว็บไซต์มีปัญหาชั่วคราว กรุณาลองใหม่ในภายหลัง'
     if (/cors|cross.?origin/i.test(m)) return 'เว็บไซต์ไม่อนุญาตให้แอปอื่นดึงข้อมูล (CORS)'
-    if (/not defined|is not a function|cannot read/i.test(m)) return 'เกิดข้อผิดพลาดภายในแอป กรุณาแจ้งผู้พัฒนา'
-    if (/gemini error|endpoint http/i.test(m)) return 'AI (Gemini) ตอบกลับผิดปกติ กรุณาลองใหม่'
+    if (/not defined|is not a function|cannot read/i.test(m)) return 'เกิดข้อผิดพลาด ลองรีโหลดแอปดู'
+    if (/gemini error|endpoint http/i.test(m)) return 'โหลดข้อมูลไม่ได้ ลองอีกครั้ง'
     if (/น้อยเกินไป|เนื้อหาน้อย/i.test(m)) return 'ดึงเนื้อหาจากหน้าเว็บได้น้อยเกินไป ลองใช้ลิงก์หน้าโปรโมชันโดยตรง'
     // Fallback: ตัดชื่อ function ออกถ้ายังมีติดมา
-    return m.replace(/[a-z_][a-z0-9_]*\s+is not (a function|defined)/gi, 'ระบบเกิดข้อผิดพลาดภายใน').slice(0, 120)
+    return m.replace(/[a-z_][a-z0-9_]*\s+is not (a function|defined)/gi, 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง').slice(0, 120)
   }
   const persist = () => { try { Storage.saveAll(S) } catch (_) {} }
   const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
@@ -5751,7 +5751,7 @@ App._pickMerchant = function(name, opts = {}) {
       }
     }
     if (isFileOrigin) {
-      throw new Error('ไม่สามารถอ่านหน้าเว็บไซต์ได้จากโหมด file:// ในเบราว์เซอร์นี้ กรุณาเปิดแอปผ่าน http://localhost เพื่อให้การวิเคราะห์ลิงก์ทำงานได้เสถียรกว่าเดิม')
+      throw new Error('ไม่รองรับการอ่านลิงก์ในโหมดนี้')
     }
     throw lastError || new Error('ไม่สามารถอ่านหน้าเว็บไซต์ได้')
   }
@@ -6571,7 +6571,7 @@ App._pickMerchant = function(name, opts = {}) {
   App.verifyBenefitEndpoint = async function() {
     const resultEl = document.getElementById('cc-benefit-import-result')
     const endpoint = String(window.MT_PROMO_SEARCH_ENDPOINT || '').trim()
-    if (!endpoint) { notify('ยังไม่ได้ตั้งค่า MT_PROMO_SEARCH_ENDPOINT', 'error'); return }
+    if (!endpoint) { notify('ฟีเจอร์นี้ยังไม่พร้อมใช้งาน', 'error'); return }
     if (resultEl) resultEl.innerHTML = `<div class="card card-pad">กำลังตรวจสอบ endpoint...</div>`
     try {
       const res = await fetch(endpoint, {
@@ -6655,7 +6655,7 @@ App._pickMerchant = function(name, opts = {}) {
         const promotions = Array.isArray(parsed.promotions) ? parsed.promotions : []
         ruleDrafts = promotions.flatMap(p => App._promotionDraftToRuleDrafts(cardId, p))
         diagnostics.push(...(parsed.diagnostics || []))
-        diagnostics.push('ยังไม่ได้ตั้งค่า MT_PROMO_SEARCH_ENDPOINT — ใช้การวิเคราะห์แบบ regex')
+        diagnostics.push('ฟีเจอร์ค้นหาโปรโมชันยังไม่พร้อมใช้งาน — ใช้การวิเคราะห์แบบ regex')
       }
 
       // Stamp stable ids once so repeated edit-button clicks don't generate new ids
@@ -8952,7 +8952,7 @@ App._pickMerchant = function(name, opts = {}) {
     const pendingAssets = (assets || []).filter(asset => normalizeCoinGeckoId(asset?.coinGeckoId))
     if (!pendingAssets.length) return { prices: {}, syncedIds: [], failedIds: [] }
     const usdThb = await fetchUsdThbRate()
-    if (!(usdThb > 0)) throw new Error('ไม่พบอัตรา USD/THB สำหรับ CoinCap fallback')
+    if (!(usdThb > 0)) throw new Error('ไม่พบอัตราแลกเปลี่ยน USD/THB')
     const rows = await fetchCoinCapRows()
     const fetchedAt = nowISO()
     const prices = {}
@@ -9353,7 +9353,7 @@ App._pickMerchant = function(name, opts = {}) {
 
       if (!silent) {
         if (finalSyncedIds.length && !finalFailedIds.length) {
-          notify(fallbackSyncedIds.length ? 'Sync ราคา Crypto สำเร็จ (มี CoinCap fallback)' : 'Sync ราคา Crypto สำเร็จ', 'success')
+          notify('อัปเดตราคา Crypto แล้ว', 'success')
         } else if (finalSyncedIds.length) {
           notify('Sync ราคา Crypto ได้บางส่วน บางเหรียญใช้ราคาสำรองเดิม', 'warn')
         } else {
@@ -9797,7 +9797,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (duplicate && !forceDuplicate) {
       App.showConfirm?.({
         title: 'พบเหรียญซ้ำใน Location เดียวกัน',
-        body: 'ต้องการบันทึกต่อหรือไม่? ระบบจะแยก holding ไว้คนละรายการ',
+        body: 'จะบันทึกเป็น 2 รายการแยกกัน ดำเนินการต่อ?',
         confirmLabel: 'บันทึกต่อ',
         onConfirm() { App.saveCryptoHolding(holdingId, true) },
       })
@@ -9929,7 +9929,7 @@ App._pickMerchant = function(name, opts = {}) {
     const holdings = summary.holdings.slice().sort((a, b) => compareHoldingsBySort(a, b, sortKey))
     const holdingGroups = buildCryptoHoldingGroups(holdings, sortKey)
     const txRows = (S.cryptoTransactions || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 30)
-    const lastUpdated = summary.lastUpdatedAt ? new Date(summary.lastUpdatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : 'ยังไม่ sync'
+    const lastUpdated = summary.lastUpdatedAt ? new Date(summary.lastUpdatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : 'ยังไม่อัปเดต'
     const selected = holdings.find(h => h.id === selectedHoldingId) || holdings[0] || null
     const actionButtons = selected ? `<div class="crypto-action-row"><button class="btn btn-secondary" onclick="App.openCryptoTxForm('adjust','${esc(selected.id)}')">Adjust</button><button class="btn btn-outline" onclick="App.openCryptoHoldingForm('${esc(selected.id)}')">Edit</button></div>` : ''
     const sortOptions = [
@@ -10063,7 +10063,7 @@ App._pickMerchant = function(name, opts = {}) {
     const empty = txt => `<div class="card card-pad wallet-empty-card">${esc(txt)}</div>`
     const section = (title, icon, list, emptyTxt, grid, extra = '', anchorId = '') =>
       `<section class="wallet-section-block"${anchorId ? ` id="${anchorId}"` : ''}><div class="wallet-section-title wallet-section-title-row"><span>${icon} ${esc(title)}</span>${extra}</div>${list.length ? `<div class="${grid ? 'wallet-grid-2' : 'wallet-list-stack'}">${list.map(App._walletCard).join('')}</div>` : empty(emptyTxt)}</section>`
-    const cryptoUpdated = cryptoSummary.lastUpdatedAt ? new Date(cryptoSummary.lastUpdatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : 'ยังไม่ sync'
+    const cryptoUpdated = cryptoSummary.lastUpdatedAt ? new Date(cryptoSummary.lastUpdatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : 'ยังไม่อัปเดต'
     const cryptoHoldingsHtml = cryptoSummary.holdings.length
       ? `<div class="crypto-holdings-grid">${cryptoSummary.holdings.slice().sort((a, b) => App.getCryptoHoldingValueTHB(b) - App.getCryptoHoldingValueTHB(a)).map(createHoldingRow).join('')}</div>`
       : `<div class="wallet-empty-card crypto-empty-state"><div><b>ยังไม่มี Crypto Holding</b><div class="list-item-sub">เพิ่ม BTC, ETH, USDT หรือเหรียญ custom ได้ที่นี่</div></div><button class="btn btn-primary" onclick="event.stopPropagation();App.openCryptoHoldingForm()" style="width:auto">เพิ่มเหรียญแรก</button></div>`
@@ -11186,7 +11186,7 @@ App._pickMerchant = function(name, opts = {}) {
     const rewardAcctHtml = rewardAcct ? `<div class="v5-reward-acct-info"><span>⭐ ${esc(rewardAcct.name)}</span><strong>${App.getRewardAccountBalance(rewardAcct.id).toLocaleString('en-US')} คะแนน</strong></div>` : ''
     const hasRewards = rewards.points > 0 || rewards.cashback > 0
     const alreadyRecorded = st && statementRewardRecorded(st.id)
-    const recordBtn = hasRewards ? `<button class="btn btn-primary btn-sm v5-record-btn" onclick="App.recordActualRewards('${esc(cardId)}')" style="width:100%;margin-top:8px">${alreadyRecorded ? '✓ บันทึกแล้ว · บันทึกซ้ำ?' : 'บันทึกยอด'}</button>` : ''
+    const recordBtn = hasRewards ? `<button class="btn btn-primary btn-sm v5-record-btn" onclick="App.recordActualRewards('${esc(cardId)}')" style="width:100%;margin-top:8px">${alreadyRecorded ? 'บันทึกแล้ว — เพิ่มอีกรายการ?' : 'บันทึกยอด'}</button>` : ''
     const stHtml = st ? `<div class="statement-compact statement-compact-th"><div class="statement-main"><div><b>สรุปรอบบัตรเครดิต</b><span>รอบ ${thaiDate(st.start)} – ${thaiDate(st.end)}</span><span>วันกำหนดชำระ ${thaiDate(st.dueDate)}</span></div><em class="status-pill ${st.paid?'ok':'warn'}">${statusText(st)}</em></div><div class="statement-metrics"><div><span>ยอดใช้ในรอบ</span><strong>${money(st.purchaseTotal)}</strong></div><div><span>ชำระแล้ว</span><strong>${money(st.paidTotal)}</strong></div><div><span>ค้างชำระ</span><strong>${money(st.balanceDue)}</strong></div></div><button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen('${esc(cardId)}')">สมุดสิทธิประโยชน์</button></div>` : ''
     // Hero section: show total owed (posted + committed installments).
     // When there are committed installments, show a sub-line with breakdown.
@@ -11254,7 +11254,7 @@ App._pickMerchant = function(name, opts = {}) {
     App.ensurePrivilegesState?.()
     const saved = persist()
     if (!saved) {
-      notify('ยังส่งออกไม่ได้ เพราะบันทึกลง local storage ไม่สำเร็จ', 'error')
+      notify('ส่งออกไม่ได้ขณะนี้ — ลองบันทึกรายการใหม่ก่อน', 'error')
       return
     }
     const verification = Storage.verifyState?.(S, ['transactions', 'wallets', 'settings', 'upcomingBills', 'goals', 'privileges']) || { ok: true, failures: [] }
@@ -11285,7 +11285,7 @@ App._pickMerchant = function(name, opts = {}) {
         title:'ตรวจสอบก่อนนำเข้า',
         danger:true,
         confirmLabel:'นำเข้า',
-        body:`Wallets: ${(payload.wallets||[]).length} · Transactions: ${(payload.transactions||[]).length} · ระบบจะเก็บ backup ก่อนแทนที่ข้อมูลปัจจุบัน`,
+        body:`Wallets: ${(payload.wallets||[]).length} · Transactions: ${(payload.transactions||[]).length} · ข้อมูลเดิมจะถูกสำรองไว้ก่อนนำเข้า`,
         onConfirm() {
           try { Storage.createLocalBackup?.(S, 'before-import') } catch (_) {}
           try { localStorage.setItem('mt_pre_import_backup', JSON.stringify(Storage.buildExportPayload(S))) } catch (_) {}
@@ -11594,7 +11594,7 @@ App._pickMerchant = function(name, opts = {}) {
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen();${input ? "document.getElementById('import-file-v5').value=''" : ''}">←</button><h2>Preview นำเข้า</h2></div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="card card-pad" style="margin-bottom:12px"><div class="report-category-title">ข้อมูลในไฟล์สำรอง</div><div class="reward-grid" style="margin-top:10px">${counts}</div>${(checked.warnings || []).length ? `<div class="form-hint" style="margin-top:10px">คำเตือน ${checked.warnings.length} จุด: ${esc(checked.warnings.slice(0,3).join(' · '))}</div>` : ''}</div>
-        <div class="card card-pad"><button class="btn btn-primary" onclick="App.confirmImportPayload('merge')">Merge: เพิ่มเฉพาะข้อมูลใหม่</button><button class="btn btn-outline mt-8" onclick="App.confirmImportPayload('replace')">Replace: แทนที่ข้อมูลทั้งหมด</button><div class="form-hint" style="margin-top:10px">ระบบจะสร้าง local backup ก่อนนำเข้าทุกครั้ง Merge จะไม่เขียนทับ id ที่มีอยู่แล้ว</div></div>
+        <div class="card card-pad"><button class="btn btn-primary" onclick="App.confirmImportPayload('merge')">Merge: เพิ่มเฉพาะข้อมูลใหม่</button><button class="btn btn-outline mt-8" onclick="App.confirmImportPayload('replace')">Replace: แทนที่ข้อมูลทั้งหมด</button><div class="form-hint" style="margin-top:10px">แอปจะสำรองข้อมูลเดิมไว้เสมอก่อนนำเข้า Merge จะไม่เขียนทับรายการที่มีอยู่แล้ว</div></div>
       </div>`)
     App._pendingImportPayload = payload
     if (input) input.value = ''
@@ -12614,7 +12614,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           </div>
           <div class="privilege-sheet-actions">
             <button class="btn btn-secondary" onclick="document.getElementById('privilege-used-overlay')?.remove()">ยกเลิก</button>
-            <button class="btn btn-primary" onclick="App.confirmPrivilegeUsed('${esc(privilege.id)}')">ยืนยัน</button>
+            <button class="btn btn-primary" onclick="App.confirmPrivilegeUsed('${esc(privilege.id)}')">บันทึกการใช้</button>
           </div>
         </div>
       </div>`
@@ -15139,5 +15139,513 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   })()
 
   // N30: Empty state multi-bounce handled by CSS override of .empty-icon
+
+})()
+
+/* ================================================================
+   MT Animation Suite · Wave 2  (A1–A8 + B1–B26)
+   Non-invasive IIFE. All wrappers chain via the standard
+   _prev = App.fn?.bind(App) pattern.
+   ================================================================ */
+;(function () {
+  'use strict'
+  if (typeof App === 'undefined' || typeof S === 'undefined') return
+
+  // ── Lite count-up helper (Wave 1's _countUp is IIFE-private) ──
+  function _cu(el, dur) {
+    if (!el || S.settings?.hideMoney) return
+    const orig = (el.textContent || '').trim()
+    if (!orig || orig.includes('*')) return
+    const numStr = orig.replace(/[^0-9.]/g, '')
+    const val    = parseFloat(numStr)
+    if (!isFinite(val) || val === 0) return
+    const hasDec  = /\.\d/.test(orig)
+    const hasBaht = orig.includes('฿')
+    const isNeg   = /^[-–]/.test(orig) || /฿\s*[-–]/.test(orig)
+    const t0      = performance.now()
+    ;(function tick(now) {
+      const p    = Math.min((now - t0) / dur, 1)
+      if (p >= 1) { el.textContent = orig; return }
+      const ease = 1 - (1 - p) ** 3
+      const cur  = val * ease
+      const fmt  = hasDec
+        ? cur.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : Math.round(cur).toLocaleString('th-TH')
+      el.textContent = (isNeg ? '-' : '') + (hasBaht ? '฿' : '') + fmt
+      requestAnimationFrame(tick)
+    })(t0)
+  }
+
+  // ── A1: Sub-screen exit slide animation ───────────────────────
+  const _prevCloseSubScreen = App.closeSubScreen?.bind(App)
+  App.closeSubScreen = function () {
+    const ss = document.getElementById('sub-screen')
+    if (!ss?.classList.contains('open')) {
+      _prevCloseSubScreen?.()
+      return
+    }
+    ss.classList.add('mt-sub-closing')
+    setTimeout(() => {
+      ss.classList.remove('mt-sub-closing')
+      _prevCloseSubScreen?.()
+    }, 280)
+  }
+
+  // ── A2 + B3 + B4: renderWallets combined hook ─────────────────
+  ;(function _patchRWave2() {
+    const _prev = App.renderWallets?.bind(App)
+    App.renderWallets = function (...args) {
+      _prev?.(...args)
+      try {
+        // A2: wallet card entrance stagger
+        document.querySelectorAll('#wallets-content .wallet-card:not(.mt-anim-in)').forEach((card, i) => {
+          card.classList.add('mt-anim-in')
+          card.style.animationDelay = `${Math.min(i * 65, 390)}ms`
+        })
+        // B3: CC urgent pulse for cards due ≤ 7 days
+        ;(S.wallets || []).filter(w => w.type === 'credit').forEach(w => {
+          try {
+            const stmt = App.getCardStatement?.(w.id)
+            if (!stmt?.due?.daysLeft || stmt.due.daysLeft > 7) return
+            const card = document.querySelector(
+              `#wallets-content .wallet-card-credit[onclick*="${CSS.escape ? CSS.escape(w.id) : w.id}"]`
+            )
+            if (card) card.classList.add('mt-cc-urgent-pulse')
+          } catch (_) {}
+        })
+        // B4: wallet summary count-up
+        document.querySelectorAll('#wallets-summary strong').forEach(el => _cu(el, 900))
+      } catch (_) {}
+    }
+  })()
+
+  // ── A3: FAB scroll hide/show ──────────────────────────────────
+  let _fabHidden = false
+  let _fabLastY   = 0
+  ;(function _setupFabScroll() {
+    document.addEventListener('scroll', function (e) {
+      const fab = document.getElementById('fab')
+      if (!fab || fab.classList.contains('hidden')) return
+      if (!e.target?.classList?.contains('page-scroll')) return
+      const cur   = e.target.scrollTop || 0
+      const delta = cur - _fabLastY
+      _fabLastY   = cur
+      if (delta > 8 && !_fabHidden && cur > 60) {
+        _fabHidden = true
+        fab.classList.add('mt-fab-hidden')
+      } else if (delta < -5 && _fabHidden) {
+        _fabHidden = false
+        fab.classList.remove('mt-fab-hidden')
+      }
+    }, { passive: true, capture: true })
+  })()
+
+  // Reset FAB when switching tabs
+  ;(function _patchShowPageFab() {
+    const _prev = App.showPage?.bind(App)
+    App.showPage = function (page) {
+      _prev?.(page)
+      _fabHidden = false
+      _fabLastY  = 0
+      document.getElementById('fab')?.classList.remove('mt-fab-hidden')
+    }
+  })()
+
+  // ── A4 + B15: Sub-screen list & tx stagger ────────────────────
+  ;(function _watchSubScreenItems() {
+    const _seen = new WeakSet()
+    function _stagger(root) {
+      // list-item / recurring-item stagger (A4)
+      root.querySelectorAll(
+        '.list-item:not(.mt-anim-in), .recurring-item:not(.mt-anim-in)'
+      ).forEach((el, i) => {
+        if (_seen.has(el)) return
+        _seen.add(el)
+        el.classList.add('mt-anim-in')
+        el.style.animationDelay = `${Math.min(i * 50, 350)}ms`
+      })
+      // tx rows in wallet detail (B15)
+      root.querySelectorAll(
+        '.tx-row:not(.mt-anim-in), .tx-row-modern:not(.mt-anim-in)'
+      ).forEach((row, i) => {
+        if (_seen.has(row)) return
+        _seen.add(row)
+        row.classList.add('mt-anim-in')
+        row.style.animationDelay = `${Math.min(i * 45, 300)}ms`
+      })
+    }
+    const ss = document.getElementById('sub-screen')
+    if (ss) {
+      new MutationObserver(() => {
+        try { if (ss.classList.contains('open')) _stagger(ss) } catch (_) {}
+      }).observe(ss, { childList: true, subtree: true })
+    }
+  })()
+
+  // ── A5: Toggle click flash the parent settings-row (B18 merged)
+  document.addEventListener('click', function (e) {
+    const tog = e.target.closest('.toggle')
+    if (!tog) return
+    const row = tog.closest('.settings-row')
+    if (!row) return
+    row.classList.remove('mt-row-flash')
+    void row.offsetWidth
+    row.classList.add('mt-row-flash')
+    setTimeout(() => row.classList.remove('mt-row-flash'), 700)
+  })
+
+  // ── A6: CC payment success animation ──────────────────────────
+  ;(function _patchSaveCCPay() {
+    const _prev = App.saveCCPay?.bind(App)
+    if (!_prev) return
+    App.saveCCPay = function (...args) {
+      let _ok = false
+      const _orig = window.toast
+      window.toast = function (msg, type, ...rest) {
+        if (type === 'success') _ok = true
+        return _orig?.(msg, type, ...rest)
+      }
+      try { _prev?.(...args) } finally { window.toast = _orig }
+      if (!_ok) return
+      // Checkmark overlay
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      svg.setAttribute('viewBox', '0 0 64 64')
+      svg.setAttribute('width',  '80')
+      svg.setAttribute('height', '80')
+      svg.className = 'mt-checkmark-overlay'
+      svg.innerHTML = '<circle cx="32" cy="32" r="30"/><path d="M20 32l9 9 15-18"/>'
+      document.body.appendChild(svg)
+      setTimeout(() => svg.remove(), 1700)
+      // Confetti burst
+      setTimeout(() => {
+        const fab = document.getElementById('fab')
+        const rect = fab?.getBoundingClientRect()
+        window.MT_confetti?.(
+          rect ? rect.left + rect.width  / 2 : window.innerWidth  / 2,
+          rect ? rect.top  + rect.height / 2 : window.innerHeight / 2
+        )
+      }, 160)
+    }
+  })()
+
+  // ── A8: Amount display first-valid entry pulse ─────────────────
+  ;(function _watchAmountFirst() {
+    let _wasZero = true
+    document.addEventListener('pointerdown', function (e) {
+      if (!e.target.closest('.numpad-key')) return
+      setTimeout(() => {
+        const disp = document.querySelector(
+          '.amount-display, #add-amount-display, [class*="amount-display"]'
+        )
+        if (!disp) return
+        const raw    = parseFloat(disp.textContent.replace(/[^0-9.]/g, ''))
+        const isNow  = isFinite(raw) && raw > 0
+        if (_wasZero && isNow) {
+          disp.classList.remove('mt-amount-valid')
+          void disp.offsetWidth
+          disp.classList.add('mt-amount-valid')
+          setTimeout(() => disp.classList.remove('mt-amount-valid'), 450)
+        }
+        _wasZero = !isNow
+      }, 20)
+    })
+    // Reset on every add-tx open
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('#fab')) _wasZero = true
+    })
+  })()
+
+  // ── B2: Search clear (×) button ───────────────────────────────
+  ;(function _injectSearchClear() {
+    const tx = document.getElementById('tx-search')
+    if (!tx) return
+    const wrapper = tx.parentElement
+    if (!wrapper || wrapper.querySelector('.mt-search-clear')) return
+    const btn = document.createElement('button')
+    btn.className = 'mt-search-clear'
+    btn.setAttribute('aria-label', 'ล้างการค้นหา')
+    btn.innerHTML = '×'
+    btn.style.cssText = [
+      'position:absolute', 'right:12px', 'top:50%',
+      'transform:translateY(-50%)', 'background:none', 'border:none',
+      'font-size:20px', 'line-height:1', 'color:var(--muted)', 'cursor:pointer',
+      'padding:4px 6px', 'opacity:0',
+      'transition:opacity .2s ease', 'z-index:2',
+    ].join(';')
+    if (getComputedStyle(wrapper).position === 'static') {
+      wrapper.style.position = 'relative'
+    }
+    wrapper.appendChild(btn)
+    tx.addEventListener('input', () => {
+      btn.style.opacity = tx.value ? '1' : '0'
+    })
+    btn.addEventListener('click', () => {
+      tx.value = ''
+      tx.dispatchEvent(new Event('input', { bubbles: true }))
+      btn.style.opacity = '0'
+      tx.focus()
+    })
+  })()
+
+  // ── B5: CC benefit wizard step-dot entrance animation ─────────
+  ;(function _watchStepDots() {
+    const _seen = new WeakSet()
+    function _animDots(root) {
+      root.querySelectorAll('.ccbr-step-dot').forEach((dot, i) => {
+        if (_seen.has(dot)) return
+        _seen.add(dot)
+        dot.style.opacity   = '0'
+        dot.style.transform = 'scale(.3)'
+        dot.style.transition = [
+          `opacity .28s ${i * 65}ms ease`,
+          `transform .28s ${i * 65}ms cubic-bezier(.34,1.56,.64,1)`,
+          'all .25s ease',   // preserves width/bg transitions from base CSS
+        ].join(', ')
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          dot.style.opacity   = '1'
+          dot.style.transform = 'scale(1)'
+        }))
+      })
+    }
+    const ss = document.getElementById('sub-screen')
+    if (ss) {
+      new MutationObserver(() => {
+        try { _animDots(ss) } catch (_) {}
+      }).observe(ss, { childList: true, subtree: true })
+    }
+  })()
+
+  // ── B6: Recurring ✓ post-now burst ────────────────────────────
+  ;(function _patchPostRecurringNow() {
+    const _prev = App.postRecurringNow?.bind(App)
+    if (!_prev) return
+    App.postRecurringNow = function (id, ...rest) {
+      // Capture the button before the sub-screen re-renders
+      const btn = document.querySelector(
+        `.recurring-item .icon-btn[onclick*="postRecurringNow('${id}')"], ` +
+        `.recurring-item .icon-btn[onclick*="postRecurringNow(\\"${id}\\")"]`
+      )
+      let _ok = false
+      const _orig = window.toast
+      window.toast = function (msg, type, ...rest2) {
+        if (type === 'success') _ok = true
+        return _orig?.(msg, type, ...rest2)
+      }
+      try { _prev(id, ...rest) } finally { window.toast = _orig }
+      if (_ok && btn && btn.isConnected) {
+        btn.classList.remove('mt-rec-ok')
+        void btn.offsetWidth
+        btn.classList.add('mt-rec-ok')
+        setTimeout(() => btn.classList.remove('mt-rec-ok'), 560)
+      }
+    }
+  })()
+
+  // ── B8: Gold wallet blink after market price refresh ──────────
+  ;(function _patchGoldBlink() {
+    const _prev = App.refreshMarketPrices?.bind(App)
+    if (!_prev) return
+    App.refreshMarketPrices = function (...args) {
+      const result = _prev?.(...args)
+      Promise.resolve(result).then(() => {
+        try {
+          ;(S.wallets || []).filter(w => w.type === 'gold').forEach(w => {
+            const el = document.querySelector(
+              `#wallets-content .wallet-card[onclick*="${w.id}"], ` +
+              `#dashboard-content [data-wallet-id="${w.id}"]`
+            )
+            if (!el) return
+            el.classList.remove('mt-gold-blink')
+            void el.offsetWidth
+            el.classList.add('mt-gold-blink')
+            setTimeout(() => el.classList.remove('mt-gold-blink'), 1600)
+          })
+        } catch (_) {}
+      }).catch(() => {})
+      return result
+    }
+  })()
+
+  // ── B10: Reports income/expense count-up ──────────────────────
+  ;(function _patchRReportsCountUp() {
+    const _prev = App.renderReports?.bind(App)
+    App.renderReports = function (...args) {
+      _prev?.(...args)
+      try {
+        // Target summary values — avoid re-hitting category bars already handled by Wave 1
+        document.querySelectorAll(
+          '#reports-content .report-summary strong, ' +
+          '#reports-content .report-total strong, ' +
+          '#reports-content .summary-value strong, ' +
+          '#reports-content .card > div > strong'
+        ).forEach(el => _cu(el, 950))
+      } catch (_) {}
+    }
+  })()
+
+  // ── B11: Tab-strip button tap bounce ──────────────────────────
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.tab-btn')
+    if (!btn) return
+    btn.classList.remove('mt-tab-bounce')
+    void btn.offsetWidth
+    btn.classList.add('mt-tab-bounce')
+    setTimeout(() => btn.classList.remove('mt-tab-bounce'), 340)
+  })
+
+  // ── B13: Budget ring warn pulse when fill >80% ─────────────────
+  ;(function _watchBudgetRingWarn() {
+    const _seen = new WeakSet()
+    function _checkRings(scope) {
+      scope.querySelectorAll('.mt-budget-ring-wrap').forEach(wrap => {
+        if (_seen.has(wrap)) return
+        _seen.add(wrap)
+        // Walk up to find the progress bar sibling / parent
+        const container = wrap.closest(
+          '.progress-wrap, .budget-progress-wrap, [class*="progress"]'
+        ) || wrap.parentElement
+        const fill = container?.querySelector('.progress-fill, .wc-prog-fill')
+        if (!fill) return
+        const pct = parseFloat(fill.style.width) || 0
+        if (pct > 80) wrap.classList.add('mt-ring-warn')
+      })
+    }
+    new MutationObserver(() => {
+      try {
+        ['wallets-content', 'dashboard-content', 'reports-content'].forEach(id => {
+          const el = document.getElementById(id)
+          if (el) _checkRings(el)
+        })
+      } catch (_) {}
+    }).observe(document.getElementById('app') || document.body, {
+      childList: true, subtree: true,
+    })
+  })()
+
+  // ── B16: Save button flash on successful saveTx ───────────────
+  ;(function _patchSaveTxBtnFlash() {
+    const _prev = App.saveTx?.bind(App)
+    if (!_prev) return
+    App.saveTx = function (...args) {
+      let _ok = false
+      const _orig = window.toast
+      window.toast = function (msg, type, ...rest) {
+        if (type === 'success') _ok = true
+        return _orig?.(msg, type, ...rest)
+      }
+      try { _prev?.(...args) } finally { window.toast = _orig }
+      if (!_ok) return
+      const btn = document.querySelector(
+        '#add-tx-content .btn-primary, #sheet-add-tx .btn-primary'
+      )
+      if (!btn) return
+      btn.classList.remove('mt-btn-saved')
+      void btn.offsetWidth
+      btn.classList.add('mt-btn-saved')
+      setTimeout(() => btn.classList.remove('mt-btn-saved'), 620)
+    }
+  })()
+
+  // ── B18: Notification rule & recurring row toggle flash ───────
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest(
+      '.icon-btn[onclick*="toggleNotificationRule"], ' +
+      '.icon-btn[onclick*="toggleRecurring"]'
+    )
+    if (!btn) return
+    const row = btn.closest('.recurring-item, .list-item, [class*="notification-rule"]')
+    if (!row) return
+    row.classList.remove('mt-row-flash')
+    void row.offsetWidth
+    row.classList.add('mt-row-flash')
+    setTimeout(() => row.classList.remove('mt-row-flash'), 700)
+  })
+
+  // ── B19: Dashboard cold-start section entrance ────────────────
+  ;(function _dashColdStart() {
+    // Only on the very first render in this browser session
+    if (sessionStorage.getItem('mt_w2_dash_entered')) return
+    sessionStorage.setItem('mt_w2_dash_entered', '1')
+    let _done = false
+    const _prev = App.renderDashboard?.bind(App)
+    App.renderDashboard = function (...args) {
+      _prev?.(...args)
+      if (_done) return
+      _done = true
+      try {
+        const content = document.getElementById('dashboard-content')
+        if (!content) return
+        Array.from(content.children).forEach((section, i) => {
+          section.classList.add('mt-section-entrance')
+          section.style.animationDelay = `${i * 75}ms`
+          setTimeout(
+            () => section.classList.remove('mt-section-entrance'),
+            600 + i * 75
+          )
+        })
+      } catch (_) {}
+    }
+  })()
+
+  // ── B23: Export/backup success row flash ──────────────────────
+  ;(function _patchExportFlash() {
+    function _wrap(name) {
+      const _prev = App[name]?.bind(App)
+      if (!_prev) return
+      App[name] = function (...args) {
+        let _ok = false
+        const _orig = window.toast
+        window.toast = function (msg, type, ...rest) {
+          if (type === 'success') _ok = true
+          return _orig?.(msg, type, ...rest)
+        }
+        try { _prev?.(...args) } finally { window.toast = _orig }
+        if (!_ok) return
+        const row = document.querySelector(
+          `.settings-row[onclick*="${name}"], [onclick*="${name}"]`
+        )
+        if (!row) return
+        row.classList.remove('mt-row-flash')
+        void row.offsetWidth
+        row.classList.add('mt-row-flash')
+        setTimeout(() => row.classList.remove('mt-row-flash'), 700)
+      }
+    }
+    _wrap('exportData')
+    _wrap('exportCSV')
+  })()
+
+  // ── B25: Color swatch pop-in stagger (forms only) ─────────────
+  ;(function _watchSwatchGrid() {
+    const _seen = new WeakSet()
+    function _animSwatches(root) {
+      root.querySelectorAll('.color-swatch:not(.mt-swatch-appear)').forEach((el, i) => {
+        if (_seen.has(el)) return
+        _seen.add(el)
+        el.classList.add('mt-swatch-appear')
+        el.style.animationDelay = `${i * 28}ms`
+        setTimeout(() => {
+          el.classList.remove('mt-swatch-appear')
+          el.style.animationDelay = ''
+        }, 380 + i * 28)
+      })
+    }
+    new MutationObserver(mutations => {
+      try {
+        mutations.forEach(m => {
+          m.addedNodes.forEach(node => {
+            if (node.nodeType !== 1) return
+            const swatches = node.querySelectorAll?.('.color-swatch')
+            if (swatches?.length) _animSwatches(node)
+            else if (node.classList?.contains('color-swatch')) {
+              _animSwatches(node.parentElement || node)
+            }
+          })
+        })
+      } catch (_) {}
+    }).observe(document.getElementById('app') || document.body, {
+      childList: true, subtree: true,
+    })
+  })()
 
 })()

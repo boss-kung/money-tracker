@@ -6192,3 +6192,176 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
 .empty-icon {
   animation: mt-bounce-seq 3.4s cubic-bezier(.34, 1.56, .64, 1) infinite !important;
 }
+
+/* ================================================================
+   MT Animation Suite · Wave 2  (A1–A8 + B1–B26)
+   All new, nothing overlaps Wave 1. prefers-reduced-motion handled
+   by the global block already in this file (see line 1687).
+   ================================================================ */
+
+/* ── A1: Sub-screen exit slide right ────────────────────────── */
+@keyframes mt-sub-out {
+  from { transform: translateX(0);    opacity: 1; }
+  to   { transform: translateX(28%);  opacity: 0; }
+}
+#sub-screen.mt-sub-closing {
+  animation: mt-sub-out .26s cubic-bezier(.32, .72, 0, 1) both !important;
+  pointer-events: none !important;
+}
+
+/* ── A3: FAB scroll-hide ─────────────────────────────────────── */
+#fab {
+  transition: transform .32s cubic-bezier(.32, .72, 0, 1),
+              opacity   .32s ease !important;
+}
+#fab.mt-fab-hidden {
+  transform:      translateY(110px) !important;
+  opacity:        0 !important;
+  pointer-events: none !important;
+}
+
+/* ── A5: Toggle switch spring feedback ───────────────────────── */
+.toggle {
+  transition: background .2s ease,
+              transform  .2s cubic-bezier(.34, 1.56, .64, 1) !important;
+}
+.toggle:active { transform: scale(.86) !important; }
+.toggle::after {
+  transition: left .22s cubic-bezier(.34, 1.56, .64, 1) !important;
+}
+
+/* ── A8: Amount field first-valid entry pulse ────────────────── */
+@keyframes mt-amount-valid {
+  0%   { transform: scale(1);    }
+  42%  { transform: scale(1.10); }
+  100% { transform: scale(1);    }
+}
+.mt-amount-valid {
+  animation: mt-amount-valid .38s cubic-bezier(.34, 1.56, .64, 1) both !important;
+}
+
+/* ── B1: Sub-screen back button spring ───────────────────────── */
+.sub-header .btn-icon {
+  transition: transform .18s cubic-bezier(.34, 1.56, .64, 1) !important;
+}
+.sub-header .btn-icon:active { transform: scale(.80) !important; }
+
+/* ── B3: CC card urgent border pulse (<7 days due) ───────────── */
+@keyframes mt-cc-urgent {
+  0%, 100% { box-shadow: inset 3px 0 0 rgba(239,68,68,.22); }
+  50%       { box-shadow: inset 3px 0 0 rgba(239,68,68,.88); }
+}
+.mt-cc-urgent-pulse {
+  animation: mt-cc-urgent 1.8s ease-in-out infinite !important;
+}
+
+/* ── B6: Recurring ✓ button micro-burst ──────────────────────── */
+@keyframes mt-rec-ok {
+  0%   { transform: scale(1);    color: inherit;  background: transparent; }
+  32%  { transform: scale(1.55); color: #16A34A;  background: rgba(22,163,74,.14); }
+  62%  { transform: scale(.88);  }
+  100% { transform: scale(1);    color: inherit;  background: transparent; }
+}
+.mt-rec-ok {
+  animation: mt-rec-ok .48s cubic-bezier(.34, 1.56, .64, 1) both !important;
+  border-radius: 8px !important;
+}
+
+/* ── B7: Upcoming-bills overdue left-border pulse (CSS only) ──── */
+@keyframes mt-overdue-pulse {
+  0%, 100% { box-shadow: inset 3px 0 0 rgba(239,68,68,.18); }
+  50%       { box-shadow: inset 3px 0 0 rgba(239,68,68,.72); }
+}
+.upcoming-item.overdue {
+  animation: mt-overdue-pulse 2.2s ease-in-out infinite !important;
+}
+
+/* ── B8: Gold wallet price blink ─────────────────────────────── */
+@keyframes mt-gold-blink {
+  0%   { box-shadow: 0 0  4px rgba(245,158,11,.08); }
+  40%  { box-shadow: 0 0 24px rgba(245,158,11,.68), 0 0 0 1.5px rgba(245,158,11,.32); }
+  100% { box-shadow: 0 0  4px rgba(245,158,11,.08); }
+}
+.mt-gold-blink {
+  animation: mt-gold-blink 1.4s ease both !important;
+}
+
+/* ── B11: Tab-strip button bounce ────────────────────────────── */
+.tab-btn.mt-tab-bounce {
+  animation: mt-cat-pop .3s cubic-bezier(.34, 1.56, .64, 1) both !important;
+}
+
+/* ── B13: Budget ring warn pulse when >80% ───────────────────── */
+@keyframes mt-ring-warn {
+  0%, 100% { opacity: 1;   }
+  50%       { opacity: .50; }
+}
+.mt-ring-warn .mt-budget-ring circle.fill {
+  animation: mt-ring-warn 1.6s ease-in-out 3 !important;
+}
+
+/* ── B16: Save button success flash ──────────────────────────── */
+@keyframes mt-btn-ok {
+  0%   { background: var(--primary); transform: scale(1);   box-shadow: none; }
+  35%  { background: #16A34A;        transform: scale(.96); box-shadow: 0 0 16px rgba(22,163,74,.5); }
+  100% { background: var(--primary); transform: scale(1);   box-shadow: none; }
+}
+.mt-btn-saved {
+  animation: mt-btn-ok .55s ease both !important;
+}
+
+/* ── B18: Settings-row / toggle row flash ────────────────────── */
+@keyframes mt-row-flash {
+  0%   { background-color: rgba(37, 99, 235, .10); }
+  100% { background-color: transparent; }
+}
+.mt-row-flash {
+  animation: mt-row-flash .65s ease both !important;
+}
+
+/* ── B19: Dashboard cold-start section entrance ──────────────── */
+@keyframes mt-section-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+.mt-section-entrance {
+  animation: mt-section-in .5s cubic-bezier(.16, 1, .3, 1) both !important;
+}
+
+/* ── B20: Upcoming bill confirm button spring (CSS only) ─────── */
+.upcoming-item .btn-primary {
+  transition: transform .18s cubic-bezier(.34, 1.56, .64, 1) !important;
+}
+.upcoming-item .btn-primary:active { transform: scale(.88) !important; }
+
+/* ── B21: Sheet body fade-in after overlay opens (CSS only) ──── */
+@keyframes mt-body-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.overlay.open .sheet-body {
+  animation: mt-body-fade .3s .14s ease both !important;
+}
+
+/* ── B22: Empty state entrance (CSS only) ────────────────────── */
+.empty-state {
+  animation: mt-card-in .42s ease both !important;
+}
+
+/* ── B25: Color swatch pop-in stagger ────────────────────────── */
+@keyframes mt-swatch-in {
+  from { opacity: 0; transform: scale(.5); }
+  to   { opacity: 1; transform: scale(1);  }
+}
+.mt-swatch-appear {
+  animation: mt-swatch-in .28s cubic-bezier(.34, 1.56, .64, 1) both !important;
+}
+
+/* ── B26: Sheet spring overshoot on open ─────────────────────── */
+@keyframes mt-sheet-spring {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0);    }
+}
+.overlay.open:not(.mt-closing) .sheet {
+  animation: mt-sheet-spring .42s cubic-bezier(.34, 1.22, .64, 1) both !important;
+}
