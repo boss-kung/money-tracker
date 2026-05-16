@@ -1208,9 +1208,9 @@
         <div class="card card-pad">
           <div class="settings-row" onclick="App.openSplitBillScreen()">
             <div class="s-icon">🍽️</div><div class="s-label">หารบิล</div>
-            ${billCount?`<div class="s-value">${billCount} บิล`:''}
+            ${billCount?`<div class="s-value">${billCount} บิล</div>`:''}
+            <div class="s-arrow">›</div>
           </div>
-          <div class="s-arrow">›</div>
         </div>`
       const header = inner.querySelector('.more-sticky-header')
       if (header) header.insertAdjacentElement('afterend', sec)
