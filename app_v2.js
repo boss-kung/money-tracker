@@ -992,6 +992,18 @@ const App = {
     const ss = document.getElementById('sub-screen')
     if (!ss) return
     ss.innerHTML = html
+    // Inject drag handle and swipe-back gesture on header
+    const header = ss.querySelector('.sub-header')
+    if (header) {
+      const handle = document.createElement('div')
+      handle.className = 'sub-screen-handle'
+      header.before(handle)
+      let _startY = 0
+      header.addEventListener('touchstart', e => { _startY = e.touches[0].clientY }, { passive: true })
+      header.addEventListener('touchend', e => {
+        if (e.changedTouches[0].clientY - _startY > 60) header.querySelector('.btn-icon')?.click()
+      }, { passive: true })
+    }
     ss.classList.toggle('no-page-slide', opts.animate === false)
     ss.classList.remove('open')
     void ss.offsetHeight
@@ -1313,7 +1325,7 @@ Object.assign(App, {
   openCategoryScreen(type='expense', q='') {
     S.catManageType = type
     const cats = (S.categories[type] || []).filter(c => !q || c.label.toLowerCase().includes(q.toLowerCase()))
-    const listHtml = cats.map(c => `<div class="list-item"><div class="list-item-icon" style="background:${c.color}33">${c.icon}</div><div class="list-item-info"><div class="list-item-name">${c.label}</div><div class="list-item-sub">${c.color}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openCategoryForm('${c.id}')">✏️</button><button class="icon-btn" onclick="App.deleteCategory('${c.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')
+    const listHtml = cats.map(c => `<div class="list-item"><div class="list-item-icon" style="background:${c.color}33">${c.icon}</div><div class="list-item-info"><div class="list-item-name">${c.label}</div><div class="list-item-sub">${c.color}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openCategoryForm('${c.id}')">✏️</button><button class="icon-btn icon-btn-danger" onclick="App.deleteCategory('${c.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')
     const existingList = document.getElementById('cat-list-items')
     if (existingList && document.getElementById('sub-screen')?.classList.contains('open')) {
       existingList.innerHTML = listHtml
@@ -1322,18 +1334,18 @@ Object.assign(App, {
     }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="segmented-tabs segmented-tabs-2"><button class="segmented-tab ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="segmented-tab ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${q}" oninput="App.openCategoryScreen('${type}', this.value)"><div class="card mt-12"><div id="cat-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
   },
-  saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { toast('กรุณากรอกชื่อหมวดหมู่','error'); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); document.getElementById('category-form-overlay')?.remove(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
+  saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { App._showFieldError('cat-name', 'กรุณากรอกชื่อหมวดหมู่'); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); document.getElementById('category-form-overlay')?.remove(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
 
   openMerchantScreen(q='') {
     App._ensureV2State()
     const usage = Calc.getMerchantUsage(S.transactions)
     const list = S.merchants.filter(m => !q || m.name.toLowerCase().includes(q.toLowerCase()))
-    const listHtml = list.map(m => `<div class="list-item"><div class="list-item-icon" style="background:${m.color}33">${m.emoji || '🏪'}</div><div class="list-item-info"><div class="list-item-name">${m.name}</div><div class="list-item-sub">ใช้จ่าย ${usage[m.name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${m.id}')">✏️</button><button class="icon-btn" onclick="App.deleteMerchant('${m.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')
+    const listHtml = list.map(m => `<div class="list-item"><div class="list-item-icon" style="background:${m.color}33">${m.emoji || '🏪'}</div><div class="list-item-info"><div class="list-item-name">${m.name}</div><div class="list-item-sub">ใช้จ่าย ${usage[m.name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${m.id}')">✏️</button><button class="icon-btn icon-btn-danger" onclick="App.deleteMerchant('${m.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')
     const existingList = document.getElementById('merchant-list-items')
     if (existingList && document.getElementById('sub-screen')?.classList.contains('open')) { existingList.innerHTML = listHtml; return }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${q}" oninput="App.openMerchantScreen(this.value)"><div class="card mt-12"><div id="merchant-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
   },
-  saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { toast('กรุณากรอกชื่อร้านค้า','error'); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); document.getElementById('merchant-form-overlay')?.remove(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
+  saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { App._showFieldError('mer-name', 'กรุณากรอกชื่อร้านค้า'); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); document.getElementById('merchant-form-overlay')?.remove(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
   _registerMerchantFromTx(tx) {
   App._ensureV2State()
 
@@ -1559,6 +1571,51 @@ init()
    Shared UI + Form Foundations
    Transaction sheet / wallet drilldown / V2 mobile UI layers
    ============================================================ */
+
+/* ── Undo helper ─────────────────────────────────────────────── */
+;(function(){
+  App._undoState = null
+
+  App._withUndo = function(label, undoFn, commitFn) {
+    if (App._undoState) {
+      clearTimeout(App._undoState._timer)
+      App._undoState._commit()
+    }
+    document.getElementById('mt-undo-bar')?.remove()
+    const bar = document.createElement('div')
+    bar.id = 'mt-undo-bar'
+    bar.className = 'mt-undo-bar'
+    bar.innerHTML = `<span class="mt-undo-bar-label">${label}</span><button class="mt-undo-bar-btn" onclick="App._doUndo()">ยกเลิก</button>`
+    document.body.appendChild(bar)
+    App._undoState = {
+      _undo: undoFn,
+      _commit() { document.getElementById('mt-undo-bar')?.remove(); commitFn?.(); App._undoState = null },
+      _timer: setTimeout(() => App._undoState?._commit(), 5000)
+    }
+  }
+
+  App._doUndo = function() {
+    if (!App._undoState) return
+    clearTimeout(App._undoState._timer)
+    document.getElementById('mt-undo-bar')?.remove()
+    App._undoState._undo()
+    App._undoState = null
+    toast('ยกเลิกแล้ว', 'success')
+  }
+
+  App._showFieldError = function(fieldId, msg) {
+    const field = document.getElementById(fieldId)
+    if (!field) { toast(msg, 'error'); return }
+    field.classList.add('input-error')
+    field.parentElement?.querySelector('.field-error-msg')?.remove()
+    const errEl = document.createElement('div')
+    errEl.className = 'field-error-msg'
+    errEl.textContent = msg
+    field.after(errEl)
+    field.focus()
+    field.addEventListener('input', () => { field.classList.remove('input-error'); errEl.remove() }, { once: true })
+  }
+})()
 
 /* Core finance primitives */
 ;(function(){
@@ -3122,8 +3179,14 @@ App.render();
       title: 'ลบรายการประจำ',
       confirmLabel: 'ลบ', danger: true,
       onConfirm() {
-        S.recurring = S.recurring.filter(r => r.id !== id)
-        persist(); App.openRecurringScreen(); toast('ลบแล้ว', 'success')
+        const idx = (S.recurring || []).findIndex(r => r.id === id)
+        if (idx < 0) return
+        const removed = S.recurring.splice(idx, 1)[0]
+        App.openRecurringScreen()
+        App._withUndo(`ลบ "${removed.name || 'รายการประจำ'}" แล้ว`, () => {
+          S.recurring.splice(idx, 0, removed)
+          App.openRecurringScreen()
+        }, () => persist())
       }
     })
   }
@@ -3914,18 +3977,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App.deleteMerchant = function(id) {
-    const m = (S.merchants || []).find(x => x.id === id)
-    const txCount = m ? (S.transactions || []).filter(t => t.merchant === m.name).length : 0
-    const extraMsg = txCount ? ` ร้านนี้ใช้ใน ${txCount} รายการ` : ''
-    App.showConfirm({
-      title: 'ลบร้านค้า', danger: true,
-      body: `ยืนยันลบร้านค้านี้?${extraMsg}`,
-      confirmLabel: 'ลบ',
-      onConfirm() {
-        S.merchants = S.merchants.filter(x => x.id !== id)
-        persist(); App.openMerchantScreen(); toast('ลบร้านค้าแล้ว', 'success')
-      }
-    })
+    const idx = (S.merchants || []).findIndex(x => x.id === id)
+    if (idx < 0) return
+    const removed = S.merchants.splice(idx, 1)[0]
+    App.openMerchantScreen()
+    App._withUndo(`ลบ "${removed.name}" แล้ว`, () => {
+      S.merchants.splice(idx, 0, removed)
+      App.openMerchantScreen()
+    }, () => persist())
   }
 
   try { if (S.page === 'more')         App.renderMore()         } catch (_) {}
@@ -4361,7 +4420,17 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App.deleteInstallmentGroup = function(groupId) {
     const g = App.getInstallmentGroups().find(x => x.id === groupId)
     if (!g) return
-    App.showConfirm({ title:'ลบชุดผ่อน', danger:true, body:`ลบรายการผ่อน “${g.merchant}” ทั้ง ${g.rows.length} งวด?`, confirmLabel:'ลบทั้งชุด', onConfirm(){ S.transactions = S.transactions.filter(t => t.installmentGroupId !== groupId); App.recalculateWalletBalances({ save:false, recordSnapshot:true }); persist(); App.openInstallmentCenter(); toast('ลบชุดผ่อนแล้ว', 'success') } })
+    App.showConfirm({ title:'ลบชุดผ่อน', danger:true, body:`ลบรายการผ่อน “${g.merchant}” ทั้ง ${g.rows.length} งวด?`, confirmLabel:'ลบทั้งชุด', onConfirm() {
+      const removed = S.transactions.filter(t => t.installmentGroupId === groupId)
+      S.transactions = S.transactions.filter(t => t.installmentGroupId !== groupId)
+      App.recalculateWalletBalances({ save:false, recordSnapshot:true })
+      App.openInstallmentCenter()
+      App._withUndo(`ลบชุดผ่อน “${g.merchant}” แล้ว`, () => {
+        S.transactions = S.transactions.concat(removed).sort((a,b) => String(b.date||'').localeCompare(String(a.date||'')))
+        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+        App.openInstallmentCenter()
+      }, () => persist())
+    }})
   }
 
   App.openRecurringForm = function(id) {
@@ -4463,7 +4532,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const refs = (S.transactions || []).filter(t => t.categoryId === id).length + (S.recurring || []).filter(r => r.categoryId === id).length
     const cat = (S.categories[type] || []).find(c => c.id === id)
     if (refs > 0 && cat) { cat.archived = true; persist(); App.openCategoryScreen(type); toast('มีรายการอ้างอิง จึง Archive หมวดหมู่แทนการลบ', 'warn'); return }
-    S.categories[type] = (S.categories[type] || []).filter(c => c.id !== id); persist(); App.openCategoryScreen(type); toast('ลบหมวดหมู่แล้ว', 'success')
+    const idx = (S.categories[type] || []).findIndex(c => c.id === id)
+    if (idx < 0) return
+    const removed = S.categories[type].splice(idx, 1)[0]
+    App.openCategoryScreen(type)
+    App._withUndo(`ลบ "${removed.label}" แล้ว`, () => {
+      S.categories[type].splice(idx, 0, removed)
+      App.openCategoryScreen(type)
+    }, () => persist())
   }
 
   // Backup reminder for local-only users.
@@ -5308,7 +5384,11 @@ App._pickMerchant = function(name, opts = {}) {
     const note = document.getElementById('ieg-note')?.value || ''
     const g = groupById(groupId)
     if (!g) { toast('ไม่พบชุดผ่อนนี้', 'error'); return }
-    if (!(total > 0) || !(months >= 1) || !walletId || !categoryId || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) { toast('กรุณากรอกข้อมูลชุดผ่อนให้ครบ', 'error'); return }
+    if (!(total > 0)) { App._showFieldError('ieg-total', 'ระบุยอดรวมมากกว่า 0'); return }
+    if (!(months >= 1)) { App._showFieldError('ieg-months', 'ระบุจำนวนงวดอย่างน้อย 1'); return }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) { App._showFieldError('ieg-start', 'ระบุวันที่งวดแรก'); return }
+    if (!walletId) { App._showFieldError('ieg-wallet', 'เลือกกระเป๋า / บัตร'); return }
+    if (!categoryId) { App._showFieldError('ieg-category', 'เลือกหมวดหมู่'); return }
 
     const apply = () => {
       const { rows, past } = splitRows(groupById(groupId))
@@ -5349,7 +5429,7 @@ App._pickMerchant = function(name, opts = {}) {
   App.openInstallmentCenter = function(cardId = '') {
     const groups = installmentGroups().filter(g => !cardId || g.walletId === cardId)
     const back = cardId ? `App.openCCDetail('${esc(cardId)}')` : 'App.closeSubScreen()'
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>ศูนย์ผ่อนชำระ</h2></div><div class="sub-scroll installment-compact-screen">${groups.length ? `<div class="compact-card-list">${groups.map(g => { const w = walletById(g.walletId); const next = g.next; return `<div class="installment-compact-row installment-compact-row-edit"><div class="icr-main"><b>${esc(g.merchant)}</b><span>${esc(w?.name || '')}${next ? ` · งวด ${next.installmentNo}/${next.installmentMonths} · ${thaiDateShort(next.date)}` : ' · ครบแล้ว'}</span></div><div class="icr-amount"><strong>${money(g.remaining || 0)}</strong><span>เหลือ</span></div><button class="icon-btn" onclick="App.openEditInstallmentGroup('${esc(g.id)}','${esc(cardId)}')">✏️</button><button class="icon-btn" onclick="App.deleteInstallmentGroup('${esc(g.id)}')">🗑</button></div>` }).join('')}</div>` : App._emptyState('🧾','ยังไม่มีรายการผ่อน','เพิ่มรายการจ่ายแล้วเลือก “ผ่อนชำระ”')}</div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>ศูนย์ผ่อนชำระ</h2></div><div class="sub-scroll installment-compact-screen">${groups.length ? `<div class="compact-card-list">${groups.map(g => { const w = walletById(g.walletId); const next = g.next; return `<div class="installment-compact-row installment-compact-row-edit"><div class="icr-main"><b>${esc(g.merchant)}</b><span style="text-wrap: auto;">${esc(w?.name || '')}${next ? ` · งวด ${next.installmentNo}/${next.installmentMonths} · ${thaiDateShort(next.date)}` : ' · ครบแล้ว'}</span></div><div class="icr-amount"><strong>${money(g.remaining || 0)}</strong><span>เหลือ</span></div><button class="icon-btn" onclick="App.openEditInstallmentGroup('${esc(g.id)}','${esc(cardId)}')">✏️</button><button class="icon-btn icon-btn-danger" onclick="App.deleteInstallmentGroup('${esc(g.id)}')">🗑</button></div>` }).join('')}</div>` : App._emptyState('🧾','ยังไม่มีรายการผ่อน','เพิ่มรายการจ่ายแล้วเลือก “ผ่อนชำระ”')}</div>`)
   }
 
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
@@ -5454,22 +5534,17 @@ App._pickMerchant = function(name, opts = {}) {
             <button type="button" class="v5-lm-tab${_dueMode==='fixedDay'?' active':''}" onclick="App._selectCCBDueDateMode('fixedDay')">วันที่กำหนดของเดือนถัดไป</button>
           </div>
           <input type="hidden" id="ccb-due-date-mode" value="${_dueMode}">
-          <div class="form-hint" id="ccb-due-mode-hint" style="margin-top:6px">
-            ${_dueMode==='fixedDay'
-              ? 'กำหนดวันชำระตายตัวในแต่ละเดือน'
-              : 'นับจำนวนวันหลังวันตัดรอบแบบเดิม'}
-          </div>
         </div>
         <div id="ccb-due-fixed-block" style="${_dueMode==='fixedDay'?'':'display:none'}">
           <div class="form-group">
             <label class="form-label">วันกำหนดชำระในทุก ๆ เดือน</label>
             <input class="form-input" type="number" id="ccb-fixed-due-day" min="1" max="31" value="${_fixedDueDay}" placeholder="(1–31)" oninput="App._refreshCCBDueDatePreview?.()">
-            <div class="form-hint">หากวันที่กำหนดมากกว่าจำนวนวันในเดือนนั้น ระบบจะใช้วันสุดท้ายของเดือนแทนอัตโนมัติ</div>
+            <div class="form-hint">หากเกินจำนวนวันในเดือนนั้น ระบบจะใช้วันสุดท้ายของเดือนแทน</div>
           </div>
           <div class="form-group">
             <label class="cc-toggle-row">
               <input type="checkbox" id="ccb-holiday-shift" ${_holidayShiftOn?'checked':''} onchange="App._refreshCCBDueDatePreview?.()">
-              <span><strong style="font-weight: 600 !important;">เลื่อนวันจ่ายเมื่อตรงกับเสาร์–อาทิตย์หรือวันหยุดธนาคาร</strong><br><small>เลื่อนวันชำระไปเป็นวันทำการก่อนหน้า</small></span>
+              <span><strong style="font-weight: 600 !important;">เลื่อนวันชำระเป็นวันทำการก่อนหน้า</strong><br><small>หากตรงกับวันเสาร์–อาทิตย์หรือวันหยุดธนาคาร</small></span>
             </label>
           </div>
           <div class="form-group">
@@ -5491,7 +5566,7 @@ App._pickMerchant = function(name, opts = {}) {
           <div class="form-group">
             <label class="form-label">วันหยุดเพิ่มเติม (ไม่บังคับ)</label>
             <textarea class="form-input" id="ccb-custom-holidays" rows="2" placeholder="เช่น 2026-05-13 หรือ 12-31" oninput="App._refreshCCBDueDatePreview?.()">${esc(_customStr)}</textarea>
-            <div class="form-hint">รูปแบบ YYYY-MM-DD (ครั้งเดียว) หรือ MM-DD (วันเดิมทุกปี) — คั่นด้วยขึ้นบรรทัดใหม่หรือเครื่องหมายจุลภาค</div>
+            <div class="form-hint">YYYY-MM-DD หรือ MM-DD — คั่นด้วย comma หรือขึ้นบรรทัดใหม่</div>
           </div>
         </div>
         <div id="ccb-due-preview" class="form-hint cc-due-preview" style="margin-top:8px"></div>
@@ -12266,12 +12341,14 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   App.deleteGoal = function(goalId) {
-    const g = (S.goals || []).find(x => x.id === goalId)
-    if (!g) return
-    App.showConfirm?.({ title:'ลบเป้าหมาย', danger:true, confirmLabel:'ลบ', body:`ลบ “${g.name}”? การลบนี้ไม่กระทบยอดในกระเป๋า`, onConfirm() {
-      S.goals = (S.goals || []).filter(x => x.id !== goalId)
-      persist(); App.openGoalsScreen(); notify('ลบเป้าหมายแล้ว', 'success')
-    }})
+    const idx = (S.goals || []).findIndex(x => x.id === goalId)
+    if (idx < 0) return
+    const removed = S.goals.splice(idx, 1)[0]
+    App.openGoalsScreen()
+    App._withUndo(`ลบ “${removed.name}” แล้ว`, () => {
+      S.goals.splice(idx, 0, removed)
+      App.openGoalsScreen()
+    }, () => persist())
   }
 
   App.getUpcomingItems = function(days = 60) {
@@ -12888,7 +12965,7 @@ App._pickMerchant = function(name, opts = {}) {
       return `<div class="installment-compact-row installment-compact-row-edit">
         <div class="icr-main">
           <b>${esc(g.merchant)}</b>
-          <span>${statusLabel}</span>
+          <span style="text-wrap: auto;">${statusLabel}</span>
           ${progressBar}
         </div>
         <div class="icr-amount">
@@ -12896,7 +12973,7 @@ App._pickMerchant = function(name, opts = {}) {
           <span>${amtSub}</span>
         </div>
         <button class="icon-btn" onclick="App.openEditInstallmentGroup('${esc(g.id)}','${esc(cardId)}')">✏️</button>
-        <button class="icon-btn" onclick="App.deleteInstallmentGroup('${esc(g.id)}')">🗑</button>
+        <button class="icon-btn icon-btn-danger" onclick="App.deleteInstallmentGroup('${esc(g.id)}')">🗑</button>
       </div>`
     }).join('')
 
@@ -13729,19 +13806,16 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   App.deletePrivilege = function(privilegeId) {
     ensurePrivilegesState()
-    const privilege = (S.privileges || []).find(row => row.id === privilegeId)
-    if (!privilege) return
-    App.showConfirm?.({
-      title: 'ลบสิทธิพิเศษ',
-      danger: true,
-      confirmLabel: 'ลบ',
-      body: `ลบ “${privilege.title || 'สิทธิพิเศษ'}”? การลบนี้ไม่กระทบธุรกรรมหรือยอดเงิน`,
-      onConfirm() {
-        S.privileges = (S.privileges || []).filter(row => row.id !== privilegeId)
-        persistPrivilegesAndRefresh(true)
-        toast('ลบสิทธิพิเศษแล้ว', 'success')
-      },
-    })
+    const idx = (S.privileges || []).findIndex(row => row.id === privilegeId)
+    if (idx < 0) return
+    const removed = S.privileges.splice(idx, 1)[0]
+    document.getElementById('privilege-actions-overlay')?.remove()
+    document.getElementById('privilege-detail-overlay')?.remove()
+    App.openPrivilegesScreen(S.privilegesFilter || 'active', S.privilegeSearch || '')
+    App._withUndo(`ลบ “${removed.title || 'สิทธิพิเศษ'}” แล้ว`, () => {
+      S.privileges.splice(idx, 0, removed)
+      App.openPrivilegesScreen(S.privilegesFilter || 'active', S.privilegeSearch || '')
+    }, () => persist())
   }
 
   App.duplicatePrivilege = function(privilegeId) {
