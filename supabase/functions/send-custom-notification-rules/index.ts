@@ -30,23 +30,16 @@ type SnapshotRow = {
 }
 
 function bangkokParts() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Bangkok',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    weekday: 'short',
-    hourCycle: 'h23',
-  }).formatToParts(new Date())
-  const get = (type: string) => parts.find(part => part.type === type)?.value || ''
-  return {
-    date: `${get('year')}-${get('month')}-${get('day')}`,
-    weekday: get('weekday').slice(0, 3).toLowerCase(),
-    minutes: Number(get('hour') || 0) * 60 + Number(get('minute') || 0),
-    dayOfMonth: Number(get('day') || 0),
-  }
+  const OFFSET_MS = 7 * 60 * 60 * 1000
+  const bkk = new Date(Date.now() + OFFSET_MS)
+  const iso = bkk.toISOString() // "2026-05-16T09:30:00.000Z" = Bangkok 16:30
+  const date = iso.slice(0, 10)
+  const hour = Number(iso.slice(11, 13))
+  const minute = Number(iso.slice(14, 16))
+  const day = Number(iso.slice(8, 10))
+  const weekdayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+  const weekday = weekdayNames[bkk.getUTCDay()]
+  return { date, weekday, minutes: hour * 60 + minute, dayOfMonth: day }
 }
 
 function minutesOf(time: unknown) {
