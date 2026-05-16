@@ -204,6 +204,7 @@
   }
 
   window.SplitBillCalc = { calcResult, runPipeline, itemSubtotal, calcShares }
+  window.SbStore = SbStore
 
   App._fmtNum = function (el) {
     if (!el) return
@@ -865,7 +866,7 @@
           : `<div style="color:var(--muted);font-size:13px;margin-bottom:14px">ยังไม่มีรายการอาหาร (ยอดจะคำนวณเมื่อเพิ่มรายการแล้ว)</div>`}
         ${pipelineRows}
         <div class="card card-pad" style="margin-top:8px">
-          <div style="display:flex;gap:10px">
+          <div style="display:flex;gap:10px;align-items:center;">
             <button class="toggle${rm.mode!=='off'?' on':''}" onclick="App._sbToggleRounding()" aria-label="ปัดเศษ" style="align-self: flex-start"></button>
             <div style="flex:1">
               <div style="font-weight:600">ปัดเศษยอดรวมบิล</div>
@@ -1197,25 +1198,7 @@
   const _prevRenderMoreSB = App.renderMore?.bind(App)
   App.renderMore = function () {
     _prevRenderMoreSB?.()
-    try {
-      const content = document.getElementById('more-content'); if (!content) return
-      const inner   = content.firstElementChild;               if (!inner)   return
-      if (inner.querySelector('.sb-more-section')) return
-      const billCount = SbStore.loadBills().length
-      const sec = document.createElement('div'); sec.className = 'sb-more-section'
-      sec.innerHTML = `
-        <div class="sec-title">คำนวณ</div>
-        <div class="card card-pad">
-          <div class="settings-row" onclick="App.openSplitBillScreen()">
-            <div class="s-icon">🍽️</div><div class="s-label">หารบิล</div>
-            ${billCount?`<div class="s-value">${billCount} บิล</div>`:''}
-            <div class="s-arrow">›</div>
-          </div>
-        </div>`
-      const header = inner.querySelector('.more-sticky-header')
-      if (header) header.insertAdjacentElement('afterend', sec)
-      else inner.prepend(sec)
-    } catch(_) {}
+    // หารบิล is now part of the วางแผน tab in the 3-tab More layout — skip standalone injection
   }
 
   // ══════════════════════════════════════════════════════════════

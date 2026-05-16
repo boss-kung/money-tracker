@@ -16800,3 +16800,565 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     S._mtMonthlyReviewMonth = targetMonth || currentMonth
   }
 })()
+
+/* ============================================================
+   Spending Calendar (heatmap view in Reports)
+   Color-fill calendar grid + day bottom sheet
+   ============================================================ */
+;(function () {
+  'use strict'
+
+  const esc   = App._esc || (s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const money = n => moneyFmt(Number(n) || 0)
+  const TH_MONTHS  = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  const TH_DAYS    = ['อา','จ','อ','พ','พฤ','ศ','ส']
+  const TH_DAYLONG = ['วันอาทิตย์','วันจันทร์','วันอังคาร','วันพุธ','วันพฤหัสบดี','วันศุกร์','วันเสาร์']
+
+  function thaiFullDate(dateStr) {
+    if (!dateStr) return ''
+    const [y, m, d] = dateStr.split('-').map(Number)
+    const dow = new Date(y, m - 1, d).getDay()
+    return `${TH_DAYLONG[dow]}ที่ ${d} ${TH_MONTHS[m - 1]} ${y + 543}`
+  }
+
+  // ── Calendar renderer ─────────────────────────────────────────
+  function renderSpendCalendar(month) {
+    const [year, monthNo] = month.split('-').map(Number)
+    const totalDays  = new Date(year, monthNo, 0).getDate()
+    const firstDow   = new Date(year, monthNo - 1, 1).getDay()
+    const todayStr   = (typeof today === 'function' ? today() : new Date().toISOString().slice(0, 10))
+    const isThisMonth = month === todayStr.slice(0, 7)
+
+    const txs = (S.transactions || []).filter(t =>
+      String(t.date || '').startsWith(month) &&
+      (t.type === 'expense' || t.type === 'cc_payment') &&
+      (typeof App._isPostedTx === 'function' ? App._isPostedTx(t) : t.scheduled !== true)
+    )
+
+    const dailySpend = {}
+    txs.forEach(t => {
+      const dk = String(t.date || '').slice(8, 10)
+      if (dk) dailySpend[dk] = (dailySpend[dk] || 0) + Number(t.amount || 0)
+    })
+
+    const vals       = Object.values(dailySpend)
+    const maxSpend   = vals.length ? Math.max(...vals) : 0
+    const totalSpend = vals.reduce((s, v) => s + v, 0)
+    const daysWithSpend = vals.filter(v => v > 0).length
+    const avgSpend   = daysWithSpend > 0 ? totalSpend / daysWithSpend : 0
+
+    let maxDayKey = '', maxDayAmt = 0
+    Object.entries(dailySpend).forEach(([k, v]) => { if (v > maxDayAmt) { maxDayAmt = v; maxDayKey = k } })
+    const maxDayStr = maxDayKey ? `${month}-${maxDayKey}` : ''
+
+    function level(amount) {
+      if (!amount || amount <= 0 || avgSpend <= 0) return 0
+      const r = amount / avgSpend
+      if (r <= 0.5)  return 1
+      if (r <= 1.0)  return 2
+      if (r <= 1.5)  return 3
+      if (r <= 2.5)  return 4
+      return 5
+    }
+
+    const hdrHtml = TH_DAYS.map(d => `<div class="spcal-hdr">${d}</div>`).join('')
+
+    let cells = ''
+    for (let i = 0; i < firstDow; i++) cells += `<div class="spcal-cell spcal-empty"></div>`
+    for (let d = 1; d <= totalDays; d++) {
+      const dk      = String(d).padStart(2, '0')
+      const dateStr = `${month}-${dk}`
+      const spend   = dailySpend[dk] || 0
+      const lv      = level(spend)
+      const isFuture = isThisMonth && dateStr > todayStr
+      const isToday  = dateStr === todayStr
+      const cls = ['spcal-cell',
+        lv > 0 ? `spcal-l${lv}` : '',
+        isFuture ? 'spcal-future' : '',
+        isToday  ? 'spcal-today'  : '',
+      ].filter(Boolean).join(' ')
+      const tap = !isFuture ? ` onclick="App.openDaySheet('${dateStr}')"` : ''
+      cells += `<div class="${cls}"${tap}><span class="spcal-dn">${d}</span></div>`
+    }
+
+    const statMax = maxDayStr
+      ? `<div class="spcal-stat" onclick="App.openDaySheet('${maxDayStr}')">
+           <div class="spcal-stat-label">ใช้มากสุด</div>
+           <div class="spcal-stat-value" style="color:var(--expense)">${money(maxDayAmt)}</div>
+           <div class="spcal-stat-sub">${parseInt(maxDayKey, 10)} ${TH_MONTHS[monthNo - 1]}</div>
+         </div>`
+      : `<div class="spcal-stat">
+           <div class="spcal-stat-label">ใช้มากสุด</div>
+           <div class="spcal-stat-value" style="color:var(--muted)">-</div>
+         </div>`
+
+    return `
+      <div class="spcal-summary">
+        <div class="spcal-stat">
+          <div class="spcal-stat-label">รวมเดือนนี้</div>
+          <div class="spcal-stat-value" style="color:var(--expense)">${money(totalSpend)}</div>
+          <div class="spcal-stat-sub">${daysWithSpend} วันที่มีรายจ่าย</div>
+        </div>
+        <div class="spcal-stat">
+          <div class="spcal-stat-label">เฉลี่ย/วัน</div>
+          <div class="spcal-stat-value">${money(avgSpend)}</div>
+          <div class="spcal-stat-sub">เฉพาะวันที่มีรายจ่าย</div>
+        </div>
+        ${statMax}
+      </div>
+      <div class="spcal-legend">
+        <span>น้อย</span>
+        <div class="spcal-legend-track">
+          <div class="spcal-ldot" style="background:var(--surface);border:1px solid var(--border)"></div>
+          <div class="spcal-ldot spcal-l1"></div>
+          <div class="spcal-ldot spcal-l2"></div>
+          <div class="spcal-ldot spcal-l3"></div>
+          <div class="spcal-ldot spcal-l4"></div>
+          <div class="spcal-ldot spcal-l5"></div>
+        </div>
+        <span>มาก</span>
+      </div>
+      <div class="spcal-header-row">${hdrHtml}</div>
+      <div class="spcal-grid">${cells}</div>`
+  }
+
+  // ── Day bottom sheet ──────────────────────────────────────────
+  App.openDaySheet = function (dateStr) {
+    const todayStr = (typeof today === 'function' ? today() : new Date().toISOString().slice(0, 10))
+    const txs = (S.transactions || [])
+      .filter(t =>
+        t.date === dateStr &&
+        (typeof App._isPostedTx === 'function' ? App._isPostedTx(t) : t.scheduled !== true)
+      )
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+
+    const expense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0)
+    const income  = txs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0)
+
+    const dateLabel = dateStr === todayStr ? 'วันนี้' : thaiFullDate(dateStr)
+
+    const parts = [
+      expense > 0 ? `<span style="color:var(--expense)">รายจ่าย ${money(expense)}</span>` : '',
+      income  > 0 ? `<span style="color:var(--income)">รายรับ +${money(income)}</span>`    : '',
+    ].filter(Boolean)
+    const summaryHtml = parts.length
+      ? `<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:13px;padding-bottom:14px">${parts.join('<span style="color:var(--border)">·</span>')}</div>`
+      : ''
+
+    const txHtml = txs.length
+      ? `<div class="card"><div style="padding:0 16px">${txs.map(t => App._txRow(t)).join('')}</div></div>`
+      : App._emptyState('📋', 'ไม่มีรายการวันนี้', 'แตะ + เพื่อเพิ่มรายการ')
+
+    const h2 = document.querySelector('#overlay-tx-detail .sheet-header h2')
+    if (h2) h2.textContent = dateLabel
+
+    const body = document.getElementById('tx-detail-content')
+    if (!body) return
+    body.innerHTML = summaryHtml + txHtml
+
+    App.openOverlay('overlay-tx-detail')
+    setTimeout(() => App._bindTxRows?.('tx-detail-content'), 0)
+  }
+
+  // ── Patch renderReports to add ปฏิทิน view ────────────────────
+  const _prevRenderReports = App.renderReports?.bind(App)
+  App.renderReports = function () {
+    if (S.rptView === 'calendar') {
+      const months = Calc.getMonths(6)
+      const monthEl = document.getElementById('report-month-chips')
+      const viewEl  = document.getElementById('report-view-chips')
+      if (monthEl) monthEl.innerHTML = months.map(m =>
+        `<button class="chip${m === S.rptMonth ? ' active' : ''}" onclick="App.setRptMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`
+      ).join('')
+      if (viewEl) viewEl.innerHTML = [
+        ['assets','สินทรัพย์'],['expense','ใช้จ่าย'],['income','รายรับ'],
+        ['cashflow','กระแสเงินสด'],['credit','บัตร/หนี้'],['budget','งบประมาณ'],
+        ['trend','แนวโน้ม'],['calendar','ปฏิทิน'],
+      ].map(([v, l]) =>
+        `<button class="chip${S.rptView === v ? ' active' : ''}" data-view="${v}" onclick="App.setRptView('${v}')">${l}</button>`
+      ).join('')
+      const content = document.getElementById('reports-content')
+      if (content) content.innerHTML = renderSpendCalendar(S.rptMonth)
+      return
+    }
+
+    _prevRenderReports?.()
+
+    // Append ปฏิทิน chip if not already present
+    const viewEl = document.getElementById('report-view-chips')
+    if (viewEl && !viewEl.querySelector('.spcal-chip')) {
+      const btn = document.createElement('button')
+      btn.className = 'chip spcal-chip'
+      btn.textContent = 'ปฏิทิน'
+      btn.onclick = () => App.setRptView('calendar')
+      viewEl.appendChild(btn)
+    }
+  }
+
+  try { if (S.page === 'reports') App.renderReports() } catch (_) {}
+})()
+
+/* ============================================================
+   Wave 4 — UX Fixes
+   1. Transactions header: summary cards move into filter panel
+   2. More tab: 3-tab strip (วางแผน / บัตร / ตั้งค่า)
+   3. Back gesture: left-edge visual indicator + larger tap area
+   4. Alert dedup: remove recurring alerts duplicated in upcoming bills
+   5. Budget daily chip: exclude installment txns
+   6. Budget alert toast: notify at 80% and 100%
+   ============================================================ */
+;(function () {
+  'use strict'
+  if (typeof App === 'undefined' || typeof S === 'undefined') return
+
+  const esc = App._esc || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const money = n => (typeof moneyFmt === 'function' ? moneyFmt : v => '฿' + Number(v).toLocaleString('en-US'))(Number(n) || 0)
+
+  // ── 1. Transactions header: move summary cards to after month chips (non-sticky) ──
+  const _prevRT = App.renderTransactions?.bind(App)
+  App.renderTransactions = function (...args) {
+    _prevRT?.(...args)
+    try {
+      const header = document.querySelector('#page-transactions .page-header')
+      if (!header) return
+      const cards = header.querySelector('.tx-summary-cards')
+      const monthRow = header.querySelector('.tx-month-row')
+      if (cards && monthRow) monthRow.insertAdjacentElement('afterend', cards)
+    } catch (_) {}
+  }
+
+  // ── 2. More tab: 3-tab strip ─────────────────────────────────────────
+
+  App._setMoreTab = function (tab) {
+    S.moreTab = tab
+    const content = document.getElementById('more-content')
+    if (!content) return
+    content.querySelectorAll('.more-tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tab)
+    })
+    content.querySelectorAll('.more-tab-pane').forEach(pane => {
+      pane.style.display = pane.dataset.pane === tab ? '' : 'none'
+    })
+  }
+
+  App.renderMore = function () {
+    const content = document.getElementById('more-content')
+    if (!content) return
+
+    const activeTab = S.moreTab || 'plan'
+    const budgetCount = (S.budgets || []).length + (S.incomeBudgets || []).length
+    const activePrivCount = App.getPrivilegesSummary?.().activeCount
+      ?? (S.privileges || []).filter(p => p.status === 'active').length
+    const meta = S.settings?.storageMeta || {}
+    const lastSaved = meta.lastSavedAt ? new Date(meta.lastSavedAt).toLocaleString('th-TH') : 'ยังไม่บันทึก'
+    const lastExport = meta.lastExportedAt ? new Date(meta.lastExportedAt).toLocaleString('th-TH') : 'ยังไม่เคย Export'
+    const ACCENTS = ['#2563EB', '#7C3AED', '#DC2626', '#059669', '#D97706', '#0891B2', '#BE185D', '#374151']
+
+    function row ({ icon, label, value = '', onclick = '', danger = false, toggle = '' }) {
+      return `<div class="settings-row"${onclick ? ` onclick="${onclick}"` : ''}>
+        <div class="s-icon">${icon}</div>
+        <div class="s-label"${danger ? ' style="color:var(--expense)"' : ''}>${label}</div>
+        ${value ? `<div class="s-value">${value}</div>` : ''}
+        ${toggle || `<div class="s-arrow"${danger ? ' style="color:var(--expense)"' : ''}>›</div>`}
+      </div>`
+    }
+
+    function pane (id, active, html) {
+      return `<div class="more-tab-pane" data-pane="${id}" style="${active ? '' : 'display:none'}">${html}</div>`
+    }
+
+    const planHtml = `
+      <div class="sec-title">วิเคราะห์</div>
+      <div class="card card-pad">
+        ${row({ icon: '📋', label: 'สรุปรายเดือน', onclick: 'App.openMonthlyReview()' })}
+        ${row({ icon: '💬', label: 'ถามการเงินของคุณ', onclick: 'App.openAskMyMoney()' })}
+      </div>
+      <div class="sec-title">วางแผน</div>
+      <div class="card card-pad">
+        ${row({ icon: '🎯', label: 'ตั้งเป้าหมายทางการเงิน', value: `${(S.goals || []).filter(g => g.status !== 'archived').length} เป้าหมาย`, onclick: 'App.openGoalsScreen()' })}
+        ${row({ icon: '💰', label: 'งบประมาณรายรับ/รายจ่าย', value: budgetCount ? `${budgetCount} หมวด` : 'ยังไม่ตั้ง', onclick: 'App.openBudgetScreen()' })}
+        ${row({ icon: '🧾', label: 'รายการรอจ่าย', value: `${(S.upcomingBills || []).filter(b => b.status === 'pending').length} รอจ่าย`, onclick: 'App.openUpcomingBillsScreen()' })}
+        ${row({ icon: '🔁', label: 'รายการประจำ', value: `${(S.recurring || []).length} รายการ`, onclick: 'App.openRecurringScreen()' })}
+        ${row({ icon: '📅', label: 'ปฏิทินบิล / รายการที่จะถึง', onclick: 'App.openUpcomingScreen()' })}
+        ${row({ icon: '🍽️', label: 'หารบิล', value: (() => { try { const n = SbStore.loadBills().length; return n ? `${n} บิล` : '' } catch(_) { return '' } })(), onclick: 'App.openSplitBillScreen()' })}
+      </div>`
+
+    const cardHtml = `
+      <div class="sec-title">บัตรและสิทธิ์</div>
+      <div class="card card-pad">
+        ${row({ icon: '🎟️', label: 'สิทธิพิเศษ', value: `${activePrivCount} สิทธิ์`, onclick: "App.openPrivilegesScreen('active')" })}
+        ${row({ icon: '🎁', label: 'สมุดสิทธิประโยชน์', onclick: 'App.openRewardLedgerScreen()' })}
+        ${row({ icon: '💳', label: 'กลุ่มวงเงินร่วม', value: `${(S.creditLimitGroups || []).length} กลุ่ม`, onclick: 'App.openCreditLimitGroupScreen()' })}
+        ${row({ icon: '🧾', label: 'ศูนย์ผ่อนชำระ', onclick: 'App.openInstallmentCenter()' })}
+      </div>`
+
+    const settingsHtml = `
+      <div class="sec-title">จัดการ</div>
+      <div class="card card-pad">
+        ${row({ icon: '🏷️', label: 'จัดการหมวดหมู่', value: 'รายรับ/รายจ่าย', onclick: "App.openCategoryScreen('expense')" })}
+        ${row({ icon: '🏪', label: 'ร้านค้า / Platform', value: `${(S.merchants || []).length} ร้าน`, onclick: 'App.openMerchantScreen()' })}
+        ${row({ icon: '🔧', label: 'ตรวจสอบยอดคงเหลือ', onclick: 'App.openBalanceRepairScreen()' })}
+        ${row({ icon: '🩺', label: 'ตรวจสอบความถูกต้องของข้อมูล', onclick: 'App.runDataHealthCheck()' })}
+      </div>
+      <div class="sec-title">ข้อมูล</div>
+      <div class="card card-pad">
+        ${row({ icon: '📤', label: 'ส่งออกข้อมูล (JSON)', onclick: 'App.exportData()' })}
+        ${row({ icon: '📊', label: 'ส่งออก CSV', onclick: 'App.exportCSV()' })}
+        ${row({ icon: '📥', label: 'นำเข้าข้อมูล (JSON)', value: 'Preview ก่อนนำเข้า', onclick: "document.getElementById('import-file-v5b').click()" })}
+        <input type="file" id="import-file-v5b" accept=".json" style="display:none" onchange="App.importData(this)">
+        ${row({ icon: '🧯', label: 'กู้คืน Backup ก่อน Import', onclick: 'App.restorePreImportBackup?.()' })}
+        <div class="settings-row"><div class="s-icon">💾</div><div class="s-label">สถานะข้อมูล<br><div class="s-value" style="font-weight:400;text-align:left !important">บันทึกเมื่อ: ${esc(lastSaved)}<br>Export ข้อมูล: ${esc(lastExport)}</div></div></div>
+      </div>
+      <div class="sec-title">การแสดงผล</div>
+      <div class="card card-pad">
+        ${row({ icon: '🌙', label: 'โหมดมืด', onclick: 'App.toggleDark()', toggle: `<button class="toggle${S.settings.darkMode ? ' on' : ''}" onclick="event.stopPropagation();App.toggleDark()" aria-label="สลับโหมดมืด" aria-pressed="${S.settings.darkMode ? 'true' : 'false'}"></button>` })}
+        <div style="padding:14px 0">
+          <div style="font-size:15px;font-weight:600;margin-bottom:12px">🎨 สีธีม</div>
+          <div class="color-row">${ACCENTS.map(c => `<div class="color-dot${S.settings.accentColor === c ? ' selected' : ''}" style="background:${c}" onclick="App.setAccent('${c}')"></div>`).join('')}</div>
+        </div>
+      </div>
+      <div class="sec-title">ระบบ</div>
+      <div class="card card-pad">
+        ${row({ icon: '🧹', label: 'ล้างแคชแอป', value: 'ไม่ลบข้อมูลการเงิน', onclick: 'App.resetAppCache?.()' })}
+        ${row({ icon: '🔄', label: 'รีเซ็ตข้อมูลทั้งหมด', danger: true, onclick: 'App.resetData()' })}
+      </div>
+      <div style="text-align:center;padding:32px 0 8px">
+        <div style="font-size:40px">💰</div>
+        <div style="font-size:16px;font-weight:700;margin-top:8px">Money Tracker</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(window.MT_APP_VERSION || (typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''))}</div>
+      </div>`
+
+    content.innerHTML = `<div style="padding:0 16px">
+      <div class="more-sticky-header">
+        <div style="font-size:20px;font-weight:800;padding:12px 0 8px">เพิ่มเติม</div>
+        <input class="form-input more-search-input" id="more-search" placeholder="🔍 ค้นหาฟีเจอร์..." autocomplete="off" oninput="App._filterMoreContent(this.value)" style="padding:10px 14px;font-size:14px;margin-bottom:10px">
+      </div>
+      <div class="more-tab-strip">
+        <button class="more-tab-btn${activeTab === 'plan' ? ' active' : ''}" data-tab="plan" onclick="App._setMoreTab('plan')">วางแผน</button>
+        <button class="more-tab-btn${activeTab === 'card' ? ' active' : ''}" data-tab="card" onclick="App._setMoreTab('card')">บัตร</button>
+        <button class="more-tab-btn${activeTab === 'settings' ? ' active' : ''}" data-tab="settings" onclick="App._setMoreTab('settings')">ตั้งค่า</button>
+      </div>
+      ${pane('plan', activeTab === 'plan', planHtml)}
+      ${pane('card', activeTab === 'card', cardHtml)}
+      ${pane('settings', activeTab === 'settings', settingsHtml)}
+    </div>`
+  }
+
+  App._filterMoreContent = function (q) {
+    q = (q || '').toLowerCase().trim()
+    const content = document.getElementById('more-content')
+    if (!content) return
+    const strip = content.querySelector('.more-tab-strip')
+
+    if (!q) {
+      content.querySelectorAll('.settings-row').forEach(el => { el.style.display = '' })
+      content.querySelectorAll('.card.card-pad').forEach(el => { el.style.display = '' })
+      content.querySelectorAll('.sec-title').forEach(el => { el.style.display = '' })
+      const activeTab = S.moreTab || 'plan'
+      content.querySelectorAll('.more-tab-pane').forEach(pane => {
+        pane.style.display = pane.dataset.pane === activeTab ? '' : 'none'
+      })
+      if (strip) strip.style.display = ''
+      return
+    }
+
+    // Show all panes while searching
+    content.querySelectorAll('.more-tab-pane').forEach(pane => { pane.style.display = '' })
+    if (strip) strip.style.display = 'none'
+
+    content.querySelectorAll('.settings-row').forEach(row => {
+      const label = (row.querySelector('.s-label')?.textContent || '').toLowerCase()
+      row.style.display = label.includes(q) ? '' : 'none'
+    })
+    content.querySelectorAll('.card.card-pad').forEach(card => {
+      const rows = card.querySelectorAll('.settings-row')
+      if (!rows.length) return
+      const hasVisible = [...rows].some(r => r.style.display !== 'none')
+      card.style.display = hasVisible ? '' : 'none'
+    })
+    content.querySelectorAll('.sec-title').forEach(title => {
+      let next = title.nextElementSibling
+      while (next && !next.classList.contains('card')) next = next.nextElementSibling
+      title.style.display = (next && next.style.display !== 'none') ? '' : 'none'
+    })
+  }
+
+  // ── 4. Alert dedup ────────────────────────────────────────────────────
+
+  function dedupDashboardAlerts () {
+    const content = document.getElementById('dashboard-content')
+    if (!content) return
+    const upcomingNames = new Set()
+    content.querySelectorAll('.dashboard-upcoming-alerts .mt-alert-row-name').forEach(el => {
+      upcomingNames.add(el.textContent.trim().toLowerCase())
+    })
+    if (!upcomingNames.size) return
+    let removed = 0
+    content.querySelectorAll('.mt-recurring-alert').forEach(alert => {
+      const nameEl = alert.querySelector('.mt-recurring-alert-name')
+      if (nameEl && upcomingNames.has(nameEl.textContent.trim().toLowerCase())) {
+        alert.remove()
+        removed++
+      }
+    })
+    if (removed && !content.querySelectorAll('.mt-recurring-alert').length) {
+      content.querySelectorAll('.sec-title').forEach(title => {
+        if (title.textContent.includes('รายการประจำที่ถึงกำหนด')) title.remove()
+      })
+    }
+  }
+
+  // ── 5. Budget daily chip: exclude installment txns ────────────────────
+
+  function fixDailyChips () {
+    const content = document.getElementById('dashboard-content')
+    if (!content) return
+    const chips = content.querySelectorAll('.daily-budget-chip')
+    if (!chips.length) return
+
+    const dm = S.dashMonth || (typeof today === 'function' ? today() : new Date().toISOString().slice(0, 10)).slice(0, 7)
+    const expBudgets = Calc.getBudgetProgress?.(S.transactions || [], S.budgets || [], S.categories || { expense: [], income: [] }, dm)
+    if (!expBudgets) return
+
+    const budgetRows = [...expBudgets]
+      .filter(b => Number(b.monthlyLimit || 0) > 0)
+      .sort((a, b) => Number(b.pct || 0) - Number(a.pct || 0))
+      .slice(0, 3)
+
+    if (budgetRows.length !== chips.length) return
+
+    const now = new Date()
+    const [dmY, dmM] = dm.split('-').map(Number)
+    const isCurrentMonth = dmY === now.getFullYear() && dmM === now.getMonth() + 1
+    const totalDays = new Date(dmY, dmM, 0).getDate()
+    const remainDays = isCurrentMonth ? Math.max(1, totalDays - now.getDate() + 1) : 1
+
+    chips.forEach((chip, i) => {
+      const b = budgetRows[i]
+      if (!b || !b.monthlyLimit) return
+      const spentNoInstall = (S.transactions || [])
+        .filter(t =>
+          t.type === 'expense' &&
+          (t.date || '').startsWith(dm) &&
+          t.categoryId === b.categoryId &&
+          Calc.isPostedTx(t) &&
+          !t.installmentGroupId
+        )
+        .reduce((s, t) => s + Calc.getExpenseLedgerAmount(t), 0)
+      const remaining = b.monthlyLimit - spentNoInstall
+      const daily = remaining > 0 ? Math.round(remaining / remainDays) : 0
+      chip.className = 'daily-budget-chip' + (remaining < 0 ? ' over' : '')
+      chip.textContent = '฿' + daily.toLocaleString('en-US') + '/วัน'
+    })
+  }
+
+  // Wrap renderDashboard for dedup + chip fix
+  const _prevRD4 = App.renderDashboard?.bind(App)
+  App.renderDashboard = function (...args) {
+    _prevRD4?.(...args)
+    try { dedupDashboardAlerts() } catch (_) {}
+    try { fixDailyChips() } catch (_) {}
+  }
+
+  // ── 6. Budget alert toasts ────────────────────────────────────────────
+
+  function checkBudgetAlerts (month) {
+    if (!S.settings?.notifications?.budget_alert_enabled) return
+    const progress = Calc.getBudgetProgress?.(
+      S.transactions || [], S.budgets || [],
+      S.categories || { expense: [], income: [] }, month
+    )
+    if (!progress?.length) return
+
+    if (!S.settings.budgetAlertSent) S.settings.budgetAlertSent = {}
+    const allMonths = Object.keys(S.settings.budgetAlertSent).sort()
+    if (allMonths.length > 2) {
+      allMonths.slice(0, allMonths.length - 2).forEach(m => delete S.settings.budgetAlertSent[m])
+    }
+    if (!S.settings.budgetAlertSent[month]) S.settings.budgetAlertSent[month] = {}
+
+    let anyNew = false
+    progress.forEach(b => {
+      const sent = S.settings.budgetAlertSent[month][b.categoryId] || []
+      if (b.pct >= 100 && !sent.includes(100)) {
+        toast(`⚠️ ${b.icon} ${b.label} เกินงบแล้ว! (${Math.round(b.pct)}%)`, 'error')
+        S.settings.budgetAlertSent[month][b.categoryId] = [...sent, 100]
+        anyNew = true
+      } else if (b.pct >= 80 && !sent.includes(80)) {
+        toast(`💛 ${b.icon} ${b.label} ใช้งบไปแล้ว ${Math.round(b.pct)}%`, 'warn')
+        S.settings.budgetAlertSent[month][b.categoryId] = [...sent, 80]
+        anyNew = true
+      }
+    })
+    if (anyNew) persist()
+  }
+
+  const _prevSaveTx4 = App.saveTx?.bind(App)
+  App.saveTx = function (...args) {
+    const txMonth = (S.tx?.date || (typeof today === 'function' ? today() : new Date().toISOString().slice(0, 10))).slice(0, 7)
+    _prevSaveTx4?.(...args)
+    setTimeout(() => { try { checkBudgetAlerts(txMonth) } catch (_) {} }, 200)
+  }
+
+  // ── Inject CSS (back gesture indicator + More tab strip) ──────────────
+  const style = document.createElement('style')
+  style.textContent = `
+    /* Back gesture: left-edge pill indicator on sub-screen */
+    #sub-screen:not(:empty)::before {
+      content: '';
+      position: fixed;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 4px;
+      height: 48px;
+      background: var(--primary, #2563EB);
+      border-radius: 0 4px 4px 0;
+      opacity: 0.35;
+      z-index: 9999;
+      pointer-events: none;
+    }
+    /* Expand back button tap area */
+    .sub-header .btn-icon {
+      min-width: 44px !important;
+      min-height: 44px !important;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+    }
+    /* More tab strip */
+    .more-tab-strip {
+      display: flex;
+      gap: 8px;
+      margin: 14px 0px;
+    }
+    .more-tab-btn {
+      flex: 1;
+      padding: 8px 4px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border, #e2e8f0);
+      background: var(--surface, #fff);
+      color: var(--muted, #6B7280);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .more-tab-btn.active {
+      background: var(--primary, #2563EB);
+      border-color: var(--primary, #2563EB);
+      color: #fff;
+    }
+    /* Transactions header: summary cards below month chips */
+    .tx-month-row + .tx-summary-cards {
+      margin-top: 8px;
+      margin-bottom: 0;
+    }
+  `
+  document.head.appendChild(style)
+
+  // ── Init ─────────────────────────────────────────────────────────────
+  try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
+  try { if (S.page === 'more') App.renderMore() } catch (_) {}
+  try { if (S.page === 'dashboard') App.renderDashboard() } catch (_) {}
+})()
