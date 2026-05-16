@@ -1322,7 +1322,7 @@ Object.assign(App, {
     }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="segmented-tabs segmented-tabs-2"><button class="segmented-tab ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="segmented-tab ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${q}" oninput="App.openCategoryScreen('${type}', this.value)"><div class="card mt-12"><div id="cat-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
   },
-  saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { toast('กรุณากรอกชื่อหมวดหมู่','error'); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
+  saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { toast('กรุณากรอกชื่อหมวดหมู่','error'); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); document.getElementById('category-form-overlay')?.remove(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
 
   openMerchantScreen(q='') {
     App._ensureV2State()
@@ -1333,7 +1333,7 @@ Object.assign(App, {
     if (existingList && document.getElementById('sub-screen')?.classList.contains('open')) { existingList.innerHTML = listHtml; return }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${q}" oninput="App.openMerchantScreen(this.value)"><div class="card mt-12"><div id="merchant-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
   },
-  saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { toast('กรุณากรอกชื่อร้านค้า','error'); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
+  saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { toast('กรุณากรอกชื่อร้านค้า','error'); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); document.getElementById('merchant-form-overlay')?.remove(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
   _registerMerchantFromTx(tx) {
   App._ensureV2State()
 
@@ -2353,23 +2353,57 @@ App.render();
   App.openCategoryForm = function(id) {
     const type = S.catManageType || 'expense'
     const c = id ? (S.categories[type] || []).find(x => x.id === id) : null
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCategoryScreen('${type}')">←</button><h2>${c ? 'แก้ไข' : 'เพิ่ม'}หมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.saveCategory('${esc(id || '')}')" style="width:auto;padding:8px 14px">บันทึก</button></div>
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="form-group"><label class="form-label">ชื่อหมวดหมู่</label><input class="form-input" id="cat-name" value="${esc(c?.label || '')}" placeholder="เช่น อาหาร, เดินทาง"></div>
-        <div class="form-group"><label class="form-label">อีโมจิ</label>${renderEditorEmoji('cat', c?.icon || '📦', 'cat-icon')}</div>
-        <div class="form-group"><label class="form-label">สี</label>${renderEditorColor('cat', c?.color || '#2563EB', 'cat-color')}</div>
+    const overlayId = 'category-form-overlay'
+    document.getElementById(overlayId)?.remove()
+    document.getElementById('app')?.insertAdjacentHTML('beforeend', `
+      <div id="${overlayId}" class="overlay open" role="dialog" aria-modal="true">
+        <div class="overlay-backdrop" onclick="document.getElementById('${overlayId}')?.remove()"></div>
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <h2>${c ? 'แก้ไข' : 'เพิ่ม'}หมวดหมู่</h2>
+            <button class="btn-icon" onclick="document.getElementById('${overlayId}')?.remove()">✕</button>
+          </div>
+          <div class="sheet-body">
+            <div class="form-group"><label class="form-label">ชื่อหมวดหมู่</label><input class="form-input" id="cat-name" value="${esc(c?.label || '')}" placeholder="เช่น อาหาร, เดินทาง"></div>
+            <div class="form-group"><label class="form-label">อีโมจิ</label>${renderEditorEmoji('cat', c?.icon || '📦', 'cat-icon')}</div>
+            <div class="form-group"><label class="form-label">สี</label>${renderEditorColor('cat', c?.color || '#2563EB', 'cat-color')}</div>
+            <div class="flex-row" style="margin-top:4px">
+              <button class="btn btn-secondary" onclick="document.getElementById('${overlayId}')?.remove()">ยกเลิก</button>
+              <button class="btn btn-primary" onclick="App.saveCategory('${esc(id || '')}')">บันทึก</button>
+            </div>
+          </div>
+        </div>
       </div>`)
+    setTimeout(() => document.getElementById('cat-name')?.focus(), 80)
   }
 
   App.openMerchantForm = function(id) {
     App._ensureV2State?.()
     const m = id ? S.merchants.find(x => x.id === id) : null
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openMerchantScreen()">←</button><h2>${m ? 'แก้ไข' : 'เพิ่ม'}ร้านค้า</h2><button class="btn btn-primary btn-sm" onclick="App.saveMerchant('${esc(id || '')}')" style="width:auto;padding:8px 14px">บันทึก</button></div>
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="form-group"><label class="form-label">ชื่อร้านค้า</label><input class="form-input" id="mer-name" value="${esc(m?.name || '')}" placeholder="เช่น Grab, Netflix"></div>
-        <div class="form-group"><label class="form-label">อีโมจิ</label>${renderEditorEmoji('mer', m?.emoji || '🏪', 'mer-emoji')}</div>
-        <div class="form-group"><label class="form-label">สี</label>${renderEditorColor('mer', m?.color || '#2563EB', 'mer-color')}</div>
+    const overlayId = 'merchant-form-overlay'
+    document.getElementById(overlayId)?.remove()
+    document.getElementById('app')?.insertAdjacentHTML('beforeend', `
+      <div id="${overlayId}" class="overlay open" role="dialog" aria-modal="true">
+        <div class="overlay-backdrop" onclick="document.getElementById('${overlayId}')?.remove()"></div>
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <h2>${m ? 'แก้ไข' : 'เพิ่ม'}ร้านค้า</h2>
+            <button class="btn-icon" onclick="document.getElementById('${overlayId}')?.remove()">✕</button>
+          </div>
+          <div class="sheet-body">
+            <div class="form-group"><label class="form-label">ชื่อร้านค้า</label><input class="form-input" id="mer-name" value="${esc(m?.name || '')}" placeholder="เช่น Grab, Netflix"></div>
+            <div class="form-group"><label class="form-label">อีโมจิ</label>${renderEditorEmoji('mer', m?.emoji || '🏪', 'mer-emoji')}</div>
+            <div class="form-group"><label class="form-label">สี</label>${renderEditorColor('mer', m?.color || '#2563EB', 'mer-color')}</div>
+            <div class="flex-row" style="margin-top:4px">
+              <button class="btn btn-secondary" onclick="document.getElementById('${overlayId}')?.remove()">ยกเลิก</button>
+              <button class="btn btn-primary" onclick="App.saveMerchant('${esc(id || '')}')">บันทึก</button>
+            </div>
+          </div>
+        </div>
       </div>`)
+    setTimeout(() => document.getElementById('mer-name')?.focus(), 80)
   }
 
   App._txRow = function(tx) {
@@ -5235,16 +5269,31 @@ App._pickMerchant = function(name, opts = {}) {
     const paidKept = past.reduce((s,t)=>s+Number(t.amount||0),0)
     const walletOpts = (S.wallets || []).filter(w => !isInvestWallet(w)).map(w => `<option value="${esc(w.id)}"${first.walletId===w.id?' selected':''}>${esc(w.icon || '')} ${esc(w.name)}</option>`).join('')
     const catOpts = (S.categories.expense || []).map(c => `<option value="${esc(c.id)}"${first.categoryId===c.id?' selected':''}>${esc(c.icon || '')} ${esc(c.label)}</option>`).join('')
-    const back = cardId ? `App.openInstallmentCenter('${esc(cardId)}')` : 'App.openInstallmentCenter()'
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>แก้ไขชุดผ่อน</h2><button class="btn btn-primary btn-sm" onclick="App.saveInstallmentGroupEdit('${esc(groupId)}','${esc(cardId)}')" style="width:auto">บันทึก</button></div>
-      <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="installment-edit-note"><b>${esc(g.merchant || 'ผ่อนชำระ')}</b><span>บันทึกแล้ว ${past.length} งวด · ยอดที่ถือว่าเกิดขึ้นแล้ว ${money(paidKept)}</span></div>
-        <div class="form-group"><label class="form-label">ขอบเขตการแก้ไข</label><select class="form-input" id="ieg-scope"><option value="future">แก้งวดอนาคตเท่านั้น (แนะนำ)</option><option value="all">แก้ทั้งชุด รวมงวดที่ผ่านมา</option></select><div class="form-hint">ถ้าแก้ทั้งชุด ยอดย้อนหลังในรายงานและกระเป๋าจะถูกคำนวณใหม่ด้วย</div></div>
-        <div class="form-group"><label class="form-label">ชื่อร้านค้า / รายการ</label><input class="form-input" id="ieg-merchant" value="${esc(first.merchant || g.merchant || '')}"></div>
-        <div class="form-split-row"><div><label class="form-label">ยอดรวมทั้งชุด</label><input class="form-input" type="number" min="0" step="0.01" id="ieg-total" value="${esc(total)}"></div><div><label class="form-label">จำนวนงวดทั้งหมด</label><input class="form-input" type="number" min="1" step="1" id="ieg-months" value="${esc(rows.length || first.installmentMonths || 1)}"></div></div>
-        <div class="form-split-row"><div><label class="form-label">วันที่งวดแรก</label><input class="form-input" type="date" id="ieg-start" value="${esc(rows[0]?.date || today())}"></div><div><label class="form-label">กระเป๋า / บัตร</label><select class="form-input" id="ieg-wallet">${walletOpts}</select></div></div>
-        <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="ieg-category">${catOpts}</select></div>
-        <div class="form-group"><label class="form-label">หมายเหตุ</label><input class="form-input" id="ieg-note" value="${esc(first.note || '')}"></div>
+    const overlayId = 'installment-edit-overlay'
+    document.getElementById(overlayId)?.remove()
+    document.getElementById('app')?.insertAdjacentHTML('beforeend', `
+      <div id="${overlayId}" class="overlay open" role="dialog" aria-modal="true">
+        <div class="overlay-backdrop" onclick="document.getElementById('${overlayId}')?.remove()"></div>
+        <div class="sheet" style="max-height:92dvh">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <h2>แก้ไขชุดผ่อน</h2>
+            <button class="btn-icon" onclick="document.getElementById('${overlayId}')?.remove()">✕</button>
+          </div>
+          <div class="sheet-body" style="overflow-y:auto">
+            <div class="installment-edit-note"><b>${esc(g.merchant || 'ผ่อนชำระ')}</b><span>บันทึกแล้ว ${past.length} งวด · ยอดที่ถือว่าเกิดขึ้นแล้ว ${money(paidKept)}</span></div>
+            <div class="form-group"><label class="form-label">ขอบเขตการแก้ไข</label><select class="form-input" id="ieg-scope"><option value="future">แก้งวดอนาคตเท่านั้น (แนะนำ)</option><option value="all">แก้ทั้งชุด รวมงวดที่ผ่านมา</option></select><div class="form-hint">ถ้าแก้ทั้งชุด ยอดย้อนหลังในรายงานและกระเป๋าจะถูกคำนวณใหม่ด้วย</div></div>
+            <div class="form-group"><label class="form-label">ชื่อร้านค้า / รายการ</label><input class="form-input" id="ieg-merchant" value="${esc(first.merchant || g.merchant || '')}"></div>
+            <div class="form-split-row"><div><label class="form-label">ยอดรวมทั้งชุด</label><input class="form-input" type="number" min="0" step="0.01" id="ieg-total" value="${esc(total)}"></div><div><label class="form-label">จำนวนงวดทั้งหมด</label><input class="form-input" type="number" min="1" step="1" id="ieg-months" value="${esc(rows.length || first.installmentMonths || 1)}"></div></div>
+            <div class="form-split-row"><div><label class="form-label">วันที่งวดแรก</label><input class="form-input" type="date" id="ieg-start" value="${esc(rows[0]?.date || today())}"></div><div><label class="form-label">กระเป๋า / บัตร</label><select class="form-input" id="ieg-wallet">${walletOpts}</select></div></div>
+            <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="ieg-category">${catOpts}</select></div>
+            <div class="form-group"><label class="form-label">หมายเหตุ</label><input class="form-input" id="ieg-note" value="${esc(first.note || '')}"></div>
+            <div class="flex-row" style="margin-top:4px">
+              <button class="btn btn-secondary" onclick="document.getElementById('${overlayId}')?.remove()">ยกเลิก</button>
+              <button class="btn btn-primary" onclick="App.saveInstallmentGroupEdit('${esc(groupId)}','${esc(cardId)}')">บันทึก</button>
+            </div>
+          </div>
+        </div>
       </div>`)
   }
 
@@ -5289,7 +5338,7 @@ App._pickMerchant = function(name, opts = {}) {
       S.transactions = (S.transactions || []).filter(t => t.installmentGroupId !== groupId).concat(keep, generated)
       S.transactions.sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
       App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-      persist(); App.openInstallmentCenter(cardId); toast('แก้ไขชุดผ่อนแล้ว', 'success')
+      persist(); document.getElementById('installment-edit-overlay')?.remove(); App.openInstallmentCenter(cardId); toast('แก้ไขชุดผ่อนแล้ว', 'success')
     }
 
     if (scope === 'all') {
