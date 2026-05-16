@@ -2153,7 +2153,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 
 .sheet {
   border-radius: 24px 24px 0 0 !important;
-  max-height: calc(var(--app-height) - max(6px, var(--safe-t))) !important;
+  max-height: min(92dvh, calc(var(--app-height) - 44px)) !important;
 }
 .sheet-handle {
   width: 40px !important;
@@ -3401,7 +3401,7 @@ body {
     transition:transform .16s ease, opacity .12s ease!important;
   }
   body.keyboard-open .page-scroll{padding-bottom:24px!important}
-  body.keyboard-open .sheet{max-height:calc(var(--app-height) - 6px)!important}
+  body.keyboard-open .sheet{max-height:calc(var(--app-height) - 44px)!important}
 }
 
 .statement-compact-th .statement-main span + span{margin-top:1px!important}
