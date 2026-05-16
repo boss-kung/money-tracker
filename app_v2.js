@@ -992,18 +992,27 @@ const App = {
     const ss = document.getElementById('sub-screen')
     if (!ss) return
     ss.innerHTML = html
-    // Inject drag handle and swipe-back gesture on header
+    // Inject drag handle (visual affordance)
     const header = ss.querySelector('.sub-header')
     if (header) {
       const handle = document.createElement('div')
       handle.className = 'sub-screen-handle'
       header.before(handle)
-      let _startY = 0
-      header.addEventListener('touchstart', e => { _startY = e.touches[0].clientY }, { passive: true })
-      header.addEventListener('touchend', e => {
-        if (e.changedTouches[0].clientY - _startY > 60) header.querySelector('.btn-icon')?.click()
-      }, { passive: true })
     }
+    // Left-edge swipe-right to go back (iOS-style)
+    let _eX = 0, _eY = 0, _eActive = false
+    ss.addEventListener('touchstart', e => {
+      const t = e.touches[0]
+      _eX = t.clientX; _eY = t.clientY
+      _eActive = t.clientX < 28
+    }, { passive: true })
+    ss.addEventListener('touchend', e => {
+      if (!_eActive) return
+      _eActive = false
+      const t = e.changedTouches[0]
+      if (t.clientX - _eX > 80 && Math.abs(t.clientY - _eY) < 60)
+        ss.querySelector('.sub-header .btn-icon')?.click()
+    }, { passive: true })
     ss.classList.toggle('no-page-slide', opts.animate === false)
     ss.classList.remove('open')
     void ss.offsetHeight
@@ -3434,7 +3443,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       .filter(w => investmentWalletTypes.has(w.type))
       .reduce((sum, w) => sum + Number(App._investmentValueTHB ? App._investmentValueTHB(w) : (w.balance || 0)), 0)
     const miniCards = [
-      { icon:'💵', value: cashTotal, name:'เงินสด', onclick:"App.showPage('wallets')" },
+      { icon:'💵', value: cashTotal, name:'เงินสด', onclick:"App.showPage('wallets');requestAnimationFrame(()=>requestAnimationFrame(()=>App._scrollToWalletSection?.('wallet-anchor-assets')))" },
       { icon:'📈', value: investmentTotal, name:'การลงทุน', onclick:"App.showPage('wallets');requestAnimationFrame(()=>requestAnimationFrame(()=>App._scrollToWalletSection?.('wallet-anchor-invest')))" },
       { icon:'🪙', value: cryptoSummary.totalValueTHB, name:'Crypto', onclick:'App.openCryptoPortfolioDetail()' },
     ]
