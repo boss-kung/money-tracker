@@ -14,9 +14,10 @@
   const esc     = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))
   const nowISO  = () => new Date().toISOString()
   const genId   = () => Date.now().toString(36) + Math.random().toString(36).slice(2)
-  const fmt     = n => '฿' + Number(n||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})
+  const fmt     = n => { const v = Number(n||0); return '฿' + (v === 0 ? '0' : v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})) }
   const notify  = (msg, type='info') => { try { toast(msg, type) } catch(_) {} }
   const r2      = n => Math.round((Number(n)||0) * 100) / 100
+  const numVal  = el => parseFloat(String(el?.value||'').replace(/,/g,'')) || 0
   const todayStr = () => {
     try { if (typeof getTODAY === 'function') return getTODAY() } catch(_) {}
     const d = new Date()
@@ -51,9 +52,9 @@
   // ── Data helpers ─────────────────────────────────────────────
   function defaultPipeline() {
     return [
-      { id: 'discount', type: 'discount', label: 'ส่วนลด',         enabled: false, mode: 'percent', value: 0  },
-      { id: 'service',  type: 'service',  label: 'Service Charge', enabled: false, mode: 'percent', value: 10 },
-      { id: 'vat',      type: 'vat',      label: 'VAT',            enabled: false, mode: 'percent', value: 7  },
+      { id: 'discount', type: 'discount', label: 'ส่วนลด',         enabled: false, mode: 'percent', value: 0,  base: 'running' },
+      { id: 'service',  type: 'service',  label: 'Service Charge', enabled: false, mode: 'percent', value: 10, base: 'running' },
+      { id: 'vat',      type: 'vat',      label: 'VAT',            enabled: false, mode: 'percent', value: 7,  base: 'running' },
     ]
   }
 
@@ -67,7 +68,13 @@
       items:       Array.isArray(base.items) ? JSON.parse(JSON.stringify(base.items)) : [],
       pipeline:    Array.isArray(base.pipeline) ? JSON.parse(JSON.stringify(base.pipeline)) : defaultPipeline(),
       payments:    base.payments ? { ...base.payments } : {},
-      rounding:    base.rounding ?? false,
+      rounding:    (() => {
+        const r = base.rounding
+        if (!r || r === false || r === 0) return { mode: 'off', amount: 0 }
+        if (r === true || r === 25) return { mode: 'satang25', amount: 0 }
+        if (typeof r === 'object' && r !== null) return { mode: r.mode || 'off', amount: Number(r.amount) || 0 }
+        return { mode: 'off', amount: 0 }
+      })(),
       createdAt:   base.createdAt || nowISO(),
       updatedAt:   nowISO(),
     }
@@ -90,26 +97,35 @@
     return r2((draft.items||[]).reduce((s, item) => s + itemEffectivePrice(item), 0))
   }
 
-  function roundSatang(satang) {
-    const s = satang % 100
-    if (s <= 12) return satang - s
-    if (s <= 37) return satang - s + 25
-    if (s <= 62) return satang - s + 50
-    if (s <= 87) return satang - s + 75
-    return satang - s + 100
+  function roundToUnit(satang, unit) {
+    const r = satang % unit
+    return r <= unit / 2 ? satang - r : satang - r + unit
   }
 
-  function runPipeline(subtotal, pipeline) {
-    let amount = r2(subtotal)
+  function runPipeline(subtotal, pipeline, rounding = false) {
+    const foodBase = r2(subtotal)
+    let amount = foodBase
     const steps = [{ label: 'ยอดอาหาร', amount, delta: 0, type: 'base' }]
     for (const p of (pipeline||[])) {
       if (!p.enabled) continue
-      let raw = p.mode === 'percent' ? amount * (Number(p.value)||0) / 100 : (Number(p.value)||0)
+      const base = p.base === 'food' ? foodBase : amount
+      let raw = p.mode === 'percent' ? base * (Number(p.value)||0) / 100 : (Number(p.value)||0)
       const delta = p.type === 'discount' ? -Math.abs(r2(raw)) : Math.abs(r2(raw))
       amount = r2(amount + delta)
-      steps.push({ label: p.label, amount, delta, type: p.type, mode: p.mode, value: p.value })
+      steps.push({ label: p.label, amount, delta, type: p.type, mode: p.mode, value: p.value, base: p.base })
     }
-    return { finalTotal: amount, steps }
+    let roundingDelta = 0
+    const rm = (typeof rounding === 'object' && rounding !== null) ? rounding
+      : { mode: rounding > 0 ? 'satang25' : 'off', amount: 0 }
+    if (rm.mode === 'satang25') {
+      const rounded = roundToUnit(Math.round(amount * 100), 25) / 100
+      roundingDelta = r2(rounded - amount)
+      amount = rounded
+    } else if (rm.mode === 'custom') {
+      roundingDelta = r2(Number(rm.amount) || 0)
+      amount = r2(amount + roundingDelta)
+    }
+    return { finalTotal: amount, steps, roundingDelta }
   }
 
   function calcShares(draft) {
@@ -129,37 +145,15 @@
     })
 
     const sub = r2(Object.values(byPerson).reduce((s,v)=>s+v,0))
-    const { finalTotal } = runPipeline(sub, draft.pipeline)
+    const { finalTotal } = runPipeline(sub, draft.pipeline, draft.rounding)
     const shares = {}
+    const ceilSatang = n => Math.ceil(Number(n.toFixed(4)) * 100) / 100
 
     if (sub > 0) {
-      let alloc = 0
       const ids = Object.keys(byPerson)
-      ids.forEach((id, i) => {
-        if (i < ids.length - 1) { shares[id] = r2(byPerson[id] / sub * finalTotal); alloc += shares[id] }
-        else                     { shares[id] = r2(finalTotal - alloc) }
-      })
+      ids.forEach(id => { shares[id] = ceilSatang(byPerson[id] / sub * finalTotal) })
     } else if (draft.peopleIds.length) {
-      const n = draft.peopleIds.length
-      let alloc = 0
-      draft.peopleIds.forEach((id, i) => {
-        if (i < n-1) { shares[id] = r2(finalTotal / n); alloc += shares[id] }
-        else          { shares[id] = r2(finalTotal - alloc) }
-      })
-    }
-
-    // Quarter-satang rounding — last person absorbs rounding error
-    if (draft.rounding && Object.keys(shares).length > 0) {
-      let roundedTotal = 0
-      const ids = Object.keys(shares)
-      ids.forEach((id, i) => {
-        if (i < ids.length - 1) {
-          shares[id] = roundSatang(Math.round(shares[id] * 100)) / 100
-          roundedTotal += shares[id]
-        } else {
-          shares[id] = r2(finalTotal - roundedTotal)
-        }
-      })
+      draft.peopleIds.forEach(id => { shares[id] = ceilSatang(finalTotal / draft.peopleIds.length) })
     }
 
     return { shares, sub, finalTotal }
@@ -193,7 +187,7 @@
 
     const warnings = []
     const sub = itemSubtotal(draft)
-    const { finalTotal: calcTotal } = runPipeline(sub, draft.pipeline)
+    const { finalTotal: calcTotal } = runPipeline(sub, draft.pipeline, draft.rounding)
 
     if (draft.manualTotal > 0 && Math.abs(r2(draft.manualTotal - calcTotal)) > 0.5) {
       const diff = r2(draft.manualTotal - calcTotal)
@@ -211,17 +205,30 @@
 
   window.SplitBillCalc = { calcResult, runPipeline, itemSubtotal, calcShares }
 
+  App._fmtNum = function (el) {
+    if (!el) return
+    const raw    = el.value.replace(/[^0-9.]/g, '')
+    const dot    = raw.indexOf('.')
+    const intPart = dot >= 0 ? raw.slice(0, dot) : raw
+    const decPart = dot >= 0 ? raw.slice(dot)    : ''
+    const formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + decPart
+    const pos = el.selectionStart
+    const diff = formatted.length - el.value.length
+    el.value = formatted
+    try { el.setSelectionRange(pos + diff, pos + diff) } catch (_) {}
+  }
+
   // ── Wizard state ─────────────────────────────────────────────
   let _draft = null
   let _step  = 1
   let _editingItemIdx = -1
 
-  const STEP_TITLES = ['','ข้อมูลบิล & คน','รายการอาหาร','ส่วนลด / SC / VAT','ใครจ่ายไปแล้ว','สรุป']
+  const STEP_TITLES = ['','ข้อมูลบิล & คน','รายการอาหาร','ส่วนลด / ค่าบริการอื่น','ระบุคนจ่าย','สรุป']
   const noAnim = { animate: false }
 
   function stepBar() {
-    return `<div style="display:flex;gap:3px;padding:4px 16px 0">
-      ${[1,2,3,4,5].map(n=>`<div style="flex:1;height:3px;border-radius:2px;background:${_step>=n?'var(--primary)':'var(--border)'}"></div>`).join('')}
+    return `<div class="ccbr-steps">
+      ${[1,2,3,4,5].map(n=>`<div class="ccbr-step-dot${n===_step?' active':n<_step?' done':''}"></div>`).join('')}
     </div>`
   }
 
@@ -248,16 +255,16 @@
   function _lineText(bill, result) {
     const div = '──────────────'
     const transferLines = result.transfers.length
-      ? result.transfers.map(t => `${t.fromName} โอนให้ ${t.toName} ${fmt(t.amount)}`).join('\n')
-      : 'ทุกคนเสมอกันแล้ว 🎉'
-    const shareLines = result.personResults.map(p => `${p.name}: ${fmt(p.finalShare)}`).join('\n')
+      ? result.transfers.map(t => `• ${t.fromName} โอนให้ ${t.toName} ${fmt(t.amount)}`).join('\n')
+      : 'ทุกคนไม่ติดค้างแล้ว 🎉'
+    const shareLines = result.personResults.map(p => `• ${p.name}: ${fmt(p.finalShare)}`).join('\n')
     return [
       `🍽️ ${bill.title||'หารบิล'}  ${thaiDate(bill.date)}`,
       div,
       '💸 สรุปการโอน',
       transferLines,
       div,
-      '💰 ส่วนแบ่งต่อคน',
+      '💰 ยอดจ่ายต่อคน',
       shareLines,
       div,
       `ยอดรวม ${fmt(result.finalTotal)}`,
@@ -292,7 +299,7 @@
 
     const cards = bills.map(b => {
       const sub   = itemSubtotal(b)
-      const total = b.manualTotal > 0 ? b.manualTotal : runPipeline(sub, b.pipeline).finalTotal
+      const total = b.manualTotal > 0 ? b.manualTotal : runPipeline(sub, b.pipeline, b.rounding).finalTotal
       const n     = (b.peopleIds||[]).length
       return `<div class="card card-pad sb-bill-row" onclick="App.openSplitBillDetail('${esc(b.id)}')">
         <div style="display:flex;align-items:center;gap:10px">
@@ -311,8 +318,8 @@
       <div class="sub-header">
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
         <h2 style="flex:1">หารบิล</h2>
-        <button class="btn btn-secondary btn-sm" onclick="App.openSplitPeopleScreen()" style="width:auto">👥</button>
-        <button class="btn btn-primary btn-sm" onclick="App.openSplitBillForm()" style="width:auto;margin-left:6px">+ บิล</button>
+        <button class="btn btn-secondary btn-sm" onclick="App.openSplitPeopleScreen()" style="width:auto">สมาชิก</button>
+        <button class="btn btn-primary btn-sm" onclick="App.openSplitBillForm()" style="width:auto;margin-left:6px">+ เพิ่มบิล</button>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         ${bills.length
@@ -337,10 +344,10 @@
       <div class="detail-row">
         <div style="flex:1">
           <div style="font-weight:600">${esc(p.name)}</div>
-          <div style="font-size:12px;color:var(--muted)">ส่วนแบ่ง ${fmt(p.finalShare)} · จ่าย ${fmt(p.paid)}</div>
+          <div style="font-size:12px;color:var(--muted)">ยอดจ่าย ${fmt(p.finalShare)} · จ่ายไปแล้ว ${fmt(p.paid)}</div>
         </div>
         <div style="text-align:right;font-weight:700;color:${p.net>0?'var(--income)':p.net<0?'var(--expense)':'var(--muted)'}">
-          ${p.net>0?`ได้คืน ${fmt(p.net)}`:p.net<0?`ต้องจ่าย ${fmt(-p.net)}`:'เสมอกัน'}
+          ${p.net>0?`ได้คืน ${fmt(p.net)}`:p.net<0?`ต้องจ่าย ${fmt(-p.net)}`:'ไม่ติดค้าง'}
         </div>
       </div>`).join('')
 
@@ -354,7 +361,7 @@
             </div>
             <div style="font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
           </div>`).join('')
-      : `<div style="color:var(--muted);font-size:13px;padding:8px 0">ทุกคนเสมอกันแล้ว 🎉</div>`
+      : `<div style="color:var(--muted);font-size:13px;padding:8px 0">ทุกคนไม่ติดค้างแล้ว 🎉</div>`
 
     const warnHtml = result.warnings.map(w =>
       `<div style="background:var(--elevated);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px;color:var(--expense)">⚠️ ${esc(w)}</div>`
@@ -366,7 +373,7 @@
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openSplitBillScreen()">←</button>
         <h2 style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(bill.title||'ไม่มีชื่อ')}</h2>
-        <button class="btn btn-secondary btn-sm" onclick="App.openSplitBillForm('${esc(billId)}')" style="width:auto">✏️</button>
+        <button class="btn btn-secondary btn-sm" onclick="App.openSplitBillForm('${esc(billId)}')" style="width:auto">✏️ แก้ไข</button>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         <div style="font-size:13px;color:var(--muted);margin-bottom:10px">📅 ${thaiDate(bill.date)}</div>
@@ -381,17 +388,17 @@
         ${warnHtml}
 
         <div class="sec-title">สรุปต่อคน</div>
-        <div class="card card-pad">${personRows||'<div style="color:var(--muted)">ยังไม่มีคน</div>'}</div>
+        <div class="card card-pad" style="padding: 0px 10px;">${personRows||'<div style="color:var(--muted)">ยังไม่มีคน</div>'}</div>
 
         <div class="sec-title">โอนเงิน</div>
-        <div class="card card-pad">${transferRows}</div>
+        <div class="card card-pad" style="padding: 0px 10px;">${transferRows}</div>
 
         <textarea id="sb-detail-copy" style="position:absolute;left:-9999px;top:0;opacity:0;width:1px;height:1px">${esc(copyText)}</textarea>
 
         <div style="display:flex;gap:8px;margin-top:16px">
           <button class="btn btn-secondary flex-1" onclick="App.openSplitBillForm('${esc(billId)}')">✏️ แก้ไข</button>
           <button class="btn btn-secondary flex-1" onclick="App._sbCopy('${esc(billId)}')">⧉ ทำซ้ำ</button>
-          <button class="btn btn-secondary flex-1" onclick="App._sbDetailCopyLine()">📋 LINE</button>
+          <button class="btn btn-secondary flex-1" onclick="App._sbDetailCopyLine()">📋 ข้อความ</button>
         </div>
         <div style="height:1px;background:var(--border);margin:12px 0"></div>
         <button class="btn btn-outline" onclick="App._sbDelete('${esc(billId)}')" style="width:100%;color:var(--expense);border-color:var(--expense)">🗑 ลบบิล</button>
@@ -429,13 +436,29 @@
     _sbRender()
   }
 
+  let _sbPrevStep = 1
+
   function _sbRender(opts) {
+    const animate = !opts || opts.animate !== false
+    const dir = _step >= _sbPrevStep ? 'next' : 'prev'
+    _sbPrevStep = _step
+
     switch (_step) {
-      case 1: return _sbStep1(opts)
-      case 2: return _sbStep3(opts)
-      case 3: return _sbStep4(opts)
-      case 4: return _sbStep5(opts)
-      case 5: return _sbStep6(opts)
+      case 1: _sbStep1(noAnim); break
+      case 2: _sbStep3(noAnim); break
+      case 3: _sbStep4(noAnim); break
+      case 4: _sbStep5(noAnim); break
+      case 5: _sbStep6(noAnim); break
+    }
+
+    if (animate) {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const scroll = document.querySelector('#sub-screen .sub-scroll')
+        if (!scroll) return
+        const cls = dir === 'prev' ? 'ccbr-panel-prev' : 'ccbr-panel-next'
+        scroll.classList.add(cls)
+        setTimeout(() => scroll.classList.remove('ccbr-panel-prev', 'ccbr-panel-next'), 1000)
+      }))
     }
   }
 
@@ -448,7 +471,7 @@
 
     const chips = people.map(p => {
       const on = selected.includes(p.id)
-      return `<button class="chip sb-person-chip${on?' active':''}" onclick="App._sbTogglePerson('${esc(p.id)}')">
+      return `<button class="chip sb-person-chip${on?' active':''}" onclick="App._sbTogglePerson('${esc(p.id)}')" style="min-width:60px">
         ${esc(p.emoji||'👤')} ${esc(p.name)}
       </button>`
     }).join('')
@@ -467,17 +490,23 @@
           </div>
           <div class="form-group">
             <label class="form-label">ยอดบิล (฿)</label>
-            <input class="form-input" type="number" inputmode="decimal" id="sb1-total" value="${_draft.manualTotal||''}" placeholder="ไม่ระบุ">
+            <input class="form-input" type="text" inputmode="decimal" id="sb1-total" value="${_draft.manualTotal||''}" placeholder="ไม่ระบุ" oninput="App._fmtNum(this)">
           </div>
         </div>
-
-        <div class="sec-title" style="margin-top:4px">คนในบิล</div>
+        <div class="mt-divider" style="border-bottom:1px solid var(--border)"></div>
+        <div style="display:flex;align-items:center;margin-top:4px;margin-bottom:8px">
+          <span class="sec-title" style="font-size: 18px !important;color:var(--primary);margin: 0 !important;flex:1">สมาชิกในบิลนี้</span>
+          <div style="display:flex;gap:6px">
+            <button onclick="App._sbSelectAllPeople()" style="font-size:11px !important;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:8px;padding:2px 8px">เลือกทั้งหมด</button>
+            <button onclick="App._sbClearAllPeople()" style="font-size:11px !important;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:8px;padding:2px 8px">ล้าง</button>
+          </div>
+        </div>
         ${chips ? `<div class="chips" style="flex-wrap:wrap;gap:8px;padding:0 0 12px">${chips}</div>` : ''}
         <div style="display:flex;gap:8px;margin-bottom:4px">
-          <input class="form-input" id="sb2-newname" placeholder="พิมพ์ชื่อแล้วกด +"
+          <input class="form-input" id="sb2-newname" placeholder="พิมพ์ชื่อสมาชิกแล้วกด +"
             style="flex:1" onkeydown="if(event.key==='Enter')App._sbQuickAdd()">
           <button class="btn btn-secondary" onclick="App._sbQuickAdd()"
-            style="width:auto;padding:0 18px;font-size:20px;line-height:1">+</button>
+            style="width:80px;padding:0 18px;font-size:20px;line-height:1">+ เพิ่ม</button>
         </div>
 
         ${navRow(`ถัดไป: รายการอาหาร → (${selected.length} คน)`, 'App._sbNext1()')}
@@ -487,7 +516,7 @@
   App._sbNext1 = function () {
     _draft.title       = document.getElementById('sb1-title')?.value.trim() || 'บิลใหม่'
     _draft.date        = document.getElementById('sb1-date')?.value || todayStr()
-    _draft.manualTotal = Number(document.getElementById('sb1-total')?.value) || 0
+    _draft.manualTotal = numVal(document.getElementById('sb1-total'))
     if (!_draft.peopleIds.length) return notify('เลือกอย่างน้อย 1 คน', 'error')
     ;(_draft.items||[]).forEach(item => {
       if (!item.participants?.length) {
@@ -507,6 +536,17 @@
     } else {
       _draft.peopleIds.push(id)
     }
+    _sbStep1(noAnim)
+  }
+
+  App._sbSelectAllPeople = function () {
+    const people = SbStore.loadPeople().filter(p => !p.archived)
+    people.forEach(p => { if (!_draft.peopleIds.includes(p.id)) _draft.peopleIds.push(p.id) })
+    _sbStep1(noAnim)
+  }
+
+  App._sbClearAllPeople = function () {
+    _draft.peopleIds = []
     _sbStep1(noAnim)
   }
 
@@ -530,21 +570,24 @@
       const person = SbStore.getPerson(id)
       const label  = person ? person.name : '?'
       return `<button class="chip${on?' active':''}" onclick="App._sbItemTogglePerson('${esc(id)}')"
-        style="${on?'background:var(--primary);color:#fff;border-color:var(--primary)':''}">
+        style="${on?'background:var(--primary);color:#fff;border-color:var(--primary);min-width:60px!important;':'min-width:60px!important'}">
         ${esc(label)}
       </button>`
     }).join('')
 
     let ratioInputs = ''
     if (item.splitMode === 'ratio') {
-      const activeParts = (item.participants||[]).filter(p => _draft.peopleIds.includes(p.personId))
-      ratioInputs = `<div style="margin-top:8px">${activeParts.map(p => `
-        <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
-          <span style="flex:1;font-size:13px">${esc(pName(p.personId))}</span>
-          <input class="form-input" type="number" inputmode="decimal" id="sbi-ratio-${esc(p.personId)}" value="${p.ratio||1}" style="width:70px;text-align:center">
-          <span style="color:var(--muted);font-size:13px">ส่วน</span>
-        </div>`).join('')}</div>`
-    }
+  const activeParts = (item.participants || []).filter(p => _draft.peopleIds.includes(p.personId))
+  ratioInputs = `<div style="padding-top:8px; display:flex; gap:16px; flex-wrap:wrap; padding-bottom:8px;">
+    ${activeParts.map(p => `
+      <div style="display:flex; flex-direction:column; align-items:center; gap:6px; min-width:70px;">
+        <span style="font-size:13px; text-align:center; white-space:nowrap;">${esc(pName(p.personId))}</span>
+        <input class="form-input" type="number" inputmode="decimal" id="sbi-ratio-${esc(p.personId)}" value="${p.ratio||1}" style="width:70px;text-align:center;padding: 0px !important;min-height: 36px !important;">
+        <span style="color:var(--muted); font-size:13px;">ส่วน</span>
+      </div>
+    `).join('')}
+  </div>`
+}
 
     const discEnabled = item.discount?.enabled
     const discMode    = item.discount?.mode || 'percent'
@@ -554,35 +597,36 @@
 
     return `<div class="card" style="padding:14px;border:2px solid var(--primary)">
       <input class="form-input" id="sbi-name" value="${esc(item.name)}" placeholder="ชื่อรายการ เช่น ผัดไทย" style="margin-bottom:8px;font-weight:600">
-
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:68% 32%;gap:4px;padding: 8px 0px;">
+      <div>
         <span style="color:var(--muted);font-size:13px;white-space:nowrap">ราคา ฿</span>
-        <input class="form-input" type="number" inputmode="decimal" id="sbi-price" value="${displayPrice}" placeholder="0" style="flex:1;text-align:right">
       </div>
-
-      <div style="display:flex;align-items:center;gap:8px;padding:4px 0;margin-bottom:${discEnabled?'0':'6'}px">
-        <button class="toggle${discEnabled?' on':''}" onclick="App._sbItemToggleDiscount()" aria-label="ส่วนลดรายการนี้"></button>
-        <span style="font-size:13px;color:var(--muted)">ส่วนลดรายการนี้</span>
+      <div></div>
+      <input class="form-input" type="text" inputmode="decimal" id="sbi-price" value="${displayPrice}" placeholder="0" oninput="App._fmtNum(this)" style="flex:1">
+      <div style="display:flex;align-items:center;gap:8px;margin:0px 0px 4px 10px">
+        <button class="toggle${discEnabled?' on':''}" onclick="App._sbItemToggleDiscount()" aria-label="ส่วนลด"></button>
+        <span style="font-size:13px;color:var(--muted)">ส่วนลด</span>
+      </div>
       </div>
       ${discEnabled ? `
       <div style="display:flex;gap:6px;margin-bottom:8px;margin-top:4px">
-        <select class="form-input" id="sbi-disc-mode" style="flex:0 0 auto;width:135px">
-          <option value="percent" ${discMode==='percent'?'selected':''}>% เปอร์เซ็นต์</option>
-          <option value="fixed"   ${discMode==='fixed'  ?'selected':''}>฿ จำนวนเงิน</option>
+        <select class="form-input" id="sbi-disc-mode" style="flex:0 0 auto;width:45%">
+          <option value="percent" ${discMode==='percent'?'selected':''}>ลด % เปอร์เซ็นต์</option>
+          <option value="fixed"   ${discMode==='fixed'  ?'selected':''}>ลด ฿ จำนวนเงิน</option>
         </select>
-        <input class="form-input" type="number" inputmode="decimal" id="sbi-disc-val" value="${discVal}" placeholder="0" style="flex:1;text-align:right">
+        <input class="form-input" type="text" inputmode="decimal" id="sbi-disc-val" value="${discVal}" placeholder="0" oninput="App._fmtNum(this)" style="flex:1;text-align:right">
       </div>` : ''}
 
       <div style="margin-bottom:8px">
         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">วิธีหาร</div>
-        <div class="chips" style="padding:0;gap:6px">
-          <button class="chip${item.splitMode!=='ratio'?' active':''}" onclick="App._sbItemSetMode('equal')">เท่ากัน</button>
-          <button class="chip${item.splitMode==='ratio'?' active':''}" onclick="App._sbItemSetMode('ratio')">สัดส่วน</button>
+        <div class="chips" style="padding:0">
+          <button class="chip${item.splitMode!=='ratio'?' active':''}" onclick="App._sbItemSetMode('equal')" style="min-width: 70px !important;">เท่ากัน</button>
+          <button class="chip${item.splitMode==='ratio'?' active':''}" onclick="App._sbItemSetMode('ratio')" style="min-width: 70px !important;">สัดส่วน</button>
         </div>
       </div>
 
       <div style="margin-bottom:10px">
-        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">ใครกินรายการนี้</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">เลือกคนที่กินรายการนี้</div>
         <div class="chips" style="flex-wrap:wrap;gap:6px;padding:0">${personChips}</div>
       </div>
 
@@ -632,11 +676,11 @@
       <div class="sub-scroll" style="padding:16px 16px 40px">
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">${rows}</div>
         ${!editing ? `<button class="btn btn-secondary" onclick="App._sbAddItem()" style="margin-bottom:16px">+ เพิ่มรายการ</button>` : ''}
-        ${items.length && !editing ? `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <span style="font-size:13px;color:var(--muted)">ยอดรายการรวม</span>
-          <span style="font-weight:800;color:var(--primary)">${fmt(sub)}</span>
+        ${items.length && !editing ? `<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;border-color: var(--primary) !important;">
+          <span style="font-size:16px!important;color:var(--muted)">ยอดรายการรวม</span>
+          <span style="font-size:18px!important;font-weight:800;color:var(--primary)">${fmt(sub)}</span>
         </div>` : ''}
-        ${!editing ? navRow('ถัดไป: ส่วนลด / SC / VAT →', 'App._sbNext3()', 'App._sbBack()') : ''}
+        ${!editing ? navRow('ถัดไป: ส่วนลด / ค่าบริการอื่น →', 'App._sbNext3()', 'App._sbBack()') : ''}
       </div>`, opts)
 
     if (editing) {
@@ -675,14 +719,14 @@
     const item = _draft.items[_editingItemIdx]
     if (!item) return
     item.name  = document.getElementById('sbi-name')?.value.trim() || ''
-    item.price = Number(document.getElementById('sbi-price')?.value) || 0
+    item.price = numVal(document.getElementById('sbi-price'))
     // Clear legacy fields if present
     delete item.qty; delete item.pricePerUnit
     if (!item.discount) item.discount = { enabled: false, mode: 'percent', value: 0 }
     const discModeEl = document.getElementById('sbi-disc-mode')
     const discValEl  = document.getElementById('sbi-disc-val')
     if (discModeEl) item.discount.mode  = discModeEl.value
-    if (discValEl)  item.discount.value = Number(discValEl.value) || 0
+    if (discValEl)  item.discount.value = numVal(discValEl)
     if (item.splitMode === 'ratio') {
       ;(item.participants||[]).forEach(p => {
         const el = document.getElementById(`sbi-ratio-${p.personId}`)
@@ -732,21 +776,66 @@
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  STEP 4 — ส่วนลด / SC / VAT + rounding
+  //  STEP 4 — ส่วนลด / ค่าบริการอื่น SC / VAT + rounding
   // ══════════════════════════════════════════════════════════════
+  function _sbBuildPreviewRows() {
+    const sub = itemSubtotal(_draft)
+    const { finalTotal, steps, roundingDelta } = runPipeline(sub, _draft.pipeline, _draft.rounding)
+    const lines = []
+    lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px">
+        <span>ยอดอาหาร</span><span>${fmt(sub)}</span>
+      </div>`)
+    steps.slice(1).forEach(s => {
+      const sign  = s.delta < 0 ? '−' : '+'
+      const color = s.delta < 0 ? 'var(--income)' : 'var(--expense)'
+      const note  = s.base === 'food' ? `<span style="font-size:11px;margin-left:4px">(จากยอดอาหาร)</span>` : ''
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px">
+        <span style="color:var(--muted)">${esc(s.label)}${note}</span>
+        <span style="color:${color}">${sign} ${fmt(Math.abs(s.delta))}</span>
+      </div>`)
+    })
+    if (_draft.rounding.mode !== 'off' && roundingDelta !== 0) {
+      const sign  = roundingDelta < 0 ? '−' : '+'
+      const color = roundingDelta < 0 ? 'var(--income)' : 'var(--expense)'
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px">
+        <span style="color:var(--muted)">ปัดเศษ</span>
+        <span style="color:${color}">${sign} ${fmt(Math.abs(roundingDelta))}</span>
+      </div>`)
+    }
+    lines.push(`<div style="display:flex;justify-content:space-between;padding:10px 0 2px;font-size:16px;font-weight:800;border-top:1px solid var(--border);margin-top:8px;color:var(--primary)">
+        <span>ยอดรวม</span><span>${fmt(finalTotal)}</span>
+      </div>`)
+    return lines.join('')
+  }
+
+  App._sbUpdatePreview = function () {
+    const card = document.getElementById('sb-preview-card')
+    if (!card) return
+    _sbPipeSaveAll()
+    const el = document.getElementById('rounding-custom')
+    if (el) {
+      const sign = _draft.rounding.amount > 0 ? 1 : -1
+      _draft.rounding.amount = sign * (Math.abs(Number(el.value)) / 100 || 0)
+    }
+    card.innerHTML = _sbBuildPreviewRows()
+  }
+
   function _sbStep4(opts) {
     const sub = itemSubtotal(_draft)
     const pipeline = _draft.pipeline
-    const { finalTotal, steps } = runPipeline(sub, pipeline)
+    const rm = _draft.rounding
+
+    const pillBtn = (label, active, onclick) =>
+      `<button onclick="${onclick}" style="border:1px solid ${active?'var(--primary)':'var(--border)'};border-radius:12px;padding:2px 10px;font-size:12px;background:${active?'var(--primary)':'transparent'};color:${active?'#fff':'var(--muted)'};">${label}</button>`
 
     const pipelineRows = pipeline.map((p, i) => {
       const isFirst   = i === 0
       const isLast    = i === pipeline.length - 1
-      const signLabel = p.type === 'discount' ? '−' : '+'
+      const showBasePills = p.enabled && p.mode === 'percent' && p.type !== 'discount'
       return `<div class="card card-pad" style="margin-bottom:6px;opacity:${p.enabled?1:0.5}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:${p.enabled?'8':'0'}px">
           <button class="toggle${p.enabled?' on':''}" onclick="App._sbPipeToggle(${i})" aria-label="${esc(p.label)}"></button>
-          <span style="font-weight:600;flex:1">${signLabel} ${esc(p.label)}</span>
+          <span style="font-weight:600;flex:1">${esc(p.label)}</span>
           <div style="display:flex;gap:4px">
             ${!isFirst?`<button class="btn-icon" onclick="App._sbPipeMove(${i},-1)">↑</button>`:'<div style="width:32px"></div>'}
             ${!isLast ?`<button class="btn-icon" onclick="App._sbPipeMove(${i}, 1)">↓</button>`:'<div style="width:32px"></div>'}
@@ -754,59 +843,80 @@
         </div>
         ${p.enabled ? `
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-            <div class="form-group" style="margin:0">
-              <label class="form-label">ประเภท</label>
-              <select class="form-input" id="pipe-mode-${i}" onchange="App._sbPipeSave()">
-                <option value="percent" ${p.mode==='percent'?'selected':''}>% (เปอร์เซ็นต์)</option>
-                <option value="fixed"   ${p.mode==='fixed'?'selected':''}>฿ (จำนวนเงิน)</option>
-              </select>
-            </div>
-            <div class="form-group" style="margin:0">
-              <label class="form-label">${p.mode==='percent'?'%':'฿'}</label>
-              <input class="form-input" type="number" inputmode="decimal" id="pipe-val-${i}" value="${p.value||''}" oninput="App._sbPipeSave()">
-            </div>
-          </div>` : ''}
+            <select class="form-input" id="pipe-mode-${i}" onchange="App._sbPipeSave();App._sbUpdatePreview()">
+              <option value="percent" ${p.mode==='percent'?'selected':''}>% (เปอร์เซ็นต์)</option>
+              <option value="fixed"   ${p.mode==='fixed'?'selected':''}>฿ (จำนวนเงิน)</option>
+            </select>
+            <input class="form-input" type="text" inputmode="decimal" id="pipe-val-${i}" value="${p.value||''}" oninput="App._fmtNum(this);App._sbPipeSave();App._sbUpdatePreview()">
+          </div>
+          ${showBasePills ? `
+          <div style="display:flex;gap:4px;margin-top:8px">
+            ${pillBtn('ยอดสะสม', p.base !== 'food', `App._sbPipeBaseToggle(${i},'running')`)}
+            ${pillBtn('ยอดอาหาร', p.base === 'food', `App._sbPipeBaseToggle(${i},'food')`)}
+          </div>` : ''}` : ''}
       </div>`
     }).join('')
-
-    const previewRows = steps.map((s, i) => `
-      <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;${i===steps.length-1?'font-weight:800;border-top:1px solid var(--border);padding-top:8px;margin-top:4px':''}">
-        <span style="color:${i===0||i===steps.length-1?'var(--text)':'var(--muted)'}">${esc(s.label)}</span>
-        <span style="${s.delta<0?'color:var(--income)':s.delta>0?'color:var(--expense)':''}">
-          ${i>0&&i<steps.length-1?(s.delta>=0?'+':'')+fmt(Math.abs(s.delta)):''}
-          ${i>0?`= ${fmt(s.amount)}`:fmt(s.amount)}
-        </span>
-      </div>`).join('')
 
     App.openSubScreen(`
       ${stepHeader('App._sbBack()')}
       <div class="sub-scroll" style="padding:16px 16px 40px">
         ${sub > 0
-          ? `<div class="card" style="padding:12px 14px;margin-bottom:14px">${previewRows}</div>`
+          ? `<div id="sb-preview-card" class="card" style="padding:12px 14px;margin-bottom:14px">${_sbBuildPreviewRows()}</div>`
           : `<div style="color:var(--muted);font-size:13px;margin-bottom:14px">ยังไม่มีรายการอาหาร (ยอดจะคำนวณเมื่อเพิ่มรายการแล้ว)</div>`}
         ${pipelineRows}
         <div class="card card-pad" style="margin-top:8px">
-          <div style="display:flex;align-items:center;gap:10px">
-            <button class="toggle${_draft.rounding?' on':''}" onclick="App._sbToggleRounding()" aria-label="ปัดเศษ"></button>
-            <div>
-              <div style="font-weight:600">ปัดเศษ (ทุก 25 สตางค์)</div>
-              <div style="font-size:12px;color:var(--muted)">ปัดยอดต่อคนเป็น 0 / 25 / 50 / 75 สตางค์</div>
+          <div style="display:flex;gap:10px">
+            <button class="toggle${rm.mode!=='off'?' on':''}" onclick="App._sbToggleRounding()" aria-label="ปัดเศษ" style="align-self: flex-start"></button>
+            <div style="flex:1">
+              <div style="font-weight:600">ปัดเศษยอดรวมบิล</div>
+              ${rm.mode !== 'off' ? `
+              <div style="display:flex;gap:4px;margin-top:6px">
+                ${pillBtn('ทุก 25 สต.', rm.mode==='satang25', "App._sbSetRoundingMode('satang25')")}
+                ${pillBtn('กำหนดเอง',   rm.mode==='custom',   "App._sbSetRoundingMode('custom')")}
+              </div>
+              ${rm.mode === 'custom' ? `
+              <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
+                <button onclick="App._sbToggleRoundingSign()" style="width:28px;height:28px;border-radius:50%;border:1.5px solid var(--primary);background:${rm.amount>0?'transparent':'var(--primary)'};color:${rm.amount>0?'var(--primary)':'#fff'};font-size:16px;font-weight:700;line-height:1;padding:0;flex-shrink:0">${rm.amount>0?'+':'−'}</button>
+                <input class="form-input" type="number" inputmode="numeric" id="rounding-custom" value="${Math.round(Math.abs(rm.amount)*100)||''}" placeholder="0" min="0" max="99" step="1" oninput="if(this.value !== '' && this.value > 99) this.value = 99; if(this.value !== '' && this.value < 0) this.value = 0; App._sbUpdatePreview()" style="width:70px;padding:0px 10px !important;min-height:36px !important;">
+                <span style="font-size:13px;color:var(--muted)">สตางค์</span>
+              </div>` : ''}` : ''}
             </div>
           </div>
         </div>
-        ${navRow('ถัดไป: ใครจ่าย →', 'App._sbNext4()', 'App._sbBack()')}
+        ${navRow('ถัดไป: ระบุคนจ่าย →', 'App._sbNext4()', 'App._sbBack()')}
       </div>`, opts)
   }
 
   App._sbToggleRounding = function () {
     _sbPipeSaveAll()
-    _draft.rounding = !_draft.rounding
+    _draft.rounding = _draft.rounding.mode !== 'off'
+      ? { mode: 'off', amount: 0 }
+      : { mode: 'satang25', amount: 0 }
+    _sbStep4(noAnim)
+  }
+
+  App._sbSetRoundingMode = function (mode) {
+    _sbPipeSaveAll()
+    _draft.rounding = { mode, amount: _draft.rounding.amount || 0 }
+    _sbStep4(noAnim)
+  }
+
+  App._sbToggleRoundingSign = function () {
+    const el = document.getElementById('rounding-custom')
+    const absVal = el ? Math.abs(Number(el.value) || 0) / 100 : Math.abs(_draft.rounding.amount || 0)
+    _draft.rounding.amount = _draft.rounding.amount > 0 ? -absVal : absVal
     _sbStep4(noAnim)
   }
 
   App._sbPipeToggle = function (i) {
     _sbPipeSaveAll()
     _draft.pipeline[i].enabled = !_draft.pipeline[i].enabled
+    _sbStep4(noAnim)
+  }
+
+  App._sbPipeBaseToggle = function (i, val) {
+    _sbPipeSaveAll()
+    _draft.pipeline[i].base = val
     _sbStep4(noAnim)
   }
 
@@ -825,7 +935,7 @@
       const modeEl = document.getElementById(`pipe-mode-${i}`)
       const valEl  = document.getElementById(`pipe-val-${i}`)
       if (modeEl) p.mode  = modeEl.value
-      if (valEl)  p.value = Number(valEl.value) || 0
+      if (valEl)  p.value = numVal(valEl)
     })
   }
 
@@ -835,28 +945,29 @@
   //  STEP 5 — ใครจ่ายไปแล้ว
   // ══════════════════════════════════════════════════════════════
   function _sbStep5(opts) {
-    const { finalTotal } = runPipeline(itemSubtotal(_draft), _draft.pipeline)
+    const { finalTotal } = runPipeline(itemSubtotal(_draft), _draft.pipeline, _draft.rounding)
 
     const { shares } = calcShares(_draft)
     const rows = _draft.peopleIds.map(id => {
       const person  = SbStore.getPerson(id)
       const name    = person ? person.name : '?'
       const share   = r2(shares[id] || 0)
-      const paid    = _draft.payments[id] || ''
-      const hasPaid = Number(paid) > 0
+      const paidRaw = _draft.payments[id] || 0
+      const paid    = paidRaw ? String(paidRaw).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''
+      const hasPaid = paidRaw > 0
       const safeId  = esc(id)
       return `<div class="detail-row" style="align-items:center">
-        <div style="flex:1">
+        <div style="flex:4">
           <div style="font-weight:600">${esc(name)}</div>
-          <div style="font-size:12px;color:var(--muted)">ส่วนแบ่ง ${fmt(share)}</div>
+          <div style="font-size:12px;color:var(--muted)">ยอดจ่าย ${fmt(share)}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:6px">
+        <div style="display:flex;flex:5;align-items:center;gap:6px">
           <span style="color:var(--muted)">฿</span>
-          <div style="position:relative;display:flex;align-items:center">
-            <input class="form-input" type="number" inputmode="decimal" id="pay-${safeId}"
-              value="${paid}" placeholder="0"
-              style="width:110px;text-align:right;padding-right:${hasPaid?'28':'10'}px"
-              oninput="(function(v,id){var x=document.getElementById('pay-x-'+id);if(x){x.style.display=v?'flex':'none'};document.getElementById('pay-'+id).style.paddingRight=v?'28px':'10px'})(this.value,'${safeId}')">
+          <div style="position:relative;display:flex;align-items:center;flex:1">
+            <input class="form-input" type="text" inputmode="decimal" id="pay-${safeId}"
+              value="${paid||''}" placeholder="0"
+              style="width:100%;text-align:right;padding-right:${hasPaid?'28':'10'}px !important"
+              oninput="App._fmtNum(this);(function(v,id){var n=parseFloat(v.replace(/,/g,''))||0;var x=document.getElementById('pay-x-'+id);if(x){x.style.display=n>0?'flex':'none'};document.getElementById('pay-'+id).style.setProperty('padding-right',n>0?'28px':'10px','important')})(this.value,'${safeId}');App._sbUpdatePayRemaining()">
             <button id="pay-x-${safeId}" onclick="App._sbPayClear('${safeId}')"
               style="display:${hasPaid?'flex':'none'};position:absolute;right:6px;background:none;border:none;cursor:pointer;color:var(--muted);padding:2px;align-items:center;font-size:13px;line-height:1">✕</button>
           </div>
@@ -868,18 +979,20 @@
     App.openSubScreen(`
       ${stepHeader('App._sbBack()')}
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        <div style="font-size:13px;color:var(--muted);margin-bottom:10px">ระบุว่าใครจ่ายเงินไปแล้วเท่าไหร่ ถ้าไม่ได้จ่ายเว้นว่างไว้</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px">ระบุว่าใครจ่ายเงินไปแล้วบ้าง ถ้าไม่ได้จ่ายเว้นว่างไว้</div>
         <div class="card card-pad">
           ${rows||'<div style="color:var(--muted)">ยังไม่มีคน</div>'}
-          <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;font-size:12px;color:var(--muted)">กด "ทั้งหมด" เพื่อใส่ยอดรวม ${fmt(finalTotal)} อัตโนมัติ</div>
+          <div id="sb-pay-remaining" style="padding-top:8px;margin-top:4px;font-size:14px"></div>
+          <div style="padding-top:4px;font-size:16px;color:var(--muted)">ยอดรวมทั้งหมด <span style="font-weight:800;font-size:18px;color:var(--primary)">${fmt(finalTotal)}</span></div>
         </div>
         ${navRow('ถัดไป: สรุป →', 'App._sbNext5()', 'App._sbBack()')}
       </div>`, opts)
+    App._sbUpdatePayRemaining()
   }
 
   App._sbPayAll = function (personId) {
     _sbSavePayments()
-    const { finalTotal } = runPipeline(itemSubtotal(_draft), _draft.pipeline)
+    const { finalTotal } = runPipeline(itemSubtotal(_draft), _draft.pipeline, _draft.rounding)
     _draft.payments[personId] = finalTotal
     _sbStep5(noAnim)
   }
@@ -893,11 +1006,30 @@
   function _sbSavePayments() {
     _draft.peopleIds.forEach(id => {
       const el = document.getElementById(`pay-${id}`)
-      _draft.payments[id] = el ? (Number(el.value) || 0) : (_draft.payments[id] || 0)
+      _draft.payments[id] = el ? numVal(el) : (_draft.payments[id] || 0)
     })
   }
 
   App._sbNext5 = function () { _sbSavePayments(); _step = 5; _sbRender() }
+
+  App._sbUpdatePayRemaining = function () {
+    const el = document.getElementById('sb-pay-remaining')
+    if (!el) return
+    const { finalTotal } = runPipeline(itemSubtotal(_draft), _draft.pipeline, _draft.rounding)
+    let paid = 0
+    _draft.peopleIds.forEach(id => {
+      const inp = document.getElementById(`pay-${id}`)
+      paid = r2(paid + (inp ? numVal(inp) : (_draft.payments[id] || 0)))
+    })
+    const remaining = r2(finalTotal - paid)
+    if (remaining === 0) {
+      el.innerHTML = `<span style="color:var(--success,#22c55e);font-weight:600">ครบแล้ว</span>`
+    } else if (remaining > 0) {
+      el.innerHTML = `ยังขาดอีก <span style="font-weight:700;color:var(--warning,#f59e0b)">${fmt(remaining)}</span>`
+    } else {
+      el.innerHTML = `จ่ายเกินมา <span style="font-weight:700;color:var(--muted)">${fmt(Math.abs(remaining))}</span>`
+    }
+  }
 
   // ══════════════════════════════════════════════════════════════
   //  STEP 6 — สรุป
@@ -915,12 +1047,12 @@
             </div>
             <div style="font-size:20px;font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
           </div>`).join('')
-      : `<div style="text-align:center;padding:16px 0;color:var(--muted)">ทุกคนเสมอกันแล้ว 🎉</div>`
+      : `<div style="text-align:center;padding:16px 0;color:var(--muted)">ทุกคนไม่ติดค้างแล้ว 🎉</div>`
 
     const detailRows = result.personResults.map(p => `
       <div class="detail-row" style="font-size:13px">
         <div style="flex:1">${esc(p.name)}</div>
-        <div style="text-align:right;color:var(--muted)">ส่วนแบ่ง ${fmt(p.finalShare)}</div>
+        <div style="text-align:right;color:var(--muted)">ยอดจ่าย ${fmt(p.finalShare)}</div>
       </div>`).join('')
 
     const warnHtml = result.warnings.map(w =>
@@ -944,13 +1076,13 @@
         <div style="margin-bottom:16px">${transferRows}</div>
 
         <details style="margin-bottom:16px">
-          <summary style="font-size:13px;color:var(--muted);cursor:pointer;padding:4px 0">ส่วนแบ่งต่อคน</summary>
-          <div class="card card-pad" style="margin-top:8px">${detailRows}</div>
+          <summary style="font-size:13px;color:var(--muted);cursor:pointer;padding:4px 0">ยอดจ่ายต่อคน</summary>
+          <div class="card card-pad" style="margin-top:8px;padding:0px 10px">${detailRows}</div>
         </details>
 
         <textarea id="sb6-copy-text" style="position:absolute;left:-9999px;top:0;opacity:0;width:1px;height:1px">${esc(copyText)}</textarea>
         <button class="btn btn-primary" onclick="App._sbSaveBill()" style="width:100%;margin-bottom:8px">💾 บันทึกบิล</button>
-        <button class="btn btn-secondary" onclick="App._sbCopyLine()" style="width:100%">📋 คัดลอกสำหรับส่ง LINE</button>
+        <button class="btn btn-secondary" onclick="App._sbCopyLine()" style="width:100%">📋 ข้อความ</button>
       </div>`, opts)
   }
 
@@ -986,7 +1118,7 @@
     const rows = people.map(p => {
       if (_editingId === p.id) {
         return `
-          <div class="settings-row" style="gap:8px;align-items:center">
+          <div class="settings-row" style="padding: 0px 8px 0px 0px;gap:8px;align-items:center">
             <input class="form-input" id="sbp-edit-${esc(p.id)}" value="${esc(p.name)}"
               style="flex:1;padding:8px 10px;font-size:14px"
               onkeydown="if(event.key==='Enter')App._sbSaveEditPerson('${esc(p.id)}');if(event.key==='Escape')App.openSplitPeopleScreen()">
@@ -995,7 +1127,7 @@
           </div>`
       }
       return `
-        <div class="settings-row">
+        <div class="settings-row" style="padding:0px 8px">
           <div class="s-label" style="flex:1">${esc(p.name)}</div>
           <button class="btn-icon" onclick="App.openSplitPeopleScreen('${esc(p.id)}')" style="color:var(--muted);font-size:13px" title="แก้ไข">✏️</button>
           <button class="btn-icon" onclick="App._sbDeletePerson('${esc(p.id)}')" style="color:var(--expense);font-size:13px" title="ลบ">🗑</button>
@@ -1010,13 +1142,13 @@
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         <div style="display:flex;gap:8px;margin-bottom:16px">
-          <input class="form-input" id="sbp-newname" placeholder="พิมพ์ชื่อสมาชิก..."
+          <input class="form-input" id="sbp-newname" placeholder="พิมพ์ชื่อสมาชิกแล้วกด +"
             style="flex:1;padding:10px 14px;font-size:14px"
             onkeydown="if(event.key==='Enter')App._sbAddPerson()">
-          <button class="btn btn-primary" onclick="App._sbAddPerson()" style="width:auto;padding:10px 18px;flex-shrink:0">+</button>
+          <button class="btn btn-primary" onclick="App._sbAddPerson()" style="width:70px;padding:10px 18px;flex-shrink:0">+ เพิ่ม</button>
         </div>
         ${people.length
-          ? `<div class="card card-pad">${rows}</div>`
+          ? `<div class="card card-pad" style="padding:3px 8px">${rows}</div>`
           : `<div style="text-align:center;padding:32px 0;color:var(--muted)"><div style="font-size:32px">👥</div><div style="margin-top:8px">ยังไม่มีสมาชิก</div></div>`}
       </div>`, noAnim)
     if (_editingId) {
@@ -1077,8 +1209,8 @@
           <div class="settings-row" onclick="App.openSplitBillScreen()">
             <div class="s-icon">🍽️</div><div class="s-label">หารบิล</div>
             ${billCount?`<div class="s-value">${billCount} บิล`:''}
-            <div class="s-arrow">›</div>
           </div>
+          <div class="s-arrow">›</div>
         </div>`
       const header = inner.querySelector('.more-sticky-header')
       if (header) header.insertAdjacentElement('afterend', sec)

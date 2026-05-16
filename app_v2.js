@@ -168,7 +168,7 @@
       if (!scroll) return
       const cls = ccbrDirection === 'prev' ? 'ccbr-panel-prev' : 'ccbr-panel-next'
       scroll.classList.add(cls)
-      setTimeout(() => scroll.classList.remove('ccbr-panel-prev', 'ccbr-panel-next'), 260)
+      setTimeout(() => scroll.classList.remove('ccbr-panel-prev', 'ccbr-panel-next'), 500)
     })
   }
 
@@ -8607,7 +8607,7 @@ App._pickMerchant = function(name, opts = {}) {
         <div class="sec-title">การแสดงผล</div>
         <div class="card card-pad">
           ${row({ icon:'🌙', label:'โหมดมืด', onclick:'App.toggleDark()', toggle:`<button class="toggle${S.settings.darkMode ? ' on' : ''}" onclick="event.stopPropagation();App.toggleDark()" aria-label="สลับโหมดมืด" aria-pressed="${S.settings.darkMode ? 'true' : 'false'}"></button>` })}
-          <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+          <div style="padding:14px 0">
             <div style="font-size:15px;font-weight:600;margin-bottom:12px">🎨 สีธีม</div>
             <div class="color-row">${ACCENTS.map(c => `<div class="color-dot${S.settings.accentColor===c?' selected':''}" style="background:${c}" onclick="App.setAccent('${c}')"></div>`).join('')}</div>
           </div>
@@ -14069,7 +14069,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="sec-title">การแสดงผล</div>
       <div class="card card-pad">
         ${row({ icon:'🌙', label:'โหมดมืด', onclick:'App.toggleDark()', toggle:`<button class="toggle${S.settings.darkMode?' on':''}" onclick="event.stopPropagation();App.toggleDark()" aria-label="สลับโหมดมืด" aria-pressed="${S.settings.darkMode?'true':'false'}"></button>` })}
-        <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+        <div style="padding:14px 0">
           <div style="font-size:15px;font-weight:600;margin-bottom:12px">🎨 สีธีม</div>
           <div class="color-row">${ACCENTS.map(c=>`<div class="color-dot${S.settings.accentColor===c?' selected':''}" style="background:${c}" onclick="App.setAccent('${c}')"></div>`).join('')}</div>
         </div>
@@ -16637,7 +16637,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       if (!scroll) return
       const cls = ccbrDirection === 'prev' ? 'ccbr-panel-prev' : 'ccbr-panel-next'
       scroll.classList.add(cls)
-      setTimeout(() => scroll.classList.remove('ccbr-panel-prev', 'ccbr-panel-next'), 260)
+      setTimeout(() => scroll.classList.remove('ccbr-panel-prev', 'ccbr-panel-next'), 500)
     })
   }
 
