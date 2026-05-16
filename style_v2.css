@@ -3266,7 +3266,7 @@ body {
 }
 
 /* Transaction compact follow-up */
-.tx-summary-cards-compact{margin:0 0 8px!important;gap:8px!important}
+.tx-summary-cards-compact{margin:8px 0 8px 0!important;gap:8px!important}
 .tx-summary-cards-compact .tx-summary-card{border-radius:15px!important;padding:9px 12px!important;min-height:58px!important}
 .tx-summary-cards-compact .tx-summary-card span{font-size:11.5px!important;margin-bottom:4px!important}
 .tx-summary-cards-compact .tx-summary-card strong{font-size:17px!important;letter-spacing:-.04em!important;overflow:hidden;text-overflow:ellipsis}
@@ -6630,3 +6630,117 @@ html.dark .mt-undo-bar { background: #0f172a; }
   border-color: var(--expense, #DC2626) !important;
   background: rgba(220,38,38,.05) !important;
 }
+
+/* ── Spending Calendar ──────────────────────────────────────── */
+.spcal-summary {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.spcal-stat {
+  flex: 1;
+  background: var(--surface);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 10px 8px;
+  text-align: center;
+  min-width: 0;
+}
+.spcal-stat[onclick] { cursor: pointer; }
+.spcal-stat[onclick]:active { opacity: .7; }
+.spcal-stat-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.spcal-stat-value { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spcal-stat-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.spcal-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.spcal-legend-track { display: flex; gap: 3px; }
+.spcal-ldot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.spcal-ldot.spcal-l1 { background: #FEF2F2; border: 1px solid #FECACA; }
+.spcal-ldot.spcal-l2 { background: rgba(220,38,38,.22); }
+.spcal-ldot.spcal-l3 { background: rgba(220,38,38,.45); }
+.spcal-ldot.spcal-l4 { background: rgba(220,38,38,.68); }
+.spcal-ldot.spcal-l5 { background: #DC2626; }
+
+.spcal-header-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.spcal-hdr {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+.spcal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.spcal-cell {
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .1s;
+  user-select: none;
+}
+.spcal-cell:active { transform: scale(.88); }
+.spcal-empty  { border: none !important; background: transparent !important; cursor: default; pointer-events: none; }
+.spcal-future { opacity: .3; cursor: default; pointer-events: none; }
+.spcal-dn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+}
+
+/* Color levels */
+.spcal-l1 { background: #FEF2F2; border-color: #FECACA; }
+.spcal-l2 { background: rgba(220,38,38,.22); border-color: rgba(220,38,38,.32); }
+.spcal-l3 { background: rgba(220,38,38,.45); border-color: rgba(220,38,38,.55); }
+.spcal-l3 .spcal-dn { color: #fff; }
+.spcal-l4 { background: rgba(220,38,38,.68); border-color: rgba(220,38,38,.78); }
+.spcal-l4 .spcal-dn { color: #fff; }
+.spcal-l5 { background: #DC2626; border-color: #B91C1C; }
+.spcal-l5 .spcal-dn { color: #fff; }
+
+/* Today ring */
+.spcal-today::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 10px;
+  border: 2px solid var(--primary);
+  pointer-events: none;
+}
+
+/* Dark mode */
+html.dark .spcal-stat  { background: var(--elevated); }
+html.dark .spcal-cell  { background: var(--elevated); border-color: var(--border); }
+html.dark .spcal-l1    { background: rgba(220,38,38,.18); border-color: rgba(220,38,38,.28); }
+html.dark .spcal-l2    { background: rgba(220,38,38,.32); border-color: rgba(220,38,38,.42); }
+html.dark .spcal-l3    { background: rgba(220,38,38,.50); border-color: rgba(220,38,38,.60); }
