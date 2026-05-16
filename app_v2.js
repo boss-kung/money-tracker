@@ -2111,7 +2111,7 @@ App.render();
   }
   // Keep app height stable while the iOS keyboard is open.
   let stableAppHeight = Math.round(isStandaloneMode() ? getStandaloneHeight() : (window.innerHeight || document.documentElement.clientHeight || 0))
-  const isFormControl = el => !!el && el.matches?.('input, textarea, select, [contenteditable="true"]')
+  const isFormControl = el => !!el && el.matches?.('input:not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, [contenteditable="true"]')
   const isKeyboardLikelyOpen = () => {
     const vv = window.visualViewport
     const layoutH = Math.round(window.innerHeight || document.documentElement.clientHeight || stableAppHeight || 0)
@@ -5143,7 +5143,7 @@ App._pickMerchant = function(name, opts = {}) {
   App.setTxType = function(t) { S.txType = t; App.renderTransactions() }
 
   // iOS keyboard/select guard: hide nav/FAB while form controls are active.
-  function isFormControl(el) { return !!el && (el.matches?.('input, textarea, select, [contenteditable="true"]')) }
+  function isFormControl(el) { return !!el && (el.matches?.('input:not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, [contenteditable="true"]')) }
   function syncKeyboardClass(force) {
     const active = isFormControl(document.activeElement)
     const vv = window.visualViewport
