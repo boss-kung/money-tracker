@@ -999,20 +999,23 @@ const App = {
       handle.className = 'sub-screen-handle'
       header.before(handle)
     }
-    // Left-edge swipe-right to go back (iOS-style)
-    let _eX = 0, _eY = 0, _eActive = false
-    ss.addEventListener('touchstart', e => {
-      const t = e.touches[0]
-      _eX = t.clientX; _eY = t.clientY
-      _eActive = t.clientX < 28
-    }, { passive: true })
-    ss.addEventListener('touchend', e => {
-      if (!_eActive) return
-      _eActive = false
-      const t = e.changedTouches[0]
-      if (t.clientX - _eX > 80 && Math.abs(t.clientY - _eY) < 60)
-        ss.querySelector('.sub-header .btn-icon')?.click()
-    }, { passive: true })
+    // Left-edge swipe-right to go back — attach once per element lifetime
+    if (!ss._edgeSwipeReady) {
+      ss._edgeSwipeReady = true
+      let _eX = 0, _eY = 0, _eActive = false
+      ss.addEventListener('touchstart', e => {
+        const t = e.touches[0]
+        _eX = t.clientX; _eY = t.clientY
+        _eActive = t.clientX < 28
+      }, { passive: true })
+      ss.addEventListener('touchend', e => {
+        if (!_eActive) return
+        _eActive = false
+        const t = e.changedTouches[0]
+        if (t.clientX - _eX > 80 && Math.abs(t.clientY - _eY) < 60)
+          ss.querySelector('.sub-header .btn-icon')?.click()
+      }, { passive: true })
+    }
     ss.classList.toggle('no-page-slide', opts.animate === false)
     ss.classList.remove('open')
     void ss.offsetHeight
@@ -4389,11 +4392,11 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const card = walletById(S.payingCardId)
     const source = walletById(sourceId)
     if (!card || card.type !== 'credit') { toast('ไม่พบบัตรเครดิต', 'error'); return }
-    if (!sourceId || !source) { toast('กรุณาเลือกกระเป๋าต้นทาง', 'error'); return }
-    if (!amount || amount <= 0) { toast('กรุณาระบุยอดชำระ', 'error'); return }
-    if (source.type !== 'credit' && Number(source.balance || 0) < amount) { toast('ยอดเงินในกระเป๋าต้นทางไม่เพียงพอ', 'error'); return }
+    if (!sourceId || !source) { App._showFieldError('cc-pay-wallet', 'กรุณาเลือกกระเป๋าต้นทาง'); return }
+    if (!(amount > 0)) { App._showFieldError('cc-pay-amount', 'กรุณาระบุยอดชำระ'); return }
     const owed = Math.abs(Number(card.balance || 0))
-    if (owed > 0 && amount > owed + 0.01) { toast(`ยอดค้างชำระมี ${money(owed)} ไม่ควรชำระเกิน`, 'error'); return }
+    if (source.type !== 'credit' && Number(source.balance || 0) < amount) { App._showFieldError('cc-pay-amount', 'ยอดเงินในกระเป๋าไม่เพียงพอ'); return }
+    if (owed > 0 && amount > owed + 0.01) { App._showFieldError('cc-pay-amount', `ค้างชำระอยู่ ${money(owed)} ไม่ควรชำระเกิน`); return }
     const st = App.getCardStatement(card.id)
     const tx = { id:Calc.genId(), type:'cc_payment', amount, walletId:sourceId, toWalletId:card.id, date:today(), note:`ชำระ ${card.name}`, statementId:st?.id }
     const subScreenCardId = document.querySelector('.cc-detail-screen')?.dataset.cardId || ''
@@ -4499,7 +4502,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const walletId = g('rec-wallet')?.value || ''
     const nextDueDateRaw = g('rec-next')?.value || today()
     const cat = catById(categoryId)
-    if (!name || amount <= 0 || !walletId || !categoryId) { toast('กรุณากรอกข้อมูลรายการประจำให้ครบ', 'error'); return }
+    if (!name) { App._showFieldError('rec-name', 'กรุณากรอกชื่อรายการ'); return }
+    if (!(amount > 0)) { App._showFieldError('rec-amount', 'กรุณาระบุจำนวนเงิน'); return }
+    if (!walletId) { App._showFieldError('rec-wallet', 'กรุณาเลือกกระเป๋า'); return }
+    if (!categoryId) { App._showFieldError('rec-cat', 'กรุณาเลือกหมวดหมู่'); return }
 
     let nextDueDate = nextDueDateRaw
     if (recType === 'monthly') {
@@ -13702,17 +13708,17 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           </div>
           <div class="form-hint">${esc(template.hint)}</div>
         </div>
-        <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input class="form-input" value="${esc(draft.title)}" placeholder="${esc(template.titlePlaceholder)}" oninput="App._updatePrivilegeDraft('title', this.value)"></div>
+        <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input id="priv-form-title" class="form-input" value="${esc(draft.title)}" placeholder="${esc(template.titlePlaceholder)}" oninput="App._updatePrivilegeDraft('title', this.value)"></div>
         <div class="form-group"><label class="form-label">Platform / Source</label><input class="form-input" value="${esc(draft.platform)}" placeholder="${esc(template.platformPlaceholder)}" oninput="App._updatePrivilegeDraft('platform', this.value)"></div>
         ${template.showCodeQuick ? `<div class="form-group"><label class="form-label">โค้ด</label><input class="form-input" value="${esc(draft.code)}" placeholder="เช่น PAYDAY10" oninput="App._updatePrivilegeDraft('code', this.value)"></div>` : ''}
         ${template.showFreeItemQuick && showFreeItemName ? `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น อเมริกาโน่เย็น" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>` : ''}
         <div class="form-split-row">
-          <div><label class="form-label">วันหมดอายุ</label><input class="form-input" type="date" value="${esc(draft.expiryDate)}" oninput="App._updatePrivilegeDraft('expiryDate', this.value)"></div>
+          <div><label class="form-label">วันหมดอายุ</label><input id="priv-form-expiry" class="form-input" type="date" value="${esc(draft.expiryDate)}" oninput="App._updatePrivilegeDraft('expiryDate', this.value)"></div>
           <div><label class="form-label">คาดว่าประหยัดได้</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.estimatedSaving)}" oninput="App._updatePrivilegeDraft('estimatedSaving', this.value)"></div>
         </div>
         ${draft.type === 'discount_code' && !template.showCodeQuick ? `<div class="form-group"><label class="form-label">โค้ด</label><input class="form-input" value="${esc(draft.code)}" placeholder="ถ้ามี เช่น PAYDAY10" oninput="App._updatePrivilegeDraft('code', this.value)"></div>` : ''}
         ${template.showFreeItemQuick || !showFreeItemName ? '' : `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>`}
-        <div class="form-group"><label class="form-label">จำนวนสิทธิ์</label><input class="form-input" type="number" min="${draft.status === 'used' ? 0 : 1}" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
+        <div class="form-group"><label class="form-label">จำนวนสิทธิ์</label><input id="priv-form-qty" class="form-input" type="number" min="${draft.status === 'used' ? 0 : 1}" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
         <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" rows="4" placeholder="เงื่อนไขเพิ่มเติม" oninput="App._updatePrivilegeDraft('note', this.value)">${esc(draft.note)}</textarea></div>
         ${existing ? `<button class="btn btn-outline privilege-delete-btn" onclick="App.deletePrivilege('${esc(existing.id)}')">ลบสิทธิพิเศษ</button>` : ''}
       </div>`
@@ -13727,10 +13733,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       quantity: S.privilegeDraft?.quantity || 1,
       updatedAt: nowISO(),
     })
-    if (!draft.title) return toast('กรุณากรอกชื่อสิทธิพิเศษ', 'error')
-    if (!draft.expiryDate) return toast('กรุณาเลือกวันหมดอายุ', 'error')
-    if (draft.status === 'active' && !(Number(draft.quantity || 0) >= 1)) return toast('จำนวนสิทธิ์ต้องไม่น้อยกว่า 1', 'error')
-    if (draft.status !== 'active' && Number(draft.quantity || 0) < 0) return toast('จำนวนสิทธิ์ต้องไม่ติดลบ', 'error')
+    if (!draft.title) return App._showFieldError('priv-form-title', 'กรุณากรอกชื่อสิทธิพิเศษ')
+    if (!draft.expiryDate) return App._showFieldError('priv-form-expiry', 'กรุณาเลือกวันหมดอายุ')
+    if (draft.status === 'active' && !(Number(draft.quantity || 0) >= 1)) return App._showFieldError('priv-form-qty', 'จำนวนสิทธิ์ต้องไม่น้อยกว่า 1')
+    if (draft.status !== 'active' && Number(draft.quantity || 0) < 0) return App._showFieldError('priv-form-qty', 'จำนวนสิทธิ์ต้องไม่ติดลบ')
     if (Number(draft.estimatedSaving || 0) < 0 || Number(draft.value || 0) < 0 || Number(draft.minSpend || 0) < 0 || Number(draft.maxDiscount || 0) < 0) {
       return toast('ค่าตัวเลขต้องเป็นจำนวนไม่ติดลบ', 'error')
     }
