@@ -184,6 +184,19 @@
     </div>
   </div>
 
+  <!-- ── Overlay: Benefit Cap Breakdown ───────── -->
+  <div class="overlay" id="overlay-benefit-cap-breakdown" role="dialog" aria-modal="true" aria-label="สิทธิ์คงเหลือรายร้าน/ช่องทาง">
+    <div class="overlay-backdrop" onclick="App.closeOverlay('overlay-benefit-cap-breakdown')" aria-hidden="true"></div>
+    <div class="sheet">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-header">
+        <h2 id="benefit-cap-breakdown-title">สิทธิ์คงเหลือ</h2>
+        <button class="btn-icon" onclick="App.closeOverlay('overlay-benefit-cap-breakdown')" aria-label="ปิด">✕</button>
+      </div>
+      <div class="sheet-body" id="benefit-cap-breakdown-content"></div>
+    </div>
+  </div>
+
   <!-- ── Sub-screen (full overlay for sub-pages) -->
   <div id="sub-screen"></div>
 

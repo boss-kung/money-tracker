@@ -736,7 +736,7 @@
       danger: true,
       onConfirm() {
         const prefs = ensureSettings()
-        prefs.customRules = getCustomRules().filter(item => item.id !== ruleId)
+        prefs.customRules = prefs.customRules.filter(item => item.id !== ruleId)
         persist()
         syncCustomRules().catch(() => {})
         notify('ลบกฎแจ้งเตือนแล้ว', 'success')

@@ -2653,7 +2653,7 @@ App.render();
           placeholder="เช่น Grab, Netflix, เงินเดือน"
           value="${esc(S.tx.merchant)}"
           oninput="App._txField('merchant', this.value); App._showMerchantDropdown?.(this.value)"
-          onfocus="App._showMerchantDropdown?.(this.value)"
+          onfocus="if(this.value.trim())App._showMerchantDropdown?.(this.value)"
           onkeydown="if(event.key==='Enter'){event.preventDefault();App._confirmTypedMerchant?.()}"
           onblur="App._merchantBlurTimer=setTimeout(()=>App._hideMerchantDropdown?.(true),260)"
         >
@@ -2689,6 +2689,13 @@ App.render();
                   : (rule.merchantEligibleRemaining != null && rule.merchantEligibleRemaining <= 0
                     ? `<span class="list-item-sub" style="color:var(--expense)">ยอดร้านนี้เต็มแล้ว</span>`
                     : '')
+                const _channelHint = rule.channelCashbackRemaining != null
+                  ? (rule.channelCashbackRemaining <= 0
+                    ? `<span class="list-item-sub" style="color:var(--expense)">ช่องทางนี้ครบแล้ว</span>`
+                    : `<span class="list-item-sub" style="color:var(--muted)">เหลือในช่องทางนี้ ${esc(fmt(rule.channelCashbackRemaining))}</span>`)
+                  : (rule.channelEligibleRemaining != null && rule.channelEligibleRemaining <= 0
+                    ? `<span class="list-item-sub" style="color:var(--expense)">ยอดช่องทางนี้เต็มแล้ว</span>`
+                    : '')
                 return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}${rule.trackLocked ? ' locked' : ''}" onclick="App._toggleTxRewardRule('${esc(rule.id)}')" aria-pressed="${_selected ? 'true' : 'false'}">
                   <span class="csr-main">
                     <span>
@@ -2697,6 +2704,7 @@ App.render();
                       ${rule.description ? `<span class="list-item-sub">${esc(rule.description)}</span>` : ''}
                       ${_trackHint}
                       ${_merchantHint}
+                      ${_channelHint}
                     </span>
                   </span>
                   <span class="reward-rule-toggle${_selected ? ' on' : ''}" aria-hidden="true"><span class="reward-rule-toggle-knob"></span></span>
@@ -2704,7 +2712,7 @@ App.render();
               }).join('')
               const _warnings = (_estimate.stackingWarnings || []).map(msg => `<div class="form-hint" style="color:var(--expense)">${esc(msg)}</div>`).join('')
               const _capRows = (_estimate.rules || [])
-                .filter(row => row.capApplied || row.cycleRewardRemainingBefore != null || row.triggerMode === 'cycle_spend_threshold' || row.merchantCashbackRemainingBefore != null || row.merchantEligibleSpendRemainingBefore != null)
+                .filter(row => row.capApplied || row.cycleRewardRemainingBefore != null || row.triggerMode === 'cycle_spend_threshold' || row.merchantCashbackRemainingBefore != null || row.merchantEligibleSpendRemainingBefore != null || row.channelCashbackRemainingBefore != null || row.channelEligibleSpendRemainingBefore != null)
               const _caps = _capRows
                 .map(row => {
                   const _text = App.buildBenefitCapAppliedText?.(row) || ''
@@ -5865,7 +5873,7 @@ App._pickMerchant = function(name, opts = {}) {
     const selectedTrackChannels = d._trackChannels || getTriggerTrackChannels(trigger)
     const channelOpts = (App.getBenefitChannelOptions?.() || []).filter(([val]) => val !== '')
     const trackChannelChips = channelOpts.map(([val,lbl]) => `<button type="button" class="chip mini${selectedTrackChannels.includes(val)?' active':''}" onclick="App._ccbrToggleChip('_trackChannels','${esc(val)}',this)">${esc(lbl)}</button>`).join('')
-    return `<div class="card card-pad" style="margin-bottom:12px"><div style="display:flex;align-items:center;justify-content:space-between${hasTrigger?';margin-bottom:14px':''}"><div class="ccbr-section-label" style="margin:0">ยอดสะสมเพื่อปลดล็อก</div><button type="button" id="ccbr-trigger-toggle" class="toggle${hasTrigger?' on':''}" onclick="App._ccbrToggleTrigger()"></button></div><div id="ccbr-trigger-body"${hasTrigger?'':' style="display:none"'}><div class="form-group"><label class="form-label">ช่องทางที่นับสะสม</label><div class="ccbr-chip-scroll ccbr-track-channel-scroll">${trackChannelChips}</div><div class="form-hint">เลือกได้หลายช่องทาง · ไม่เลือก = นับทุก tx บนบัตร ไม่จำกัดเฉพาะรายการที่เลือกกฎนี้</div></div><div class="form-group"><label class="form-label">สะสมครบกี่บาทต่อรอบ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-trigger-threshold" value="${esc(v(trigger.thresholdAmount))}" placeholder="เช่น 2000"><span class="ccbr-input-unit">บาท</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label">วิธีให้รางวัล</label><div style="display:flex;gap:8px;margin-top:6px"><button type="button" class="chip mini${!isEvery?' active':''}" id="ccbr-grant-once" onclick="this.classList.add('active');document.getElementById('ccbr-grant-every').classList.remove('active')">ครั้งเดียวต่อรอบ</button><button type="button" class="chip mini${isEvery?' active':''}" id="ccbr-grant-every" onclick="this.classList.add('active');document.getElementById('ccbr-grant-once').classList.remove('active')" style="white-space:nowrap">ทุกครั้งที่ครบยอด</button></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">เพดานรางวัล <span class="ccbr-section-hint">ว่าง = ไม่จำกัด</span></div><div class="ccbr-2col"><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรายการ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-tx" value="${esc(v(limits.maxRewardAmountPerTx))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรอบบิล</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-cycle" value="${esc(v(limits.maxRewardAmountPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ยอดที่นำมาคำนวณ <span class="ccbr-section-hint">ว่าง = ไม่จำกัด</span></div><div class="ccbr-2col"><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรายการ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-tx" value="${esc(v(limits.maxEligibleSpendPerTx))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรอบบิล</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-cycle" value="${esc(v(limits.maxEligibleSpendPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">เพดานต่อร้านค้า/เดือน <span class="ccbr-section-hint">จำกัดแยกอิสระตามแต่ละร้านค้า · ว่าง = ไม่จำกัด</span></div><div class="ccbr-2col"><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ยอดคำนวณสูงสุด/ร้าน</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-merchant" value="${esc(v(limits.maxEligibleSpendPerMerchantPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿/ร้าน</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">เงินคืนสูงสุด/ร้าน</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-merchant" value="${esc(v(limits.maxRewardAmountPerMerchantPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿/ร้าน</span></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ตั้งค่าเพิ่มเติม</div><div class="tx-reward-toggle-row"><span>ใช้ร่วมกับสิทธิ์อื่นได้</span><button type="button" id="ccbr-stacking" class="toggle${d.allowStacking!==false?' on':''}" onclick="this.classList.toggle('on')"></button></div><div class="tx-reward-toggle-row"><span>เป็นสิทธิ์พื้นฐานของบัตร</span><button type="button" id="ccbr-base" class="toggle${d.isBaseRule?' on':''}" onclick="this.classList.toggle('on')"></button></div><div class="form-group" style="margin-top:10px;margin-bottom:0"><label class="form-label">ลำดับความสำคัญ</label><input class="form-input" type="number" step="1" id="ccbr-priority" value="${esc(v(d.priority||0))}"></div></div>`
+    return `<div class="card card-pad" style="margin-bottom:12px"><div style="display:flex;align-items:center;justify-content:space-between${hasTrigger?';margin-bottom:14px':''}"><div class="ccbr-section-label" style="margin:0">ยอดสะสมเพื่อปลดล็อก</div><button type="button" id="ccbr-trigger-toggle" class="toggle${hasTrigger?' on':''}" onclick="App._ccbrToggleTrigger()"></button></div><div id="ccbr-trigger-body"${hasTrigger?'':' style="display:none"'}><div class="form-group"><label class="form-label">ช่องทางที่นับสะสม</label><div class="ccbr-chip-scroll ccbr-track-channel-scroll">${trackChannelChips}</div><div class="form-hint">เลือกได้หลายช่องทาง · ไม่เลือก = นับทุก tx บนบัตร ไม่จำกัดเฉพาะรายการที่เลือกกฎนี้</div></div><div class="form-group"><label class="form-label">สะสมครบกี่บาทต่อรอบ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-trigger-threshold" value="${esc(v(trigger.thresholdAmount))}" placeholder="เช่น 2000"><span class="ccbr-input-unit">บาท</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label">วิธีให้รางวัล</label><div style="display:flex;gap:8px;margin-top:6px"><button type="button" class="chip mini${!isEvery?' active':''}" id="ccbr-grant-once" onclick="this.classList.add('active');document.getElementById('ccbr-grant-every').classList.remove('active')">ครั้งเดียวต่อรอบ</button><button type="button" class="chip mini${isEvery?' active':''}" id="ccbr-grant-every" onclick="this.classList.add('active');document.getElementById('ccbr-grant-once').classList.remove('active')" style="white-space:nowrap">ทุกครั้งที่ครบยอด</button></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">เพดานรางวัล <span class="ccbr-section-hint">ว่าง = ไม่จำกัด</span></div><div class="ccbr-2col"><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรายการ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-tx" value="${esc(v(limits.maxRewardAmountPerTx))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรอบบิล</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-cycle" value="${esc(v(limits.maxRewardAmountPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ยอดที่นำมาคำนวณ <span class="ccbr-section-hint">ว่าง = ไม่จำกัด</span></div><div class="ccbr-2col"><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรายการ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-tx" value="${esc(v(limits.maxEligibleSpendPerTx))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรอบบิล</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-cycle" value="${esc(v(limits.maxEligibleSpendPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">เพดานต่อร้านค้า/เดือน <span class="ccbr-section-hint">จำกัดแยกอิสระตามแต่ละร้านค้า · ว่าง = ไม่จำกัด</span></div><div class="ccbr-2col"><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ยอดคำนวณสูงสุด/ร้าน</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-merchant" value="${esc(v(limits.maxEligibleSpendPerMerchantPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿/ร้าน</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">เงินคืนสูงสุด/ร้าน</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-merchant" value="${esc(v(limits.maxRewardAmountPerMerchantPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿/ร้าน</span></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">เพดานต่อช่องทาง/เดือน <span class="ccbr-section-hint">จำกัดแยกอิสระตามแต่ละช่องทางชำระเงิน · ว่าง = ไม่จำกัด</span></div><div class="ccbr-2col"><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ยอดคำนวณสูงสุด/ช่องทาง</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-channel" value="${esc(v(limits.maxEligibleSpendPerChannelPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿/ช่องทาง</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">เงินคืนสูงสุด/ช่องทาง</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-channel" value="${esc(v(limits.maxRewardAmountPerChannelPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿/ช่องทาง</span></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ตั้งค่าเพิ่มเติม</div><div class="tx-reward-toggle-row"><span>ใช้ร่วมกับสิทธิ์อื่นได้</span><button type="button" id="ccbr-stacking" class="toggle${d.allowStacking!==false?' on':''}" onclick="this.classList.toggle('on')"></button></div><div class="tx-reward-toggle-row"><span>เป็นสิทธิ์พื้นฐานของบัตร</span><button type="button" id="ccbr-base" class="toggle${d.isBaseRule?' on':''}" onclick="this.classList.toggle('on')"></button></div><div class="form-group" style="margin-top:10px;margin-bottom:0"><label class="form-label">ลำดับความสำคัญ</label><input class="form-input" type="number" step="1" id="ccbr-priority" value="${esc(v(d.priority||0))}"></div></div>`
   }
   App._ccbrRenderStep = function(step, animate = true) {
     const d = App._ccbrDraft; if (!d) return
@@ -5934,6 +5942,8 @@ App._pickMerchant = function(name, opts = {}) {
         maxEligibleSpendPerCycle: readNum('ccbr-limit-eligible-cycle'),
         maxEligibleSpendPerMerchantPerCycle: readNum('ccbr-limit-eligible-merchant'),
         maxRewardAmountPerMerchantPerCycle: readNum('ccbr-limit-reward-merchant'),
+        maxEligibleSpendPerChannelPerCycle: readNum('ccbr-limit-eligible-channel'),
+        maxRewardAmountPerChannelPerCycle: readNum('ccbr-limit-reward-channel'),
       },
       rewardTrigger: {
         mode: triggerOn ? 'cycle_spend_threshold' : 'none',
@@ -7478,6 +7488,9 @@ App._pickMerchant = function(name, opts = {}) {
         ${sections.length === 0
           ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:6px">ใช้ได้ไม่จำกัด</div>`
           : sections.join('')}
+        ${(Number(rule.limits?.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxRewardAmountPerChannelPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerChannelPerCycle || 0) > 0)
+          ? `<button onclick="App.openBenefitCapBreakdownSheet('${esc(rule.id)}','${esc(cardId)}')" style="margin-top:10px;font-size:12px;color:var(--primary,#2563EB);background:none;border:none;padding:0;cursor:pointer;text-align:left">ดูสิทธิ์รายร้าน/ช่องทาง ›</button>`
+          : ''}
       </div>`
     }
 
@@ -7601,6 +7614,102 @@ App._pickMerchant = function(name, opts = {}) {
         <div id="cc-benefit-overview-body">${contentHtml}</div>
       </div>
     `)
+  }
+
+  App.openBenefitCapBreakdownSheet = function(ruleId, cardId) {
+    ensureCCBenefitRulesState?.()
+    const rule = (S.ccBenefitRules || []).find(r => r.id === ruleId)
+    if (!rule) return
+
+    const cycle = getCyclePeriodForDate(cardId, today(), rule)
+    const limits = rule.limits || {}
+    const cond = rule.suggestedConditions || {}
+    const merchants = Array.isArray(cond.merchants) ? cond.merchants.filter(Boolean) : []
+    const channels  = Array.isArray(cond.channels)  ? cond.channels.filter(Boolean)  : []
+
+    const rewardCap    = Number(limits.maxRewardAmountPerMerchantPerCycle  || 0)
+    const eligCap      = Number(limits.maxEligibleSpendPerMerchantPerCycle || 0)
+    const chRewardCap  = Number(limits.maxRewardAmountPerChannelPerCycle   || 0)
+    const chEligCap    = Number(limits.maxEligibleSpendPerChannelPerCycle  || 0)
+
+    const hasMerchantCap = rewardCap > 0 || eligCap > 0
+    const hasChannelCap  = chRewardCap > 0 || chEligCap > 0
+
+    function barHtml(used, cap, isReward) {
+      const pct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0
+      const full = pct >= 100
+      const remain = Math.max(0, cap - used)
+      const color = full ? 'var(--success,#059669)' : 'var(--primary,#2563EB)'
+      const hint = full
+        ? `<span style="color:var(--success,#059669);font-size:11px">✓ ครบแล้ว</span>`
+        : `<span style="color:var(--text-secondary,#6b7280);font-size:11px">เหลือ ${money(remain)}</span>`
+      return `<div style="display:flex;justify-content:space-between;margin-top:2px">
+        <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${isReward ? 'เงินคืน' : 'ยอดคำนวณ'}</span>
+        <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${money(used)} / ${money(cap)}</span>
+      </div>
+      <div style="height:5px;background:var(--border,#e5e7eb);border-radius:3px;overflow:hidden;margin:3px 0 1px">
+        <div style="height:100%;width:${pct.toFixed(1)}%;background:${color};border-radius:3px"></div>
+      </div>${hint}`
+    }
+
+    function itemHtml(label, usageObj, isRewardCap, capValue, isEligCap, eligCapValue) {
+      const rewardUsed = Math.round(Number(usageObj.cashbackUsedByMerchantBefore || usageObj.cashbackUsedByChannelBefore || 0) * 100) / 100
+      const eligUsed   = Math.round(Number(usageObj.eligibleSpendUsedByMerchantBefore || usageObj.eligibleSpendUsedByChannelBefore || 0) * 100) / 100
+      const full = (isRewardCap && rewardUsed >= capValue) || (isEligCap && eligUsed >= eligCapValue && !isRewardCap)
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="font-weight:600;font-size:14px${full ? ';color:var(--success,#059669)' : ''}">${esc(label)}${full ? ' ✓' : ''}</div>
+        ${isRewardCap  ? barHtml(rewardUsed, capValue,   true)  : ''}
+        ${isEligCap    ? barHtml(eligUsed,   eligCapValue, false) : ''}
+      </div>`
+    }
+
+    const channelOptions = App.getBenefitChannelOptions?.() || []
+    function channelLabel(val) {
+      const found = channelOptions.find(([v]) => v === val)
+      return found ? found[1] : val
+    }
+
+    let merchantSection = ''
+    if (hasMerchantCap && merchants.length > 0) {
+      const rows = merchants.map(m => {
+        const u = App.getRuleCycleUsage(ruleId, cardId, cycle.start, cycle.end, '', [], m, '')
+        return itemHtml(m, u, rewardCap > 0, rewardCap, eligCap > 0, eligCap)
+      }).join('')
+      merchantSection = `<div style="margin-bottom:16px">
+        <div style="font-weight:700;font-size:13px;color:var(--text-secondary,#6b7280);margin-bottom:2px;letter-spacing:.5px">ร้านค้า (${merchants.length})</div>
+        ${rows}
+      </div>`
+    }
+
+    let channelSection = ''
+    if (hasChannelCap && channels.length > 0) {
+      const rows = channels.map(ch => {
+        const u = App.getRuleCycleUsage(ruleId, cardId, cycle.start, cycle.end, '', [], '', ch)
+        const u2 = {
+          cashbackUsedByChannelBefore: u.cashbackUsedByChannelBefore,
+          eligibleSpendUsedByChannelBefore: u.eligibleSpendUsedByChannelBefore,
+          cashbackUsedByMerchantBefore: u.cashbackUsedByChannelBefore,
+          eligibleSpendUsedByMerchantBefore: u.eligibleSpendUsedByChannelBefore,
+        }
+        return itemHtml(channelLabel(ch), u2, chRewardCap > 0, chRewardCap, chEligCap > 0, chEligCap)
+      }).join('')
+      channelSection = `<div style="margin-bottom:16px">
+        <div style="font-weight:700;font-size:13px;color:var(--text-secondary,#6b7280);margin-bottom:2px;letter-spacing:.5px">ช่องทาง (${channels.length})</div>
+        ${rows}
+      </div>`
+    }
+
+    const empty = !merchantSection && !channelSection
+      ? `<div style="text-align:center;padding:32px 0;color:var(--text-secondary,#6b7280);font-size:14px">ยังไม่ได้กำหนดร้านค้า/ช่องทางในเงื่อนไขกฎนี้</div>`
+      : ''
+
+    const titleEl = document.getElementById('benefit-cap-breakdown-title')
+    if (titleEl) titleEl.textContent = rule.name
+
+    const body = document.getElementById('benefit-cap-breakdown-content')
+    if (body) body.innerHTML = `<div style="padding:0 0 24px">${merchantSection}${channelSection}${empty}</div>`
+
+    App.openOverlay('overlay-benefit-cap-breakdown')
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -11698,6 +11807,8 @@ App._pickMerchant = function(name, opts = {}) {
         maxRewardAmountPerCycle: parseRuleNumber(limits.maxRewardAmountPerCycle, null),
         maxEligibleSpendPerMerchantPerCycle: parseRuleNumber(limits.maxEligibleSpendPerMerchantPerCycle, null),
         maxRewardAmountPerMerchantPerCycle: parseRuleNumber(limits.maxRewardAmountPerMerchantPerCycle, null),
+        maxEligibleSpendPerChannelPerCycle: parseRuleNumber(limits.maxEligibleSpendPerChannelPerCycle, null),
+        maxRewardAmountPerChannelPerCycle: parseRuleNumber(limits.maxRewardAmountPerChannelPerCycle, null),
       },
       rewardTrigger: {
         mode: rewardTrigger.mode === 'cycle_spend_threshold' ? 'cycle_spend_threshold' : 'none',
@@ -11828,6 +11939,8 @@ App._pickMerchant = function(name, opts = {}) {
       maxRewardAmountPerCycle: 'สิทธิประโยชน์สูงสุดต่อรอบบิล',
       maxEligibleSpendPerMerchantPerCycle: 'ยอดใช้จ่ายที่นำมาคิดสูงสุดต่อร้านค้า/เดือน',
       maxRewardAmountPerMerchantPerCycle: 'เงินคืนสูงสุดต่อร้านค้า/เดือน',
+      maxEligibleSpendPerChannelPerCycle: 'ยอดใช้จ่ายที่นำมาคิดสูงสุดต่อช่องทาง/เดือน',
+      maxRewardAmountPerChannelPerCycle: 'เงินคืนสูงสุดต่อช่องทาง/เดือน',
     }
     return String(capReason || '')
       .split(',')
@@ -11871,6 +11984,15 @@ App._pickMerchant = function(name, opts = {}) {
     } else if (merchantEligibleRem != null) {
       if (merchantEligibleRem <= 0) parts.push('ยอดร้านนี้เต็มแล้ว')
       else parts.push(`ยอดร้านนี้เหลือ ${formatBenefitCapValue('', merchantEligibleRem)}`)
+    }
+    const channelCashbackRem = row.channelCashbackRemainingBefore
+    const channelEligibleRem = row.channelEligibleSpendRemainingBefore
+    if (channelCashbackRem != null) {
+      if (channelCashbackRem <= 0) parts.push('ช่องทางนี้ครบแล้ว')
+      else parts.push(`เหลือในช่องทางนี้ ${formatBenefitCapValue(row.type, channelCashbackRem)}`)
+    } else if (channelEligibleRem != null) {
+      if (channelEligibleRem <= 0) parts.push('ยอดช่องทางนี้เต็มแล้ว')
+      else parts.push(`ยอดช่องทางนี้เหลือ ${formatBenefitCapValue('', channelEligibleRem)}`)
     }
     if (diffValue > 0) {
       parts.push(`ถูกตัดเหลือ ${formatBenefitCapValue(row.type, finalValue)} (จาก ${formatBenefitCapValue(row.type, rawValue)})`)
@@ -11925,25 +12047,35 @@ App._pickMerchant = function(name, opts = {}) {
         }
         let merchantCashbackRemaining = null
         let merchantEligibleRemaining = null
+        let channelCashbackRemaining = null
+        let channelEligibleRemaining = null
         const ruleLimits = rule.limits || {}
-        if (eligibility.matched && (Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle || 0) > 0)) {
+        const hasMerchantCap = Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle || 0) > 0
+        const hasChannelCap = Number(ruleLimits.maxRewardAmountPerChannelPerCycle || 0) > 0 || Number(ruleLimits.maxEligibleSpendPerChannelPerCycle || 0) > 0
+        if (eligibility.matched && (hasMerchantCap || hasChannelCap)) {
           const cycle = getCyclePeriodForDate(cardId, txDraft.date || today(), rule)
-          const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', [], txDraft.merchant || '')
+          const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', [], txDraft.merchant || '', txDraft.channel || '')
           if (Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0) {
             merchantCashbackRemaining = Math.max(0, Number(ruleLimits.maxRewardAmountPerMerchantPerCycle) - Number(usage.cashbackUsedByMerchantBefore || 0))
           }
           if (Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle || 0) > 0) {
             merchantEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle) - Number(usage.eligibleSpendUsedByMerchantBefore || 0))
           }
+          if (Number(ruleLimits.maxRewardAmountPerChannelPerCycle || 0) > 0) {
+            channelCashbackRemaining = Math.max(0, Number(ruleLimits.maxRewardAmountPerChannelPerCycle) - Number(usage.cashbackUsedByChannelBefore || 0))
+          }
+          if (Number(ruleLimits.maxEligibleSpendPerChannelPerCycle || 0) > 0) {
+            channelEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerChannelPerCycle) - Number(usage.eligibleSpendUsedByChannelBefore || 0))
+          }
         }
         const suggested = !!rule.active && eligibility.matched
         const score = (suggested ? 100 : 0) + (rule.isBaseRule ? 15 : 0) + (specificity * 3) + Number(rule.priority || 0)
-        return { ...rule, suggested, timeMatch: eligibility.timeMatch, eligibility, suggestionScore: score, trackLocked, trackRemaining, trackChannelLabel, merchantCashbackRemaining, merchantEligibleRemaining }
+        return { ...rule, suggested, timeMatch: eligibility.timeMatch, eligibility, suggestionScore: score, trackLocked, trackRemaining, trackChannelLabel, merchantCashbackRemaining, merchantEligibleRemaining, channelCashbackRemaining, channelEligibleRemaining }
       })
       .sort((a, b) => Number(b.suggested) - Number(a.suggested) || Number(b.suggestionScore || 0) - Number(a.suggestionScore || 0) || String(a.name || '').localeCompare(String(b.name || '')))
   }
 
-  App.getRuleCycleUsage = function(ruleId, cardId, cycleStart, cycleEnd, excludeTxId = '', trackChannels = [], txMerchant = '') {
+  App.getRuleCycleUsage = function(ruleId, cardId, cycleStart, cycleEnd, excludeTxId = '', trackChannels = [], txMerchant = '', txChannel = '') {
     let eligibleSpendUsed = 0
     let cashbackUsed = 0
     let discountUsed = 0
@@ -11952,7 +12084,10 @@ App._pickMerchant = function(name, opts = {}) {
     let trackChannelSpend = 0
     let eligibleSpendUsedByMerchant = 0
     let cashbackUsedByMerchant = 0
+    let eligibleSpendUsedByChannel = 0
+    let cashbackUsedByChannel = 0
     const normalizedTxMerchant = normalizeCompareText(txMerchant || '')
+    const normalizedTxChannel = String(txChannel || '').trim().toLowerCase()
     ;(S.transactions || []).forEach(tx => {
       if (String(tx.id || '') === String(excludeTxId || '')) return
       if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return
@@ -11961,6 +12096,7 @@ App._pickMerchant = function(name, opts = {}) {
       const txCh = String(tx.channel || '').trim()
       if (channelMatchesAny(Array.isArray(trackChannels) ? trackChannels : [trackChannels].filter(Boolean), txCh)) trackChannelSpend += Number(tx.amount || 0)
       const isSameMerchant = !normalizedTxMerchant || merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
+      const isSameChannel = !normalizedTxChannel || txCh.toLowerCase() === normalizedTxChannel
       const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
       rows.forEach(row => {
         if (String(row.ruleId || '') !== String(ruleId || '')) return
@@ -11973,6 +12109,10 @@ App._pickMerchant = function(name, opts = {}) {
           eligibleSpendUsedByMerchant += Number(row.eligibleAmount || 0)
           cashbackUsedByMerchant += Number(row.cashback || row.finalCashback || 0)
         }
+        if (isSameChannel) {
+          eligibleSpendUsedByChannel += Number(row.eligibleAmount || 0)
+          cashbackUsedByChannel += Number(row.cashback || row.finalCashback || 0)
+        }
       })
     })
     return {
@@ -11984,6 +12124,8 @@ App._pickMerchant = function(name, opts = {}) {
       trackChannelSpendBefore: Math.round(trackChannelSpend * 100) / 100,
       eligibleSpendUsedByMerchantBefore: Math.round(eligibleSpendUsedByMerchant * 100) / 100,
       cashbackUsedByMerchantBefore: Math.round(cashbackUsedByMerchant * 100) / 100,
+      eligibleSpendUsedByChannelBefore: Math.round(eligibleSpendUsedByChannel * 100) / 100,
+      cashbackUsedByChannelBefore: Math.round(cashbackUsedByChannel * 100) / 100,
     }
   }
 
@@ -12022,6 +12164,14 @@ App._pickMerchant = function(name, opts = {}) {
         eligibleAmount = merchantEligibleRemaining
         capApplied = true
         capReasons.push('maxEligibleSpendPerMerchantPerCycle')
+      }
+    }
+    if (limits.maxEligibleSpendPerChannelPerCycle > 0) {
+      const channelEligibleRemaining = Math.max(0, Number(limits.maxEligibleSpendPerChannelPerCycle || 0) - Number(cycleUsage.eligibleSpendUsedByChannelBefore || 0))
+      if (eligibleAmount > channelEligibleRemaining) {
+        eligibleAmount = channelEligibleRemaining
+        capApplied = true
+        capReasons.push('maxEligibleSpendPerChannelPerCycle')
       }
     }
     eligibleAmount = Math.max(0, Math.round(eligibleAmount * 100) / 100)
@@ -12096,6 +12246,14 @@ App._pickMerchant = function(name, opts = {}) {
         capReasons.push('maxRewardAmountPerMerchantPerCycle')
       }
     }
+    if (limits.maxRewardAmountPerChannelPerCycle > 0) {
+      const remaining = Math.max(0, Number(limits.maxRewardAmountPerChannelPerCycle || 0) - Number(cycleUsage.cashbackUsedByChannelBefore || 0))
+      if (cashback > remaining) {
+        cashback = remaining
+        capApplied = true
+        capReasons.push('maxRewardAmountPerChannelPerCycle')
+      }
+    }
     if (limits.maxRewardAmountPerTx > 0 && discount > limits.maxRewardAmountPerTx) {
       discount = Number(limits.maxRewardAmountPerTx || 0)
       capApplied = true
@@ -12153,6 +12311,10 @@ App._pickMerchant = function(name, opts = {}) {
       merchantEligibleSpendRemainingBefore: limits.maxEligibleSpendPerMerchantPerCycle > 0 ? Math.max(0, Number(limits.maxEligibleSpendPerMerchantPerCycle || 0) - Number(cycleUsage.eligibleSpendUsedByMerchantBefore || 0)) : null,
       merchantCashbackUsedBefore: Math.round(Number(cycleUsage.cashbackUsedByMerchantBefore || 0) * 100) / 100,
       merchantCashbackRemainingBefore: limits.maxRewardAmountPerMerchantPerCycle > 0 ? Math.max(0, Number(limits.maxRewardAmountPerMerchantPerCycle || 0) - Number(cycleUsage.cashbackUsedByMerchantBefore || 0)) : null,
+      channelEligibleSpendUsedBefore: Math.round(Number(cycleUsage.eligibleSpendUsedByChannelBefore || 0) * 100) / 100,
+      channelEligibleSpendRemainingBefore: limits.maxEligibleSpendPerChannelPerCycle > 0 ? Math.max(0, Number(limits.maxEligibleSpendPerChannelPerCycle || 0) - Number(cycleUsage.eligibleSpendUsedByChannelBefore || 0)) : null,
+      channelCashbackUsedBefore: Math.round(Number(cycleUsage.cashbackUsedByChannelBefore || 0) * 100) / 100,
+      channelCashbackRemainingBefore: limits.maxRewardAmountPerChannelPerCycle > 0 ? Math.max(0, Number(limits.maxRewardAmountPerChannelPerCycle || 0) - Number(cycleUsage.cashbackUsedByChannelBefore || 0)) : null,
       triggerMode,
       triggerThresholdAmount: triggerMode === 'cycle_spend_threshold' ? thresholdAmount : null,
       triggerGrantMode: trigger.grantMode === 'every_threshold' ? 'every_threshold' : 'once_per_cycle',
@@ -12229,7 +12391,7 @@ App._pickMerchant = function(name, opts = {}) {
     let points = 0
     rules.forEach(rule => {
       const cycle = getCyclePeriodForDate(card.id, txDraft.date || today(), rule)
-      const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '', getTriggerTrackChannels(rule.rewardTrigger || {}), txDraft.merchant || '')
+      const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '', getTriggerTrackChannels(rule.rewardTrigger || {}), txDraft.merchant || '', txDraft.channel || '')
       const result = App.applyBenefitRule(txDraft, rule, usage)
       result.cycleStart = cycle.start
       result.cycleEnd = cycle.end
