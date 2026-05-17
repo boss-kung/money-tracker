@@ -7256,14 +7256,16 @@ App._pickMerchant = function(name, opts = {}) {
   // ═══════════════════════════════════════════════════════════════════
   // Credit card benefit overview (consolidated view across all cards)
   // ═══════════════════════════════════════════════════════════════════
-  // _direction: 'next' | 'prev' | '' (filter change, no slide) | undefined (full openSubScreen)
-  App.openCCBenefitOverviewScreen = function (refMonth, filter, _direction) {
+  // _direction: 'next' | 'prev' | '' (filter/toggle change) | undefined (full openSubScreen)
+  App.openCCBenefitOverviewScreen = function (refMonth, filter, _direction, showAll) {
     App.ensureCCBenefitRulesState?.()
     const todayStr = (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
     if (!refMonth) refMonth = S._ccOverviewMonth || todayStr.slice(0, 7)
     S._ccOverviewMonth = refMonth
     if (filter === undefined) filter = S._ccOverviewFilter || 'all'
     S._ccOverviewFilter = filter
+    if (showAll === undefined) showAll = S._ccOverviewShowAll || false
+    S._ccOverviewShowAll = showAll
 
     const [year, month] = refMonth.split('-').map(Number)
     const lastDayOfMonth = new Date(year, month, 0).getDate()
@@ -7420,15 +7422,24 @@ App._pickMerchant = function(name, opts = {}) {
       </div>`
     }
 
-    // compute summary counts across all active rules
+    // rules with measurable progress (cap or threshold)
+    function isTrackable(rule) {
+      return rule.rewardTrigger?.mode === 'cycle_spend_threshold' ||
+             Number(rule.limits?.maxRewardAmountPerCycle  || 0) > 0 ||
+             Number(rule.limits?.maxEligibleSpendPerCycle || 0) > 0
+    }
+
+    const sa = String(showAll)  // safe to embed in onclick strings
+
+    // compute summary counts (trackable rules only — tiles always reflect trackable)
     const creditCards = (S.wallets || []).filter(w => w.type === 'credit')
     let cntAvail = 0, cntLocked = 0, cntFull = 0
     creditCards.forEach(card => {
-      App.getCreditCardBenefitRules(card.id).filter(r => r.active !== false).forEach(r => {
+      App.getCreditCardBenefitRules(card.id).filter(r => r.active !== false && isTrackable(r)).forEach(r => {
         const s = getRuleStatus(card.id, r)
-        if (s.locked)     cntLocked++
-        else if (s.full)  cntFull++
-        else              cntAvail++
+        if (s.locked)    cntLocked++
+        else if (s.full) cntFull++
+        else             cntAvail++
       })
     })
 
@@ -7436,17 +7447,30 @@ App._pickMerchant = function(name, opts = {}) {
       const active    = filter === key
       const newFilter = active ? 'all' : key
       const border    = active ? `border:2px solid ${numColor};` : 'border:2px solid transparent;'
-      return `<div onclick="App.openCCBenefitOverviewScreen('${esc(refMonth)}','${newFilter}','')"
+      return `<div onclick="App.openCCBenefitOverviewScreen('${esc(refMonth)}','${newFilter}','',${sa})"
         style="background:var(--elevated,#1e2a3a);border-radius:12px;padding:10px;text-align:center;cursor:pointer;${border}">
         <div style="font-size:22px;font-weight:700;color:${numColor}">${count}</div>
         <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-top:2px">${label}</div>
       </div>`
     }
+
+    const toggleHtml = `
+      <div style="display:flex;background:var(--elevated,#1e2a3a);border-radius:10px;padding:3px;margin-bottom:12px">
+        <button onclick="App.openCCBenefitOverviewScreen('${esc(refMonth)}','${esc(filter)}','',false)"
+          style="flex:1;border:none;cursor:pointer;border-radius:8px;padding:7px 0;font-size:13px;font-weight:600;transition:background .15s,color .15s;
+                 background:${!showAll ? 'var(--primary,#2563EB)' : 'transparent'};
+                 color:${!showAll ? '#fff' : 'var(--text-secondary,#6b7280)'}">ติดตามได้</button>
+        <button onclick="App.openCCBenefitOverviewScreen('${esc(refMonth)}','${esc(filter)}','',true)"
+          style="flex:1;border:none;cursor:pointer;border-radius:8px;padding:7px 0;font-size:13px;font-weight:600;transition:background .15s,color .15s;
+                 background:${showAll ? 'var(--primary,#2563EB)' : 'transparent'};
+                 color:${showAll ? '#fff' : 'var(--text-secondary,#6b7280)'}">ทั้งหมด</button>
+      </div>`
+
     const summaryHtml = `
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
-        ${tileHtml('available', cntAvail,  'ใช้ได้',      'var(--primary,#2563EB)')}
-        ${tileHtml('locked',   cntLocked, 'ยังไม่ปลด',   'var(--warning,#D97706)')}
-        ${tileHtml('full',     cntFull,   'เต็มแล้ว',    'var(--success,#059669)')}
+        ${tileHtml('available', cntAvail,  'ใช้ได้',    'var(--primary,#2563EB)')}
+        ${tileHtml('locked',   cntLocked, 'ยังไม่ปลด', 'var(--warning,#D97706)')}
+        ${tileHtml('full',     cntFull,   'เต็มแล้ว',  'var(--success,#059669)')}
       </div>`
 
     const cardsHtml = creditCards.length === 0
@@ -7455,7 +7479,8 @@ App._pickMerchant = function(name, opts = {}) {
           const allRulesForCard = App.getCreditCardBenefitRules(card.id)
           if (!allRulesForCard.length) return ''
 
-          const filteredRules = filter === 'all' ? allRulesForCard : allRulesForCard.filter(r => {
+          const basePool = showAll ? allRulesForCard : allRulesForCard.filter(isTrackable)
+          const filteredRules = filter === 'all' ? basePool : basePool.filter(r => {
             if (r.active === false) return false
             const s = getRuleStatus(card.id, r)
             if (filter === 'locked')    return s.locked
@@ -7481,10 +7506,11 @@ App._pickMerchant = function(name, opts = {}) {
 
     const contentHtml = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(prevStr)}','${esc(filter)}','prev')">‹</button>
+        <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(prevStr)}','${esc(filter)}','prev',${sa})">‹</button>
         <span style="font-weight:700;font-size:15px">${esc(monthLabel)}</span>
-        <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(nextStr)}','${esc(filter)}','next')"${refMonth >= todayMonth ? ' disabled style="opacity:.3"' : ''}>›</button>
+        <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(nextStr)}','${esc(filter)}','next',${sa})"${refMonth >= todayMonth ? ' disabled style="opacity:.3"' : ''}>›</button>
       </div>
+      ${toggleHtml}
       ${summaryHtml}
       ${cardsHtml}`
 
