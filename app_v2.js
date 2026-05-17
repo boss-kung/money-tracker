@@ -2633,9 +2633,37 @@ App.render();
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small><b>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'}</b><span> · แตะเพื่อแก้ไข</span></small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class=”form-group”><label class=”form-label”>หมวดหมู่ที่ใช้บ่อย</label><div id=”cat-grid” style=”display:flex;flex-direction:row;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding:0 2px 6px;margin:0 -2px”>${orderedCats.map(c => `<button type=”button” data-catid=”${esc(c.id)}” class=”cat-btn${S.tx.categoryId === c.id ? ' active' : ''}” onclick=”App._selectCat('${esc(c.id)}')” style=”flex:0 0 110px;width:110px;scroll-snap-align:start;font-size:12px;font-weight:600”><span class=”cat-icon”>${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}</div></div>` : ''}
           ${isExpense ? `<div class=”form-group”><label class=”form-label”>ช่องทางการใช้จ่าย</label><select class=”form-input” id=”tx-channel” onchange=”App._txField('channel',this.value);App._renderAddTxDetail()”>${(App.getBenefitChannelOptions?.() || [['','ไม่ระบุ'],['online','ออนไลน์'],['offline','หน้าร้าน / ออฟไลน์']]).map(([value,label]) => `<option value=”${esc(value)}”${S.tx.channel === value ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></div>` : ''}
-          ${type === 'transfer' ? '' : `<div class=”form-group”><label class=”form-label”>ร้านค้า / แหล่งที่มา</label><div class=”tx-merchant-input-wrap”><input class=”form-input” id=”tx-merchant” autocomplete=”off” autocapitalize=”none” placeholder=”เช่น Grab, Netflix, เงินเดือน” value=”${esc(S.tx.merchant)}” oninput=”App._txField('merchant', this.value); App._showMerchantDropdown?.(this.value)” onfocus=”App._showMerchantDropdown?.(this.value)” onkeydown=”if(event.key==='Enter'){event.preventDefault();App._confirmTypedMerchant?.()}” onblur=”App._merchantBlurTimer=setTimeout(()=>App._hideMerchantDropdown?.(true),260)”><button type=”button” class=”tx-merchant-clear” aria-label=”ล้างร้านค้า” onclick=”App.clearTxMerchant()”>×</button></div>${S.tx.merchantSuggestionNote ? '<div class=”form-hint”>' + esc(S.tx.merchantSuggestionNote) + '</div>' : ''}</div>`}
+          ${type === 'transfer'
+  ? ''
+  : `<div class=”form-group”>
+      <label class=”form-label”>ร้านค้า / แหล่งที่มา</label>
+      <div class=”tx-merchant-input-wrap”>
+        <input
+          class=”form-input”
+          id=”tx-merchant”
+          autocomplete=”off”
+          autocapitalize=”none”
+          placeholder=”เช่น Grab, Netflix, เงินเดือน”
+          value=”${esc(S.tx.merchant)}”
+          oninput=”App._txField('merchant', this.value); App._showMerchantDropdown?.(this.value)”
+          onfocus=”App._showMerchantDropdown?.(this.value)”
+          onkeydown=”if(event.key==='Enter'){event.preventDefault();App._confirmTypedMerchant?.()}”
+          onblur=”App._merchantBlurTimer=setTimeout(()=>App._hideMerchantDropdown?.(true),260)”
+        >
+        <button type=”button” class=”tx-merchant-clear” aria-label=”ล้างร้านค้า” onclick=”App.clearTxMerchant()”>×</button>
+      </div>
+      ${S.tx.merchantSuggestionNote ? `<div class=”form-hint”>${esc(S.tx.merchantSuggestionNote)}</div>` : ''}
+    </div>`}
           <div class=”form-group”><label class=”form-label”>${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class=”form-input” id=”tx-wallet” onchange=”App._txField('walletId',this.value);App._renderAddTxDetail()”>${walletOptions}</select></div>
-          ${type === 'transfer' ? `<div class=”form-group”><label class=”form-label”>ไปบัญชี</label><select class=”form-input” id=”tx-towallet” onchange=”App._txField('toWalletId',this.value)”><option value=””>เลือกปลายทาง</option>${toWalletOptions}</select><div class=”form-hint”>รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : ''}
+          ${type === 'transfer'
+  ? `<div class=”form-group”>
+      <label class=”form-label”>ไปบัญชี</label>
+      <select class=”form-input” id=”tx-towallet” onchange=”App._txField('toWalletId',this.value)”>
+        <option value=””>เลือกปลายทาง</option>${toWalletOptions}
+      </select>
+      <div class=”form-hint”>รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div>
+    </div>`
+  : ''}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value);App._renderAddTxDetail()"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
           ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? (App._recurringInlineHtml?.() || '') : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
           ${(() => {
