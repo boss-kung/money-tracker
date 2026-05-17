@@ -17776,6 +17776,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 ;(function () {
   let _st = null, _sh = null, _ov = null
 
+  function _cleanup(sheet) {
+    sheet.classList.remove('sheet-swiping')
+    sheet.style.transform = ''
+    sheet.style.transition = ''
+    sheet.style.willChange = ''
+  }
+
   document.addEventListener('touchstart', e => {
     const t = e.target
     if (t.closest('button, .btn, .btn-icon, select, input, textarea')) return
@@ -17787,6 +17794,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     _sh = sheet
     _ov = overlay
     _st = { y: e.touches[0].clientY, t: Date.now() }
+    // Cancel the spring-open CSS animation so inline transform takes effect
+    sheet.classList.add('sheet-swiping')
     sheet.style.transition = 'none'
     sheet.style.willChange = 'transform'
   }, { passive: true })
@@ -17805,40 +17814,32 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     _sh = _ov = _st = null
 
     if (dy > 120 || vel > 0.4) {
-      sheet.style.transition = 'transform 0.26s cubic-bezier(.32,.72,0,1)'
-      void sheet.offsetHeight  // flush style so transition registers before transform changes
+      // sheet-swiping keeps animation:none — inline transition now works
+      sheet.style.transition = 'transform 0.28s cubic-bezier(.32,.72,0,1)'
+      void sheet.offsetHeight
       sheet.style.transform = 'translateY(110%)'
       setTimeout(() => {
         const isDynamic = overlay.querySelector('.overlay-backdrop')
           ?.getAttribute('onclick')?.includes('remove()')
         if (isDynamic) {
-          overlay.remove()  // element gone — no style cleanup needed
+          overlay.remove()
         } else {
-          overlay.classList.remove('open')  // hide first, then reset styles while hidden
-          sheet.style.transition = ''
-          sheet.style.transform = ''
-          sheet.style.willChange = ''
-          // Delegate state cleanup; closeOverlay/closeAddTx see no 'open' so skip animation
+          overlay.classList.remove('open')
+          _cleanup(sheet)
           if (overlay.id === 'overlay-add-tx') try { App.closeAddTx() } catch (_) {}
           else try { App.closeOverlay(overlay.id) } catch (_) {}
         }
-      }, 260)
+      }, 280)
     } else {
       sheet.style.transition = 'transform 0.32s cubic-bezier(.32,.72,0,1)'
+      void sheet.offsetHeight
       sheet.style.transform = ''
-      setTimeout(() => {
-        sheet.style.transition = ''
-        sheet.style.willChange = ''
-      }, 320)
+      setTimeout(() => _cleanup(sheet), 320)
     }
   }, { passive: true })
 
   document.addEventListener('touchcancel', () => {
-    if (_sh) {
-      _sh.style.transform = ''
-      _sh.style.transition = ''
-      _sh.style.willChange = ''
-    }
+    if (_sh) _cleanup(_sh)
     _sh = _ov = _st = null
   }, { passive: true })
 })()
