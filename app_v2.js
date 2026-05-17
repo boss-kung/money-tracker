@@ -7283,6 +7283,17 @@ App._pickMerchant = function(name, opts = {}) {
 
     // inline button style (override .btn's display:block width:100%)
     const btnInline = 'display:inline-block;width:auto;white-space:nowrap;padding:5px 12px;font-size:12px;border-radius:8px;flex-shrink:0'
+    const SHORT_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+    function fmtDateShort(iso) {
+      const [, m, d] = String(iso || '').split('-').map(Number)
+      return `${d} ${SHORT_MONTHS[m - 1] || ''}`
+    }
+    function cyclePeriodLabel(cardId, rule) {
+      const hint  = String(rule?.validity?.statementCycleHint || 'statement_cycle')
+      const cycle = getCyclePeriod(cardId, rule)
+      if (hint === 'calendar_month') return null
+      return `รอบบัตร: ${fmtDateShort(cycle.start)} – ${fmtDateShort(cycle.end)}`
+    }
 
     function getRuleStatus(cardId, rule) {
       const cycle      = getCyclePeriod(cardId, rule)
@@ -7305,8 +7316,9 @@ App._pickMerchant = function(name, opts = {}) {
     }
 
     function ruleCardHtml(cardId, rule) {
-      const s = getRuleStatus(cardId, rule)
+      const s         = getRuleStatus(cardId, rule)
       const typeLabel = { cashback: 'เงินคืน', points: 'คะแนน', both: 'เงินคืน + คะแนน', discount: 'ส่วนลด' }[rule.type] || rule.type
+      const cycleLabel = cyclePeriodLabel(cardId, rule)
       const sections  = []
 
       if (s.hasTrigger && s.triggerAmt > 0) {
@@ -7357,7 +7369,7 @@ App._pickMerchant = function(name, opts = {}) {
         <div style="display:flex;align-items:flex-start;gap:8px">
           <div style="flex:1;min-width:0">
             <div style="font-weight:600;font-size:14px;line-height:1.3">${esc(rule.name)}${rule.active === false ? '<span style="font-size:11px;color:var(--text-secondary,#6b7280)"> · ปิด</span>' : ''}</div>
-            <div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:1px">${typeLabel}${rule.isBaseRule ? ' · พื้นฐาน' : ''}</div>
+            <div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:1px">${typeLabel}${rule.isBaseRule ? ' · พื้นฐาน' : ''}${cycleLabel ? ` · <span style="color:var(--text-secondary,#6b7280)">${esc(cycleLabel)}</span>` : ''}</div>
           </div>
           <button class="btn btn-secondary" style="${btnInline}"
             onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">แก้ไข</button>
