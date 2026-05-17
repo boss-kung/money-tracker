@@ -7758,7 +7758,7 @@ App._pickMerchant = function(name, opts = {}) {
         reward   = Number(storedRow?.cashback || storedRow?.finalCashback || 0)
         pts      = Number(storedRow?.points || storedRow?.finalPoints || 0)
       } else {
-        const eligibility = getRuleEligibility(tx, rule)
+        const eligibility = App._getRuleEligibility(tx, rule)
         if (eligibility.matched) {
           eligible = Math.max(0, Number(tx.amount || 0))
           if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
@@ -12042,6 +12042,7 @@ App._pickMerchant = function(name, opts = {}) {
   App.getCyclePeriodForDate = function(cardId, refDate, rule) {
     return getCyclePeriodForDate(cardId, refDate || today(), rule || null)
   }
+  App._getRuleEligibility = function(tx, rule) { return getRuleEligibility(tx, rule) }
 
   function getCyclePeriodForDate(cardId, refDate = today(), rule = null) {
     const cycleHint = String(rule?.validity?.statementCycleHint || 'statement_cycle').trim()
