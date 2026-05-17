@@ -12289,8 +12289,8 @@ App._pickMerchant = function(name, opts = {}) {
           const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
           rows.forEach(row => {
             if (String(row.ruleId || '') !== String(ruleId || '')) return
-            const isSameMerchant = !normalizedTxMerchant || merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
-            const isSameChannel = !normalizedTxChannel || txCh.toLowerCase() === normalizedTxChannel
+            const isSameMerchant = !!normalizedTxMerchant && merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
+            const isSameChannel = !!normalizedTxChannel && txCh.toLowerCase() === normalizedTxChannel
             eligibleSpendUsed += Number(row.eligibleAmount || 0)
             cashbackUsed += Number(row.cashback || row.finalCashback || 0)
             pointsUsed += Number(row.points || row.finalPoints || 0)
@@ -12304,8 +12304,8 @@ App._pickMerchant = function(name, opts = {}) {
         if (!eligibility.matched) return
         const txMerchKey = normalizeCompareText(tx.merchant || '')
         const txChKey    = txCh.toLowerCase()
-        const isSameMerchant = !normalizedTxMerchant || merchantTextsMatch(normalizedTxMerchant, txMerchKey)
-        const isSameChannel  = !normalizedTxChannel  || txChKey === normalizedTxChannel
+        const isSameMerchant = !!normalizedTxMerchant && merchantTextsMatch(normalizedTxMerchant, txMerchKey)
+        const isSameChannel  = !!normalizedTxChannel  && txChKey === normalizedTxChannel
         let eligible = Math.max(0, Number(tx.amount || 0))
         if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
         if (cycleEligibleCap > 0)  eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - eligibleSpendUsed))
@@ -12354,8 +12354,8 @@ App._pickMerchant = function(name, opts = {}) {
         if (date < cycleStart || date > cycleEnd) return
         const txCh = String(tx.channel || '').trim()
         if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += Number(tx.amount || 0)
-        const isSameMerchant = !normalizedTxMerchant || merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
-        const isSameChannel = !normalizedTxChannel || txCh.toLowerCase() === normalizedTxChannel
+        const isSameMerchant = !!normalizedTxMerchant && merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
+        const isSameChannel = !!normalizedTxChannel && txCh.toLowerCase() === normalizedTxChannel
         const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
         rows.forEach(row => {
           if (String(row.ruleId || '') !== String(ruleId || '')) return
@@ -18099,7 +18099,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const sheet = _sh, overlay = _ov
     _sh = _ov = _st = null
 
-    if (dy > 120 || vel > 0.4) {
+    if (dy > sheet.offsetHeight * 0.35 || vel > 0.4) {
       sheet.style.transition = 'transform 0.28s cubic-bezier(.32,.72,0,1)'
       void sheet.offsetHeight
       sheet.style.transform = 'translateY(110%)'
