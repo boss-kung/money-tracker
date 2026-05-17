@@ -12151,29 +12151,52 @@ App._pickMerchant = function(name, opts = {}) {
     const merchantEligible  = {}
     const channelCashback   = {}
     const channelEligible   = {}
+    const rule = (S.ccBenefitRules || []).find(r => r.id === ruleId)
+    if (!rule) return { merchantCashback, merchantEligible, channelCashback, channelEligible }
+    const limits = rule.limits || {}
+    const cashbackCfg = rule.cashback || {}
+    const discountCfg = rule.discount || {}
+    const pointsCfg = rule.points || {}
+    const trigger = rule.rewardTrigger || {}
+    const isThresholdMode = trigger.mode === 'cycle_spend_threshold' && Number(trigger.thresholdAmount || 0) > 0
+    const ruleChannelKeys = ruleChannels.map(ch => String(ch || '').trim().toLowerCase()).filter(Boolean)
     ;(S.transactions || []).forEach(tx => {
       if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return
       const date = String(tx.date || '')
       if (date < cycleStart || date > cycleEnd) return
+      const eligibility = getRuleEligibility(tx, rule)
+      if (!eligibility.matched) return
       const txMerchantNorm = normalizeCompareText(tx.merchant || '')
       const txChannelKey   = String(tx.channel || '').trim().toLowerCase()
-      const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
-      rows.forEach(row => {
-        if (String(row.ruleId || '') !== String(ruleId || '')) return
-        const eligible = Number(row.eligibleAmount || 0)
-        const cashback = Number(row.cashback || row.finalCashback || 0)
-        // Group by the rule-condition merchant that this tx matches
-        const matchedMerchant = ruleMerchants.find(m => merchantTextsMatch(m, txMerchantNorm))
-        if (matchedMerchant) {
-          merchantCashback[matchedMerchant]  = (merchantCashback[matchedMerchant]  || 0) + cashback
-          merchantEligible[matchedMerchant]  = (merchantEligible[matchedMerchant]  || 0) + eligible
+      // Compute eligible amount from current rule config (ignoring cycle caps — those are what we're measuring)
+      let eligible = Math.max(0, Number(tx.amount || 0))
+      if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
+      eligible = Math.round(eligible * 100) / 100
+      // For threshold rules the per-tx cashback depends on cycle context; fall back to stored estimate
+      let cashback = 0
+      if (isThresholdMode) {
+        const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
+        const row = rows.find(r => String(r.ruleId || '') === String(ruleId || ''))
+        if (row) cashback = Number(row.cashback || row.finalCashback || 0)
+      } else {
+        if (rule.type === 'cashback' || rule.type === 'both') {
+          cashback = cashbackCfg.mode === 'fixed' ? Number(cashbackCfg.fixedAmount || 0) : eligible * (Number(cashbackCfg.rate || 0) / 100)
+        } else if (rule.type === 'discount') {
+          cashback = discountCfg.mode === 'fixed' ? Number(discountCfg.fixedAmount || 0) : eligible * (Number(discountCfg.rate || 0) / 100)
         }
-        // Group by actual tx channel
-        if (txChannelKey) {
-          channelCashback[txChannelKey]  = (channelCashback[txChannelKey]  || 0) + cashback
-          channelEligible[txChannelKey]  = (channelEligible[txChannelKey]  || 0) + eligible
-        }
-      })
+      }
+      cashback = Math.round(cashback * 100) / 100
+      // Group by the rule-condition merchant that this tx matches
+      const matchedMerchant = ruleMerchants.find(m => merchantTextsMatch(m, txMerchantNorm))
+      if (matchedMerchant) {
+        merchantCashback[matchedMerchant] = (merchantCashback[matchedMerchant] || 0) + cashback
+        merchantEligible[matchedMerchant] = (merchantEligible[matchedMerchant] || 0) + eligible
+      }
+      // Group by tx channel, but only for channels in the rule's condition list
+      if (txChannelKey && ruleChannelKeys.includes(txChannelKey)) {
+        channelCashback[txChannelKey] = (channelCashback[txChannelKey] || 0) + cashback
+        channelEligible[txChannelKey] = (channelEligible[txChannelKey] || 0) + eligible
+      }
     })
     return { merchantCashback, merchantEligible, channelCashback, channelEligible }
   }
