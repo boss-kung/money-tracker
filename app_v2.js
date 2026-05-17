@@ -5371,7 +5371,7 @@ App._pickMerchant = function(name, opts = {}) {
     document.getElementById('app')?.insertAdjacentHTML('beforeend', `
       <div id="${overlayId}" class="overlay open" role="dialog" aria-modal="true">
         <div class="overlay-backdrop" onclick="document.getElementById('${overlayId}')?.remove()"></div>
-        <div class="sheet" style="max-height:80dvh">
+        <div class="sheet" style="max-height:85dvh">
           <div class="sheet-handle"></div>
           <div class="sheet-header">
             <h2>แก้ไขชุดผ่อน</h2>
@@ -5969,7 +5969,7 @@ App._pickMerchant = function(name, opts = {}) {
     document.getElementById('app')?.insertAdjacentHTML('beforeend', `
       <div id="${dialogId}" class="overlay open" role="dialog" aria-modal="true">
         <div class="overlay-backdrop" onclick="document.getElementById('${dialogId}')?.remove()"></div>
-        <div class="sheet" style="max-height:80dvh">
+        <div class="sheet" style="max-height:85dvh">
           <div class="sheet-handle"></div>
           <div class="sheet-header">
             <h2>วิเคราะห์สิทธิประโยชน์จากลิงก์</h2>
@@ -6963,7 +6963,7 @@ App._pickMerchant = function(name, opts = {}) {
     document.getElementById('app')?.insertAdjacentHTML('beforeend', `
       <div id="${dialogId}" class="overlay open" role="dialog" aria-modal="true">
         <div class="overlay-backdrop" onclick="document.getElementById('${dialogId}')?.remove()"></div>
-        <div class="sheet" style="max-height:80dvh">
+        <div class="sheet" style="max-height:85dvh">
           <div class="sheet-handle"></div>
           <div class="sheet-header">
             <h2>เลือกสิทธิประโยชน์</h2>
@@ -8140,7 +8140,7 @@ App._pickMerchant = function(name, opts = {}) {
     document.getElementById('app')?.insertAdjacentHTML('beforeend', `
       <div id="${dlgId}" class="overlay open" role="dialog" aria-modal="true">
         <div class="overlay-backdrop" onclick="document.getElementById('${dlgId}').remove()"></div>
-        <div class="sheet" style="max-height:80dvh">
+        <div class="sheet" style="max-height:85dvh">
           <div class="sheet-handle"></div>
           <div class="sheet-header">
             <h2>บันทึกยอด</h2>
@@ -17403,15 +17403,15 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       sheet.style.transition = 'transform 0.26s cubic-bezier(.32,.72,0,1)'
       sheet.style.transform = 'translateY(110%)'
       setTimeout(() => {
-        sheet.style.transition = ''
-        sheet.style.transform = ''
-        sheet.style.willChange = ''
         const isDynamic = overlay.querySelector('.overlay-backdrop')
           ?.getAttribute('onclick')?.includes('remove()')
         if (isDynamic) {
-          overlay.remove()
+          overlay.remove()  // element gone — no style cleanup needed
         } else {
-          overlay.classList.remove('open')
+          overlay.classList.remove('open')  // hide first, then reset styles while hidden
+          sheet.style.transition = ''
+          sheet.style.transform = ''
+          sheet.style.willChange = ''
           // Delegate state cleanup; closeOverlay/closeAddTx see no 'open' so skip animation
           if (overlay.id === 'overlay-add-tx') try { App.closeAddTx() } catch (_) {}
           else try { App.closeOverlay(overlay.id) } catch (_) {}

@@ -2042,7 +2042,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 
 .sheet {
   border-radius: 24px 24px 0 0 !important;
-  max-height: min(80dvh, calc(var(--app-height) - 44px)) !important;
+  max-height: min(85dvh, calc(var(--app-height) - 44px)) !important;
 }
 .sheet-handle {
   width: 40px !important;
@@ -3290,7 +3290,7 @@ body {
     transition:transform .16s ease, opacity .12s ease!important;
   }
   body.keyboard-open .page-scroll{padding-bottom:24px!important}
-  body.keyboard-open .sheet{max-height:min(80dvh,calc(var(--app-height) - 44px))!important}
+  body.keyboard-open .sheet{max-height:min(85dvh,calc(var(--app-height) - 44px))!important}
 }
 
 .statement-compact-th .statement-main span + span{margin-top:1px!important}
@@ -4805,7 +4805,7 @@ html.dark .crypto-summary-item {
 }
 
 .upcoming-bill-dialog {
-  max-height: min(80dvh, 720px);
+  max-height: min(85dvh, 720px);
   overflow: hidden;
 }
 
@@ -5139,7 +5139,7 @@ html.dark .crypto-summary-item {
 }
 
 .privilege-sheet {
-  max-height: min(80dvh, 760px);
+  max-height: min(85dvh, 760px);
 }
 
 .privilege-delete-btn {
