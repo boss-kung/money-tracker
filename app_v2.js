@@ -7626,6 +7626,7 @@ App._pickMerchant = function(name, opts = {}) {
     const rule = (S.ccBenefitRules || []).find(r => r.id === ruleId)
     if (!rule) return
 
+    const esc = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])))
     const todayStr = new Date().toISOString().slice(0, 10)
     const cycle = App.getCyclePeriodForDate(cardId, todayStr, rule)
     const limits = rule.limits || {}
@@ -7640,6 +7641,9 @@ App._pickMerchant = function(name, opts = {}) {
 
     const hasMerchantCap = rewardCap > 0 || eligCap > 0
     const hasChannelCap  = chRewardCap > 0 || chEligCap > 0
+
+    const breakdown = App.getBenefitCapBreakdown(ruleId, cardId, cycle.start, cycle.end, merchants, channels)
+    const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : `฿${Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`)
 
     function barHtml(used, cap, isReward) {
       const pct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0
@@ -7658,14 +7662,12 @@ App._pickMerchant = function(name, opts = {}) {
       </div>${hint}`
     }
 
-    function itemHtml(label, usageObj, isRewardCap, capValue, isEligCap, eligCapValue) {
-      const rewardUsed = Math.round(Number(usageObj.cashbackUsedByMerchantBefore || usageObj.cashbackUsedByChannelBefore || 0) * 100) / 100
-      const eligUsed   = Math.round(Number(usageObj.eligibleSpendUsedByMerchantBefore || usageObj.eligibleSpendUsedByChannelBefore || 0) * 100) / 100
-      const full = (isRewardCap && rewardUsed >= capValue) || (isEligCap && eligUsed >= eligCapValue && !isRewardCap)
+    function itemRow(label, rewardUsed, eligUsed, isRewardCap, capValue, isEligCap, eligCapValue) {
+      const full = (isRewardCap && rewardUsed >= capValue) || (!isRewardCap && isEligCap && eligUsed >= eligCapValue)
       return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
         <div style="font-weight:600;font-size:14px${full ? ';color:var(--success,#059669)' : ''}">${esc(label)}${full ? ' ✓' : ''}</div>
-        ${isRewardCap  ? barHtml(rewardUsed, capValue,   true)  : ''}
-        ${isEligCap    ? barHtml(eligUsed,   eligCapValue, false) : ''}
+        ${isRewardCap ? barHtml(rewardUsed, capValue,    true)  : ''}
+        ${isEligCap   ? barHtml(eligUsed,   eligCapValue, false) : ''}
       </div>`
     }
 
@@ -7678,8 +7680,9 @@ App._pickMerchant = function(name, opts = {}) {
     let merchantSection = ''
     if (hasMerchantCap && merchants.length > 0) {
       const rows = merchants.map(m => {
-        const u = App.getRuleCycleUsage(ruleId, cardId, cycle.start, cycle.end, '', [], m, '')
-        return itemHtml(m, u, rewardCap > 0, rewardCap, eligCap > 0, eligCap)
+        const rewardUsed = Math.round((breakdown.merchantCashback[m]  || 0) * 100) / 100
+        const eligUsed   = Math.round((breakdown.merchantEligible[m]  || 0) * 100) / 100
+        return itemRow(m, rewardUsed, eligUsed, rewardCap > 0, rewardCap, eligCap > 0, eligCap)
       }).join('')
       merchantSection = `<div style="margin-bottom:16px">
         <div style="font-weight:700;font-size:13px;color:var(--text-secondary,#6b7280);margin-bottom:2px;letter-spacing:.5px">ร้านค้า (${merchants.length})</div>
@@ -7690,14 +7693,10 @@ App._pickMerchant = function(name, opts = {}) {
     let channelSection = ''
     if (hasChannelCap && channels.length > 0) {
       const rows = channels.map(ch => {
-        const u = App.getRuleCycleUsage(ruleId, cardId, cycle.start, cycle.end, '', [], '', ch)
-        const u2 = {
-          cashbackUsedByChannelBefore: u.cashbackUsedByChannelBefore,
-          eligibleSpendUsedByChannelBefore: u.eligibleSpendUsedByChannelBefore,
-          cashbackUsedByMerchantBefore: u.cashbackUsedByChannelBefore,
-          eligibleSpendUsedByMerchantBefore: u.eligibleSpendUsedByChannelBefore,
-        }
-        return itemHtml(channelLabel(ch), u2, chRewardCap > 0, chRewardCap, chEligCap > 0, chEligCap)
+        const key = String(ch || '').trim().toLowerCase()
+        const rewardUsed = Math.round((breakdown.channelCashback[key]  || 0) * 100) / 100
+        const eligUsed   = Math.round((breakdown.channelEligible[key]  || 0) * 100) / 100
+        return itemRow(channelLabel(ch), rewardUsed, eligUsed, chRewardCap > 0, chRewardCap, chEligCap > 0, chEligCap)
       }).join('')
       channelSection = `<div style="margin-bottom:16px">
         <div style="font-weight:700;font-size:13px;color:var(--text-secondary,#6b7280);margin-bottom:2px;letter-spacing:.5px">ช่องทาง (${channels.length})</div>
@@ -12140,6 +12139,41 @@ App._pickMerchant = function(name, opts = {}) {
       eligibleSpendUsedByChannelBefore: Math.round(eligibleSpendUsedByChannel * 100) / 100,
       cashbackUsedByChannelBefore: Math.round(cashbackUsedByChannel * 100) / 100,
     }
+  }
+
+  // Returns per-merchant and per-channel cashback/eligible aggregates for a rule in a cycle.
+  // Keys for merchant map = rule condition merchant name (matched by merchantTextsMatch).
+  // Keys for channel map  = raw channel value (lowercase).
+  App.getBenefitCapBreakdown = function(ruleId, cardId, cycleStart, cycleEnd, ruleMerchants = [], ruleChannels = []) {
+    const merchantCashback  = {}
+    const merchantEligible  = {}
+    const channelCashback   = {}
+    const channelEligible   = {}
+    ;(S.transactions || []).forEach(tx => {
+      if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return
+      const date = String(tx.date || '')
+      if (date < cycleStart || date > cycleEnd) return
+      const txMerchantNorm = normalizeCompareText(tx.merchant || '')
+      const txChannelKey   = String(tx.channel || '').trim().toLowerCase()
+      const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
+      rows.forEach(row => {
+        if (String(row.ruleId || '') !== String(ruleId || '')) return
+        const eligible = Number(row.eligibleAmount || 0)
+        const cashback = Number(row.cashback || row.finalCashback || 0)
+        // Group by the rule-condition merchant that this tx matches
+        const matchedMerchant = ruleMerchants.find(m => merchantTextsMatch(m, txMerchantNorm))
+        if (matchedMerchant) {
+          merchantCashback[matchedMerchant]  = (merchantCashback[matchedMerchant]  || 0) + cashback
+          merchantEligible[matchedMerchant]  = (merchantEligible[matchedMerchant]  || 0) + eligible
+        }
+        // Group by actual tx channel
+        if (txChannelKey) {
+          channelCashback[txChannelKey]  = (channelCashback[txChannelKey]  || 0) + cashback
+          channelEligible[txChannelKey]  = (channelEligible[txChannelKey]  || 0) + eligible
+        }
+      })
+    })
+    return { merchantCashback, merchantEligible, channelCashback, channelEligible }
   }
 
   App.applyBenefitRule = function(txDraft, rule, cycleUsage = {}) {
