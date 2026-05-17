@@ -7242,14 +7242,15 @@ App._pickMerchant = function(name, opts = {}) {
   // ═══════════════════════════════════════════════════════════════════
   // Credit card benefit overview (consolidated view across all cards)
   // ═══════════════════════════════════════════════════════════════════
-  App.openCCBenefitOverviewScreen = function (refMonth) {
+  App.openCCBenefitOverviewScreen = function (refMonth, filter) {
     App.ensureCCBenefitRulesState?.()
     const todayStr = (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
     if (!refMonth) refMonth = S._ccOverviewMonth || todayStr.slice(0, 7)
     S._ccOverviewMonth = refMonth
+    if (filter === undefined) filter = S._ccOverviewFilter || 'all'
+    S._ccOverviewFilter = filter
 
     const [year, month] = refMonth.split('-').map(Number)
-    const refDate = `${refMonth}-15`
     const lastDayOfMonth = new Date(year, month, 0).getDate()
     const calStart = `${refMonth}-01`
     const calEnd   = `${refMonth}-${String(lastDayOfMonth).padStart(2, '0')}`
@@ -7263,12 +7264,37 @@ App._pickMerchant = function(name, opts = {}) {
     const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
     const monthLabel = `${THAI_MONTHS[month - 1]} ${year + 543}`
 
+    function clampToMonthEnd(y, m, d) {
+      return Math.min(d, new Date(y, m, 0).getDate())
+    }
+
     function getCyclePeriod(cardId, rule) {
       const hint = String(rule?.validity?.statementCycleHint || 'statement_cycle')
       if (hint === 'calendar_month') return { start: calStart, end: calEnd }
-      const st = App.getCardStatement?.(cardId, refDate)
-      if (st?.start && st?.end) return { start: st.start, end: st.end }
-      return { start: calStart, end: calEnd }
+
+      const card     = walletById(cardId) || {}
+      const cycleDay = Math.max(1, Math.min(31, Number(card.cycleDay || 25)))
+
+      // Find the cycle whose end date contains the 15th of refMonth.
+      // If 15 <= cycleDay: cycle ends this month on cycleDay.
+      // If 15 >  cycleDay: cycle ends next month on cycleDay.
+      let endY, endM
+      if (15 <= cycleDay) {
+        endY = year; endM = month
+      } else {
+        const nd = new Date(year, month, 1)
+        endY = nd.getFullYear(); endM = nd.getMonth() + 1
+      }
+      const endDay = clampToMonthEnd(endY, endM, cycleDay)
+      const endStr = `${endY}-${String(endM).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`
+
+      // Start = day after cycleDay of the month before endMonth
+      const prevM   = new Date(endY, endM - 2, 1)
+      const prevDay = clampToMonthEnd(prevM.getFullYear(), prevM.getMonth() + 1, cycleDay)
+      const startD  = new Date(prevM.getFullYear(), prevM.getMonth(), prevDay + 1)
+      const startStr = `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${String(startD.getDate()).padStart(2, '0')}`
+
+      return { start: startStr, end: endStr }
     }
 
     function fmtNum(n, isPoints) {
@@ -7282,7 +7308,6 @@ App._pickMerchant = function(name, opts = {}) {
     }
 
     // inline button style (override .btn's display:block width:100%)
-    const btnInline = 'display:inline-block;width:auto;white-space:nowrap;padding:5px 12px;font-size:12px;border-radius:8px;flex-shrink:0'
     const SHORT_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
     function fmtDateShort(iso) {
       const [, m, d] = String(iso || '').split('-').map(Number)
@@ -7366,13 +7391,13 @@ App._pickMerchant = function(name, opts = {}) {
 
       const dimmed = rule.active === false ? 'opacity:0.45;' : ''
       return `<div class="card card-pad" style="margin-bottom:8px;${dimmed}">
-        <div style="display:flex;align-items:flex-start;gap:8px">
+        <div style="display:flex;align-items:flex-start;gap:6px">
           <div style="flex:1;min-width:0">
             <div style="font-weight:600;font-size:14px;line-height:1.3">${esc(rule.name)}${rule.active === false ? '<span style="font-size:11px;color:var(--text-secondary,#6b7280)"> · ปิด</span>' : ''}</div>
-            <div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:1px">${typeLabel}${rule.isBaseRule ? ' · พื้นฐาน' : ''}${cycleLabel ? ` · <span style="color:var(--text-secondary,#6b7280)">${esc(cycleLabel)}</span>` : ''}</div>
+            <div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:1px">${typeLabel}${rule.isBaseRule ? ' · พื้นฐาน' : ''}${cycleLabel ? ` · ${esc(cycleLabel)}` : ''}</div>
           </div>
-          <button class="btn btn-secondary" style="${btnInline}"
-            onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">แก้ไข</button>
+          <button class="btn-icon" style="font-size:15px;flex-shrink:0;width:30px;height:30px"
+            onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">✏️</button>
         </div>
         ${sections.length === 0
           ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:6px">ไม่มีแคปต่อรอบ</div>`
@@ -7392,38 +7417,50 @@ App._pickMerchant = function(name, opts = {}) {
       })
     })
 
+    function tileHtml(key, count, label, numColor) {
+      const active   = filter === key
+      const newFilter = active ? 'all' : key
+      const border   = active ? `border:2px solid ${numColor};` : 'border:2px solid transparent;'
+      return `<div onclick="App.openCCBenefitOverviewScreen('${esc(refMonth)}','${newFilter}')"
+        style="background:var(--elevated,#1e2a3a);border-radius:12px;padding:10px;text-align:center;cursor:pointer;${border}">
+        <div style="font-size:22px;font-weight:700;color:${numColor}">${count}</div>
+        <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-top:2px">${label}</div>
+      </div>`
+    }
     const summaryHtml = `
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
-        <div style="background:var(--elevated,#1e2a3a);border-radius:12px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:var(--primary,#2563EB)">${cntAvail}</div>
-          <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-top:2px">ใช้ได้</div>
-        </div>
-        <div style="background:var(--elevated,#1e2a3a);border-radius:12px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:var(--warning,#D97706)">${cntLocked}</div>
-          <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-top:2px">ยังไม่ปลด</div>
-        </div>
-        <div style="background:var(--elevated,#1e2a3a);border-radius:12px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:var(--success,#059669)">${cntFull}</div>
-          <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-top:2px">เต็มแล้ว</div>
-        </div>
+        ${tileHtml('available', cntAvail,  'ใช้ได้',      'var(--primary,#2563EB)')}
+        ${tileHtml('locked',   cntLocked, 'ยังไม่ปลด',   'var(--warning,#D97706)')}
+        ${tileHtml('full',     cntFull,   'เต็มแล้ว',    'var(--success,#059669)')}
       </div>`
 
     const cardsHtml = creditCards.length === 0
       ? `<div style="text-align:center;padding:40px 16px;color:var(--text-secondary,#6b7280)">ยังไม่มีบัตรเครดิต<br><small>เพิ่มบัตรในหน้ากระเป๋า</small></div>`
       : creditCards.map(card => {
-          const rules = App.getCreditCardBenefitRules(card.id)
-          if (!rules.length) return ''
+          const allRulesForCard = App.getCreditCardBenefitRules(card.id)
+          if (!allRulesForCard.length) return ''
+
+          const filteredRules = filter === 'all' ? allRulesForCard : allRulesForCard.filter(r => {
+            if (r.active === false) return false
+            const s = getRuleStatus(card.id, r)
+            if (filter === 'locked')    return s.locked
+            if (filter === 'full')      return s.full
+            if (filter === 'available') return !s.locked && !s.full
+            return true
+          })
+          if (!filteredRules.length) return ''
+
           return `<div style="margin-bottom:20px">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-              <div style="width:30px;height:30px;border-radius:8px;background:${esc(card.color || '#2563EB')}33;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">${esc(card.icon || '💳')}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <div style="width:34px;height:34px;border-radius:10px;background:${esc(card.color || '#2563EB')}33;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">${esc(card.icon || '💳')}</div>
               <div style="flex:1;min-width:0">
-                <div style="font-weight:700;font-size:14px">${esc(card.name)}</div>
-                <div style="font-size:11px;color:var(--text-secondary,#6b7280)">${rules.length} สิทธิ์</div>
+                <div style="font-weight:700;font-size:16px;color:var(--text)">${esc(card.name)}</div>
+                <div style="font-size:11px;color:var(--text-secondary,#6b7280)">${allRulesForCard.length} สิทธิ์</div>
               </div>
-              <button class="btn btn-secondary" style="${btnInline}"
-                onclick="App.openCCBenefitScreen('${esc(card.id)}')">+ จัดการ</button>
+              <button class="btn-icon" style="font-size:16px;width:32px;height:32px;flex-shrink:0"
+                onclick="App.openCCBenefitScreen('${esc(card.id)}')">⚙️</button>
             </div>
-            ${rules.map(r => ruleCardHtml(card.id, r)).join('')}
+            ${filteredRules.map(r => ruleCardHtml(card.id, r)).join('')}
           </div>`
         }).join('')
 
@@ -7434,9 +7471,9 @@ App._pickMerchant = function(name, opts = {}) {
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(prevStr)}')">‹</button>
+          <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(prevStr)}','${esc(filter)}')">‹</button>
           <span style="font-weight:700;font-size:15px">${esc(monthLabel)}</span>
-          <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(nextStr)}')"${refMonth >= todayMonth ? ' disabled style="opacity:.3"' : ''}>›</button>
+          <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(nextStr)}','${esc(filter)}')"${refMonth >= todayMonth ? ' disabled style="opacity:.3"' : ''}>›</button>
         </div>
         ${summaryHtml}
         ${cardsHtml}
