@@ -877,7 +877,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.18-r5'
+const APP_VERSION = '2026.05.18-r6'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -18072,8 +18072,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const sheet = _sh, overlay = _ov
     _sh = _ov = _st = null
 
-    if (dy > sheet.offsetHeight * 0.35 || vel > 0.4) {
-      sheet.style.transition = 'transform 0.28s cubic-bezier(.32,.72,0,1)'
+    if (dy > sheet.offsetHeight * 0.6 || vel > 0.2) {
+      sheet.style.transition = 'transform 0.5s cubic-bezier(.32,.72,0,1)'
       void sheet.offsetHeight
       sheet.style.transform = 'translateY(110%)'
       setTimeout(() => {
@@ -18087,7 +18087,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           if (overlay.id === 'overlay-add-tx') try { App.closeAddTx() } catch (_) {}
           else try { App.closeOverlay(overlay.id) } catch (_) {}
         }
-      }, 280)
+      }, 500)
     } else {
       // Spring back — keep sheet-swiping to suppress animation replay
       sheet.style.transition = 'transform 0.32s cubic-bezier(.32,.72,0,1)'
