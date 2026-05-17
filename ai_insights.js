@@ -101,9 +101,10 @@ const InsightEngine = (() => {
       catch(_) { return { month: m, income:0, expense:0, net:0, rate:null } }
     })
 
-    // Budget history (3 months for INS-09)
+    // Budget history (4 months for INS-09 — slice(0,-1) gives 3 previous months)
     const months3 = Calc.getMonths ? Calc.getMonths(3) : [month]
-    const budgetHistory = months3.map(m => {
+    const months4 = Calc.getMonths ? Calc.getMonths(4) : [month]
+    const budgetHistory = months4.map(m => {
       try { return { month: m, items: Calc.getBudgetProgress(txs, budgets, cats, m) } }
       catch(_) { return { month: m, items: [] } }
     })
@@ -190,6 +191,16 @@ const InsightEngine = (() => {
     const projectedExpense = monthly.expense / monthFraction
     const daysLeft = daysInMonth - dayOfMonth
 
+    // Monthly recurring total for INS-15
+    const monthlyRecurringTotal = recurring
+      .filter(r => r.status !== 'inactive' && r.status !== 'cancelled')
+      .reduce((s, r) => {
+        const amt = Number(r.amount || 0)
+        if (r.frequency === 'weekly') return s + amt * 4.3
+        if (r.frequency === 'yearly') return s + amt / 12
+        return s + amt
+      }, 0)
+
     return {
       month, prevMonth, txCount: txs.length,
       monthly, prevMonthly, budget, budgetHistory, history,
@@ -198,6 +209,7 @@ const InsightEngine = (() => {
       billsDue, goalProgress, privExpiring,
       merchantBreakdown, unregisteredRecurring, stalePrices, todayTxs,
       dayOfMonth, daysInMonth, monthFraction, projectedExpense, daysLeft,
+      recurringMerchants, monthlyRecurringTotal,
     }
   }
 
@@ -221,7 +233,7 @@ const InsightEngine = (() => {
     // ── INS-01: Cashflow Risk ──────────────────────────────────
     try {
       const liquid = Number(payload.usable.liquid || 0)
-      const obligations = payload.upcomingCommitted + Math.max(0, payload.projectedExpense - payload.monthly.expense)
+      const obligations = payload.upcomingCommitted
       const gap = liquid - obligations
       if (gap < 0 && obligations > 0) {
         add('01', 'cashflow-critical', {
@@ -273,7 +285,7 @@ const InsightEngine = (() => {
       payload.creditStatements.forEach(({ card, dueInfo }) => {
         if (!dueInfo) return
         const daysLeft = Number(dueInfo.daysLeft)
-        if (daysLeft < 0 || daysLeft > 14) return
+        if (daysLeft < 0 || daysLeft > 7) return
         const amount = Math.abs(Number(card.balance || 0))
         if (amount <= 0) return
         const canPay = Number(payload.usable.liquid || 0) >= amount
@@ -316,7 +328,8 @@ const InsightEngine = (() => {
         const monthlyGap = progress.suggestedMonthly && goal.monthlyContribution > 0
           && progress.suggestedMonthly > goal.monthlyContribution * 1.2
         const overdue = goal.targetDate && progress.daysLeft < 0
-        if (!monthlyGap && !overdue) return
+        const nearDeadline = goal.targetDate && progress.daysLeft >= 0 && progress.daysLeft < 30 && !goal.monthlyContribution
+        if (!monthlyGap && !overdue && !nearDeadline) return
         const suffix = goal.targetDate
           ? (overdue ? ` · เลยกำหนด ${Math.abs(progress.daysLeft)} วัน` : ` · ${progress.daysLeft} วัน`)
           : ''
@@ -349,8 +362,9 @@ const InsightEngine = (() => {
     try {
       const top = (payload.merchantBreakdown || [])[0]
       if (top && payload.monthly.expense > 0) {
+        const topKey = (top.merchant || top.name || '').toLowerCase().trim()
         const pct = (top.total / payload.monthly.expense) * 100
-        if (pct > 35 && top.total > 500) {
+        if (pct > 35 && top.total > 500 && !payload.recurringMerchants?.has(topKey)) {
           add('07', top.merchant || top.name, {
             title: 'รายจ่ายกระจุกตัวสูง',
             body: `"${top.merchant || top.name}" คิดเป็น ${pct.toFixed(0)}% ของรายจ่ายเดือนนี้ (฿${Math.round(top.total).toLocaleString('en-US')}) — ควร negotiate ราคาหรือกระจายร้านค้า`,
@@ -442,7 +456,7 @@ const InsightEngine = (() => {
     // ── INS-12: Daily Budget / Savings Forecast ───────────────
     try {
       const { budget, daysLeft, dayOfMonth, projectedExpense, monthly } = payload
-      if (dayOfMonth < 3) {
+      if (dayOfMonth < 7) {
         // Too early in month — no forecast
       } else if (budget.length > 0) {
         const totalLimit = budget.reduce((s,b) => s + (b.monthlyLimit||0), 0)
@@ -475,6 +489,95 @@ const InsightEngine = (() => {
           action: { label: 'ดูรายงาน', fn: "App.showPage('reports')" },
           evidence: { projectedExpense, income: monthly.income, savingsRate: sr },
         })
+      }
+    } catch(_) {}
+
+    // ── INS-13: Month-over-Month ──────────────────────────────
+    try {
+      const expDiff = payload.prevMonthly.expense > 0
+        ? (payload.monthly.expense - payload.prevMonthly.expense) / payload.prevMonthly.expense * 100
+        : null
+      const incDiff = payload.prevMonthly.income > 0
+        ? (payload.monthly.income - payload.prevMonthly.income) / payload.prevMonthly.income * 100
+        : null
+      const expBig  = expDiff !== null && expDiff > 15
+      const incDown = incDiff !== null && incDiff < -10
+      if (expBig || incDown) {
+        const parts = []
+        if (expBig)  parts.push(`รายจ่ายเพิ่ม ${expDiff.toFixed(0)}% จากเดือนก่อน`)
+        if (incDown) parts.push(`รายรับลด ${Math.abs(incDiff).toFixed(0)}% จากเดือนก่อน`)
+        add('13', `mom-${month}`, {
+          title: 'แนวโน้มเปลี่ยนแปลงจากเดือนก่อน',
+          body: parts.join(' · ') + (expBig && incDown ? ' — ควรตรวจรายการผิดปกติทันที' : ''),
+          severity: expBig && incDown ? 'critical' : 'warning', urgency: 5, impact: 6,
+          action: { label: 'ดูรายงาน', fn: "App.showPage('reports')" },
+          evidence: { expDiff, incDiff },
+        })
+      }
+    } catch(_) {}
+
+    // ── INS-14: Emergency Fund ────────────────────────────────
+    try {
+      const liquid = Number(payload.usable.liquid || 0)
+      const monthsWithExp = payload.history.filter(h => h.expense > 0)
+      if (monthsWithExp.length >= 2) {
+        const avgExp = monthsWithExp.reduce((s, h) => s + h.expense, 0) / monthsWithExp.length
+        const months = liquid / avgExp
+        if (months < 1) {
+          add('14', 'emergency-critical', {
+            title: 'เงินสำรองฉุกเฉินต่ำมาก',
+            body: `เงินพร้อมใช้ ฿${Math.round(liquid).toLocaleString('en-US')} ยังไม่ถึง 1 เดือนของค่าใช้จ่ายเฉลี่ย (฿${Math.round(avgExp).toLocaleString('en-US')}) ควรหยุดลงทุนชั่วคราวและสะสมเงินสำรองก่อน`,
+            severity: 'critical', urgency: 8, impact: 9,
+            action: { label: 'ดูกระเป๋าเงิน', fn: "App.showPage('wallets')" },
+            evidence: { liquid, avgExp, months },
+          })
+        } else if (months < 3) {
+          add('14', 'emergency-warn', {
+            title: 'เงินสำรองฉุกเฉินยังไม่ถึงเป้า',
+            body: `ปัจจุบันมี ${months.toFixed(1)} เดือน (฿${Math.round(liquid).toLocaleString('en-US')}) เป้าหมายคือ 3 เดือน (฿${Math.round(avgExp*3).toLocaleString('en-US')}) ควรเพิ่มเงินสำรองก่อนลงทุนเพิ่ม`,
+            severity: 'warning', urgency: 5, impact: 9,
+            action: { label: 'ดูกระเป๋าเงิน', fn: "App.showPage('wallets')" },
+            evidence: { liquid, avgExp, months },
+          })
+        }
+      }
+    } catch(_) {}
+
+    // ── INS-15: Fixed Cost Ratio ──────────────────────────────
+    try {
+      const { monthlyRecurringTotal, monthly } = payload
+      if (monthly.income > 0 && monthlyRecurringTotal > 0) {
+        const ratio = monthlyRecurringTotal / monthly.income
+        if (ratio > 0.55) {
+          add('15', 'fixed-cost-ratio', {
+            title: 'ค่าใช้จ่ายคงที่สูง',
+            body: `รายจ่ายประจำ ฿${Math.round(monthlyRecurringTotal).toLocaleString('en-US')}/เดือน คิดเป็น ${(ratio*100).toFixed(0)}% ของรายรับ — เหลือ flexibility น้อย ควร review subscription หรือรายจ่ายที่ตัดออกได้`,
+            severity: ratio > 0.7 ? 'warning' : 'info', urgency: 3, impact: 7,
+            action: { label: 'ดูรายการประจำ', fn: "App.openRecurringScreen()" },
+            evidence: { ratio, monthlyFixed: monthlyRecurringTotal, income: monthly.income },
+          })
+        }
+      }
+    } catch(_) {}
+
+    // ── INS-16: Income Irregularity ──────────────────────────
+    try {
+      if (payload.dayOfMonth >= 15) {
+        const pastInc = payload.history
+          .filter(h => h.month !== payload.month && h.income > 0)
+          .map(h => h.income)
+        if (pastInc.length >= 2) {
+          const avgInc = pastInc.reduce((s, v) => s + v, 0) / pastInc.length
+          if (payload.monthly.income < avgInc * 0.7) {
+            add('16', `income-drop-${payload.month}`, {
+              title: 'รายรับต่ำกว่าค่าเฉลี่ย',
+              body: `รายรับเดือนนี้ ฿${Math.round(payload.monthly.income).toLocaleString('en-US')} ต่ำกว่าค่าเฉลี่ย ${pastInc.length} เดือนที่ผ่านมา (฿${Math.round(avgInc).toLocaleString('en-US')}) — ตรวจสอบว่ายังไม่ได้บันทึกรายรับบางส่วน`,
+              severity: 'warning', urgency: 4, impact: 7,
+              action: { label: 'ดูรายรับ', fn: "App.showPage('transactions')" },
+              evidence: { income: payload.monthly.income, avgInc, months: pastInc.length },
+            })
+          }
+        }
       }
     } catch(_) {}
 

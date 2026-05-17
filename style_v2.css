@@ -5489,6 +5489,22 @@ html.dark .ins-card.severity-positive  { border-color: rgba(52,211,153,.3);  bac
   cursor: pointer;
 }
 
+.ins-snooze-select {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.ins-empty-state {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 8px 0 4px;
+}
+
 /* Reports list inside ai-advisor-card */
 .ins-reports-list {
   margin-top: 10px;
