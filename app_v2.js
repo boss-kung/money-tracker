@@ -2524,22 +2524,39 @@ App.render();
     ['qr_payment', 'QR / Scan to Pay'],
   ]
   App.getBenefitChannelOptions = function() {
-    const custom = (S.settings?.customChannels || []).map(c => [c.value, c.label])
-    return [['', 'ไม่ระบุ'], ...DEFAULT_CHANNELS_LIST, ...custom]
+    const labels = S.settings?.channelLabels || {}
+    const defaults = DEFAULT_CHANNELS_LIST.map(([v, l]) => [v, labels[v] || l])
+    const custom = (S.settings?.customChannels || []).map(c => [c.value, labels[c.value] || c.label])
+    return [['', 'ไม่ระบุ'], ...defaults, ...custom]
   }
 
   App.openChannelScreen = function() {
     S.settings ||= {}
-    const custom = S.settings.customChannels || []
-    const defaultRows = DEFAULT_CHANNELS_LIST.map(([value, label]) =>
-      `<div class="list-item"><div class="list-item-info"><div class="list-item-name">${esc(label)}</div><div class="list-item-sub" style="font-family:monospace">${esc(value)}</div></div><div style="font-size:11px;color:var(--muted);padding:0 12px">ค่าเริ่มต้น</div></div>`
+    const labels = S.settings.channelLabels || {}
+    const customValues = new Set((S.settings.customChannels || []).map(c => c.value))
+    const allChannels = [
+      ...DEFAULT_CHANNELS_LIST.map(([v, l]) => ({ value: v, label: labels[v] || l, isDefault: true })),
+      ...(S.settings.customChannels || []).map(c => ({ value: c.value, label: labels[c.value] || c.label, isDefault: false })),
+    ]
+    const rows = allChannels.map(c =>
+      `<div class="list-item"><div class="list-item-info"><div class="list-item-name">${esc(c.label)}</div><div class="list-item-sub" style="font-family:monospace">${esc(c.value)}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.renameChannel('${esc(c.value)}','${esc(c.label)}')" title="เปลี่ยนชื่อ">✏️</button>${c.isDefault ? '' : `<button class="icon-btn icon-btn-danger" onclick="App.deleteCustomChannel('${esc(c.value)}')" title="ลบ">🗑</button>`}</div></div>`
     ).join('')
-    const customRows = custom.length
-      ? custom.map((c, i) =>
-          `<div class="list-item"><div class="list-item-info"><div class="list-item-name">${esc(c.label)}</div><div class="list-item-sub" style="font-family:monospace">${esc(c.value)}</div></div><div class="recurring-actions"><button class="icon-btn icon-btn-danger" onclick="App.deleteCustomChannel(${i})">🗑</button></div></div>`
-        ).join('')
-      : `<div style="padding:16px;color:var(--muted);text-align:center;font-size:14px">ยังไม่มีช่องทางที่กำหนดเอง</div>`
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ช่องทางการใช้จ่าย</h2></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="card card-pad" style="margin-bottom:16px"><label class="form-label" style="margin-bottom:6px">เพิ่มช่องทางใหม่</label><div style="display:flex;gap:8px;align-items:center"><input class="form-input" id="new-channel-label" placeholder="เช่น PromptPay, Paotang" style="flex:1" onkeydown="if(event.key==='Enter')App.saveCustomChannel()"><button class="btn btn-primary" onclick="App.saveCustomChannel()" style="width:auto;padding:0 16px;height:44px;flex-shrink:0">+ เพิ่ม</button></div></div><div class="sec-title" style="margin-top:4px">ที่กำหนดเอง</div><div class="card"><div style="padding:0 16px">${customRows}</div></div><div class="sec-title">ค่าเริ่มต้น (ล็อก)</div><div class="card"><div style="padding:0 16px">${defaultRows}</div></div></div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ช่องทางการใช้จ่าย</h2></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="card card-pad" style="margin-bottom:16px"><label class="form-label" style="margin-bottom:6px">เพิ่มช่องทางใหม่</label><div style="display:flex;gap:8px;align-items:center"><input class="form-input" id="new-channel-label" placeholder="เช่น PromptPay, Paotang" style="flex:1" onkeydown="if(event.key==='Enter')App.saveCustomChannel()"><button class="btn btn-primary" onclick="App.saveCustomChannel()" style="width:auto;padding:0 16px;height:44px;flex-shrink:0">+ เพิ่ม</button></div></div><div class="card"><div style="padding:0 16px">${rows}</div></div></div>`)
+  }
+
+  App.renameChannel = function(value, currentLabel) {
+    const newLabel = prompt('เปลี่ยนชื่อช่องทาง', currentLabel)
+    if (newLabel === null) return
+    const trimmed = newLabel.trim()
+    if (!trimmed) { toast('กรุณากรอกชื่อ', 'warn'); return }
+    S.settings ||= {}
+    S.settings.channelLabels ||= {}
+    S.settings.channelLabels[value] = trimmed
+    const ci = (S.settings.customChannels || []).findIndex(c => c.value === value)
+    if (ci >= 0) S.settings.customChannels[ci].label = trimmed
+    persist()
+    App.openChannelScreen()
+    toast('เปลี่ยนชื่อแล้ว', 'success')
   }
 
   App.saveCustomChannel = function() {
@@ -2556,12 +2573,13 @@ App.render();
     toast('เพิ่มช่องทางแล้ว', 'success')
   }
 
-  App.deleteCustomChannel = function(index) {
+  App.deleteCustomChannel = function(value) {
     S.settings ||= {}
-    const ch = (S.settings.customChannels || [])[index]
+    const ch = (S.settings.customChannels || []).find(c => c.value === value)
     if (!ch) return
     if (!confirm(`ลบช่องทาง "${ch.label}" ?`)) return
-    S.settings.customChannels.splice(index, 1)
+    S.settings.customChannels = S.settings.customChannels.filter(c => c.value !== value)
+    if (S.settings.channelLabels) delete S.settings.channelLabels[value]
     persist()
     App.openChannelScreen()
     toast('ลบช่องทางแล้ว', 'success')
