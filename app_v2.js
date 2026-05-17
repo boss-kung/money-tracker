@@ -877,7 +877,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.18-r6'
+const APP_VERSION = '2026.05.18-r7'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -15004,7 +15004,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const actionHtml = ins.action
       ? `<button class="ins-action-primary" data-ins-fn="${esc(ins.action.fn)}" onclick="App.insightAct('${esc(ins.id)}', this.dataset.insFn)">${esc(ins.action.label)}</button>`
       : ''
-    const snoozeHtml = `<button class="ins-snooze-btn" onclick="App.insightSnooze('${esc(ins.id)}',1)">เตือนพรุ่งนี้</button>`
+    const snoozeHtml = `<select class="ins-snooze-select" onchange="if(this.value){App.insightSnooze('${esc(ins.id)}',+this.value);this.value=''}"><option value="">⏰ เตือนอีกครั้ง</option><option value="1">พรุ่งนี้ (1 วัน)</option><option value="3">3 วัน</option><option value="7">1 สัปดาห์</option></select>`
     return `<div class="ins-card severity-${esc(ins.severity)}" id="ins-${esc(ins.id)}">
       <div class="ins-card-top">
         <span class="ins-icon">${icon}</span>
@@ -15036,13 +15036,15 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
     let insights = []
     try { insights = InsightEngine.getTopN(3, 'dashboard', S) } catch(_) { return }
-    if (!insights.length) return
 
     insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
 
     const section = document.createElement('div')
     section.className = 'ins-dashboard-section'
-    section.innerHTML = `<div class="sec-title" style="margin-top:14px">💡 วันนี้ต้องรู้</div>${insights.map(insightCardHtml).join('')}`
+    const insBody = insights.length
+      ? insights.map(insightCardHtml).join('')
+      : `<div class="ins-empty-state">ทุกอย่างดูดี ไม่มีการแจ้งเตือน</div>`
+    section.innerHTML = `<div class="sec-title" style="margin-top:14px">💡 วันนี้ต้องรู้</div>${insBody}`
 
     const statRow = content.querySelector('.mt-stat-row')
     if (statRow) statRow.insertAdjacentElement('afterend', section)
@@ -15067,19 +15069,25 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const advisorCard = content.querySelector('.ai-advisor-card')
     if (!advisorCard) return
 
+    // Clear any stale content from previous renders
+    advisorCard.querySelectorAll('.insight-row.ai-insight').forEach(el => el.remove())
+    advisorCard.querySelector('.ins-reports-list')?.remove()
+    advisorCard.querySelector('.ins-reports-empty')?.remove()
+
     let insights = []
     try { insights = InsightEngine.getTopN(5, 'reports', S) } catch(_) { return }
-    if (!insights.length) return
 
     insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
 
-    // Replace the "วิเคราะห์ใหม่" button with ↻ รีเฟรช (stays inside ai-card-head)
-    const reloadBtn = advisorCard.querySelector('.ai-card-head button')
-    if (reloadBtn) {
-      reloadBtn.outerHTML = `<button class="btn btn-secondary btn-sm" onclick="InsightEngine.invalidate();App.renderReports()" style="width:auto;font-size:11px">↻ รีเฟรช</button>`
+    if (!insights.length) {
+      const empty = document.createElement('div')
+      empty.className = 'list-item-sub ins-reports-empty'
+      empty.style.padding = '8px 0 4px'
+      empty.textContent = 'ไม่มีการแจ้งเตือนสำหรับตอนนี้'
+      advisorCard.appendChild(empty)
+      return
     }
 
-    advisorCard.querySelector('.ins-reports-list')?.remove()
     const listEl = document.createElement('div')
     listEl.className = 'ins-reports-list'
     listEl.innerHTML = insights.map(insightCardHtml).join('')
