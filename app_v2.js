@@ -7339,7 +7339,7 @@ App._pickMerchant = function(name, opts = {}) {
 
     function getRuleStatus(cardId, rule) {
       const cycle      = getCyclePeriod(cardId, rule)
-      const usage      = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end)
+      const usage      = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, '', getTriggerTrackChannels(rule.rewardTrigger || {}))
       const isPoints   = rule.type === 'points'
       const hasTrigger = rule.rewardTrigger?.mode === 'cycle_spend_threshold'
       const triggerAmt = Number(rule.rewardTrigger?.thresholdAmount || 0)
