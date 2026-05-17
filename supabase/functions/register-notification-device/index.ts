@@ -44,9 +44,10 @@ Deno.serve(async req => {
       .from('mt_notification_preferences')
       .upsert({
         install_id: installId,
+        daily_expense_enabled: true,
         timezone: device.timezone,
         hide_amounts_in_notification: Boolean(body.hideAmounts),
-      }, { onConflict: 'install_id', ignoreDuplicates: true })
+      }, { onConflict: 'install_id', ignoreDuplicates: false })
 
     return jsonResponse({ ok: true })
   } catch (error) {
