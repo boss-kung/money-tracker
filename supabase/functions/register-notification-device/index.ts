@@ -1,6 +1,11 @@
 import { adminClient } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
+type WebPushSubscription = {
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+}
+
 Deno.serve(async req => {
   const options = handleOptions(req)
   if (options) return options
@@ -9,13 +14,17 @@ Deno.serve(async req => {
   try {
     const body = await req.json()
     const installId = String(body.installId || '').trim()
-    const fcmToken = String(body.fcmToken || '').trim()
-    if (!installId || !fcmToken) return jsonResponse({ error: 'installId and fcmToken are required' }, 400)
+    if (!installId) return jsonResponse({ error: 'installId is required' }, 400)
+
+    const pushSubscription = body.pushSubscription as WebPushSubscription | null
+    if (body.enabled !== false && (!pushSubscription?.endpoint || !pushSubscription?.keys?.p256dh)) {
+      return jsonResponse({ error: 'pushSubscription is required when enabling notifications' }, 400)
+    }
 
     const supabase = adminClient()
     const device = {
       install_id: installId,
-      fcm_token: fcmToken,
+      push_subscription: pushSubscription ?? null,
       platform: String(body.platform || 'unknown').slice(0, 64),
       browser: String(body.browser || 'unknown').slice(0, 64),
       timezone: String(body.timezone || 'Asia/Bangkok').slice(0, 64),
@@ -28,17 +37,16 @@ Deno.serve(async req => {
 
     const { error } = await supabase
       .from('mt_notification_devices')
-      .upsert(device, { onConflict: 'fcm_token' })
+      .upsert(device, { onConflict: 'install_id' })
     if (error) throw error
 
     await supabase
       .from('mt_notification_preferences')
       .upsert({
         install_id: installId,
-        daily_expense_enabled: false,
         timezone: device.timezone,
         hide_amounts_in_notification: Boolean(body.hideAmounts),
-      }, { onConflict: 'install_id', ignoreDuplicates: false })
+      }, { onConflict: 'install_id', ignoreDuplicates: true })
 
     return jsonResponse({ ok: true })
   } catch (error) {

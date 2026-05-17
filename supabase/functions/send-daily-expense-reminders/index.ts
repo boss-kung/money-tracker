@@ -1,12 +1,11 @@
 import { adminClient } from '../_shared/supabase.ts'
-import { sendFcm } from '../_shared/fcm.ts'
+import { sendWebPush } from '../_shared/webpush.ts'
+import type { WebPushSubscription } from '../_shared/webpush.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
-
-const APP_LINK = Deno.env.get('MT_APP_LINK') || '/'
 
 type DeviceRow = {
   install_id: string
-  fcm_token: string
+  push_subscription: WebPushSubscription | null
 }
 
 type PreferenceRow = {
@@ -31,15 +30,6 @@ function bangkokDate() {
   return `${get('year')}-${get('month')}-${get('day')}`
 }
 
-function appLink(pathAndHash: string) {
-  try {
-    const base = new URL(APP_LINK)
-    return new URL(pathAndHash, base).href
-  } catch (_) {
-    return undefined
-  }
-}
-
 Deno.serve(async req => {
   const options = handleOptions(req)
   if (options) return options
@@ -52,7 +42,7 @@ Deno.serve(async req => {
   try {
     const { data: devices, error } = await supabase
       .from('mt_notification_devices')
-      .select('install_id, fcm_token, enabled, permission')
+      .select('install_id, push_subscription, enabled, permission')
       .eq('enabled', true)
       .eq('permission', 'granted')
     if (error) throw error
@@ -62,7 +52,7 @@ Deno.serve(async req => {
     const { data: prefsRows, error: prefsError } = installIds.length
       ? await supabase
         .from('mt_notification_preferences')
-        .select('install_id, daily_expense_enabled, hide_amounts_in_notification')
+        .select('install_id, daily_expense_enabled')
         .in('install_id', installIds)
       : { data: [], error: null }
     if (prefsError) throw prefsError
@@ -84,11 +74,18 @@ Deno.serve(async req => {
 
     for (const device of deviceRows) {
       const installId = String(device.install_id)
+
+      if (!device.push_subscription?.endpoint) {
+        skipped++
+        continue
+      }
+
       const prefs = prefsByInstallId.get(installId)
       if (prefs?.daily_expense_enabled !== true) {
         skipped++
         continue
       }
+
       const { data: existing } = await supabase
         .from('mt_notification_logs')
         .select('id, status')
@@ -109,28 +106,17 @@ Deno.serve(async req => {
         : 'ใช้เวลาแป๊บเดียว แล้วรายงานเดือนนี้จะแม่นขึ้น'
 
       try {
-        const link = appLink('index.html#dashboard?open=addTx')
-        const result = await sendFcm({
-          token: String(device.fcm_token),
-          notification: { title, body },
-          data: {
-            type: 'daily_expense',
-            route: 'addTx',
-            date: today,
-          },
-          webpush: {
-            ...(link ? { fcm_options: { link } } : {}),
-            notification: {
-              icon: '/assets/icon.svg',
-              badge: '/assets/icon.svg',
-              tag: dedupeKey,
-              renotify: false,
-              actions: [
-                { action: 'addTx', title: 'เพิ่มรายจ่าย' },
-                { action: 'open', title: 'เปิดแอป' },
-              ],
-            },
-          },
+        await sendWebPush(device.push_subscription, {
+          title,
+          body,
+          icon: './assets/icon.svg',
+          badge: './assets/icon.svg',
+          tag: dedupeKey,
+          data: { type: 'daily_expense', route: 'addTx', date: today },
+          actions: [
+            { action: 'addTx', title: 'เพิ่มรายจ่าย' },
+            { action: 'open', title: 'เปิดแอป' },
+          ],
         })
 
         await supabase.from('mt_notification_logs').upsert({
@@ -140,7 +126,7 @@ Deno.serve(async req => {
           title,
           body,
           status: 'sent',
-          fcm_message_id: result?.name || null,
+          fcm_message_id: null,
           error: null,
         }, { onConflict: 'install_id,notification_type,dedupe_key' })
         sent++

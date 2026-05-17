@@ -379,13 +379,12 @@
 
     const registration = await navigator.serviceWorker.ready
     const applicationServerKey = urlBase64ToUint8Array(getConfig().vapidKey)
-    let pushSubscription = await registration.pushManager.getSubscription()
-    if (!pushSubscription) {
-      pushSubscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey,
-      })
-    }
+    const existing = await registration.pushManager.getSubscription()
+    if (existing) await existing.unsubscribe()
+    const pushSubscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey,
+    })
     const subJson = pushSubscription.toJSON()
     try { localStorage.setItem(PUSH_SUB_KEY, JSON.stringify(subJson)) } catch (_) {}
 
