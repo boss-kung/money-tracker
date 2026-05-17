@@ -7240,6 +7240,178 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // Credit card benefit overview (consolidated view across all cards)
+  // ═══════════════════════════════════════════════════════════════════
+  App.openCCBenefitOverviewScreen = function (refMonth) {
+    App.ensureCCBenefitRulesState?.()
+    const todayStr = (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
+    if (!refMonth) refMonth = S._ccOverviewMonth || todayStr.slice(0, 7)
+    S._ccOverviewMonth = refMonth
+
+    const [year, month] = refMonth.split('-').map(Number)
+    const refDate = `${refMonth}-15`
+    const lastDayOfMonth = new Date(year, month, 0).getDate()
+    const calStart = `${refMonth}-01`
+    const calEnd   = `${refMonth}-${String(lastDayOfMonth).padStart(2, '0')}`
+
+    const prevD = new Date(year, month - 2, 1)
+    const nextD = new Date(year, month, 1)
+    const prevStr = `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, '0')}`
+    const nextStr = `${nextD.getFullYear()}-${String(nextD.getMonth() + 1).padStart(2, '0')}`
+    const todayMonth = todayStr.slice(0, 7)
+
+    const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+    const monthLabel = `${THAI_MONTHS[month - 1]} ${year + 543}`
+
+    function getCyclePeriod(cardId, rule) {
+      const hint = String(rule?.validity?.statementCycleHint || 'statement_cycle')
+      if (hint === 'calendar_month') return { start: calStart, end: calEnd }
+      const st = App.getCardStatement?.(cardId, refDate)
+      if (st?.start && st?.end) return { start: st.start, end: st.end }
+      return { start: calStart, end: calEnd }
+    }
+
+    function fmtNum(n, isPoints) {
+      const v = Number(n || 0)
+      return isPoints ? `${Math.floor(v).toLocaleString('en-US')} คะแนน` : money(v)
+    }
+
+    function progressBar(pct, color) {
+      return `<div style="height:6px;background:var(--border,#e5e7eb);border-radius:3px;overflow:hidden;margin:4px 0">
+        <div style="height:100%;width:${Math.min(100, pct).toFixed(1)}%;background:${color};border-radius:3px;transition:width .3s"></div>
+      </div>`
+    }
+
+    function ruleCardHtml(cardId, rule) {
+      const cycle  = getCyclePeriod(cardId, rule)
+      const usage  = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end)
+      const isPoints = rule.type === 'points'
+      const typeLabel = { cashback: 'เงินคืน', points: 'คะแนน', both: 'เงินคืน + คะแนน', discount: 'ส่วนลด' }[rule.type] || rule.type
+
+      const hasTrigger   = rule.rewardTrigger?.mode === 'cycle_spend_threshold'
+      const triggerAmt   = Number(rule.rewardTrigger?.thresholdAmount || 0)
+      const trackSpent   = Number(usage.trackChannelSpendBefore || 0)
+      const rewardCap    = Number(rule.limits?.maxRewardAmountPerCycle || 0)
+      const spendCap     = Number(rule.limits?.maxEligibleSpendPerCycle || 0)
+      const rewardUsed   = isPoints ? Number(usage.pointsUsedBefore || 0) : Number(usage.cashbackUsedBefore || 0)
+      const eligibleUsed = Number(usage.eligibleSpendUsedBefore || 0)
+
+      const sections = []
+
+      if (hasTrigger && triggerAmt > 0) {
+        const pct      = Math.min(100, (trackSpent / triggerAmt) * 100)
+        const unlocked = trackSpent >= triggerAmt
+        const remain   = Math.max(0, triggerAmt - trackSpent)
+        const color    = unlocked ? 'var(--success,#059669)' : 'var(--primary,#2563EB)'
+        const hint     = unlocked
+          ? `<span style="color:var(--success,#059669);font-size:11px">✓ ปลดล็อกแล้ว</span>`
+          : `<span style="color:var(--text-secondary,#6b7280);font-size:11px">ขาดอีก ${money(remain)}</span>`
+        sections.push(`
+          <div style="margin-top:8px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:1px">
+              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">ยอดสะสมปลดล็อก</span>
+              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${money(trackSpent)} / ${money(triggerAmt)}</span>
+            </div>
+            ${progressBar(pct, color)}
+            ${hint}
+          </div>`)
+      }
+
+      if (rewardCap > 0) {
+        const pct    = Math.min(100, (rewardUsed / rewardCap) * 100)
+        const remain = Math.max(0, rewardCap - rewardUsed)
+        const full   = pct >= 100
+        const color  = full ? 'var(--success,#059669)' : 'var(--primary,#2563EB)'
+        const hint   = full
+          ? `<span style="color:var(--success,#059669);font-size:11px">✓ เต็มโควต้า · รีเซ็ตรอบถัดไป</span>`
+          : `<span style="color:var(--text-secondary,#6b7280);font-size:11px">เหลือ ${fmtNum(remain, isPoints)}</span>`
+        sections.push(`
+          <div style="margin-top:8px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:1px">
+              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${isPoints ? 'คะแนนที่ได้รับ' : 'เงินคืนที่ได้รับ'}</span>
+              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${fmtNum(rewardUsed, isPoints)} / ${fmtNum(rewardCap, isPoints)}</span>
+            </div>
+            ${progressBar(pct, color)}
+            ${hint}
+          </div>`)
+      } else if (spendCap > 0) {
+        const pct    = Math.min(100, (eligibleUsed / spendCap) * 100)
+        const remain = Math.max(0, spendCap - eligibleUsed)
+        const full   = pct >= 100
+        const color  = full ? 'var(--success,#059669)' : 'var(--primary,#2563EB)'
+        const hint   = full
+          ? `<span style="color:var(--success,#059669);font-size:11px">✓ เต็มยอดใช้จ่ายที่นับ</span>`
+          : `<span style="color:var(--text-secondary,#6b7280);font-size:11px">เหลือ ${money(remain)}</span>`
+        sections.push(`
+          <div style="margin-top:8px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:1px">
+              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">ยอดใช้จ่ายที่นับ</span>
+              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${money(eligibleUsed)} / ${money(spendCap)}</span>
+            </div>
+            ${progressBar(pct, color)}
+            ${hint}
+          </div>`)
+      }
+
+      const noCap  = sections.length === 0
+      const dimmed = rule.active === false ? 'opacity:0.45;' : ''
+
+      return `<div class="card card-pad" style="margin-bottom:8px;${dimmed}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="min-width:0;flex:1">
+            <div style="font-weight:600;font-size:14px;line-height:1.3">${esc(rule.name)}${rule.active === false ? '<span style="font-size:11px;color:var(--text-secondary,#6b7280)"> · ปิด</span>' : ''}</div>
+            <div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:1px">${typeLabel}${rule.isBaseRule ? ' · สิทธิ์พื้นฐาน' : ''}</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" style="white-space:nowrap;font-size:11px;padding:4px 10px;flex-shrink:0"
+            onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">แก้ไข</button>
+        </div>
+        ${noCap
+          ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:6px">ไม่มีแคปต่อรอบ</div>`
+          : sections.join('')}
+      </div>`
+    }
+
+    const creditCards = (S.wallets || []).filter(w => w.type === 'credit')
+    const allRules    = (S.ccBenefitRules || [])
+    const hiddenCount = allRules.filter(r => r.active === false).length
+
+    const cardsHtml = creditCards.length === 0
+      ? `<div style="text-align:center;padding:40px 16px;color:var(--text-secondary,#6b7280)">ยังไม่มีบัตรเครดิต<br><small>เพิ่มบัตรในหน้ากระเป๋า</small></div>`
+      : creditCards.map(card => {
+          const rules = App.getCreditCardBenefitRules(card.id)
+          if (!rules.length) return ''
+          return `<div style="margin-bottom:20px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <div style="width:30px;height:30px;border-radius:8px;background:${esc(card.color || '#2563EB')}33;display:flex;align-items:center;justify-content:center;font-size:15px">${esc(card.icon || '💳')}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:14px">${esc(card.name)}</div>
+                <div style="font-size:11px;color:var(--text-secondary,#6b7280)">${rules.length} สิทธิ์</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px"
+                onclick="App.openCCBenefitScreen('${esc(card.id)}')">+ จัดการ</button>
+            </div>
+            ${rules.map(r => ruleCardHtml(card.id, r)).join('')}
+          </div>`
+        }).join('')
+
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>สิทธิประโยชน์บัตรเครดิต</h2>
+      </div>
+      <div class="sub-scroll" style="padding:12px 16px 40px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(prevStr)}')">‹</button>
+          <span style="font-weight:700;font-size:15px">${esc(monthLabel)}</span>
+          <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(nextStr)}')"${refMonth >= todayMonth ? ' disabled style="opacity:.3"' : ''}>›</button>
+        </div>
+        ${cardsHtml}
+        ${hiddenCount > 0 ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);text-align:center;margin-top:4px">${hiddenCount} สิทธิ์ที่ปิดใช้งานรวมอยู่ด้วย (แสดงแบบโปร่งใส)</div>` : ''}
+      </div>
+    `)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // Crypto pricing helpers reused by wallet cards
   // ═══════════════════════════════════════════════════════════════════
   const CRYPTO_MAP = {
@@ -17148,6 +17320,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="card card-pad">
         ${row({ icon: '🎟️', label: 'สิทธิพิเศษ', value: `${activePrivCount} สิทธิ์`, onclick: "App.openPrivilegesScreen('active')" })}
         ${row({ icon: '🎁', label: 'สมุดสิทธิประโยชน์', onclick: 'App.openRewardLedgerScreen()' })}
+        ${row({ icon: '💎', label: 'รวมสิทธิประโยชน์บัตรเครดิต', value: `${(S.ccBenefitRules || []).filter(r => r.active !== false).length} สิทธิ์`, onclick: 'App.openCCBenefitOverviewScreen()' })}
         ${row({ icon: '💳', label: 'กลุ่มวงเงินร่วม', value: `${(S.creditLimitGroups || []).length} กลุ่ม`, onclick: 'App.openCreditLimitGroupScreen()' })}
         ${row({ icon: '🧾', label: 'ศูนย์ผ่อนชำระ', onclick: 'App.openInstallmentCenter()' })}
       </div>`
