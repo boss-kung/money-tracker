@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.05.17-fcm-fix'
+const APP_VERSION = '2026.05.17-webpush'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 
@@ -20,33 +20,22 @@ const STATIC_ASSETS = [
   './assets/fonts/LINESeedSansTH_XBd.ttf',
 ]
 
-try {
-  importScripts('./notification_config.js')
-  if (globalThis.MT_FIREBASE_CONFIG?.apiKey) {
-    importScripts(
-      'https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js',
-      'https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js'
-    )
-    firebase.initializeApp(globalThis.MT_FIREBASE_CONFIG)
-    const messaging = firebase.messaging()
-    messaging.onBackgroundMessage(payload => {
-      const notification = payload.notification || {}
-      const data = payload.data || {}
-      self.registration.showNotification(notification.title || 'Money Tracker', {
-        body: notification.body || '',
-        icon: './assets/icon.svg',
-        badge: './assets/icon.svg',
-        tag: data.date ? `${data.type || 'money-tracker'}:${data.date}` : data.type || 'money-tracker',
-        data,
-        actions: data.route
-          ? [{ action: data.route, title: data.actionLabel || 'เปิดดู' }, { action: 'open', title: 'เปิดแอป' }]
-          : [{ action: 'open', title: 'เปิดแอป' }],
-      })
+self.addEventListener('push', event => {
+  let payload = {}
+  try { payload = event.data?.json() || {} } catch (_) {}
+  const title = payload.title || 'Money Tracker'
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body || '',
+      icon: payload.icon || './assets/icon.svg',
+      badge: payload.badge || './assets/icon.svg',
+      tag: payload.tag || 'money-tracker',
+      renotify: payload.renotify || false,
+      data: payload.data || {},
+      actions: payload.actions || [{ action: 'open', title: 'เปิดแอป' }],
     })
-  }
-} catch (_) {
-  // Notification config is optional until Firebase is connected.
-}
+  )
+})
 
 function isSameOrigin(request) {
   try { return new URL(request.url).origin === self.location.origin } catch (_) { return false }

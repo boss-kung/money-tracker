@@ -1,12 +1,12 @@
 /* ============================================================
    Money Tracker Notifications
-   Firebase Cloud Messaging + Supabase Edge Functions
+   Native Web Push (VAPID) + Supabase Edge Functions
    ============================================================ */
 ;(function(){
   'use strict'
 
   const INSTALL_KEY = 'mt_notification_install_id'
-  const FCM_TOKEN_KEY = 'mt_notification_fcm_token'
+  const PUSH_SUB_KEY = 'mt_notification_push_sub'
   const LAST_SYNC_KEY = 'mt_notification_last_snapshot_sync'
   const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch]))
 
@@ -79,22 +79,13 @@
       supabaseUrl,
       supabaseAnonKey: String(window.MT_SUPABASE_ANON_KEY || ''),
       functionsUrl: supabaseUrl ? `${supabaseUrl}/functions/v1` : '',
-      firebaseConfig: window.MT_FIREBASE_CONFIG || null,
       vapidKey: String(window.MT_FCM_VAPID_KEY || ''),
     }
   }
 
   function isConfigured() {
     const cfg = getConfig()
-    return Boolean(
-      cfg.functionsUrl &&
-      cfg.supabaseAnonKey &&
-      cfg.vapidKey &&
-      cfg.firebaseConfig?.apiKey &&
-      cfg.firebaseConfig?.projectId &&
-      cfg.firebaseConfig?.messagingSenderId &&
-      cfg.firebaseConfig?.appId
-    )
+    return Boolean(cfg.functionsUrl && cfg.supabaseAnonKey && cfg.vapidKey)
   }
 
   async function callFunction(name, payload) {
@@ -132,15 +123,18 @@
     return 'unknown'
   }
 
-  async function loadFirebaseMessaging() {
-    const [{ initializeApp }, { getMessaging, getToken, isSupported }] = await Promise.all([
-      import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js'),
-      import('https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging.js'),
-    ])
-    const supported = await isSupported().catch(() => false)
-    if (!supported) throw new Error('อุปกรณ์หรือเบราว์เซอร์นี้ยังไม่รองรับ FCM Web')
-    const app = initializeApp(getConfig().firebaseConfig)
-    return { messaging: getMessaging(app), getToken }
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+    const rawData = atob(base64)
+    return Uint8Array.from([...rawData].map(ch => ch.charCodeAt(0)))
+  }
+
+  function storedPushSub() {
+    try {
+      const raw = localStorage.getItem(PUSH_SUB_KEY)
+      return raw ? JSON.parse(raw) : null
+    } catch (_) { return null }
   }
 
   function todayStr() {
@@ -315,10 +309,6 @@
     return prefs.customRules
   }
 
-  function storedFcmToken() {
-    try { return localStorage.getItem(FCM_TOKEN_KEY) || '' } catch (_) { return '' }
-  }
-
   async function syncCustomRules() {
     if (!isConfigured()) return false
     await callFunction('sync-notification-rules', {
@@ -371,10 +361,10 @@
       return false
     }
     if (!isConfigured()) {
-      notify('ยังไม่ได้ตั้งค่า Firebase/Supabase สำหรับ Notification', 'warn')
+      notify('ยังไม่ได้ตั้งค่า Supabase/VAPID สำหรับ Notification', 'warn')
       return false
     }
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
       notify('เบราว์เซอร์นี้ยังไม่รองรับการแจ้งเตือนของ PWA', 'warn')
       return false
     }
@@ -388,13 +378,16 @@
     }
 
     const registration = await navigator.serviceWorker.ready
-    const { messaging, getToken } = await loadFirebaseMessaging()
-    const fcmToken = await getToken(messaging, {
-      vapidKey: getConfig().vapidKey,
-      serviceWorkerRegistration: registration,
-    })
-    if (!fcmToken) throw new Error('สร้าง FCM token ไม่สำเร็จ')
-    try { localStorage.setItem(FCM_TOKEN_KEY, fcmToken) } catch (_) {}
+    const applicationServerKey = urlBase64ToUint8Array(getConfig().vapidKey)
+    let pushSubscription = await registration.pushManager.getSubscription()
+    if (!pushSubscription) {
+      pushSubscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      })
+    }
+    const subJson = pushSubscription.toJSON()
+    try { localStorage.setItem(PUSH_SUB_KEY, JSON.stringify(subJson)) } catch (_) {}
 
     const prefs = ensureSettings()
     prefs.permission = 'granted'
@@ -404,7 +397,7 @@
 
     await callFunction('register-notification-device', {
       installId: getInstallId(),
-      fcmToken,
+      pushSubscription: subJson,
       platform: platform(),
       browser: browserName(),
       timezone: prefs.timezone,
@@ -426,10 +419,11 @@
     const prefs = ensureSettings()
     prefs.enabled = false
     persist()
-    if (isConfigured() && storedFcmToken()) {
+    if (isConfigured()) {
+      const sub = storedPushSub()
       await callFunction('register-notification-device', {
         installId: getInstallId(),
-        fcmToken: storedFcmToken(),
+        pushSubscription: sub,
         platform: platform(),
         browser: browserName(),
         timezone: prefs.timezone,
@@ -438,7 +432,7 @@
         hideAmounts: Boolean(prefs.hide_amounts_in_notification),
         appVersion: window.MT_APP_VERSION || '',
         userAgent: navigator.userAgent || '',
-      })
+      }).catch(() => {})
     }
     await savePreferences().catch(() => {})
     notify('ปิดการแจ้งเตือนแล้ว', 'success')
