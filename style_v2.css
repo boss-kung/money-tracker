@@ -6314,7 +6314,7 @@ body.is-transactions #fab.mt-magnetic:not(.hidden) {
   to   { transform: translateY(0);    }
 }
 .overlay.open:not(.mt-closing) .sheet {
-  animation: mt-sheet-spring .42s cubic-bezier(.34, 1.22, .64, 1) both !important;
+  animation: mt-sheet-spring .5s cubic-bezier(.34, 1.22, .64, 1) both !important;
 }
 /* Cancel spring animation while user is dragging the sheet */
 .overlay.open .sheet.sheet-swiping {
