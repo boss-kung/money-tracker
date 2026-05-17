@@ -2514,18 +2514,59 @@ App.render();
     S.transactions.filter(t => t.type === type && t.categoryId).forEach(t => usage[t.categoryId] = (usage[t.categoryId] || 0) + 1)
     return [...cats].sort((a,b) => (usage[b.id] || 0) - (usage[a.id] || 0))
   }
+  const DEFAULT_CHANNELS_LIST = [
+    ['online', 'ออนไลน์'],
+    ['offline', 'หน้าร้าน / ออฟไลน์'],
+    ['truemoney', 'TrueMoney / Wallet ผูกบัตร'],
+    ['line_pay', 'LINE Pay'],
+    ['shopeepay', 'ShopeePay'],
+    ['rabbit_line_pay', 'Rabbit LINE Pay'],
+    ['qr_payment', 'QR / Scan to Pay'],
+  ]
   App.getBenefitChannelOptions = function() {
-    return [
-      ['', 'ไม่ระบุ'],
-      ['online', 'ออนไลน์'],
-      ['offline', 'หน้าร้าน / ออฟไลน์'],
-      ['truemoney', 'TrueMoney / Wallet ผูกบัตร'],
-      ['line_pay', 'LINE Pay'],
-      ['shopeepay', 'ShopeePay'],
-      ['rabbit_line_pay', 'Rabbit LINE Pay'],
-      ['qr_payment', 'QR / Scan to Pay'],
-    ]
+    const custom = (S.settings?.customChannels || []).map(c => [c.value, c.label])
+    return [['', 'ไม่ระบุ'], ...DEFAULT_CHANNELS_LIST, ...custom]
   }
+
+  App.openChannelScreen = function() {
+    S.settings ||= {}
+    const custom = S.settings.customChannels || []
+    const defaultRows = DEFAULT_CHANNELS_LIST.map(([value, label]) =>
+      `<div class="list-item"><div class="list-item-info"><div class="list-item-name">${esc(label)}</div><div class="list-item-sub" style="font-family:monospace">${esc(value)}</div></div><div style="font-size:11px;color:var(--muted);padding:0 12px">ค่าเริ่มต้น</div></div>`
+    ).join('')
+    const customRows = custom.length
+      ? custom.map((c, i) =>
+          `<div class="list-item"><div class="list-item-info"><div class="list-item-name">${esc(c.label)}</div><div class="list-item-sub" style="font-family:monospace">${esc(c.value)}</div></div><div class="recurring-actions"><button class="icon-btn icon-btn-danger" onclick="App.deleteCustomChannel(${i})">🗑</button></div></div>`
+        ).join('')
+      : `<div style="padding:16px;color:var(--muted);text-align:center;font-size:14px">ยังไม่มีช่องทางที่กำหนดเอง</div>`
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ช่องทางการใช้จ่าย</h2></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="card card-pad" style="margin-bottom:16px"><label class="form-label" style="margin-bottom:6px">เพิ่มช่องทางใหม่</label><div style="display:flex;gap:8px;align-items:center"><input class="form-input" id="new-channel-label" placeholder="เช่น PromptPay, Paotang" style="flex:1" onkeydown="if(event.key==='Enter')App.saveCustomChannel()"><button class="btn btn-primary" onclick="App.saveCustomChannel()" style="width:auto;padding:0 16px;height:44px;flex-shrink:0">+ เพิ่ม</button></div></div><div class="sec-title" style="margin-top:4px">ที่กำหนดเอง</div><div class="card"><div style="padding:0 16px">${customRows}</div></div><div class="sec-title">ค่าเริ่มต้น (ล็อก)</div><div class="card"><div style="padding:0 16px">${defaultRows}</div></div></div>`)
+  }
+
+  App.saveCustomChannel = function() {
+    const label = String(document.getElementById('new-channel-label')?.value || '').trim()
+    if (!label) { toast('กรุณากรอกชื่อช่องทาง', 'warn'); return }
+    S.settings ||= {}
+    S.settings.customChannels ||= []
+    if (S.settings.customChannels.some(c => c.label === label)) { toast('ช่องทางนี้มีอยู่แล้ว', 'warn'); return }
+    const slug = label.toLowerCase().replace(/[^a-z0-9ก-๙]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 28)
+    const value = 'custom_' + (slug || Date.now())
+    S.settings.customChannels.push({ value, label })
+    persist()
+    App.openChannelScreen()
+    toast('เพิ่มช่องทางแล้ว', 'success')
+  }
+
+  App.deleteCustomChannel = function(index) {
+    S.settings ||= {}
+    const ch = (S.settings.customChannels || [])[index]
+    if (!ch) return
+    if (!confirm(`ลบช่องทาง "${ch.label}" ?`)) return
+    S.settings.customChannels.splice(index, 1)
+    persist()
+    App.openChannelScreen()
+    toast('ลบช่องทางแล้ว', 'success')
+  }
+
   App.showAllTxCategories = function() { S.txShowAllCats = true; App._renderAddTxDetail() }
   App.hideAllTxCategories = function() { S.txShowAllCats = false; App._renderAddTxDetail() }
 
@@ -8846,7 +8887,7 @@ App._pickMerchant = function(name, opts = {}) {
     App.openSubScreen(`
       <div class="sub-header">
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
-        <h2>สมุดสิทธิประโยชน์</h2>
+        <h2>บัญชีคะแนนบัตรเครดิต</h2>
         <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm()" style="width:auto">+ บัญชีคะแนน</button>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
@@ -9068,7 +9109,7 @@ App._pickMerchant = function(name, opts = {}) {
           ${row({ icon:'📅', label:'ปฏิทินบิล / รายการที่จะถึง', onclick:'App.openUpcomingScreen()' })}
           ${row({ icon:'🎯', label:'ตั้งเป้าหมายทางการเงิน', value:`${(S.goals||[]).filter(g=>g.status!=='archived').length} เป้าหมาย`, onclick:'App.openGoalsScreen()' })}
           ${row({ icon:'🧾', label:'ศูนย์ผ่อนชำระ', onclick:'App.openInstallmentCenter()' })}
-          ${row({ icon:'🎁', label:'สมุดสิทธิประโยชน์', onclick:'App.openRewardLedgerScreen()' })}
+          ${row({ icon:'🎁', label:'บัญชีคะแนนบัตรเครดิต', onclick:'App.openRewardLedgerScreen()' })}
           ${row({ icon:'💳', label:'กลุ่มวงเงินร่วม', value:`${(S.creditLimitGroups||[]).length} กลุ่ม`, onclick:'App.openCreditLimitGroupScreen()' })}
           ${row({ icon:'💰', label:'งบประมาณรายรับ/รายจ่าย', value:budgetCount?`${budgetCount} หมวด`:'ยังไม่ตั้ง', onclick:'App.openBudgetScreen()' })}
         </div>
@@ -9076,6 +9117,7 @@ App._pickMerchant = function(name, opts = {}) {
         <div class="card card-pad">
           ${row({ icon:'🏷️', label:'จัดการหมวดหมู่', value:'รายรับ/รายจ่าย', onclick:"App.openCategoryScreen('expense')" })}
           ${row({ icon:'🏪', label:'ร้านค้า / Platform', value:`${(S.merchants||[]).length} ร้าน`, onclick:'App.openMerchantScreen()' })}
+          ${row({ icon:'🔀', label:'ช่องทางการใช้จ่าย', value:(S.settings?.customChannels||[]).length ? `+${(S.settings?.customChannels||[]).length} ที่กำหนดเอง` : '7 ช่องทาง', onclick:'App.openChannelScreen()' })}
           ${row({ icon:'🔧', label:'ตรวจสอบยอดคงเหลือ', onclick:'App.openBalanceRepairScreen()' })}
           ${row({ icon:'🩺', label:'ตรวจสอบความถูกต้องของข้อมูล', onclick:'App.runDataHealthCheck()' })}
         </div>
@@ -12406,7 +12448,7 @@ App._pickMerchant = function(name, opts = {}) {
     const hasRewards = rewards.points > 0 || rewards.cashback > 0
     const alreadyRecorded = st && statementRewardRecorded(st.id)
     const recordBtn = hasRewards ? `<button class="btn btn-primary btn-sm v5-record-btn" onclick="App.recordActualRewards('${esc(cardId)}')" style="width:100%;margin-top:8px">${alreadyRecorded ? 'บันทึกแล้ว — เพิ่มอีกรายการ?' : 'บันทึกยอด'}</button>` : ''
-    const stHtml = st ? `<div class="statement-compact statement-compact-th"><div class="statement-main"><div><b>สรุปรอบบัตรเครดิต</b><span>รอบ ${thaiDate(st.start)} – ${thaiDate(st.end)}</span><span>วันกำหนดชำระ ${thaiDate(st.dueDate)}</span></div><em class="status-pill ${st.paid?'ok':'warn'}">${statusText(st)}</em></div><div class="statement-metrics"><div><span>ยอดใช้ในรอบ</span><strong>${money(st.purchaseTotal)}</strong></div><div><span>ชำระแล้ว</span><strong>${money(st.paidTotal)}</strong></div><div><span>ค้างชำระ</span><strong>${money(st.balanceDue)}</strong></div></div><button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen('${esc(cardId)}')">สมุดสิทธิประโยชน์</button></div>` : ''
+    const stHtml = st ? `<div class="statement-compact statement-compact-th"><div class="statement-main"><div><b>สรุปรอบบัตรเครดิต</b><span>รอบ ${thaiDate(st.start)} – ${thaiDate(st.end)}</span><span>วันกำหนดชำระ ${thaiDate(st.dueDate)}</span></div><em class="status-pill ${st.paid?'ok':'warn'}">${statusText(st)}</em></div><div class="statement-metrics"><div><span>ยอดใช้ในรอบ</span><strong>${money(st.purchaseTotal)}</strong></div><div><span>ชำระแล้ว</span><strong>${money(st.paidTotal)}</strong></div><div><span>ค้างชำระ</span><strong>${money(st.balanceDue)}</strong></div></div><button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen('${esc(cardId)}')">บัญชีคะแนนบัตรเครดิต</button></div>` : ''
     // Hero section: show total owed (posted + committed installments).
     // When there are committed installments, show a sub-line with breakdown.
     const heroBreakdown = committedInstallments > 0
@@ -14530,7 +14572,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="sec-title">บัตรและสิทธิ์</div>
       <div class="card card-pad">
         ${row({ icon:'🎟️', label:'สิทธิพิเศษ', value:`${activePrivCount} สิทธิ์`, onclick:"App.openPrivilegesScreen('active')" })}
-        ${row({ icon:'🎁', label:'สมุดสิทธิประโยชน์', onclick:'App.openRewardLedgerScreen()' })}
+        ${row({ icon:'🎁', label:'บัญชีคะแนนบัตรเครดิต', onclick:'App.openRewardLedgerScreen()' })}
         ${row({ icon:'💳', label:'กลุ่มวงเงินร่วม', value:`${(S.creditLimitGroups||[]).length} กลุ่ม`, onclick:'App.openCreditLimitGroupScreen()' })}
         ${row({ icon:'🧾', label:'ศูนย์ผ่อนชำระ', onclick:'App.openInstallmentCenter()' })}
       </div>
@@ -14539,6 +14581,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="card card-pad">
         ${row({ icon:'🏷️', label:'จัดการหมวดหมู่', value:'รายรับ/รายจ่าย', onclick:"App.openCategoryScreen('expense')" })}
         ${row({ icon:'🏪', label:'ร้านค้า / Platform', value:`${(S.merchants||[]).length} ร้าน`, onclick:'App.openMerchantScreen()' })}
+        ${row({ icon:'🔀', label:'ช่องทางการใช้จ่าย', value:(S.settings?.customChannels||[]).length ? `+${(S.settings?.customChannels||[]).length} ที่กำหนดเอง` : '7 ช่องทาง', onclick:'App.openChannelScreen()' })}
         ${row({ icon:'🔧', label:'ตรวจสอบยอดคงเหลือ', onclick:'App.openBalanceRepairScreen()' })}
         ${row({ icon:'🩺', label:'ตรวจสอบความถูกต้องของข้อมูล', onclick:'App.runDataHealthCheck()' })}
       </div>
@@ -17452,7 +17495,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="sec-title">บัตรและสิทธิ์</div>
       <div class="card card-pad">
         ${row({ icon: '🎟️', label: 'สิทธิพิเศษ', value: `${activePrivCount} สิทธิ์`, onclick: "App.openPrivilegesScreen('active')" })}
-        ${row({ icon: '🎁', label: 'สมุดสิทธิประโยชน์', onclick: 'App.openRewardLedgerScreen()' })}
+        ${row({ icon: '🎁', label: 'บัญชีคะแนนบัตรเครดิต', onclick: 'App.openRewardLedgerScreen()' })}
         ${row({ icon: '💎', label: 'รวมสิทธิประโยชน์บัตรเครดิต', value: `${(S.ccBenefitRules || []).filter(r => r.active !== false).length} สิทธิ์`, onclick: 'App.openCCBenefitOverviewScreen()' })}
         ${row({ icon: '💳', label: 'กลุ่มวงเงินร่วม', value: `${(S.creditLimitGroups || []).length} กลุ่ม`, onclick: 'App.openCreditLimitGroupScreen()' })}
         ${row({ icon: '🧾', label: 'ศูนย์ผ่อนชำระ', onclick: 'App.openInstallmentCenter()' })}
