@@ -14121,26 +14121,14 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         return hay.includes(q)
       })
 
-    const weight = privilege => {
-      if (privilege.status === 'used') return 3
-      if (isPrivilegeExpired(privilege)) return 2
-      if (isPrivilegeExpiringSoon(privilege)) return 0
-      return 1
-    }
-
     return rows.sort((a, b) => {
-      const aw = weight(a)
-      const bw = weight(b)
-      if (aw !== bw) return aw - bw
-      if (aw <= 2) {
-        const diff = String(a.expiryDate || '').localeCompare(String(b.expiryDate || ''))
-        if (diff) return diff
-      }
-      if (aw === 3) {
-        const usedDiff = String(b.usedAt || '').localeCompare(String(a.usedAt || ''))
-        if (usedDiff) return usedDiff
-      }
-      return String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')) || String(a.title || '').localeCompare(String(b.title || ''))
+      const aUsed = a.status === 'used', bUsed = b.status === 'used'
+      if (aUsed !== bUsed) return aUsed ? 1 : -1
+      if (aUsed && bUsed) return String(b.usedAt || '').localeCompare(String(a.usedAt || ''))
+      return String(a.expiryDate || '').localeCompare(String(b.expiryDate || ''))
+        || Number(b.estimatedSaving || 0) - Number(a.estimatedSaving || 0)
+        || Number(b.quantity || 0) - Number(a.quantity || 0)
+        || String(a.title || '').localeCompare(String(b.title || ''))
     })
   }
 
