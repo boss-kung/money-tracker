@@ -1337,7 +1337,7 @@ Object.assign(App, {
   openCategoryScreen(type='expense', q='') {
     S.catManageType = type
     const cats = (S.categories[type] || []).filter(c => !q || c.label.toLowerCase().includes(q.toLowerCase()))
-    const listHtml = cats.map(c => `<div class="list-item"><div class="list-item-icon" style="background:${c.color}33">${c.icon}</div><div class="list-item-info"><div class="list-item-name">${c.label}</div><div class="list-item-sub">${c.color}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openCategoryForm('${c.id}')">✏️</button><button class="icon-btn icon-btn-danger" onclick="App.deleteCategory('${c.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')
+    const listHtml = cats.map(c => `<div class="list-item"${c.archived ? ' style="opacity:0.55"' : ''}><div class="list-item-icon" style="background:${c.color}33">${c.icon}</div><div class="list-item-info"><div class="list-item-name">${c.label}${c.archived ? ' <span style="font-size:10px;font-weight:600;color:#fff;background:#94a3b8;border-radius:4px;padding:1px 5px;vertical-align:middle">ซ่อนอยู่</span>' : ''}</div><div class="list-item-sub">${c.color}</div></div><div class="recurring-actions">${c.archived ? `<button class="icon-btn" onclick="App.unarchiveCategory('${c.id}')" title="คืนค่า">↩️</button>` : `<button class="icon-btn" onclick="App.openCategoryForm('${c.id}')">✏️</button>`}<button class="icon-btn icon-btn-danger" onclick="App.deleteCategory('${c.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')
     const existingList = document.getElementById('cat-list-items')
     if (existingList && document.getElementById('sub-screen')?.classList.contains('open')) {
       existingList.innerHTML = listHtml
@@ -4555,6 +4555,16 @@ Calc.getUsableMoney = function(wallets, state = null) {
       S.categories[type].splice(idx, 0, removed)
       App.openCategoryScreen(type)
     }, () => persist())
+  }
+
+  App.unarchiveCategory = function(id) {
+    const type = S.catManageType || 'expense'
+    const cat = (S.categories[type] || []).find(c => c.id === id)
+    if (!cat) return
+    delete cat.archived
+    persist()
+    App.openCategoryScreen(type)
+    toast(`คืนค่า "${cat.label}" แล้ว`, 'success')
   }
 
   // Backup reminder for local-only users.
