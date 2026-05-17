@@ -11874,7 +11874,12 @@ App._pickMerchant = function(name, opts = {}) {
     const date = String(txDraft.date || today())
     const categoryMatch = !categories.length || categories.includes(categoryId)
     const merchantMatch = !merchants.length || merchants.some(v => merchantTextsMatch(v, merchant))
-    const channelMatch = !channels.length || channels.some(value => channelMatches(value, channel))
+    // When called from the card-picker suggestion context with no channel selected yet,
+    // treat channel conditions as satisfied (channel = "not yet chosen") so channel-specific
+    // rules still appear in estimates. Actual saving always has a concrete channel value.
+    const channelMatch = !channels.length
+      || (txDraft._forSuggestion && !channel)
+      || channels.some(value => channelMatches(value, channel))
     // When both merchants AND channels are specified, either one matching is enough (OR logic)
     // When only one is specified, the other defaults to "match all" (standard AND behavior)
     const merchantChannelMatch = (merchants.length > 0 && channels.length > 0)
@@ -14877,7 +14882,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       id: S.editingTxId || '',
       type: 'expense', amount,
       categoryId: S.tx.categoryId, merchant: S.tx.merchant,
-      note: S.tx.note, date: S.tx.date || today(), channel: S.tx.channel || ''
+      note: S.tx.note, date: S.tx.date || today(), channel: S.tx.channel || '',
+      _forSuggestion: true,
     }
 
     const estimates = creditCards.map(card => {
@@ -14894,7 +14900,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           pts: Number(est.points||0),
           score: Number(optimal.rankingScore || 0),
         }
-      } catch(_) {
+      } catch(e) {
+        console.error('[CardPicker]', card?.name, e)
         return { card, est:{cashback:0,points:0,discount:0}, applicableRules: [], selectedRuleIds: [], value:0, pts:0, score:0 }
       }
     })
@@ -18040,11 +18047,27 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 ;(function () {
   let _st = null, _sh = null, _ov = null
 
+  // Full cleanup used on dismiss or cancel
   function _cleanup(sheet) {
     sheet.classList.remove('sheet-swiping')
     sheet.style.transform = ''
     sheet.style.transition = ''
     sheet.style.willChange = ''
+  }
+
+  // Partial reset used on spring-back: clear inline styles but KEEP sheet-swiping
+  // so the mt-sheet-spring animation doesn't replay while the sheet is still open
+  function _resetStyles(sheet) {
+    sheet.style.transform = ''
+    sheet.style.transition = ''
+    sheet.style.willChange = ''
+  }
+
+  // Remove sheet-swiping before any overlay opens so spring animation plays fresh
+  const _origOpen = App.openOverlay?.bind(App)
+  App.openOverlay = function (id) {
+    document.getElementById(id)?.querySelector('.sheet')?.classList.remove('sheet-swiping')
+    _origOpen?.(id)
   }
 
   document.addEventListener('touchstart', e => {
@@ -18058,7 +18081,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     _sh = sheet
     _ov = overlay
     _st = { y: e.touches[0].clientY, t: Date.now() }
-    // Cancel the spring-open CSS animation so inline transform takes effect
     sheet.classList.add('sheet-swiping')
     sheet.style.transition = 'none'
     sheet.style.willChange = 'transform'
@@ -18078,7 +18100,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     _sh = _ov = _st = null
 
     if (dy > 120 || vel > 0.4) {
-      // sheet-swiping keeps animation:none — inline transition now works
       sheet.style.transition = 'transform 0.28s cubic-bezier(.32,.72,0,1)'
       void sheet.offsetHeight
       sheet.style.transform = 'translateY(110%)'
@@ -18095,10 +18116,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         }
       }, 280)
     } else {
+      // Spring back — keep sheet-swiping to suppress animation replay
       sheet.style.transition = 'transform 0.32s cubic-bezier(.32,.72,0,1)'
       void sheet.offsetHeight
       sheet.style.transform = ''
-      setTimeout(() => _cleanup(sheet), 320)
+      setTimeout(() => _resetStyles(sheet), 320)
     }
   }, { passive: true })
 
