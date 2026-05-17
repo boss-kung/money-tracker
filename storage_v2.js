@@ -97,6 +97,18 @@ const Storage = {
   lastVerifyError: null,
   _lastStorageToastAt: 0,
 
+  _stripDangerousKeys(obj) {
+    if (!obj || typeof obj !== 'object') return obj
+    const dangerous = new Set(['__proto__', 'constructor', 'prototype'])
+    const clean = Array.isArray(obj) ? [] : {}
+    for (const key of Object.keys(obj)) {
+      if (dangerous.has(key)) continue
+      const val = obj[key]
+      clean[key] = (val && typeof val === 'object') ? Storage._stripDangerousKeys(val) : val
+    }
+    return clean
+  },
+
   isLocalStorageAvailable() {
     try {
       if (typeof localStorage === 'undefined') return false
@@ -348,7 +360,7 @@ const Storage = {
 
   normalizeBackupPayload(raw) {
     if (!raw || typeof raw !== 'object') throw new Error('ไฟล์สำรองข้อมูลไม่ถูกต้อง')
-    const backup = { ...raw }
+    const backup = Storage._stripDangerousKeys({ ...raw })
     const schemaVersion = Number(backup.backupSchemaVersion || backup.version || 1)
     if (!Array.isArray(backup.transactions) || !Array.isArray(backup.wallets)) throw new Error('ไม่พบข้อมูลหลักของแอป')
     const normalized = {
@@ -360,6 +372,25 @@ const Storage = {
     BACKUP_SCHEMA_KEYS.forEach(key => {
       const fallback = BACKUP_DEFAULTS[key]
       const incoming = backup[key]
+
+      // aiInsightStore is regenerated locally from transaction data — never import action.fn
+      // from external backup files to prevent code injection via crafted backup files
+      if (key === 'aiInsightStore') {
+        const emptyStore = JSON.parse(JSON.stringify(fallback))
+        if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+          if (Array.isArray(incoming.insights)) {
+            emptyStore.insights = incoming.insights
+              .filter(i => i && typeof i === 'object' && typeof i.id === 'string')
+              .map(({ action: _action, ...safe }) => safe)
+          }
+          if (Array.isArray(incoming.hiddenTypes)) emptyStore.hiddenTypes = incoming.hiddenTypes.filter(t => typeof t === 'string')
+          if (Array.isArray(incoming.feedback)) emptyStore.feedback = incoming.feedback.filter(f => f && typeof f === 'object')
+          if (typeof incoming.version === 'number') emptyStore.version = incoming.version
+        }
+        normalized[key] = emptyStore
+        return
+      }
+
       if (incoming === undefined || incoming === null) {
         normalized[key] = JSON.parse(JSON.stringify(fallback))
       } else if (Array.isArray(fallback)) {
@@ -378,7 +409,7 @@ const Storage = {
   exportJSON(state, filename = '') {
     const data = Storage.buildExportPayload(state)
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    return Storage.triggerDownload(blob, filename || `money-tracker-${(typeof getTODAY === 'function' ? getTODAY() : TODAY)}.json`)
+    return Storage.triggerDownload(blob, filename || `backup-${(typeof getTODAY === 'function' ? getTODAY() : TODAY)}.json`)
   },
 
   createLocalBackup(state, reason = 'manual') {
@@ -409,6 +440,8 @@ const Storage = {
   },
 
   importJSON(file, onSuccess, onError) {
+    if (!file) { onError('ไม่พบไฟล์'); return }
+    if (file.size > 10 * 1024 * 1024) { onError('ไฟล์ backup ต้องมีขนาดไม่เกิน 10MB'); return }
     const reader = new FileReader()
     reader.onload = e => {
       try {

@@ -2998,6 +2998,9 @@ App.render();
     const customProxy = String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '').trim();
     if (customProxy) { const payload = await App._fetchJsonp(customProxy); const data = normaliseGoldPayload(payload); if (data?.jewelryBuy) return { ...data, fetchedVia:'apps-script-proxy' }; }
     try { const r = await fetch(GOLD_API_URL, { cache:'no-store' }); if (r.ok) { const data = normaliseGoldPayload(await r.json()); if (data?.jewelryBuy) return { ...data, fetchedVia:'direct-api' }; } } catch (_) {}
+    // Fallback: public CORS proxies — used only when direct API and custom proxy both fail.
+    // Only public gold price data (no personal/financial data) passes through these services.
+    // To avoid public proxies entirely, set window.MT_GOLD_PROXY_URL to your own Apps Script proxy.
     for (const url of ['https://api.allorigins.win/raw?url=' + encodeURIComponent(GOLD_API_URL), 'https://corsproxy.io/?' + encodeURIComponent(GOLD_API_URL)]) { try { const r = await fetch(url, { cache:'no-store' }); if (r.ok) { const data = normaliseGoldPayload(await r.text()); if (data?.jewelryBuy) return { ...data, fetchedVia:'public-proxy' }; } } catch (_) {} }
     return null;
   };
@@ -12144,7 +12147,7 @@ App._pickMerchant = function(name, opts = {}) {
     }
     const exportedAt = new Date().toISOString()
     if (S.settings?.storageMeta) S.settings.storageMeta.lastExportedAt = exportedAt
-    const exportOk = Storage.exportJSON(S, `money-tracker-backup-${today()}.json`)
+    const exportOk = Storage.exportJSON(S, `backup-${today()}.json`)
     if (!exportOk) {
       notify('ส่งออกข้อมูลไม่สำเร็จบนอุปกรณ์นี้', 'error')
       return
@@ -14296,9 +14299,25 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (section && !section.querySelector('.ins-card')) section.remove()
   }
 
+  const _INSIGHT_ACTION_MAP = {
+    "App.showPage('wallets')":                () => App.showPage?.('wallets'),
+    "App.showPage('reports')":                () => App.showPage?.('reports'),
+    "App.showPage('transactions')":           () => App.showPage?.('transactions'),
+    "App.openBudgetScreen()":                 () => App.openBudgetScreen?.(),
+    "App.openGoalsScreen()":                  () => App.openGoalsScreen?.(),
+    "App.openUpcomingBillsScreen()":          () => App.openUpcomingBillsScreen?.(),
+    "App.openUpcomingScreen?.()":             () => App.openUpcomingScreen?.(),
+    "App.openRecurringScreen()":              () => App.openRecurringScreen?.(),
+    "App.openPrivilegesScreen?.('expiring')": () => App.openPrivilegesScreen?.('expiring'),
+  }
+
   App.insightAct = function(id, fn) {
     InsightEngine.markActed(id)
-    try { const f = new Function(fn); f() } catch(_) { try { eval(fn) } catch(__) {} }
+    if (!fn || typeof fn !== 'string') return
+    const direct = _INSIGHT_ACTION_MAP[fn]
+    if (direct) { direct(); return }
+    const ccMatch = fn.match(/^App\.openCCPayOverlay\?\.\('([a-zA-Z0-9_-]{1,64})'\)$/)
+    if (ccMatch) { App.openCCPayOverlay?.(ccMatch[1]); return }
   }
 
   App.insightRate = function(id, rating) {
