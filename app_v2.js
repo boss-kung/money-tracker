@@ -2609,10 +2609,10 @@ App.render();
                 const _trackHint = rule.trackLocked ? `<span class="list-item-sub" style="color:var(--expense)">สะสมผ่าน${esc(rule.trackChannelLabel)}อีก ${esc(fmt(rule.trackRemaining))} ในรอบนี้เพื่อปลดล็อก</span>` : ''
                 const _merchantHint = rule.merchantCashbackRemaining != null
                   ? (rule.merchantCashbackRemaining <= 0
-                    ? `<span class="list-item-sub" style="color:var(--expense)">ใช้สิทธิ์ในร้านนี้เดือนนี้ครบแล้ว</span>`
-                    : `<span class="list-item-sub" style="color:var(--muted)">เหลือรับเงินคืนได้อีก ${esc(fmt(rule.merchantCashbackRemaining))} ในร้านนี้เดือนนี้</span>`)
+                    ? `<span class="list-item-sub" style="color:var(--expense)">ร้านนี้ครบแล้ว</span>`
+                    : `<span class="list-item-sub" style="color:var(--muted)">เหลือในร้านนี้ ${esc(fmt(rule.merchantCashbackRemaining))}</span>`)
                   : (rule.merchantEligibleRemaining != null && rule.merchantEligibleRemaining <= 0
-                    ? `<span class="list-item-sub" style="color:var(--expense)">ยอดคำนวณในร้านนี้เดือนนี้เต็มแล้ว</span>`
+                    ? `<span class="list-item-sub" style="color:var(--expense)">ยอดร้านนี้เต็มแล้ว</span>`
                     : '')
                 return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}${rule.trackLocked ? ' locked' : ''}" onclick="App._toggleTxRewardRule('${esc(rule.id)}')" aria-pressed="${_selected ? 'true' : 'false'}">
                   <span class="csr-main">
@@ -2627,12 +2627,15 @@ App.render();
                   <span class="reward-rule-toggle${_selected ? ' on' : ''}" aria-hidden="true"><span class="reward-rule-toggle-knob"></span></span>
                 </button>`
               }).join('')
-              const _warnings = (_estimate.warnings || []).map(msg => `<div class="form-hint" style="color:var(--expense)">${esc(msg)}</div>`).join('')
-              const _caps = (_estimate.rules || [])
+              const _warnings = (_estimate.stackingWarnings || []).map(msg => `<div class="form-hint" style="color:var(--expense)">${esc(msg)}</div>`).join('')
+              const _capRows = (_estimate.rules || [])
                 .filter(row => row.capApplied || row.cycleRewardRemainingBefore != null || row.triggerMode === 'cycle_spend_threshold' || row.merchantCashbackRemainingBefore != null || row.merchantEligibleSpendRemainingBefore != null)
+              const _caps = _capRows
                 .map(row => {
                   const _text = App.buildBenefitCapAppliedText?.(row) || ''
-                  return _text ? `<div class="form-hint">${esc(row.ruleName)}: ${esc(_text)}</div>` : ''
+                  if (!_text) return ''
+                  const _prefix = _capRows.length > 1 ? `${esc(String(row.ruleName || '').slice(0, 12))}: ` : ''
+                  return `<div class="form-hint">${_prefix}${esc(_text)}</div>`
                 })
                 .filter(Boolean)
                 .join('')
@@ -2644,7 +2647,7 @@ App.render();
                   ${Number(_estimate.cashback || 0) > 0 ? `<div class="list-item-sub">เงินคืนโดยประมาณ: ${fmt(Number(_estimate.cashback || 0))}</div>` : ''}
                   ${Number(_estimate.discount || 0) > 0 ? `<div class="list-item-sub">ส่วนลดทันทีโดยประมาณ: ${fmt(Number(_estimate.discount || 0))}</div>` : ''}
                   ${Number(_estimate.points || 0) > 0 ? `<div class="list-item-sub">คะแนนโดยประมาณ: ${Number(_estimate.points).toLocaleString('en-US')} คะแนน</div>` : ''}
-                  ${_selectedNames.length ? `<div class="list-item-sub">ใช้สิทธิ์: ${esc(_selectedNames.join(', '))}</div>` : `<div class="list-item-sub">ยังไม่ได้เลือกสิทธิประโยชน์</div>`}
+                  ${_selectedNames.length ? '' : `<div class="list-item-sub">ยังไม่ได้เลือกสิทธิประโยชน์</div>`}
                   ${_caps}
                   ${_warnings}
                 </div>
