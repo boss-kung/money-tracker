@@ -7413,7 +7413,7 @@ App._pickMerchant = function(name, opts = {}) {
 
     function getRuleStatus(cardId, rule) {
       const cycle      = getCyclePeriod(cardId, rule)
-      const usage      = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, '', getTriggerTrackChannels(rule.rewardTrigger || {}))
+      const usage      = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, '', getTriggerTrackChannels(rule.rewardTrigger || {}), '', '', rule)
       const isPoints   = rule.type === 'points'
       const hasTrigger = rule.rewardTrigger?.mode === 'cycle_spend_threshold'
       const triggerAmt = Number(rule.rewardTrigger?.thresholdAmount || 0)
@@ -12066,7 +12066,7 @@ App._pickMerchant = function(name, opts = {}) {
         const hasChannelCap = Number(ruleLimits.maxRewardAmountPerChannelPerCycle || 0) > 0 || Number(ruleLimits.maxEligibleSpendPerChannelPerCycle || 0) > 0
         if (eligibility.matched && (hasMerchantCap || hasChannelCap)) {
           const cycle = getCyclePeriodForDate(cardId, txDraft.date || today(), rule)
-          const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', [], txDraft.merchant || '', txDraft.channel || '')
+          const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', [], txDraft.merchant || '', txDraft.channel || '', rule)
           // Only show merchant cap hint when the merchant field itself matched (not just channel)
           if (eligibility.merchantMatch && Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0) {
             merchantCashbackRemaining = Math.max(0, Number(ruleLimits.maxRewardAmountPerMerchantPerCycle) - Number(usage.cashbackUsedByMerchantBefore || 0))
@@ -12089,7 +12089,7 @@ App._pickMerchant = function(name, opts = {}) {
       .sort((a, b) => Number(b.suggested) - Number(a.suggested) || Number(b.suggestionScore || 0) - Number(a.suggestionScore || 0) || String(a.name || '').localeCompare(String(b.name || '')))
   }
 
-  App.getRuleCycleUsage = function(ruleId, cardId, cycleStart, cycleEnd, excludeTxId = '', trackChannels = [], txMerchant = '', txChannel = '') {
+  App.getRuleCycleUsage = function(ruleId, cardId, cycleStart, cycleEnd, excludeTxId = '', trackChannels = [], txMerchant = '', txChannel = '', rule = null) {
     let eligibleSpendUsed = 0
     let cashbackUsed = 0
     let discountUsed = 0
@@ -12102,33 +12102,116 @@ App._pickMerchant = function(name, opts = {}) {
     let cashbackUsedByChannel = 0
     const normalizedTxMerchant = normalizeCompareText(txMerchant || '')
     const normalizedTxChannel = String(txChannel || '').trim().toLowerCase()
-    ;(S.transactions || []).forEach(tx => {
-      if (String(tx.id || '') === String(excludeTxId || '')) return
-      if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return
-      const date = String(tx.date || '')
-      if (date < cycleStart || date > cycleEnd) return
-      const txCh = String(tx.channel || '').trim()
-      if (channelMatchesAny(Array.isArray(trackChannels) ? trackChannels : [trackChannels].filter(Boolean), txCh)) trackChannelSpend += Number(tx.amount || 0)
-      const isSameMerchant = !normalizedTxMerchant || merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
-      const isSameChannel = !normalizedTxChannel || txCh.toLowerCase() === normalizedTxChannel
-      const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
-      rows.forEach(row => {
-        if (String(row.ruleId || '') !== String(ruleId || '')) return
-        eligibleSpendUsed += Number(row.eligibleAmount || 0)
-        cashbackUsed += Number(row.cashback || row.finalCashback || 0)
-        discountUsed += Number(row.discount || row.finalDiscount || 0)
-        pointsUsed += Number(row.points || row.finalPoints || 0)
-        triggerCountUsed += Number(row.triggerCount || 0)
-        if (isSameMerchant) {
-          eligibleSpendUsedByMerchant += Number(row.eligibleAmount || 0)
-          cashbackUsedByMerchant += Number(row.cashback || row.finalCashback || 0)
+    const normalizedTrackChannels = Array.isArray(trackChannels) ? trackChannels : [trackChannels].filter(Boolean)
+
+    // When a rule object is provided, recompute eligibility and rewards on-the-fly
+    // (in date order with proper caps) to avoid relying on potentially stale stored estimates.
+    if (rule) {
+      const limits = rule.limits || {}
+      const cashbackCfg = rule.cashback || {}
+      const discountCfg = rule.discount || {}
+      const pointsCfg = rule.points || {}
+      const isThresholdMode = rule.rewardTrigger?.mode === 'cycle_spend_threshold' && Number(rule.rewardTrigger?.thresholdAmount || 0) > 0
+      const cycleCashbackCap = Number(limits.maxRewardAmountPerCycle || 0)
+      const cycleEligibleCap = Number(limits.maxEligibleSpendPerCycle || 0)
+      const txsInCycle = (S.transactions || [])
+        .filter(tx => {
+          if (String(tx.id || '') === String(excludeTxId || '')) return false
+          if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return false
+          const d = String(tx.date || '')
+          return d >= cycleStart && d <= cycleEnd
+        })
+        .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+      txsInCycle.forEach(tx => {
+        const txCh = String(tx.channel || '').trim()
+        if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += Number(tx.amount || 0)
+        if (isThresholdMode) {
+          // Threshold rules: fall back to stored estimate for cashback/points
+          const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
+          rows.forEach(row => {
+            if (String(row.ruleId || '') !== String(ruleId || '')) return
+            const isSameMerchant = !normalizedTxMerchant || merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
+            const isSameChannel = !normalizedTxChannel || txCh.toLowerCase() === normalizedTxChannel
+            eligibleSpendUsed += Number(row.eligibleAmount || 0)
+            cashbackUsed += Number(row.cashback || row.finalCashback || 0)
+            pointsUsed += Number(row.points || row.finalPoints || 0)
+            triggerCountUsed += Number(row.triggerCount || 0)
+            if (isSameMerchant) { eligibleSpendUsedByMerchant += Number(row.eligibleAmount || 0); cashbackUsedByMerchant += Number(row.cashback || row.finalCashback || 0) }
+            if (isSameChannel)  { eligibleSpendUsedByChannel  += Number(row.eligibleAmount || 0); cashbackUsedByChannel  += Number(row.cashback || row.finalCashback || 0) }
+          })
+          return
         }
-        if (isSameChannel) {
-          eligibleSpendUsedByChannel += Number(row.eligibleAmount || 0)
-          cashbackUsedByChannel += Number(row.cashback || row.finalCashback || 0)
+        const eligibility = getRuleEligibility(tx, rule)
+        if (!eligibility.matched) return
+        const isSameMerchant = !normalizedTxMerchant || merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
+        const isSameChannel = !normalizedTxChannel || txCh.toLowerCase() === normalizedTxChannel
+        let eligible = Math.max(0, Number(tx.amount || 0))
+        if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
+        if (cycleEligibleCap > 0) {
+          const eligRem = Math.max(0, cycleEligibleCap - eligibleSpendUsed)
+          if (eligible > eligRem) eligible = eligRem
         }
+        eligible = Math.round(eligible * 100) / 100
+        eligibleSpendUsed += eligible
+        if (isSameMerchant) eligibleSpendUsedByMerchant += eligible
+        if (isSameChannel)  eligibleSpendUsedByChannel  += eligible
+        let txCashback = 0
+        let txDiscount = 0
+        let txPoints = 0
+        if (rule.type === 'cashback' || rule.type === 'both') {
+          txCashback = cashbackCfg.mode === 'fixed' ? Number(cashbackCfg.fixedAmount || 0) : eligible * (Number(cashbackCfg.rate || 0) / 100)
+          if (limits.maxRewardAmountPerTx > 0 && txCashback > limits.maxRewardAmountPerTx) txCashback = Number(limits.maxRewardAmountPerTx)
+          if (cycleCashbackCap > 0) {
+            const capRem = Math.max(0, cycleCashbackCap - cashbackUsed)
+            if (txCashback > capRem) txCashback = capRem
+          }
+          txCashback = Math.round(txCashback * 100) / 100
+        }
+        if (rule.type === 'discount') {
+          txDiscount = discountCfg.mode === 'fixed' ? Number(discountCfg.fixedAmount || 0) : eligible * (Number(discountCfg.rate || 0) / 100)
+          if (limits.maxRewardAmountPerTx > 0 && txDiscount > limits.maxRewardAmountPerTx) txDiscount = Number(limits.maxRewardAmountPerTx)
+          txDiscount = Math.round(txDiscount * 100) / 100
+        }
+        if (rule.type === 'points' || rule.type === 'both') {
+          const bahtPer = Number(pointsCfg.bahtPerPoint || 0)
+          txPoints = bahtPer > 0 ? Math.floor(eligible / bahtPer) * Number(pointsCfg.multiplier || 1) : 0
+        }
+        cashbackUsed += txCashback
+        discountUsed += txDiscount
+        pointsUsed += txPoints
+        if (isSameMerchant) cashbackUsedByMerchant += txCashback
+        if (isSameChannel)  cashbackUsedByChannel  += txCashback
       })
-    })
+    } else {
+      // Legacy path: read from stored rewardEstimate
+      ;(S.transactions || []).forEach(tx => {
+        if (String(tx.id || '') === String(excludeTxId || '')) return
+        if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return
+        const date = String(tx.date || '')
+        if (date < cycleStart || date > cycleEnd) return
+        const txCh = String(tx.channel || '').trim()
+        if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += Number(tx.amount || 0)
+        const isSameMerchant = !normalizedTxMerchant || merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
+        const isSameChannel = !normalizedTxChannel || txCh.toLowerCase() === normalizedTxChannel
+        const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
+        rows.forEach(row => {
+          if (String(row.ruleId || '') !== String(ruleId || '')) return
+          eligibleSpendUsed += Number(row.eligibleAmount || 0)
+          cashbackUsed += Number(row.cashback || row.finalCashback || 0)
+          discountUsed += Number(row.discount || row.finalDiscount || 0)
+          pointsUsed += Number(row.points || row.finalPoints || 0)
+          triggerCountUsed += Number(row.triggerCount || 0)
+          if (isSameMerchant) {
+            eligibleSpendUsedByMerchant += Number(row.eligibleAmount || 0)
+            cashbackUsedByMerchant += Number(row.cashback || row.finalCashback || 0)
+          }
+          if (isSameChannel) {
+            eligibleSpendUsedByChannel += Number(row.eligibleAmount || 0)
+            cashbackUsedByChannel += Number(row.cashback || row.finalCashback || 0)
+          }
+        })
+      })
+    }
     return {
       eligibleSpendUsedBefore: Math.round(eligibleSpendUsed * 100) / 100,
       cashbackUsedBefore: Math.round(cashbackUsed * 100) / 100,
@@ -12463,7 +12546,7 @@ App._pickMerchant = function(name, opts = {}) {
     let points = 0
     rules.forEach(rule => {
       const cycle = getCyclePeriodForDate(card.id, txDraft.date || today(), rule)
-      const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '', getTriggerTrackChannels(rule.rewardTrigger || {}), txDraft.merchant || '', txDraft.channel || '')
+      const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '', getTriggerTrackChannels(rule.rewardTrigger || {}), txDraft.merchant || '', txDraft.channel || '', rule)
       const result = App.applyBenefitRule(txDraft, rule, usage)
       result.cycleStart = cycle.start
       result.cycleEnd = cycle.end
