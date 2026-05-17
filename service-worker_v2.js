@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.05.18-r1'
+const APP_VERSION = '2026.05.18-r2'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 
@@ -83,7 +83,7 @@ async function staleWhileRevalidate(request) {
 }
 
 self.addEventListener('install', event => {
-  event.waitUntil(precache())
+  event.waitUntil(precache().then(() => self.skipWaiting()))
 })
 
 self.addEventListener('activate', event => {
