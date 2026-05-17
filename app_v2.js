@@ -992,13 +992,6 @@ const App = {
     const ss = document.getElementById('sub-screen')
     if (!ss) return
     ss.innerHTML = html
-    // Inject drag handle (visual affordance)
-    const header = ss.querySelector('.sub-header')
-    if (header) {
-      const handle = document.createElement('div')
-      handle.className = 'sub-screen-handle'
-      header.before(handle)
-    }
     // Left-edge swipe-right to go back — attach once per element lifetime
     if (!ss._edgeSwipeReady) {
       ss._edgeSwipeReady = true
@@ -5378,7 +5371,7 @@ App._pickMerchant = function(name, opts = {}) {
     document.getElementById('app')?.insertAdjacentHTML('beforeend', `
       <div id="${overlayId}" class="overlay open" role="dialog" aria-modal="true">
         <div class="overlay-backdrop" onclick="document.getElementById('${overlayId}')?.remove()"></div>
-        <div class="sheet" style="max-height:92dvh">
+        <div class="sheet" style="max-height:80dvh">
           <div class="sheet-handle"></div>
           <div class="sheet-header">
             <h2>แก้ไขชุดผ่อน</h2>
@@ -5976,7 +5969,7 @@ App._pickMerchant = function(name, opts = {}) {
     document.getElementById('app')?.insertAdjacentHTML('beforeend', `
       <div id="${dialogId}" class="overlay open" role="dialog" aria-modal="true">
         <div class="overlay-backdrop" onclick="document.getElementById('${dialogId}')?.remove()"></div>
-        <div class="sheet" style="max-height:92dvh">
+        <div class="sheet" style="max-height:80dvh">
           <div class="sheet-handle"></div>
           <div class="sheet-header">
             <h2>วิเคราะห์สิทธิประโยชน์จากลิงก์</h2>
@@ -6970,7 +6963,7 @@ App._pickMerchant = function(name, opts = {}) {
     document.getElementById('app')?.insertAdjacentHTML('beforeend', `
       <div id="${dialogId}" class="overlay open" role="dialog" aria-modal="true">
         <div class="overlay-backdrop" onclick="document.getElementById('${dialogId}')?.remove()"></div>
-        <div class="sheet" style="max-height:92dvh">
+        <div class="sheet" style="max-height:80dvh">
           <div class="sheet-handle"></div>
           <div class="sheet-header">
             <h2>เลือกสิทธิประโยชน์</h2>
@@ -8147,7 +8140,7 @@ App._pickMerchant = function(name, opts = {}) {
     document.getElementById('app')?.insertAdjacentHTML('beforeend', `
       <div id="${dlgId}" class="overlay open" role="dialog" aria-modal="true">
         <div class="overlay-backdrop" onclick="document.getElementById('${dlgId}').remove()"></div>
-        <div class="sheet" style="max-height:92dvh">
+        <div class="sheet" style="max-height:80dvh">
           <div class="sheet-handle"></div>
           <div class="sheet-header">
             <h2>บันทึกยอด</h2>
