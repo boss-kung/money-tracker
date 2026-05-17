@@ -518,6 +518,8 @@
     _draft.title       = document.getElementById('sb1-title')?.value.trim() || 'บิลใหม่'
     _draft.date        = document.getElementById('sb1-date')?.value || todayStr()
     _draft.manualTotal = numVal(document.getElementById('sb1-total'))
+    const _sbTErr = (window._fieldTooLong || function(){})(  _draft.title, (window.FIELD_MAX || {}).title || 100, 'ชื่อบิล')
+    if (_sbTErr) return notify(_sbTErr, 'error')
     if (!_draft.peopleIds.length) return notify('เลือกอย่างน้อย 1 คน', 'error')
     ;(_draft.items||[]).forEach(item => {
       if (!item.participants?.length) {
@@ -1162,6 +1164,8 @@
   App._sbAddPerson = function () {
     const name = document.getElementById('sbp-newname')?.value.trim()
     if (!name) return notify('กรุณากรอกชื่อ', 'error')
+    const _sbpErr = (window._fieldTooLong || function(){})(name, (window.FIELD_MAX || {}).name || 50, 'ชื่อสมาชิก')
+    if (_sbpErr) return notify(_sbpErr, 'error')
     SbStore.upsertPerson({ id: genId(), name, emoji:'👤', color:'#2563EB', note:'', archived:false, createdAt: nowISO(), updatedAt: nowISO() })
     notify('เพิ่มสมาชิกแล้ว', 'success')
     App.openSplitPeopleScreen()
@@ -1170,6 +1174,8 @@
   App._sbSaveEditPerson = function (personId) {
     const name = document.getElementById(`sbp-edit-${personId}`)?.value.trim()
     if (!name) return notify('กรุณากรอกชื่อ', 'error')
+    const _sbpeErr = (window._fieldTooLong || function(){})(name, (window.FIELD_MAX || {}).name || 50, 'ชื่อสมาชิก')
+    if (_sbpeErr) return notify(_sbpeErr, 'error')
     const existing = SbStore.getPerson(personId); if (!existing) return
     SbStore.upsertPerson({ ...existing, name, updatedAt: nowISO() })
     notify('แก้ไขแล้ว', 'success')

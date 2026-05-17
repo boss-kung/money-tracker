@@ -552,6 +552,8 @@ window.__mountUpcomingBillsFeature = function() {
     const amount = round2(Number(draft.amount || 0))
     const dueDate = String(draft.dueDate || '')
     if (!title) return toast('กรุณากรอกชื่อรายการรอจ่าย', 'error')
+    const _billTErr = _fieldTooLong(title, FIELD_MAX.title, 'ชื่อรายการรอจ่าย')
+    if (_billTErr) return toast(_billTErr, 'error')
     if (!(amount > 0)) return toast('กรุณาระบุจำนวนเงินมากกว่า 0', 'error')
     if (!dueDate) return toast('กรุณาเลือกวันครบกำหนด', 'error')
     const normalized = normalizeUpcomingBill({
@@ -882,6 +884,27 @@ window.MT_APP_VERSION = APP_VERSION
    Core App Shell
    State / persistence / theme / toast / navigation / base screens
    ============================================================ */
+
+// ── Field length limits (used by save functions to guard localStorage) ──
+const FIELD_MAX = {
+  name:     50,
+  title:    100,
+  merchant: 100,
+  note:     1000,
+  label:    50,
+  icon:     10,
+}
+
+function _fieldTooLong(value, max, fieldLabel) {
+  if (typeof value === 'string' && value.length > max) {
+    return `${fieldLabel} ยาวเกินไป (สูงสุด ${max} ตัวอักษร)`
+  }
+  return null
+}
+
+// expose for split_bill.js which loads after app_v2.js
+window._fieldTooLong = _fieldTooLong
+window.FIELD_MAX = FIELD_MAX
 
 // ── State ────────────────────────────────────────────────────
 let S = {
@@ -1339,7 +1362,7 @@ Object.assign(App, {
     }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="segmented-tabs segmented-tabs-2"><button class="segmented-tab ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="segmented-tab ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${q}" oninput="App.openCategoryScreen('${type}', this.value)"><div class="card mt-12"><div id="cat-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
   },
-  saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { App._showFieldError('cat-name', 'กรุณากรอกชื่อหมวดหมู่'); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); document.getElementById('category-form-overlay')?.remove(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
+  saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { App._showFieldError('cat-name', 'กรุณากรอกชื่อหมวดหมู่'); return } const _cErr = _fieldTooLong(label, FIELD_MAX.label, 'ชื่อหมวดหมู่'); if (_cErr) { App._showFieldError('cat-name', _cErr); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); document.getElementById('category-form-overlay')?.remove(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
 
   openMerchantScreen(q='') {
     App._ensureV2State()
@@ -1350,7 +1373,7 @@ Object.assign(App, {
     if (existingList && document.getElementById('sub-screen')?.classList.contains('open')) { existingList.innerHTML = listHtml; return }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${q}" oninput="App.openMerchantScreen(this.value)"><div class="card mt-12"><div id="merchant-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
   },
-  saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { App._showFieldError('mer-name', 'กรุณากรอกชื่อร้านค้า'); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); document.getElementById('merchant-form-overlay')?.remove(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
+  saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { App._showFieldError('mer-name', 'กรุณากรอกชื่อร้านค้า'); return } const _merErr = _fieldTooLong(data.name, FIELD_MAX.name, 'ชื่อร้านค้า'); if (_merErr) { App._showFieldError('mer-name', _merErr); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); document.getElementById('merchant-form-overlay')?.remove(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
   _registerMerchantFromTx(tx) {
   App._ensureV2State()
 
@@ -4502,6 +4525,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const nextDueDateRaw = g('rec-next')?.value || today()
     const cat = catById(categoryId)
     if (!name) { App._showFieldError('rec-name', 'กรุณากรอกชื่อรายการ'); return }
+    const _recErr = _fieldTooLong(name, FIELD_MAX.title, 'ชื่อรายการประจำ')
+    if (_recErr) { App._showFieldError('rec-name', _recErr); return }
     if (!(amount > 0)) { App._showFieldError('rec-amount', 'กรุณาระบุจำนวนเงิน'); return }
     if (!walletId) { App._showFieldError('rec-wallet', 'กรุณาเลือกกระเป๋า'); return }
     if (!categoryId) { App._showFieldError('rec-cat', 'กรุณาเลือกหมวดหมู่'); return }
@@ -7517,6 +7542,10 @@ App._pickMerchant = function(name, opts = {}) {
     if (!tx.walletId) return 'กรุณาเลือกกระเป๋าเงิน'
     const w = walletById(tx.walletId)
     if (!w) return 'ไม่พบกระเป๋าเงินที่เลือก'
+    const _mErr = _fieldTooLong(tx.merchant, FIELD_MAX.merchant, 'ชื่อร้าน')
+    if (_mErr) return _mErr
+    const _nErr = _fieldTooLong(tx.note, FIELD_MAX.note, 'หมายเหตุ')
+    if (_nErr) return _nErr
 
     // For edits, simulate effective balance by reverting the original transaction
     const origTx = isEdit && editingTxId ? (S.transactions || []).find(t => t.id === editingTxId) : null
@@ -7960,6 +7989,8 @@ App._pickMerchant = function(name, opts = {}) {
     const ICONS = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', saving:'🏦', gold:'🥇', crypto:'₿', fcd:'💱' }
 
     if (!name) { notify('กรุณากรอกชื่อกระเป๋า', 'error'); return }
+    const _wErr = _fieldTooLong(name, FIELD_MAX.name, 'ชื่อกระเป๋า')
+    if (_wErr) { notify(_wErr, 'error'); return }
 
     let balance = isCC ? -Math.abs(rawBalance) : rawBalance
 
@@ -12343,6 +12374,8 @@ App._pickMerchant = function(name, opts = {}) {
       status: document.getElementById('goal-status')?.value || 'active',
     }
     if (!raw.name) return notify('กรุณากรอกชื่อเป้าหมาย', 'error')
+    const _gErr = _fieldTooLong(raw.name, FIELD_MAX.title, 'ชื่อเป้าหมาย')
+    if (_gErr) return notify(_gErr, 'error')
     if (!(raw.targetAmount > 0)) return notify('กรุณาระบุยอดเป้าหมายมากกว่า 0', 'error')
     if (mode === 'linked' && !raw.linkedWalletId) return notify('กรุณาเลือกกระเป๋าที่เชื่อม', 'error')
     const normalized = normalizeGoal(raw)
@@ -13741,6 +13774,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       updatedAt: nowISO(),
     })
     if (!draft.title) return App._showFieldError('priv-form-title', 'กรุณากรอกชื่อสิทธิพิเศษ')
+    const _pvTErr = _fieldTooLong(draft.title, FIELD_MAX.title, 'ชื่อสิทธิพิเศษ')
+    if (_pvTErr) return App._showFieldError('priv-form-title', _pvTErr)
+    const _pvNErr = _fieldTooLong(draft.note, FIELD_MAX.note, 'หมายเหตุสิทธิพิเศษ')
+    if (_pvNErr) return toast(_pvNErr, 'error')
     if (!draft.expiryDate) return App._showFieldError('priv-form-expiry', 'กรุณาเลือกวันหมดอายุ')
     if (draft.status === 'active' && !(Number(draft.quantity || 0) >= 1)) return App._showFieldError('priv-form-qty', 'จำนวนสิทธิ์ต้องไม่น้อยกว่า 1')
     if (draft.status !== 'active' && Number(draft.quantity || 0) < 0) return App._showFieldError('priv-form-qty', 'จำนวนสิทธิ์ต้องไม่ติดลบ')
