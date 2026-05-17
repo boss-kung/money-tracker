@@ -17806,6 +17806,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
     if (dy > 120 || vel > 0.4) {
       sheet.style.transition = 'transform 0.26s cubic-bezier(.32,.72,0,1)'
+      void sheet.offsetHeight  // flush style so transition registers before transform changes
       sheet.style.transform = 'translateY(110%)'
       setTimeout(() => {
         const isDynamic = overlay.querySelector('.overlay-backdrop')
