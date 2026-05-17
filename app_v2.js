@@ -7481,24 +7481,22 @@ App._pickMerchant = function(name, opts = {}) {
       }
 
       const dimmed = rule.active === false ? 'opacity:0.45;' : ''
-      return `<div class="card card-pad" style="margin-bottom:8px;${dimmed}">
+      const hasCapBreakdown = Number(rule.limits?.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxRewardAmountPerChannelPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerChannelPerCycle || 0) > 0
+      return `<div class="card card-pad" style="margin-bottom:8px;${dimmed}cursor:pointer" onclick="App.openRuleTransactionsSheet('${esc(rule.id)}','${esc(cardId)}')">
         <div style="display:flex;align-items:flex-start;gap:6px">
           <div style="flex:1;min-width:0">
             <div style="font-weight:600;font-size:14px;line-height:1.3">${esc(rule.name)}${rule.active === false ? '<span style="font-size:11px;color:var(--text-secondary,#6b7280)"> · ปิด</span>' : ''}</div>
             <div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:1px">${typeLabel}${rule.isBaseRule ? ' · พื้นฐาน' : ''}${cycleLabel ? ` · ${esc(cycleLabel)}` : ''}</div>
           </div>
           <button class="btn-icon" style="font-size:15px;flex-shrink:0;width:30px;height:30px"
-            onclick="App._ccBenefitRuleFormReturn='overview';App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">✏️</button>
+            onclick="event.stopPropagation();App._ccBenefitRuleFormReturn='overview';App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">✏️</button>
         </div>
         ${sections.length === 0
           ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:6px">ใช้ได้ไม่จำกัด</div>`
           : sections.join('')}
-        <div style="display:flex;gap:16px;margin-top:10px">
-          <button onclick="App.openRuleTransactionsSheet('${esc(rule.id)}','${esc(cardId)}')" style="font-size:12px;color:var(--primary,#2563EB);background:none;border:none;padding:0;cursor:pointer;text-align:left">ดูรายการ ›</button>
-          ${(Number(rule.limits?.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxRewardAmountPerChannelPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerChannelPerCycle || 0) > 0)
-            ? `<button onclick="App.openBenefitCapBreakdownSheet('${esc(rule.id)}','${esc(cardId)}')" style="font-size:12px;color:var(--primary,#2563EB);background:none;border:none;padding:0;cursor:pointer;text-align:left">ดูสิทธิ์รายร้าน/ช่องทาง ›</button>`
-            : ''}
-        </div>
+        ${hasCapBreakdown
+          ? `<button onclick="event.stopPropagation();App.openBenefitCapBreakdownSheet('${esc(rule.id)}','${esc(cardId)}')" style="margin-top:10px;font-size:12px;color:var(--primary,#2563EB);background:none;border:none;padding:0;cursor:pointer;text-align:left">ดูสิทธิ์รายร้าน/ช่องทาง ›</button>`
+          : ''}
       </div>`
     }
 
