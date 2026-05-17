@@ -12125,6 +12125,8 @@ App._pickMerchant = function(name, opts = {}) {
       txsInCycle.forEach(tx => {
         const txCh = String(tx.channel || '').trim()
         if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += Number(tx.amount || 0)
+        // Only count transactions where the user explicitly applied this rule
+        if (!Array.isArray(tx.rewardRuleIds) || !tx.rewardRuleIds.map(String).includes(String(ruleId || ''))) return
         if (isThresholdMode) {
           // Threshold rules: fall back to stored estimate for cashback/points
           const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
