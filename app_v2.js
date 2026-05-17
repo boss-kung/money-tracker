@@ -11526,43 +11526,39 @@ App._pickMerchant = function(name, opts = {}) {
     const rawValue = Number(row.rawReward || 0)
     const finalValue = Number(row.finalReward || 0)
     const diffValue = Math.max(0, rawValue - finalValue)
-    const cycleLabel = row.cycleMode === 'calendar_month' ? 'ในเดือนปฏิทินนี้' : 'ในรอบบิลนี้'
+    const cycleLabel = row.cycleMode === 'calendar_month' ? 'เดือนนี้' : 'รอบบิลนี้'
     const parts = []
     if (row.triggerMode === 'cycle_spend_threshold' && Number(row.triggerThresholdAmount || 0) > 0) {
       const threshold = Number(row.triggerThresholdAmount || 0)
       const chLabel = formatTrackChannelLabel(row.triggerTrackChannels || (row.triggerTrackChannel ? [row.triggerTrackChannel] : []))
-      const before = Number(row.triggerChannelSpendBefore || 0)
       const after = Number(row.triggerChannelSpendAfter || 0)
-      const spendLabel = chLabel ? `ยอดสะสมผ่าน${chLabel}` : 'ยอดสะสม'
-      parts.push(`${spendLabel} ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel}`)
+      const spendLabel = chLabel ? `สะสมผ่าน${chLabel}` : 'สะสม'
       if (Number(row.triggerCount || 0) > 0) {
-        const grantLabel = row.triggerGrantMode === 'every_threshold' ? `ปลดสิทธิ์ ${Number(row.triggerCount || 0)} ครั้ง` : 'ปลดสิทธิ์รอบนี้แล้ว'
-        parts.push(grantLabel)
+        const grantLabel = row.triggerGrantMode === 'every_threshold' ? `ปลดสิทธิ์ ${Number(row.triggerCount || 0)} ครั้ง` : 'ปลดแล้ว'
+        parts.push(`${spendLabel} ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel} · ${grantLabel}`)
       } else if (after < threshold) {
-        parts.push(`ก่อนรายการนี้สะสม ${formatBenefitCapValue('', before)}`)
+        const lacking = threshold - after
+        parts.push(`${spendLabel} ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel} · ยังขาด ${formatBenefitCapValue('', lacking)}`)
       } else {
-        parts.push('สิทธิ์ยอดสะสมรอบนี้ถูกปลดไปแล้ว')
+        parts.push(`ปลดสิทธิ์${cycleLabel}แล้ว`)
       }
     }
     if (remainingBefore != null) {
-      if (Number(remainingBefore || 0) <= 0) parts.push('ใช้สิทธิ์รอบนี้ครบแล้ว')
-      else parts.push(`เหลือใช้ได้อีก ${formatBenefitCapValue(row.type, remainingBefore)} ${cycleLabel}`)
+      if (Number(remainingBefore || 0) <= 0) parts.push(`ครบแล้ว${cycleLabel}`)
+      else parts.push(`เหลือรับ ${formatBenefitCapValue(row.type, remainingBefore)} ${cycleLabel}`)
     }
     const merchantCashbackRem = row.merchantCashbackRemainingBefore
     const merchantEligibleRem = row.merchantEligibleSpendRemainingBefore
     if (merchantCashbackRem != null) {
-      if (merchantCashbackRem <= 0) parts.push('ใช้สิทธิ์ในร้านนี้เดือนนี้ครบแล้ว')
-      else parts.push(`เหลือรับเงินคืนได้อีก ${formatBenefitCapValue(row.type, merchantCashbackRem)} ในร้านนี้เดือนนี้`)
+      if (merchantCashbackRem <= 0) parts.push('ร้านนี้ครบแล้ว')
+      else parts.push(`เหลือในร้านนี้ ${formatBenefitCapValue(row.type, merchantCashbackRem)}`)
     } else if (merchantEligibleRem != null) {
-      if (merchantEligibleRem <= 0) parts.push('ยอดคำนวณในร้านนี้เดือนนี้เต็มแล้ว')
-      else parts.push(`เหลือยอดคำนวณอีก ${formatBenefitCapValue('', merchantEligibleRem)} ในร้านนี้เดือนนี้`)
+      if (merchantEligibleRem <= 0) parts.push('ยอดร้านนี้เต็มแล้ว')
+      else parts.push(`ยอดร้านนี้เหลือ ${formatBenefitCapValue('', merchantEligibleRem)}`)
     }
     if (diffValue > 0) {
-      parts.push(`ควรได้ ${formatBenefitCapValue(row.type, rawValue)} แต่หลังติด cap ได้จริง ${formatBenefitCapValue(row.type, finalValue)}`)
-      parts.push(`ถูกตัดออก ${formatBenefitCapValue(row.type, diffValue)}`)
+      parts.push(`ถูกตัดเหลือ ${formatBenefitCapValue(row.type, finalValue)} (จาก ${formatBenefitCapValue(row.type, rawValue)})`)
     }
-    const reasonText = describeBenefitCapReason(row.capReason)
-    if (row?.capApplied && reasonText) parts.push(`จำกัดโดย ${reasonText}`)
     return parts.join(' · ')
   }
   App.buildBenefitCapAppliedText = buildBenefitCapAppliedText
@@ -11928,13 +11924,15 @@ App._pickMerchant = function(name, opts = {}) {
       points += Number(result.points || 0)
       ;(result.warnings || []).forEach(msg => warnings.push(`${rule.name}: ${msg}`))
     })
-    getStackingWarnings(rules).forEach(msg => warnings.push(msg))
+    const stackingWarnings = getStackingWarnings(rules)
+    stackingWarnings.forEach(msg => warnings.push(msg))
     return {
       cashback: Math.round(cashback * 100) / 100,
       discount: Math.round(discount * 100) / 100,
       points: Math.floor(points),
       rules: results,
       warnings,
+      stackingWarnings,
       calculatedAt: new Date().toISOString(),
       source: 'manual-selected-rules',
     }
@@ -17371,4 +17369,74 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
   try { if (S.page === 'more') App.renderMore() } catch (_) {}
   try { if (S.page === 'dashboard') App.renderDashboard() } catch (_) {}
+})()
+
+// ── Sheet swipe-to-dismiss ──────────────────────────────────────────────────
+;(function () {
+  let _st = null, _sh = null, _ov = null
+
+  document.addEventListener('touchstart', e => {
+    const t = e.target
+    if (t.closest('button, .btn, .btn-icon, select, input, textarea')) return
+    if (!t.closest('.sheet-handle, .sheet-header')) return
+    const sheet = t.closest('.sheet')
+    if (!sheet) return
+    const overlay = sheet.closest('.overlay.open')
+    if (!overlay) return
+    _sh = sheet
+    _ov = overlay
+    _st = { y: e.touches[0].clientY, t: Date.now() }
+    sheet.style.transition = 'none'
+    sheet.style.willChange = 'transform'
+  }, { passive: true })
+
+  document.addEventListener('touchmove', e => {
+    if (!_st || !_sh) return
+    const dy = e.touches[0].clientY - _st.y
+    _sh.style.transform = dy > 0 ? `translateY(${dy}px)` : ''
+  }, { passive: true })
+
+  document.addEventListener('touchend', e => {
+    if (!_st || !_sh) return
+    const dy = e.changedTouches[0].clientY - _st.y
+    const vel = dy / Math.max(1, Date.now() - _st.t)
+    const sheet = _sh, overlay = _ov
+    _sh = _ov = _st = null
+
+    if (dy > 120 || vel > 0.4) {
+      sheet.style.transition = 'transform 0.26s cubic-bezier(.32,.72,0,1)'
+      sheet.style.transform = 'translateY(110%)'
+      setTimeout(() => {
+        sheet.style.transition = ''
+        sheet.style.transform = ''
+        sheet.style.willChange = ''
+        const isDynamic = overlay.querySelector('.overlay-backdrop')
+          ?.getAttribute('onclick')?.includes('remove()')
+        if (isDynamic) {
+          overlay.remove()
+        } else {
+          overlay.classList.remove('open')
+          // Delegate state cleanup; closeOverlay/closeAddTx see no 'open' so skip animation
+          if (overlay.id === 'overlay-add-tx') try { App.closeAddTx() } catch (_) {}
+          else try { App.closeOverlay(overlay.id) } catch (_) {}
+        }
+      }, 260)
+    } else {
+      sheet.style.transition = 'transform 0.32s cubic-bezier(.32,.72,0,1)'
+      sheet.style.transform = ''
+      setTimeout(() => {
+        sheet.style.transition = ''
+        sheet.style.willChange = ''
+      }, 320)
+    }
+  }, { passive: true })
+
+  document.addEventListener('touchcancel', () => {
+    if (_sh) {
+      _sh.style.transform = ''
+      _sh.style.transition = ''
+      _sh.style.willChange = ''
+    }
+    _sh = _ov = _st = null
+  }, { passive: true })
 })()
