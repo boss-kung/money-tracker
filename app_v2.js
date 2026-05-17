@@ -5651,7 +5651,10 @@ App._pickMerchant = function(name, opts = {}) {
           </div>
         </div>`).join('')
       : App._emptyState?.('🎁', 'ยังไม่มีกฎสิทธิประโยชน์', 'เพิ่มสิทธิ์พื้นฐานหรือแคมเปญของบัตรใบนี้') || ''
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCCDetail('${esc(cardId)}')">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog('${esc(cardId)}')" style="width:auto">วางลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div></div>
+    const _ccBenefitBack = App._ccBenefitScreenReturn === 'overview'
+      ? `App._ccBenefitScreenReturn=null;App.openCCBenefitOverviewScreen()`
+      : `App.openCCDetail('${esc(cardId)}')`
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${_ccBenefitBack}">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog('${esc(cardId)}')" style="width:auto">วางลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div></div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         ${statementCard}
         <div class="sec-title">กฎของบัตรใบนี้</div>
@@ -5899,6 +5902,12 @@ App._pickMerchant = function(name, opts = {}) {
       }
       App._reopenCCBenefitImportDialog(cardId)
       notify('บันทึกกฎแล้ว — กลับมาเลือกสิทธิประโยชน์', 'success')
+      return
+    }
+    if (App._ccBenefitRuleFormReturn === 'overview') {
+      App._ccBenefitRuleFormReturn = null
+      App.openCCBenefitOverviewScreen()
+      notify('บันทึกกฎสิทธิประโยชน์แล้ว', 'success')
       return
     }
     App.openCCBenefitScreen(cardId)
@@ -7011,6 +7020,11 @@ App._pickMerchant = function(name, opts = {}) {
       App._reopenCCBenefitImportDialog(cardId)
       return
     }
+    if (App._ccBenefitRuleFormReturn === 'overview') {
+      App._ccBenefitRuleFormReturn = null
+      App.openCCBenefitOverviewScreen()
+      return
+    }
     App.openCCBenefitScreen(cardId)
   }
 
@@ -7242,7 +7256,8 @@ App._pickMerchant = function(name, opts = {}) {
   // ═══════════════════════════════════════════════════════════════════
   // Credit card benefit overview (consolidated view across all cards)
   // ═══════════════════════════════════════════════════════════════════
-  App.openCCBenefitOverviewScreen = function (refMonth, filter) {
+  // _direction: 'next' | 'prev' | '' (filter change, no slide) | undefined (full openSubScreen)
+  App.openCCBenefitOverviewScreen = function (refMonth, filter, _direction) {
     App.ensureCCBenefitRulesState?.()
     const todayStr = (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
     if (!refMonth) refMonth = S._ccOverviewMonth || todayStr.slice(0, 7)
@@ -7397,7 +7412,7 @@ App._pickMerchant = function(name, opts = {}) {
             <div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:1px">${typeLabel}${rule.isBaseRule ? ' · พื้นฐาน' : ''}${cycleLabel ? ` · ${esc(cycleLabel)}` : ''}</div>
           </div>
           <button class="btn-icon" style="font-size:15px;flex-shrink:0;width:30px;height:30px"
-            onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">✏️</button>
+            onclick="App._ccBenefitRuleFormReturn='overview';App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">✏️</button>
         </div>
         ${sections.length === 0
           ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:6px">ไม่มีแคปต่อรอบ</div>`
@@ -7418,10 +7433,10 @@ App._pickMerchant = function(name, opts = {}) {
     })
 
     function tileHtml(key, count, label, numColor) {
-      const active   = filter === key
+      const active    = filter === key
       const newFilter = active ? 'all' : key
-      const border   = active ? `border:2px solid ${numColor};` : 'border:2px solid transparent;'
-      return `<div onclick="App.openCCBenefitOverviewScreen('${esc(refMonth)}','${newFilter}')"
+      const border    = active ? `border:2px solid ${numColor};` : 'border:2px solid transparent;'
+      return `<div onclick="App.openCCBenefitOverviewScreen('${esc(refMonth)}','${newFilter}','')"
         style="background:var(--elevated,#1e2a3a);border-radius:12px;padding:10px;text-align:center;cursor:pointer;${border}">
         <div style="font-size:22px;font-weight:700;color:${numColor}">${count}</div>
         <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-top:2px">${label}</div>
@@ -7458,11 +7473,39 @@ App._pickMerchant = function(name, opts = {}) {
                 <div style="font-size:11px;color:var(--text-secondary,#6b7280)">${allRulesForCard.length} สิทธิ์</div>
               </div>
               <button class="btn-icon" style="font-size:16px;width:32px;height:32px;flex-shrink:0"
-                onclick="App.openCCBenefitScreen('${esc(card.id)}')">⚙️</button>
+                onclick="App._ccBenefitScreenReturn='overview';App.openCCBenefitScreen('${esc(card.id)}')">⚙️</button>
             </div>
             ${filteredRules.map(r => ruleCardHtml(card.id, r)).join('')}
           </div>`
         }).join('')
+
+    const contentHtml = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(prevStr)}','${esc(filter)}','prev')">‹</button>
+        <span style="font-weight:700;font-size:15px">${esc(monthLabel)}</span>
+        <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(nextStr)}','${esc(filter)}','next')"${refMonth >= todayMonth ? ' disabled style="opacity:.3"' : ''}>›</button>
+      </div>
+      ${summaryHtml}
+      ${cardsHtml}`
+
+    // In-page update (month nav or filter change) — no full openSubScreen
+    if (_direction !== undefined) {
+      const body = document.getElementById('cc-benefit-overview-body')
+      if (body) {
+        if (_direction === 'next' || _direction === 'prev') {
+          const dx = _direction === 'next' ? 28 : -28
+          body.style.cssText = `transform:translateX(${dx}px);opacity:0;transition:none`
+          body.innerHTML = contentHtml
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            body.style.cssText = 'transform:translateX(0);opacity:1;transition:transform .2s ease,opacity .15s ease'
+          }))
+        } else {
+          body.innerHTML = contentHtml
+        }
+        return
+      }
+      // body missing (came back from sub-screen) — fall through to full render
+    }
 
     App.openSubScreen(`
       <div class="sub-header">
@@ -7470,13 +7513,7 @@ App._pickMerchant = function(name, opts = {}) {
         <h2>สิทธิประโยชน์บัตรเครดิต</h2>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(prevStr)}','${esc(filter)}')">‹</button>
-          <span style="font-weight:700;font-size:15px">${esc(monthLabel)}</span>
-          <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(nextStr)}','${esc(filter)}')"${refMonth >= todayMonth ? ' disabled style="opacity:.3"' : ''}>›</button>
-        </div>
-        ${summaryHtml}
-        ${cardsHtml}
+        <div id="cc-benefit-overview-body">${contentHtml}</div>
       </div>
     `)
   }
