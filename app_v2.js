@@ -645,13 +645,13 @@ window.__mountUpcomingBillsFeature = function() {
   App.openUpcomingBillPayment = function(billId) {
     const bill = (S.upcomingBills || []).find(b => b.id === billId)
     if (!bill) return
-    const wallets = upcomingWallets()
+    const payWallets = (S.wallets || []).filter(w => w && !w.hiddenFromWalletList && new Set(['bank','cash','ewallet','saving','credit']).has(String(w.type || '').toLowerCase()))
     const categories = upcomingCategories()
     openUpcomingDialog(
       `จ่ายแล้ว · ${bill.title}`,
       `<div class="form-group"><label class="form-label">วันที่จ่ายจริง</label><input class="form-input" type="date" id="upcoming-pay-date" value="${esc(today())}"></div>
        <div class="form-group"><label class="form-label">จำนวนที่จ่ายจริง (฿)</label><input class="form-input" type="number" inputmode="decimal" id="upcoming-pay-amount" value="${esc(bill.amount)}"></div>
-       <div class="form-group"><label class="form-label">เลือกกระเป๋าที่จะจ่าย</label><select class="form-input" id="upcoming-pay-wallet"><option value="">เลือกกระเป๋า</option>${wallets.map(w => `<option value="${esc(w.id)}"${bill.walletId === w.id ? ' selected' : ''}>${esc(w.icon || '👛')} ${esc(w.name)}</option>`).join('')}</select></div>
+       <div class="form-group"><label class="form-label">เลือกกระเป๋าที่จะจ่าย</label><select class="form-input" id="upcoming-pay-wallet"><option value="">เลือกกระเป๋า</option>${payWallets.map(w => `<option value="${esc(w.id)}"${bill.walletId === w.id ? ' selected' : ''}>${esc(w.icon || '👛')} ${esc(w.name)}</option>`).join('')}</select></div>
        <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="upcoming-pay-category"><option value="">เลือกหมวดหมู่</option>${categories.map(c => `<option value="${esc(c.id)}"${bill.categoryId === c.id ? ' selected' : ''}>${esc(c.icon || '📦')} ${esc(c.label)}</option>`).join('')}</select></div>
        <div class="form-group"><label class="form-label">ร้านค้า / ผู้รับชำระ</label><input class="form-input" list="upcoming-pay-merchants" id="upcoming-pay-merchant" value="${esc(getBillMerchantLabel(bill))}" placeholder="เช่น MEA"><datalist id="upcoming-pay-merchants">${(S.merchants || []).map(m => `<option value="${esc(m.name)}"></option>`).join('')}</datalist></div>
        <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" id="upcoming-pay-note" rows="3">${esc(bill.note || '')}</textarea></div>`,
