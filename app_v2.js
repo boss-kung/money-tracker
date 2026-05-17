@@ -7272,108 +7272,129 @@ App._pickMerchant = function(name, opts = {}) {
     }
 
     function fmtNum(n, isPoints) {
-      const v = Number(n || 0)
-      return isPoints ? `${Math.floor(v).toLocaleString('en-US')} คะแนน` : money(v)
+      return isPoints ? `${Math.floor(Number(n || 0)).toLocaleString('en-US')} คะแนน` : money(n)
     }
 
     function progressBar(pct, color) {
-      return `<div style="height:6px;background:var(--border,#e5e7eb);border-radius:3px;overflow:hidden;margin:4px 0">
-        <div style="height:100%;width:${Math.min(100, pct).toFixed(1)}%;background:${color};border-radius:3px;transition:width .3s"></div>
+      return `<div style="height:5px;background:var(--border,#e5e7eb);border-radius:3px;overflow:hidden;margin:4px 0 2px">
+        <div style="height:100%;width:${Math.min(100, pct).toFixed(1)}%;background:${color};border-radius:3px"></div>
       </div>`
     }
 
+    // inline button style (override .btn's display:block width:100%)
+    const btnInline = 'display:inline-block;width:auto;white-space:nowrap;padding:5px 12px;font-size:12px;border-radius:8px;flex-shrink:0'
+
+    function getRuleStatus(cardId, rule) {
+      const cycle      = getCyclePeriod(cardId, rule)
+      const usage      = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end)
+      const isPoints   = rule.type === 'points'
+      const hasTrigger = rule.rewardTrigger?.mode === 'cycle_spend_threshold'
+      const triggerAmt = Number(rule.rewardTrigger?.thresholdAmount || 0)
+      const trackSpent = Number(usage.trackChannelSpendBefore || 0)
+      const rewardCap  = Number(rule.limits?.maxRewardAmountPerCycle || 0)
+      const spendCap   = Number(rule.limits?.maxEligibleSpendPerCycle || 0)
+      const rewardUsed = isPoints ? Number(usage.pointsUsedBefore || 0) : Number(usage.cashbackUsedBefore || 0)
+      const eligUsed   = Number(usage.eligibleSpendUsedBefore || 0)
+
+      const locked = hasTrigger && triggerAmt > 0 && trackSpent < triggerAmt
+      const full   = !locked && (
+        (rewardCap > 0 && rewardUsed >= rewardCap) ||
+        (spendCap  > 0 && eligUsed  >= spendCap && rewardCap === 0)
+      )
+      return { usage, isPoints, hasTrigger, triggerAmt, trackSpent, rewardCap, spendCap, rewardUsed, eligUsed, locked, full }
+    }
+
     function ruleCardHtml(cardId, rule) {
-      const cycle  = getCyclePeriod(cardId, rule)
-      const usage  = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end)
-      const isPoints = rule.type === 'points'
+      const s = getRuleStatus(cardId, rule)
       const typeLabel = { cashback: 'เงินคืน', points: 'คะแนน', both: 'เงินคืน + คะแนน', discount: 'ส่วนลด' }[rule.type] || rule.type
+      const sections  = []
 
-      const hasTrigger   = rule.rewardTrigger?.mode === 'cycle_spend_threshold'
-      const triggerAmt   = Number(rule.rewardTrigger?.thresholdAmount || 0)
-      const trackSpent   = Number(usage.trackChannelSpendBefore || 0)
-      const rewardCap    = Number(rule.limits?.maxRewardAmountPerCycle || 0)
-      const spendCap     = Number(rule.limits?.maxEligibleSpendPerCycle || 0)
-      const rewardUsed   = isPoints ? Number(usage.pointsUsedBefore || 0) : Number(usage.cashbackUsedBefore || 0)
-      const eligibleUsed = Number(usage.eligibleSpendUsedBefore || 0)
-
-      const sections = []
-
-      if (hasTrigger && triggerAmt > 0) {
-        const pct      = Math.min(100, (trackSpent / triggerAmt) * 100)
-        const unlocked = trackSpent >= triggerAmt
-        const remain   = Math.max(0, triggerAmt - trackSpent)
-        const color    = unlocked ? 'var(--success,#059669)' : 'var(--primary,#2563EB)'
-        const hint     = unlocked
-          ? `<span style="color:var(--success,#059669);font-size:11px">✓ ปลดล็อกแล้ว</span>`
-          : `<span style="color:var(--text-secondary,#6b7280);font-size:11px">ขาดอีก ${money(remain)}</span>`
-        sections.push(`
-          <div style="margin-top:8px">
-            <div style="display:flex;justify-content:space-between;margin-bottom:1px">
-              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">ยอดสะสมปลดล็อก</span>
-              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${money(trackSpent)} / ${money(triggerAmt)}</span>
-            </div>
-            ${progressBar(pct, color)}
-            ${hint}
-          </div>`)
+      if (s.hasTrigger && s.triggerAmt > 0) {
+        const pct     = Math.min(100, (s.trackSpent / s.triggerAmt) * 100)
+        const remain  = Math.max(0, s.triggerAmt - s.trackSpent)
+        const color   = s.locked ? 'var(--primary,#2563EB)' : 'var(--success,#059669)'
+        const hint    = s.locked
+          ? `<span style="color:var(--text-secondary,#6b7280);font-size:11px">ขาดอีก ${money(remain)}</span>`
+          : `<span style="color:var(--success,#059669);font-size:11px">✓ ปลดล็อกแล้ว</span>`
+        sections.push(`<div style="margin-top:8px">
+          <div style="display:flex;justify-content:space-between">
+            <span style="font-size:11px;color:var(--text-secondary,#6b7280)">ยอดสะสมปลดล็อก</span>
+            <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${money(s.trackSpent)} / ${money(s.triggerAmt)}</span>
+          </div>
+          ${progressBar(pct, color)}${hint}</div>`)
       }
 
-      if (rewardCap > 0) {
-        const pct    = Math.min(100, (rewardUsed / rewardCap) * 100)
-        const remain = Math.max(0, rewardCap - rewardUsed)
-        const full   = pct >= 100
-        const color  = full ? 'var(--success,#059669)' : 'var(--primary,#2563EB)'
-        const hint   = full
-          ? `<span style="color:var(--success,#059669);font-size:11px">✓ เต็มโควต้า · รีเซ็ตรอบถัดไป</span>`
-          : `<span style="color:var(--text-secondary,#6b7280);font-size:11px">เหลือ ${fmtNum(remain, isPoints)}</span>`
-        sections.push(`
-          <div style="margin-top:8px">
-            <div style="display:flex;justify-content:space-between;margin-bottom:1px">
-              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${isPoints ? 'คะแนนที่ได้รับ' : 'เงินคืนที่ได้รับ'}</span>
-              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${fmtNum(rewardUsed, isPoints)} / ${fmtNum(rewardCap, isPoints)}</span>
-            </div>
-            ${progressBar(pct, color)}
-            ${hint}
-          </div>`)
-      } else if (spendCap > 0) {
-        const pct    = Math.min(100, (eligibleUsed / spendCap) * 100)
-        const remain = Math.max(0, spendCap - eligibleUsed)
-        const full   = pct >= 100
-        const color  = full ? 'var(--success,#059669)' : 'var(--primary,#2563EB)'
-        const hint   = full
+      if (s.rewardCap > 0) {
+        const pct    = Math.min(100, (s.rewardUsed / s.rewardCap) * 100)
+        const remain = Math.max(0, s.rewardCap - s.rewardUsed)
+        const color  = s.full ? 'var(--success,#059669)' : 'var(--primary,#2563EB)'
+        const hint   = s.full
+          ? `<span style="color:var(--success,#059669);font-size:11px">✓ เต็มโควต้าแล้ว</span>`
+          : `<span style="color:var(--text-secondary,#6b7280);font-size:11px">เหลือ ${fmtNum(remain, s.isPoints)}</span>`
+        sections.push(`<div style="margin-top:8px">
+          <div style="display:flex;justify-content:space-between">
+            <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${s.isPoints ? 'คะแนนที่ได้รับ' : 'เงินคืนที่ได้รับ'}</span>
+            <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${fmtNum(s.rewardUsed, s.isPoints)} / ${fmtNum(s.rewardCap, s.isPoints)}</span>
+          </div>
+          ${progressBar(pct, color)}${hint}</div>`)
+      } else if (s.spendCap > 0) {
+        const pct    = Math.min(100, (s.eligUsed / s.spendCap) * 100)
+        const remain = Math.max(0, s.spendCap - s.eligUsed)
+        const color  = s.full ? 'var(--success,#059669)' : 'var(--primary,#2563EB)'
+        const hint   = s.full
           ? `<span style="color:var(--success,#059669);font-size:11px">✓ เต็มยอดใช้จ่ายที่นับ</span>`
           : `<span style="color:var(--text-secondary,#6b7280);font-size:11px">เหลือ ${money(remain)}</span>`
-        sections.push(`
-          <div style="margin-top:8px">
-            <div style="display:flex;justify-content:space-between;margin-bottom:1px">
-              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">ยอดใช้จ่ายที่นับ</span>
-              <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${money(eligibleUsed)} / ${money(spendCap)}</span>
-            </div>
-            ${progressBar(pct, color)}
-            ${hint}
-          </div>`)
+        sections.push(`<div style="margin-top:8px">
+          <div style="display:flex;justify-content:space-between">
+            <span style="font-size:11px;color:var(--text-secondary,#6b7280)">ยอดใช้จ่ายที่นับ</span>
+            <span style="font-size:11px;color:var(--text-secondary,#6b7280)">${money(s.eligUsed)} / ${money(s.spendCap)}</span>
+          </div>
+          ${progressBar(pct, color)}${hint}</div>`)
       }
 
-      const noCap  = sections.length === 0
       const dimmed = rule.active === false ? 'opacity:0.45;' : ''
-
       return `<div class="card card-pad" style="margin-bottom:8px;${dimmed}">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-          <div style="min-width:0;flex:1">
+        <div style="display:flex;align-items:flex-start;gap:8px">
+          <div style="flex:1;min-width:0">
             <div style="font-weight:600;font-size:14px;line-height:1.3">${esc(rule.name)}${rule.active === false ? '<span style="font-size:11px;color:var(--text-secondary,#6b7280)"> · ปิด</span>' : ''}</div>
-            <div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:1px">${typeLabel}${rule.isBaseRule ? ' · สิทธิ์พื้นฐาน' : ''}</div>
+            <div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:1px">${typeLabel}${rule.isBaseRule ? ' · พื้นฐาน' : ''}</div>
           </div>
-          <button class="btn btn-secondary btn-sm" style="white-space:nowrap;font-size:11px;padding:4px 10px;flex-shrink:0"
+          <button class="btn btn-secondary" style="${btnInline}"
             onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">แก้ไข</button>
         </div>
-        ${noCap
+        ${sections.length === 0
           ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:6px">ไม่มีแคปต่อรอบ</div>`
           : sections.join('')}
       </div>`
     }
 
+    // compute summary counts across all active rules
     const creditCards = (S.wallets || []).filter(w => w.type === 'credit')
-    const allRules    = (S.ccBenefitRules || [])
-    const hiddenCount = allRules.filter(r => r.active === false).length
+    let cntAvail = 0, cntLocked = 0, cntFull = 0
+    creditCards.forEach(card => {
+      App.getCreditCardBenefitRules(card.id).filter(r => r.active !== false).forEach(r => {
+        const s = getRuleStatus(card.id, r)
+        if (s.locked)     cntLocked++
+        else if (s.full)  cntFull++
+        else              cntAvail++
+      })
+    })
+
+    const summaryHtml = `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+        <div style="background:var(--elevated,#1e2a3a);border-radius:12px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:var(--primary,#2563EB)">${cntAvail}</div>
+          <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-top:2px">ใช้ได้</div>
+        </div>
+        <div style="background:var(--elevated,#1e2a3a);border-radius:12px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:var(--warning,#D97706)">${cntLocked}</div>
+          <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-top:2px">ยังไม่ปลด</div>
+        </div>
+        <div style="background:var(--elevated,#1e2a3a);border-radius:12px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:var(--success,#059669)">${cntFull}</div>
+          <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-top:2px">เต็มแล้ว</div>
+        </div>
+      </div>`
 
     const cardsHtml = creditCards.length === 0
       ? `<div style="text-align:center;padding:40px 16px;color:var(--text-secondary,#6b7280)">ยังไม่มีบัตรเครดิต<br><small>เพิ่มบัตรในหน้ากระเป๋า</small></div>`
@@ -7382,12 +7403,12 @@ App._pickMerchant = function(name, opts = {}) {
           if (!rules.length) return ''
           return `<div style="margin-bottom:20px">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-              <div style="width:30px;height:30px;border-radius:8px;background:${esc(card.color || '#2563EB')}33;display:flex;align-items:center;justify-content:center;font-size:15px">${esc(card.icon || '💳')}</div>
+              <div style="width:30px;height:30px;border-radius:8px;background:${esc(card.color || '#2563EB')}33;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">${esc(card.icon || '💳')}</div>
               <div style="flex:1;min-width:0">
                 <div style="font-weight:700;font-size:14px">${esc(card.name)}</div>
                 <div style="font-size:11px;color:var(--text-secondary,#6b7280)">${rules.length} สิทธิ์</div>
               </div>
-              <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px"
+              <button class="btn btn-secondary" style="${btnInline}"
                 onclick="App.openCCBenefitScreen('${esc(card.id)}')">+ จัดการ</button>
             </div>
             ${rules.map(r => ruleCardHtml(card.id, r)).join('')}
@@ -7400,13 +7421,13 @@ App._pickMerchant = function(name, opts = {}) {
         <h2>สิทธิประโยชน์บัตรเครดิต</h2>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(prevStr)}')">‹</button>
           <span style="font-weight:700;font-size:15px">${esc(monthLabel)}</span>
           <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(nextStr)}')"${refMonth >= todayMonth ? ' disabled style="opacity:.3"' : ''}>›</button>
         </div>
+        ${summaryHtml}
         ${cardsHtml}
-        ${hiddenCount > 0 ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);text-align:center;margin-top:4px">${hiddenCount} สิทธิ์ที่ปิดใช้งานรวมอยู่ด้วย (แสดงแบบโปร่งใส)</div>` : ''}
       </div>
     `)
   }
