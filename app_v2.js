@@ -17983,21 +17983,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // ── Inject CSS (back gesture indicator + More tab strip) ──────────────
   const style = document.createElement('style')
   style.textContent = `
-    /* Back gesture: left-edge pill indicator on sub-screen */
-    #sub-screen:not(:empty)::before {
-      content: '';
-      position: fixed;
-      left: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 4px;
-      height: 48px;
-      background: var(--primary, #2563EB);
-      border-radius: 0 4px 4px 0;
-      opacity: 0.35;
-      z-index: 9999;
-      pointer-events: none;
-    }
     /* Expand back button tap area */
     .sub-header .btn-icon {
       min-width: 44px !important;
