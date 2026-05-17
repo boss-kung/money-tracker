@@ -6744,3 +6744,5 @@ html.dark .spcal-cell  { background: var(--elevated); border-color: var(--border
 html.dark .spcal-l1    { background: rgba(220,38,38,.18); border-color: rgba(220,38,38,.28); }
 html.dark .spcal-l2    { background: rgba(220,38,38,.32); border-color: rgba(220,38,38,.42); }
 html.dark .spcal-l3    { background: rgba(220,38,38,.50); border-color: rgba(220,38,38,.60); }
+html.dark .spcal-l4    { background: rgba(220,38,38,.68); border-color: rgba(220,38,38,.78); }
+html.dark .spcal-l5    { background: #DC2626; border-color: #B91C1C; }
