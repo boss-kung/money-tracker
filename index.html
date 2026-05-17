@@ -197,6 +197,19 @@
     </div>
   </div>
 
+  <!-- ── Overlay: Rule Transactions ──────────────── -->
+  <div class="overlay" id="overlay-rule-transactions" role="dialog" aria-modal="true" aria-label="รายการที่ track ไว้">
+    <div class="overlay-backdrop" onclick="App.closeOverlay('overlay-rule-transactions')" aria-hidden="true"></div>
+    <div class="sheet" style="max-height:92dvh">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-header">
+        <h2 id="rule-transactions-title">รายการที่ track ไว้</h2>
+        <button class="btn-icon" onclick="App.closeOverlay('overlay-rule-transactions')" aria-label="ปิด">✕</button>
+      </div>
+      <div class="sheet-body" id="rule-transactions-content"></div>
+    </div>
+  </div>
+
   <!-- ── Sub-screen (full overlay for sub-pages) -->
   <div id="sub-screen"></div>
 

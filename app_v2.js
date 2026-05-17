@@ -7493,9 +7493,12 @@ App._pickMerchant = function(name, opts = {}) {
         ${sections.length === 0
           ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:6px">ใช้ได้ไม่จำกัด</div>`
           : sections.join('')}
-        ${(Number(rule.limits?.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxRewardAmountPerChannelPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerChannelPerCycle || 0) > 0)
-          ? `<button onclick="App.openBenefitCapBreakdownSheet('${esc(rule.id)}','${esc(cardId)}')" style="margin-top:10px;font-size:12px;color:var(--primary,#2563EB);background:none;border:none;padding:0;cursor:pointer;text-align:left">ดูสิทธิ์รายร้าน/ช่องทาง ›</button>`
-          : ''}
+        <div style="display:flex;gap:16px;margin-top:10px">
+          <button onclick="App.openRuleTransactionsSheet('${esc(rule.id)}','${esc(cardId)}')" style="font-size:12px;color:var(--primary,#2563EB);background:none;border:none;padding:0;cursor:pointer;text-align:left">ดูรายการ ›</button>
+          ${(Number(rule.limits?.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxRewardAmountPerChannelPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerChannelPerCycle || 0) > 0)
+            ? `<button onclick="App.openBenefitCapBreakdownSheet('${esc(rule.id)}','${esc(cardId)}')" style="font-size:12px;color:var(--primary,#2563EB);background:none;border:none;padding:0;cursor:pointer;text-align:left">ดูสิทธิ์รายร้าน/ช่องทาง ›</button>`
+            : ''}
+        </div>
       </div>`
     }
 
@@ -7715,6 +7718,135 @@ App._pickMerchant = function(name, opts = {}) {
     if (body) body.innerHTML = `<div style="padding:0 0 24px">${merchantSection}${channelSection}${empty}</div>`
 
     App.openOverlay('overlay-benefit-cap-breakdown')
+  }
+
+  App.openRuleTransactionsSheet = function(ruleId, cardId) {
+    App.ensureCCBenefitRulesState?.()
+    const rule = (S.ccBenefitRules || []).find(r => r.id === ruleId)
+    if (!rule) return
+
+    const esc = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])))
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const cycle = App.getCyclePeriodForDate(cardId, todayStr, rule)
+    const limits = rule.limits || {}
+    const cashbackCfg = rule.cashback || {}
+    const discountCfg = rule.discount || {}
+    const pointsCfg = rule.points || {}
+    const isPoints = rule.type === 'points'
+    const isThresholdMode = rule.rewardTrigger?.mode === 'cycle_spend_threshold' && Number(rule.rewardTrigger?.thresholdAmount || 0) > 0
+    const cycleCashbackCap = Number(limits.maxRewardAmountPerCycle || 0)
+    const cycleEligibleCap = Number(limits.maxEligibleSpendPerCycle || 0)
+    const channelOptions = App.getBenefitChannelOptions?.() || []
+    const chLabel = val => { const f = channelOptions.find(([v]) => v === val); return f ? f[1] : val }
+
+    // Collect txs in cycle with this rule selected, sorted oldest→newest for cap accumulation
+    const txsInCycle = (S.transactions || [])
+      .filter(tx => {
+        if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return false
+        if (!Array.isArray(tx.rewardRuleIds) || !tx.rewardRuleIds.map(String).includes(String(ruleId))) return false
+        const d = String(tx.date || '')
+        return d >= cycle.start && d <= cycle.end
+      })
+      .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+
+    // Compute per-tx reward on-the-fly (same logic as getRuleCycleUsage on-the-fly path)
+    let eligAccum = 0, rewardAccum = 0
+    const rows = txsInCycle.map(tx => {
+      let eligible = 0, reward = 0, pts = 0
+      if (isThresholdMode) {
+        const storedRow = (Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : [])
+          .find(r => String(r.ruleId || '') === String(ruleId))
+        eligible = Number(storedRow?.eligibleAmount || 0)
+        reward   = Number(storedRow?.cashback || storedRow?.finalCashback || 0)
+        pts      = Number(storedRow?.points || storedRow?.finalPoints || 0)
+      } else {
+        const eligibility = getRuleEligibility(tx, rule)
+        if (eligibility.matched) {
+          eligible = Math.max(0, Number(tx.amount || 0))
+          if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
+          if (cycleEligibleCap > 0) eligible = Math.min(eligible, Math.max(0, cycleEligibleCap - eligAccum))
+          eligible = Math.round(eligible * 100) / 100
+          if (rule.type === 'cashback' || rule.type === 'both') {
+            reward = cashbackCfg.mode === 'fixed' ? Number(cashbackCfg.fixedAmount || 0) : eligible * (Number(cashbackCfg.rate || 0) / 100)
+            if (limits.maxRewardAmountPerTx > 0 && reward > limits.maxRewardAmountPerTx) reward = Number(limits.maxRewardAmountPerTx)
+            if (cycleCashbackCap > 0) reward = Math.min(reward, Math.max(0, cycleCashbackCap - rewardAccum))
+            reward = Math.round(reward * 100) / 100
+          } else if (rule.type === 'discount') {
+            reward = discountCfg.mode === 'fixed' ? Number(discountCfg.fixedAmount || 0) : eligible * (Number(discountCfg.rate || 0) / 100)
+            reward = Math.round(reward * 100) / 100
+          } else if (rule.type === 'points' || rule.type === 'both') {
+            const bahtPer = Number(pointsCfg.bahtPerPoint || 0)
+            pts = bahtPer > 0 ? Math.floor(eligible / bahtPer) * Number(pointsCfg.multiplier || 1) : 0
+            reward = pts
+          }
+        }
+      }
+      eligAccum   += eligible
+      rewardAccum += isPoints ? 0 : reward
+      return { tx, eligible, reward, pts }
+    })
+    rows.reverse() // newest-first for display
+
+    const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+    const fmtDate = iso => { const [, m, d] = String(iso || '').split('-').map(Number); return `${d} ${THAI_MONTHS[m - 1] || ''}` }
+    const fmtMoney = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : `฿${Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`)
+    const fmtReward = n => isPoints ? `${Math.floor(Number(n)||0).toLocaleString('en-US')} คะแนน` : fmtMoney(n)
+    const rewardLabel = { cashback:'เงินคืน', discount:'ส่วนลด', points:'คะแนน', both:'เงินคืน' }[rule.type] || 'รางวัล'
+
+    const totalElig   = Math.round(eligAccum * 100) / 100
+    const totalReward = isPoints ? rows.reduce((s, r) => s + (r.pts || 0), 0) : Math.round(rewardAccum * 100) / 100
+
+    const cycleHint = (() => {
+      const hint = String(rule?.validity?.statementCycleHint || 'statement_cycle')
+      if (hint === 'calendar_month') return `รอบปฏิทิน: ${fmtDate(cycle.start)} – ${fmtDate(cycle.end)}`
+      return `รอบบัตร: ${fmtDate(cycle.start)} – ${fmtDate(cycle.end)}`
+    })()
+
+    const summaryHtml = `
+      <div style="display:flex;gap:16px;padding:12px 0 14px;border-bottom:1px solid var(--border)">
+        <div style="flex:1;text-align:center">
+          <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-bottom:2px">${rows.length} รายการ</div>
+          <div style="font-weight:700;font-size:15px">${fmtMoney(totalElig)}</div>
+          <div style="font-size:10px;color:var(--text-secondary,#6b7280)">ยอดใช้จ่ายที่นับ</div>
+        </div>
+        <div style="width:1px;background:var(--border)"></div>
+        <div style="flex:1;text-align:center">
+          <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-bottom:2px">${rewardLabel}</div>
+          <div style="font-weight:700;font-size:15px;color:var(--success,#059669)">${fmtReward(totalReward)}</div>
+          <div style="font-size:10px;color:var(--text-secondary,#6b7280)">${cycleHint}</div>
+        </div>
+      </div>`
+
+    const listHtml = rows.length === 0
+      ? `<div style="text-align:center;padding:32px 0;color:var(--text-secondary,#6b7280);font-size:14px">ยังไม่มีรายการในรอบนี้</div>`
+      : rows.map(({ tx, eligible, reward, pts }) => {
+          const rewardVal = isPoints ? pts : reward
+          const label = String(tx.merchant || tx.note || '').trim() || 'ไม่ระบุร้าน'
+          const ch = String(tx.channel || '').trim()
+          const sub = [ch ? chLabel(ch) : null, tx.note && tx.merchant ? esc(tx.note) : null].filter(Boolean).join(' · ')
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border,#1e2a3a)">
+            <div style="flex-shrink:0;text-align:center;min-width:32px">
+              <div style="font-size:12px;font-weight:600">${fmtDate(tx.date)}</div>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(label)}</div>
+              ${sub ? `<div style="font-size:11px;color:var(--text-secondary,#6b7280)">${sub}</div>` : ''}
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:13px;font-weight:600">${fmtMoney(tx.amount)}</div>
+              <div style="font-size:11px;color:var(--success,#059669)">+${fmtReward(rewardVal)}</div>
+              ${eligible < Number(tx.amount || 0) - 0.005 ? `<div style="font-size:10px;color:var(--text-secondary,#6b7280)">นับ ${fmtMoney(eligible)}</div>` : ''}
+            </div>
+          </div>`
+        }).join('')
+
+    const titleEl = document.getElementById('rule-transactions-title')
+    if (titleEl) titleEl.textContent = rule.name
+
+    const body = document.getElementById('rule-transactions-content')
+    if (body) body.innerHTML = `<div style="padding:0 0 32px">${summaryHtml}<div style="padding-top:4px">${listHtml}</div></div>`
+
+    App.openOverlay('overlay-rule-transactions')
   }
 
   // ═══════════════════════════════════════════════════════════════════
