@@ -17506,6 +17506,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="card card-pad">
         ${row({ icon: '🏷️', label: 'จัดการหมวดหมู่', value: 'รายรับ/รายจ่าย', onclick: "App.openCategoryScreen('expense')" })}
         ${row({ icon: '🏪', label: 'ร้านค้า / Platform', value: `${(S.merchants || []).length} ร้าน`, onclick: 'App.openMerchantScreen()' })}
+        ${row({ icon: '🔀', label: 'ช่องทางการใช้จ่าย', value: (S.settings?.customChannels || []).length ? `+${(S.settings?.customChannels || []).length} ที่กำหนดเอง` : '7 ช่องทาง', onclick: 'App.openChannelScreen()' })}
         ${row({ icon: '🔧', label: 'ตรวจสอบยอดคงเหลือ', onclick: 'App.openBalanceRepairScreen()' })}
         ${row({ icon: '🩺', label: 'ตรวจสอบความถูกต้องของข้อมูล', onclick: 'App.runDataHealthCheck()' })}
       </div>
