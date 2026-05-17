@@ -7417,7 +7417,7 @@ App._pickMerchant = function(name, opts = {}) {
             onclick="App._ccBenefitRuleFormReturn='overview';App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">✏️</button>
         </div>
         ${sections.length === 0
-          ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:6px">ไม่มีแคปต่อรอบ</div>`
+          ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:6px">ใช้ได้ไม่จำกัด</div>`
           : sections.join('')}
       </div>`
     }
@@ -7435,7 +7435,7 @@ App._pickMerchant = function(name, opts = {}) {
     const creditCards = (S.wallets || []).filter(w => w.type === 'credit')
     let cntAvail = 0, cntLocked = 0, cntFull = 0
     creditCards.forEach(card => {
-      App.getCreditCardBenefitRules(card.id).filter(r => r.active !== false && isTrackable(r)).forEach(r => {
+      App.getCreditCardBenefitRules(card.id).filter(r => r.active !== false && (showAll ? true : isTrackable(r))).forEach(r => {
         const s = getRuleStatus(card.id, r)
         if (s.locked)    cntLocked++
         else if (s.full) cntFull++
