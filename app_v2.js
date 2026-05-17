@@ -2633,35 +2633,9 @@ App.render();
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small><b>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'}</b><span> · แตะเพื่อแก้ไข</span></small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
           ${needsCat ? `<div class=”form-group”><label class=”form-label”>หมวดหมู่ที่ใช้บ่อย</label><div id=”cat-grid” style=”display:flex;flex-direction:row;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding:0 2px 6px;margin:0 -2px”>${orderedCats.map(c => `<button type=”button” data-catid=”${esc(c.id)}” class=”cat-btn${S.tx.categoryId === c.id ? ' active' : ''}” onclick=”App._selectCat('${esc(c.id)}')” style=”flex:0 0 110px;width:110px;scroll-snap-align:start;font-size:12px;font-weight:600”><span class=”cat-icon”>${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}</div></div>` : ''}
           ${isExpense ? `<div class=”form-group”><label class=”form-label”>ช่องทางการใช้จ่าย</label><select class=”form-input” id=”tx-channel” onchange=”App._txField('channel',this.value);App._renderAddTxDetail()”>${(App.getBenefitChannelOptions?.() || [['','ไม่ระบุ'],['online','ออนไลน์'],['offline','หน้าร้าน / ออฟไลน์']]).map(([value,label]) => `<option value=”${esc(value)}”${S.tx.channel === value ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></div>` : ''}
-          ${type === 'transfer'
-  ? `<div class=”form-group”><label class=”form-label”>จากบัญชี</label><select class=”form-input” id=”tx-wallet” onchange=”App._txField('walletId',this.value);App._renderAddTxDetail()”>${walletOptions}</select></div>
-    <div class=”form-group”>
-      <label class=”form-label”>ไปบัญชี</label>
-      <select class=”form-input” id=”tx-towallet” onchange=”App._txField('toWalletId',this.value)”>
-        <option value=””>เลือกปลายทาง</option>${toWalletOptions}
-      </select>
-      <div class=”form-hint”>รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div>
-    </div>`
-  : `<div class=”form-group”>
-      <label class=”form-label”>ร้านค้า / แหล่งที่มา</label>
-      <div class=”tx-merchant-input-wrap”>
-        <input
-          class=”form-input”
-          id=”tx-merchant”
-          autocomplete=”off”
-          autocapitalize=”none”
-          placeholder=”เช่น Grab, Netflix, เงินเดือน”
-          value=”${esc(S.tx.merchant)}”
-          oninput=”App._txField('merchant', this.value); App._showMerchantDropdown?.(this.value)”
-          onfocus=”App._showMerchantDropdown?.(this.value)”
-          onkeydown=”if(event.key==='Enter'){event.preventDefault();App._confirmTypedMerchant?.()}”
-          onblur=”App._merchantBlurTimer=setTimeout(()=>App._hideMerchantDropdown?.(true),260)”
-        >
-        <button type=”button” class=”tx-merchant-clear” aria-label=”ล้างร้านค้า” onclick=”App.clearTxMerchant()”>×</button>
-      </div>
-      ${S.tx.merchantSuggestionNote ? `<div class=”form-hint”>${esc(S.tx.merchantSuggestionNote)}</div>` : ''}
-    </div>
-    <div class=”form-group”><label class=”form-label”>บัญชีที่ใช้</label><select class=”form-input” id=”tx-wallet” onchange=”App._txField('walletId',this.value);App._renderAddTxDetail()”>${walletOptions}</select></div>`}
+          ${type === 'transfer' ? '' : `<div class=”form-group”><label class=”form-label”>ร้านค้า / แหล่งที่มา</label><div class=”tx-merchant-input-wrap”><input class=”form-input” id=”tx-merchant” autocomplete=”off” autocapitalize=”none” placeholder=”เช่น Grab, Netflix, เงินเดือน” value=”${esc(S.tx.merchant)}” oninput=”App._txField('merchant', this.value); App._showMerchantDropdown?.(this.value)” onfocus=”App._showMerchantDropdown?.(this.value)” onkeydown=”if(event.key==='Enter'){event.preventDefault();App._confirmTypedMerchant?.()}” onblur=”App._merchantBlurTimer=setTimeout(()=>App._hideMerchantDropdown?.(true),260)”><button type=”button” class=”tx-merchant-clear” aria-label=”ล้างร้านค้า” onclick=”App.clearTxMerchant()”>×</button></div>${S.tx.merchantSuggestionNote ? '<div class=”form-hint”>' + esc(S.tx.merchantSuggestionNote) + '</div>' : ''}</div>`}
+          <div class=”form-group”><label class=”form-label”>${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class=”form-input” id=”tx-wallet” onchange=”App._txField('walletId',this.value);App._renderAddTxDetail()”>${walletOptions}</select></div>
+          ${type === 'transfer' ? `<div class=”form-group”><label class=”form-label”>ไปบัญชี</label><select class=”form-input” id=”tx-towallet” onchange=”App._txField('toWalletId',this.value)”><option value=””>เลือกปลายทาง</option>${toWalletOptions}</select><div class=”form-hint”>รายการโอนจะแสดงเป็น “ต้นทาง → ปลายทาง”</div></div>` : ''}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value);App._renderAddTxDetail()"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
           ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? (App._recurringInlineHtml?.() || '') : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
           ${(() => {
@@ -2750,44 +2724,6 @@ App.render();
         if (_newScrollEl) _newScrollEl.scrollTop = _savedScroll
       })
     }
-  }
-
-  App.getFinancialAdvisorInsights = function(month = S.rptMonth || THIS_MONTH) {
-    const stats = Calc.getMonthlyStats(S.transactions, month)
-    const prevMonth = Calc.getMonths(2)[1]
-    const prev = Calc.getMonthlyStats(S.transactions, prevMonth)
-    const budget = Calc.getBudgetProgress(S.transactions, S.budgets || [], S.categories, month)
-    const top = Object.entries(stats.byCategory || {}).sort((a,b) => b[1] - a[1])[0]
-    const cat = top && App._findCat?.(top[0])
-    const insights = []
-    const savingsRate = stats.income ? (stats.net / stats.income) * 100 : 0
-    insights.push({ icon:'🧠', title:'AI Financial Coach', body: savingsRate >= 20 ? `เดือนนี้อัตราออมประมาณ ${savingsRate.toFixed(0)}% อยู่ในระดับดี ควรแยกเงินส่วนเกินไปออม/ลงทุนทันทีหลังรับรายได้` : savingsRate >= 0 ? `เดือนนี้ยังมีกระแสเงินสดบวก แต่อัตราออมอยู่ที่ ${savingsRate.toFixed(0)}% แนะนำตั้งเป้าออมอัตโนมัติก่อนใช้จ่าย` : `เดือนนี้รายจ่ายสูงกว่ารายรับ แนะนำลดรายจ่ายไม่จำเป็น 1-2 หมวดทันทีและตั้งเพดานรายสัปดาห์` })
-    if (prev.expense) {
-      const diff = ((stats.expense - prev.expense) / prev.expense) * 100
-      insights.push({ icon: diff > 0 ? '📈' : '📉', title:'เทียบเดือนก่อน', body:`รายจ่าย${diff >= 0 ? 'เพิ่มขึ้น' : 'ลดลง'} ${Math.abs(diff).toFixed(0)}% จากเดือนก่อน ${diff > 15 ? 'ควรตรวจรายการที่ผิดปกติหรือรายจ่ายก้อนใหญ่' : 'ถือว่าอยู่ในช่วงควบคุมได้'}` })
-    }
-    if (cat && top) insights.push({ icon:'🔍', title:'หมวดที่ควรจับตา', body:`หมวด ${cat.label} ใช้สูงสุดที่ ${fmt(top[1])} (${stats.expense ? (top[1]/stats.expense*100).toFixed(0) : 0}% ของรายจ่าย) แนะนำตั้งงบย่อยหรือ review รายการซ้ำ` })
-    const over = budget.find(b => b.over)
-    if (over) insights.push({ icon:'⚠️', title:'งบประมาณเกิน', body:`${over.label} เกินงบ ${fmt(over.spent - over.monthlyLimit)} แล้ว ควรหยุดใช้หมวดนี้ชั่วคราวจนจบรอบเดือน` })
-    const usable = Calc.getUsableMoney ? Calc.getUsableMoney(S.wallets || [], S) : null
-    const upcoming = App.getUpcomingItems?.(14) || []
-    const upcomingCommitted = upcoming.filter(row => ['จ่ายบิลบัตรเครดิต', 'รายการประจำ', 'รายการที่รอจ่าย', 'ผ่อนชำระ'].includes(row.type)).reduce((sum, row) => sum + Number(row.amount || 0), 0)
-    if (usable && upcomingCommitted > 0 && usable.liquid < upcomingCommitted) {
-      insights.push({ icon:'💸', title:'บิลใกล้ถึงเกินเงินพร้อมใช้', body:`14 วันข้างหน้ามีภาระประมาณ ${fmt(upcomingCommitted)} แต่เงินพร้อมใช้มี ${fmt(usable.liquid)} ควรเตรียมสภาพคล่องล่วงหน้า` })
-    }
-    const creditSoon = (S.wallets || []).filter(w => w.type === 'credit').map(card => ({ card, due: App.getCreditCardDueInfo?.(card) })).filter(row => row.due && Number(row.due.daysLeft) >= 0 && Number(row.due.daysLeft) <= 7)
-    if (creditSoon.length && usable && usable.liquid < creditSoon.reduce((sum, row) => sum + Math.abs(Number(row.card.balance || 0)), 0)) {
-      insights.push({ icon:'💳', title:'บัตรเครดิตครบกำหนดเร็ว ๆ นี้', body:`มีบัตรครบกำหนดภายใน 7 วันและเงินพร้อมใช้อาจไม่พอชำระเต็มจำนวน ควรจัดลำดับการจ่ายก่อนถึง due date` })
-    }
-    const behindGoal = (S.goals || []).filter(g => g.status === 'active').map(g => ({ goal: g, progress: App.getGoalProgress?.(g) })).find(row => row.progress && row.progress.remaining > 0 && ((row.goal.targetDate && row.progress.daysLeft < 0) || (row.goal.targetDate && row.goal.monthlyContribution > 0 && row.progress.suggestedMonthly > row.goal.monthlyContribution)))
-    if (behindGoal) {
-      insights.push({ icon:'🎯', title:'เป้าหมายอาจตามไม่ทัน', body:`${behindGoal.goal.name} ยังเหลือ ${fmt(behindGoal.progress.remaining)}${behindGoal.goal.targetDate ? ' และมีความเสี่ยงไม่ทันวันเป้าหมาย' : ''} ลองเพิ่มเงินออมรายเดือนหรือขยับวันเป้าหมาย` })
-    }
-    const staleTexts = ['crypto', 'gold', 'fcd'].map(kind => App.getMarketFreshnessText?.(kind) || '').filter(text => /เก่า|manual|สำรอง/.test(text))
-    if (staleTexts.length) {
-      insights.push({ icon:'🕰️', title:'ราคาสินทรัพย์อาจไม่ล่าสุด', body:'มูลค่าสินทรัพย์บางส่วนกำลังใช้ราคาที่เก่าหรือราคาสำรอง ควร sync ราคาอีกครั้งก่อนตัดสินใจ' })
-    }
-    return insights.slice(0, 6)
   }
 
   try { if (S.page === 'transactions') App.renderTransactions(); else App.render?.() } catch (_) {}
@@ -4891,39 +4827,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
       </div>`
     }
 
-    const smartInsights = []
-    if (monthly.expense > 0 || monthly.income > 0) {
-      if (comparison.expensePctChange !== null) smartInsights.push({
-        icon: Number(comparison.expensePctChange) > 0 ? '📈' : '📉',
-        title: 'รายจ่ายเทียบเดือนก่อน',
-        body: `รายจ่าย${Number(comparison.expensePctChange) > 0 ? 'เพิ่มขึ้น' : 'ลดลง'} ${pctText(comparison.expensePctChange)} จากเดือนก่อน`
-      })
-      if (comparison.incomePctChange !== null) smartInsights.push({
-        icon: Number(comparison.incomePctChange) > 0 ? '💹' : '💸',
-        title: 'รายรับเทียบเดือนก่อน',
-        body: `รายรับ${Number(comparison.incomePctChange) > 0 ? 'เพิ่มขึ้น' : 'ลดลง'} ${pctText(comparison.incomePctChange)} จากเดือนก่อน`
-      })
-      if (comparison.topCategory && Math.abs(Number(comparison.topCategoryDelta || 0)) > 0.01) smartInsights.push({
-        icon: Number(comparison.topCategoryDelta) > 0 ? '🔎' : '🧾',
-        title: 'หมวดที่ใช้จ่ายสูงสุด',
-        body: `${comparison.topCategory.label} ${Number(comparison.topCategoryDelta) > 0 ? 'เพิ่มขึ้น' : 'ลดลง'} ${money(Math.abs(comparison.topCategoryDelta || 0))} จากเดือนก่อน`
-      })
-      smartInsights.push({
-        icon: monthly.netCashflow >= 0 ? '✅' : '⚠️',
-        title: 'กระแสเงินสดเดือนนี้',
-        body: monthly.netCashflow >= 0
-          ? `เดือนนี้กระแสเงินสดเป็นบวก ${money(monthly.netCashflow)}`
-          : `เดือนนี้กระแสเงินสดติดลบ ${money(Math.abs(monthly.netCashflow))} ควรระวังรายจ่ายก้อนใหญ่`
-      })
-    }
-    if (budget.length && suggestedDailyBudget !== null) smartInsights.push({
-      icon: suggestedDailyBudget >= 0 ? '📅' : '🚨',
-      title: 'งบใช้จ่ายต่อวัน',
-      body: suggestedDailyBudget >= 0
-        ? `ถ้าต้องการคุมงบที่เหลือ ควรใช้ได้เฉลี่ยวันละ ${money(suggestedDailyBudget)}`
-        : `งบรวมเดือนนี้เกินแล้ว ${money(Math.abs(budgetRemaining))} ควรลดการใช้จ่ายที่เหลือของเดือน`
-    })
-
     html += `<div class="list-item-sub" style="margin:2px 0 12px">${reportModeHint}</div>`
     html += `<div class="report-summary-grid">
       ${buildSummaryCard('รายรับ', `+${money(monthly.income)}`, 'var(--income)', hasPrevData ? compareText(comparison.incomePctChange, true) : neutralComparison)}
@@ -4931,11 +4834,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       ${buildSummaryCard('กระแสเงินสดสุทธิ', `${monthly.netCashflow < 0 ? '-' : ''}${money(Math.abs(monthly.netCashflow))}`, monthly.netCashflow >= 0 ? 'var(--income)' : 'var(--expense)', previous ? `${comparison.netCashflowDelta === null ? 'ไม่มีข้อมูลเดือนก่อน' : `ต่างจากเดือนก่อน ${comparison.netCashflowDelta >= 0 ? '+' : '-'}${money(Math.abs(comparison.netCashflowDelta || 0))}`}` : 'ไม่มีข้อมูลเดือนก่อน')}
     </div>`
 
-    html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head" style="display:flex;align-items:center;justify-content:space-between"><strong>AI Financial Coach</strong><button class="btn btn-secondary btn-sm" onclick="InsightEngine.invalidate();App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button></div>${
-      smartInsights.length
-        ? smartInsights.map(i => `<div class="insight-row ai-insight"><div class="insight-icon">${esc(i.icon)}</div><div><div class="insight-title">${esc(i.title)}</div><div class="insight-body">${esc(i.body)}</div></div></div>`).join('')
-        : `<div class="list-item-sub">ข้อมูลเดือนนี้ยังไม่พอสำหรับสรุปแนวโน้มเพิ่มเติม</div>`
-    }</div>`
+    html += `<div class="card card-pad ai-advisor-card" style="margin-bottom:12px"><div class="ai-card-head" style="display:flex;align-items:center;justify-content:space-between"><span style="font-weight:600">AI Financial Coach</span><button class="btn btn-secondary btn-sm" onclick="InsightEngine.invalidate();App.renderReports()" style="width:auto">↻ รีเฟรช</button></div></div>`
 
     if (!postedMonthTx.length && !['assets','credit','budget'].includes(S.rptView)) {
       html += txEmpty
@@ -15031,7 +14930,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const actionHtml = ins.action
       ? `<button class="ins-action-primary" data-ins-fn="${esc(ins.action.fn)}" onclick="App.insightAct('${esc(ins.id)}', this.dataset.insFn)">${esc(ins.action.label)}</button>`
       : ''
-    const snoozeHtml = `<button class="ins-snooze-btn" onclick="App.insightSnooze('${esc(ins.id)}',1)">เตือนพรุ่งนี้</button>`
+    const snoozeHtml = `<select class="ins-snooze-select" onchange="if(this.value){App.insightSnooze('${esc(ins.id)}',+this.value);this.value=''}"><option value="">⏰ เตือนอีกครั้ง</option><option value="1">พรุ่งนี้ (1 วัน)</option><option value="3">3 วัน</option><option value="7">1 สัปดาห์</option></select>`
     return `<div class="ins-card severity-${esc(ins.severity)}" id="ins-${esc(ins.id)}">
       <div class="ins-card-top">
         <span class="ins-icon">${icon}</span>
@@ -15063,13 +14962,15 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
     let insights = []
     try { insights = InsightEngine.getTopN(3, 'dashboard', S) } catch(_) { return }
-    if (!insights.length) return
 
     insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
 
     const section = document.createElement('div')
     section.className = 'ins-dashboard-section'
-    section.innerHTML = `<div class="sec-title" style="margin-top:14px">💡 วันนี้ต้องรู้</div>${insights.map(insightCardHtml).join('')}`
+    const insBody = insights.length
+      ? insights.map(insightCardHtml).join('')
+      : `<div class="ins-empty-state">ทุกอย่างดูดี ไม่มีการแจ้งเตือน</div>`
+    section.innerHTML = `<div class="sec-title" style="margin-top:14px">💡 วันนี้ต้องรู้</div>${insBody}`
 
     const statRow = content.querySelector('.mt-stat-row')
     if (statRow) statRow.insertAdjacentElement('afterend', section)
@@ -15094,19 +14995,25 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const advisorCard = content.querySelector('.ai-advisor-card')
     if (!advisorCard) return
 
+    // Clear any stale content from previous renders
+    advisorCard.querySelectorAll('.insight-row.ai-insight').forEach(el => el.remove())
+    advisorCard.querySelector('.ins-reports-list')?.remove()
+    advisorCard.querySelector('.ins-reports-empty')?.remove()
+
     let insights = []
     try { insights = InsightEngine.getTopN(5, 'reports', S) } catch(_) { return }
-    if (!insights.length) return
 
     insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
 
-    // Replace the "วิเคราะห์ใหม่" button with ↻ รีเฟรช (stays inside ai-card-head)
-    const reloadBtn = advisorCard.querySelector('.ai-card-head button')
-    if (reloadBtn) {
-      reloadBtn.outerHTML = `<button class="btn btn-secondary btn-sm" onclick="InsightEngine.invalidate();App.renderReports()" style="width:auto;font-size:11px">↻ รีเฟรช</button>`
+    if (!insights.length) {
+      const empty = document.createElement('div')
+      empty.className = 'list-item-sub ins-reports-empty'
+      empty.style.padding = '8px 0 4px'
+      empty.textContent = 'ไม่มีการแจ้งเตือนสำหรับตอนนี้'
+      advisorCard.appendChild(empty)
+      return
     }
 
-    advisorCard.querySelector('.ins-reports-list')?.remove()
     const listEl = document.createElement('div')
     listEl.className = 'ins-reports-list'
     listEl.innerHTML = insights.map(insightCardHtml).join('')
