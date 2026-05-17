@@ -12067,16 +12067,18 @@ App._pickMerchant = function(name, opts = {}) {
         if (eligibility.matched && (hasMerchantCap || hasChannelCap)) {
           const cycle = getCyclePeriodForDate(cardId, txDraft.date || today(), rule)
           const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', [], txDraft.merchant || '', txDraft.channel || '')
-          if (Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0) {
+          // Only show merchant cap hint when the merchant field itself matched (not just channel)
+          if (eligibility.merchantMatch && Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0) {
             merchantCashbackRemaining = Math.max(0, Number(ruleLimits.maxRewardAmountPerMerchantPerCycle) - Number(usage.cashbackUsedByMerchantBefore || 0))
           }
-          if (Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle || 0) > 0) {
+          if (eligibility.merchantMatch && Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle || 0) > 0) {
             merchantEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle) - Number(usage.eligibleSpendUsedByMerchantBefore || 0))
           }
-          if (txDraft.channel && Number(ruleLimits.maxRewardAmountPerChannelPerCycle || 0) > 0) {
+          // Only show channel cap hint when a channel is selected and the channel field matched
+          if (txDraft.channel && eligibility.channelMatch && Number(ruleLimits.maxRewardAmountPerChannelPerCycle || 0) > 0) {
             channelCashbackRemaining = Math.max(0, Number(ruleLimits.maxRewardAmountPerChannelPerCycle) - Number(usage.cashbackUsedByChannelBefore || 0))
           }
-          if (txDraft.channel && Number(ruleLimits.maxEligibleSpendPerChannelPerCycle || 0) > 0) {
+          if (txDraft.channel && eligibility.channelMatch && Number(ruleLimits.maxEligibleSpendPerChannelPerCycle || 0) > 0) {
             channelEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerChannelPerCycle) - Number(usage.eligibleSpendUsedByChannelBefore || 0))
           }
         }
