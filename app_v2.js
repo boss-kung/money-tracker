@@ -2653,7 +2653,7 @@ App.render();
           placeholder="เช่น Grab, Netflix, เงินเดือน"
           value="${esc(S.tx.merchant)}"
           oninput="App._txField('merchant', this.value); App._showMerchantDropdown?.(this.value)"
-          onfocus="if(this.value.trim())App._showMerchantDropdown?.(this.value)"
+          onfocus="App._showMerchantDropdown?.(this.value)"
           onkeydown="if(event.key==='Enter'){event.preventDefault();App._confirmTypedMerchant?.()}"
           onblur="App._merchantBlurTimer=setTimeout(()=>App._hideMerchantDropdown?.(true),260)"
         >
@@ -5105,10 +5105,15 @@ App._showMerchantDropdown = function(q = '') {
   const dd = ensureMerchantWrap(inp)
   if (!inp || !dd) return
 
-  clearTimeout(App._merchantBlurTimer)
-
   const raw = String(q || '')
   const norm = raw.trim().toLowerCase()
+
+  if (!norm) {
+    dd.classList.add('hidden')
+    return
+  }
+
+  clearTimeout(App._merchantBlurTimer)
 
   const matches = (S.merchants || [])
     .filter(m => !norm || String(m.name || '').toLowerCase().includes(norm))
@@ -7617,11 +7622,12 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   App.openBenefitCapBreakdownSheet = function(ruleId, cardId) {
-    ensureCCBenefitRulesState?.()
+    App.ensureCCBenefitRulesState?.()
     const rule = (S.ccBenefitRules || []).find(r => r.id === ruleId)
     if (!rule) return
 
-    const cycle = getCyclePeriodForDate(cardId, today(), rule)
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const cycle = App.getCyclePeriodForDate(cardId, todayStr, rule)
     const limits = rule.limits || {}
     const cond = rule.suggestedConditions || {}
     const merchants = Array.isArray(cond.merchants) ? cond.merchants.filter(Boolean) : []
@@ -11727,17 +11733,21 @@ App._pickMerchant = function(name, opts = {}) {
     const categoryMatch = !categories.length || categories.includes(categoryId)
     const merchantMatch = !merchants.length || merchants.some(v => merchantTextsMatch(v, merchant))
     const channelMatch = !channels.length || channels.some(value => channelMatches(value, channel))
+    // When both merchants AND channels are specified, either one matching is enough (OR logic)
+    // When only one is specified, the other defaults to "match all" (standard AND behavior)
+    const merchantChannelMatch = (merchants.length > 0 && channels.length > 0)
+      ? (merchantMatch || channelMatch)
+      : (merchantMatch && channelMatch)
     const minSpend = Number(cond.minSpend || 0)
     const minSpendMatch = !minSpend || amount >= minSpend
     const timeMatch = ruleIsInActiveWindow(rule, date)
     const reasons = []
     if (!timeMatch) reasons.push('อยู่นอกช่วงวันที่ของกฎนี้')
     if (!categoryMatch) reasons.push('หมวดหมู่ไม่ตรงเงื่อนไข')
-    if (!merchantMatch) reasons.push('ร้านค้าไม่เข้าร่วมเงื่อนไข')
-    if (!channelMatch) reasons.push('ช่องทางไม่ตรงเงื่อนไข')
+    if (!merchantChannelMatch) reasons.push('ร้านค้าหรือช่องทางไม่ตรงเงื่อนไข')
     if (!minSpendMatch) reasons.push(`ไม่ถึงยอดขั้นต่ำ ${money(minSpend)}`)
     return {
-      matched: timeMatch && categoryMatch && merchantMatch && channelMatch && minSpendMatch,
+      matched: timeMatch && categoryMatch && merchantChannelMatch && minSpendMatch,
       reasons,
       categoryMatch,
       merchantMatch,
@@ -11900,6 +11910,9 @@ App._pickMerchant = function(name, opts = {}) {
     if (typeof S.migrations.ccBenefitRulesV1 !== 'boolean') S.migrations.ccBenefitRulesV1 = true
   }
   App.ensureCCBenefitRulesState = ensureCCBenefitRulesState
+  App.getCyclePeriodForDate = function(cardId, refDate, rule) {
+    return getCyclePeriodForDate(cardId, refDate || today(), rule || null)
+  }
 
   function getCyclePeriodForDate(cardId, refDate = today(), rule = null) {
     const cycleHint = String(rule?.validity?.statementCycleHint || 'statement_cycle').trim()
@@ -12061,10 +12074,10 @@ App._pickMerchant = function(name, opts = {}) {
           if (Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle || 0) > 0) {
             merchantEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle) - Number(usage.eligibleSpendUsedByMerchantBefore || 0))
           }
-          if (Number(ruleLimits.maxRewardAmountPerChannelPerCycle || 0) > 0) {
+          if (txDraft.channel && Number(ruleLimits.maxRewardAmountPerChannelPerCycle || 0) > 0) {
             channelCashbackRemaining = Math.max(0, Number(ruleLimits.maxRewardAmountPerChannelPerCycle) - Number(usage.cashbackUsedByChannelBefore || 0))
           }
-          if (Number(ruleLimits.maxEligibleSpendPerChannelPerCycle || 0) > 0) {
+          if (txDraft.channel && Number(ruleLimits.maxEligibleSpendPerChannelPerCycle || 0) > 0) {
             channelEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerChannelPerCycle) - Number(usage.eligibleSpendUsedByChannelBefore || 0))
           }
         }
