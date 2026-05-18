@@ -877,7 +877,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.18-r7'
+const APP_VERSION = '2026.05.18-r8'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -5706,7 +5706,7 @@ App._pickMerchant = function(name, opts = {}) {
             <button class="toggle${rule.active ? ' on' : ''}" onclick="event.stopPropagation();App.toggleCCBenefitRule('${esc(rule.id)}')"></button>
           </div>
           <div class="list-item-sub" style="margin-top:8px">
-            ${rule.suggestedConditions?.categories?.length ? `หมวด: ${esc(rule.suggestedConditions.categories.join(', '))} · ` : ''}${rule.suggestedConditions?.merchants?.length ? `ร้าน: ${esc(rule.suggestedConditions.merchants.join(', '))} · ` : ''}${rule.suggestedConditions?.channels?.length ? `ช่องทาง: ${esc(rule.suggestedConditions.channels.join(', '))} · ` : ''}${rule.suggestedConditions?.minSpend ? `ขั้นต่ำ ${money(rule.suggestedConditions.minSpend)}` : ''}${rule.validity?.mode === 'range' && (rule.validity?.startDate || rule.validity?.endDate) ? `${rule.suggestedConditions?.minSpend ? ' · ' : ''}ช่วงใช้: ${esc(rule.validity.startDate || 'ไม่ระบุ')} ถึง ${esc(rule.validity.endDate || 'ไม่ระบุ')}` : ''}
+            ${rule.suggestedConditions?.categories?.length ? `หมวด: ${esc(rule.suggestedConditions.categories.join(', '))} · ` : ''}${rule.suggestedConditions?.merchants?.length ? `ร้าน: ${esc(rule.suggestedConditions.merchants.join(', '))} · ` : ''}${rule.suggestedConditions?.excludedMerchants?.length ? `ยกเว้น: ${esc(rule.suggestedConditions.excludedMerchants.join(', '))} · ` : ''}${rule.suggestedConditions?.channels?.length ? `ช่องทาง: ${esc(rule.suggestedConditions.channels.join(', '))} · ` : ''}${rule.suggestedConditions?.minSpend ? `ขั้นต่ำ ${money(rule.suggestedConditions.minSpend)}` : ''}${rule.validity?.mode === 'range' && (rule.validity?.startDate || rule.validity?.endDate) ? `${rule.suggestedConditions?.minSpend ? ' · ' : ''}ช่วงใช้: ${esc(rule.validity.startDate || 'ไม่ระบุ')} ถึง ${esc(rule.validity.endDate || 'ไม่ระบุ')}` : ''}
           </div>
           <div class="list-item-sub" style="margin-top:4px">
             ${rule.cashback?.rate ? `เงินคืน ${rule.cashback.rate}% ` : ''}${rule.cashback?.fixedAmount ? `เงินคืนคงที่ ${money(rule.cashback.fixedAmount)} ` : ''}${rule.discount?.rate ? `ส่วนลด ${rule.discount.rate}% ` : ''}${rule.discount?.fixedAmount ? `ส่วนลดคงที่ ${money(rule.discount.fixedAmount)} ` : ''}${rule.points?.bahtPerPoint ? `· ${rule.points.bahtPerPoint} บาท = 1 คะแนน x${rule.points.multiplier || 1}` : ''}
@@ -5825,10 +5825,11 @@ App._pickMerchant = function(name, opts = {}) {
         statementCycleHint: document.getElementById('ccbr-cycle-cal')?.classList.contains('active') ? 'calendar_month' : 'statement_cycle',
       }
       d.suggestedConditions = {
-        channels:   [...(d._channels   || [])],
-        categories: [...(d._categories || [])],
-        merchants:  App.splitRuleListInput?.(readStr('ccbr-merchants')) || [],
-        minSpend:   readNum('ccbr-minSpend'),
+        channels:          [...(d._channels   || [])],
+        categories:        [...(d._categories || [])],
+        merchants:         App.splitRuleListInput?.(readStr('ccbr-merchants')) || [],
+        excludedMerchants: App.splitRuleListInput?.(readStr('ccbr-excluded-merchants')) || [],
+        minSpend:          readNum('ccbr-minSpend'),
       }
     }
   }
@@ -5867,7 +5868,7 @@ App._pickMerchant = function(name, opts = {}) {
     const cats = S.categories?.expense || []
     const selectedCats = d._categories || []
     const catChips = cats.length ? cats.map(c => `<button type="button" class="chip mini${selectedCats.includes(c.id)?' active':''}" onclick="App._ccbrToggleChip('_categories','${esc(c.id)}',this)">${esc(c.label)}</button>`).join('') : '<span style="color:var(--muted);font-size:13px">ยังไม่มีหมวดหมู่</span>'
-    return `<div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ช่วงเวลา <span class="ccbr-section-hint">ว่าง = ไม่จำกัด</span></div><div class="ccbr-date-row"><div><label class="form-label" style="font-size:12px;margin-bottom:4px">วันเริ่ม</label><input class="form-input" type="date" id="ccbr-validity-start" value="${esc(validity.startDate||'')}"></div><div><label class="form-label" style="font-size:12px;margin-bottom:4px">วันสิ้นสุด</label><input class="form-input" type="date" id="ccbr-validity-end" value="${esc(validity.endDate||'')}"></div></div><div style="margin-top:10px"><label class="form-label" style="font-size:12px;margin-bottom:6px">นับรอบแบบ</label><div style="display:flex;gap:8px"><button type="button" class="chip mini${!isCal?' active':''}" id="ccbr-cycle-stmt" onclick="this.classList.add('active');document.getElementById('ccbr-cycle-cal').classList.remove('active')">รอบบิลบัตร</button><button type="button" class="chip mini${isCal?' active':''}" id="ccbr-cycle-cal" onclick="this.classList.add('active');document.getElementById('ccbr-cycle-stmt').classList.remove('active')">เดือนปฏิทิน</button></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ช่องทาง <span class="ccbr-section-hint">ไม่เลือก = ทุกช่องทาง</span></div><div class="ccbr-chip-scroll">${chChips}</div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">หมวดหมู่ <span class="ccbr-section-hint">ไม่เลือก = ทุกหมวด</span></div><div class="ccbr-chip-wrap">${catChips}</div></div><div class="card card-pad" style="margin-bottom:12px"><div class="form-group" style="margin-bottom:10px"><div class="ccbr-section-label">ร้านค้า <span class="ccbr-section-hint">คั่นด้วย comma, ว่าง = ทุกร้าน</span></div><input class="form-input" id="ccbr-merchants" value="${esc((d.suggestedConditions?.merchants||[]).join(', '))}" placeholder="เช่น Shopee, Grab, Netflix"></div><div class="form-group" style="margin-bottom:0"><div class="ccbr-section-label">ยอดขั้นต่ำต่อรายการ <span class="ccbr-section-hint">ว่าง = ไม่กำหนด</span></div><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-minSpend" value="${esc(v(d.suggestedConditions?.minSpend))}" placeholder="บาท"><span class="ccbr-input-unit">บาท</span></div></div></div>`
+    return `<div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ช่วงเวลา <span class="ccbr-section-hint">ว่าง = ไม่จำกัด</span></div><div class="ccbr-date-row"><div><label class="form-label" style="font-size:12px;margin-bottom:4px">วันเริ่ม</label><input class="form-input" type="date" id="ccbr-validity-start" value="${esc(validity.startDate||'')}"></div><div><label class="form-label" style="font-size:12px;margin-bottom:4px">วันสิ้นสุด</label><input class="form-input" type="date" id="ccbr-validity-end" value="${esc(validity.endDate||'')}"></div></div><div style="margin-top:10px"><label class="form-label" style="font-size:12px;margin-bottom:6px">นับรอบแบบ</label><div style="display:flex;gap:8px"><button type="button" class="chip mini${!isCal?' active':''}" id="ccbr-cycle-stmt" onclick="this.classList.add('active');document.getElementById('ccbr-cycle-cal').classList.remove('active')">รอบบิลบัตร</button><button type="button" class="chip mini${isCal?' active':''}" id="ccbr-cycle-cal" onclick="this.classList.add('active');document.getElementById('ccbr-cycle-stmt').classList.remove('active')">เดือนปฏิทิน</button></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ช่องทาง <span class="ccbr-section-hint">ไม่เลือก = ทุกช่องทาง</span></div><div class="ccbr-chip-scroll">${chChips}</div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">หมวดหมู่ <span class="ccbr-section-hint">ไม่เลือก = ทุกหมวด</span></div><div class="ccbr-chip-wrap">${catChips}</div></div><div class="card card-pad" style="margin-bottom:12px"><div class="form-group" style="margin-bottom:10px"><div class="ccbr-section-label">ร้านค้า <span class="ccbr-section-hint">คั่นด้วย comma, ว่าง = ทุกร้าน</span></div><input class="form-input" id="ccbr-merchants" value="${esc((d.suggestedConditions?.merchants||[]).join(', '))}" placeholder="เช่น Shopee, Grab, Netflix"></div><div class="form-group" style="margin-bottom:10px"><div class="ccbr-section-label">ร้านค้าที่ไม่ร่วม <span class="ccbr-section-hint">ยกเว้น · คั่นด้วย comma</span></div><input class="form-input" id="ccbr-excluded-merchants" value="${esc((d.suggestedConditions?.excludedMerchants||[]).join(', '))}" placeholder="เช่น Tops, Big C"></div><div class="form-group" style="margin-bottom:0"><div class="ccbr-section-label">ยอดขั้นต่ำต่อรายการ <span class="ccbr-section-hint">ว่าง = ไม่กำหนด</span></div><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-minSpend" value="${esc(v(d.suggestedConditions?.minSpend))}" placeholder="บาท"><span class="ccbr-input-unit">บาท</span></div></div></div>`
   }
   App._ccbrStep3Html = function(d) {
     const v = n => n ?? ''
@@ -5931,10 +5932,11 @@ App._pickMerchant = function(name, opts = {}) {
       active: d.active !== false,
       type: d.type || 'cashback',
       suggestedConditions: {
-        channels: [...(d._channels || [])],
-        categories: [...(d._categories || [])],
-        merchants: [...(d.suggestedConditions?.merchants || [])],
-        minSpend: d.suggestedConditions?.minSpend ?? null,
+        channels:          [...(d._channels || [])],
+        categories:        [...(d._categories || [])],
+        merchants:         [...(d.suggestedConditions?.merchants || [])],
+        excludedMerchants: [...(d.suggestedConditions?.excludedMerchants || [])],
+        minSpend:          d.suggestedConditions?.minSpend ?? null,
       },
       validity: { ...(d.validity || {}) },
       cashback: { ...(d.cashback || {}) },
@@ -11866,6 +11868,7 @@ App._pickMerchant = function(name, opts = {}) {
     const cond = rule.suggestedConditions || {}
     const categories = Array.isArray(cond.categories) ? cond.categories : []
     const merchants = Array.isArray(cond.merchants) ? cond.merchants : []
+    const excludedMerchants = Array.isArray(cond.excludedMerchants) ? cond.excludedMerchants : []
     const channels = Array.isArray(cond.channels) ? cond.channels : []
     const amount = Number(txDraft.amount || 0)
     const categoryId = String(txDraft.categoryId || '').trim()
@@ -11874,6 +11877,8 @@ App._pickMerchant = function(name, opts = {}) {
     const date = String(txDraft.date || today())
     const categoryMatch = !categories.length || categories.includes(categoryId)
     const merchantMatch = !merchants.length || merchants.some(v => merchantTextsMatch(v, merchant))
+    const excludedMatch = excludedMerchants.length > 0 && !!merchant
+      && excludedMerchants.some(v => merchantTextsMatch(v, merchant))
     // When called from the card-picker suggestion context with no channel selected yet,
     // treat channel conditions as satisfied (channel = "not yet chosen") so channel-specific
     // rules still appear in estimates. Actual saving always has a concrete channel value.
@@ -11882,22 +11887,26 @@ App._pickMerchant = function(name, opts = {}) {
       || channels.some(value => channelMatches(value, channel))
     // When both merchants AND channels are specified, either one matching is enough (OR logic)
     // When only one is specified, the other defaults to "match all" (standard AND behavior)
-    const merchantChannelMatch = (merchants.length > 0 && channels.length > 0)
-      ? (merchantMatch || channelMatch)
-      : (merchantMatch && channelMatch)
+    const merchantChannelMatch = !excludedMatch && (
+      (merchants.length > 0 && channels.length > 0)
+        ? (merchantMatch || channelMatch)
+        : (merchantMatch && channelMatch)
+    )
     const minSpend = Number(cond.minSpend || 0)
     const minSpendMatch = !minSpend || amount >= minSpend
     const timeMatch = ruleIsInActiveWindow(rule, date)
     const reasons = []
     if (!timeMatch) reasons.push('อยู่นอกช่วงวันที่ของกฎนี้')
     if (!categoryMatch) reasons.push('หมวดหมู่ไม่ตรงเงื่อนไข')
-    if (!merchantChannelMatch) reasons.push('ร้านค้าหรือช่องทางไม่ตรงเงื่อนไข')
+    if (excludedMatch) reasons.push('ร้านค้านี้ถูกยกเว้นจากกฎ')
+    else if (!merchantChannelMatch) reasons.push('ร้านค้าหรือช่องทางไม่ตรงเงื่อนไข')
     if (!minSpendMatch) reasons.push(`ไม่ถึงยอดขั้นต่ำ ${money(minSpend)}`)
     return {
       matched: timeMatch && categoryMatch && merchantChannelMatch && minSpendMatch,
       reasons,
       categoryMatch,
       merchantMatch,
+      excludedMatch,
       channelMatch,
       minSpendMatch,
       timeMatch,
@@ -11931,10 +11940,11 @@ App._pickMerchant = function(name, opts = {}) {
       type: ['cashback', 'points', 'both', 'discount'].includes(rule.type) ? rule.type : 'cashback',
       description: String(rule.description || '').trim(),
       suggestedConditions: {
-        categories: Array.isArray(suggestedConditions.categories) ? suggestedConditions.categories.filter(Boolean) : [],
-        merchants: Array.isArray(suggestedConditions.merchants) ? suggestedConditions.merchants.filter(Boolean) : [],
-        channels: Array.isArray(suggestedConditions.channels) ? suggestedConditions.channels.filter(Boolean) : [],
-        minSpend: parseRuleNumber(suggestedConditions.minSpend, null),
+        categories:        Array.isArray(suggestedConditions.categories) ? suggestedConditions.categories.filter(Boolean) : [],
+        merchants:         Array.isArray(suggestedConditions.merchants) ? suggestedConditions.merchants.filter(Boolean) : [],
+        excludedMerchants: Array.isArray(suggestedConditions.excludedMerchants) ? suggestedConditions.excludedMerchants.filter(Boolean) : [],
+        channels:          Array.isArray(suggestedConditions.channels) ? suggestedConditions.channels.filter(Boolean) : [],
+        minSpend:          parseRuleNumber(suggestedConditions.minSpend, null),
       },
       validity: {
         mode: validity.mode === 'range' ? 'range' : 'always',
@@ -14937,7 +14947,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     </div>`
 
     const walletGroup = box.querySelector('#tx-wallet')?.closest('.form-group')
-    walletGroup?.insertAdjacentHTML('afterend', widget)
+    walletGroup?.insertAdjacentHTML('beforebegin', widget)
+    const _cardPicker = box.querySelector('.card-picker-widget')
+    const _merchantGroup = box.querySelector('#tx-merchant')?.closest('.form-group')
+    if (_cardPicker && _merchantGroup) _cardPicker.before(_merchantGroup)
   }
 
   // ── Apply ─────────────────────────────────────────────────
