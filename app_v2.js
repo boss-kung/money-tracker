@@ -1428,6 +1428,31 @@ function setupServiceWorkerUpdates() {
     document.body.appendChild(el)
   }
 
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data?.type !== 'NOTIFICATION_NAVIGATE') return
+    const route = event.data.route || 'dashboard'
+    const pageMap = {
+      dashboard: 'dashboard',
+      addTx: 'dashboard',
+      transactions: 'transactions',
+      wallets: 'wallets',
+      creditCards: 'wallets',
+      reports: 'reports',
+      more: 'more',
+      upcomingBills: 'more',
+      goals: 'more',
+      open: 'dashboard',
+    }
+    const page = pageMap[route] || 'dashboard'
+    App.showPage(page)
+    // open sub-screens after the page renders
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (route === 'upcomingBills') App.openUpcomingBillsScreen?.()
+      else if (route === 'goals') App.openGoalsScreen?.()
+      else if (route === 'addTx') App.openAddTx?.()
+    }))
+  })
+
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (controllerReloading) return
     const shouldReload = (() => {
@@ -1588,6 +1613,18 @@ function init() {
 
   // Initial render
   App.showPage(S.page)
+
+  // If opened via notification with an open= param (e.g. #more?open=upcomingBills),
+  // trigger the sub-screen after the initial render completes.
+  const _initRoute = parseAppHashRoute()
+  const _initOpen = _initRoute.params.get('open')
+  if (_initOpen) {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (_initOpen === 'upcomingBills') App.openUpcomingBillsScreen?.()
+      else if (_initOpen === 'goals') App.openGoalsScreen?.()
+      else if (_initOpen === 'addTx') App.openAddTx?.()
+    }))
+  }
 
   setupServiceWorkerUpdates()
   setupConnectivityWatch()
@@ -5061,7 +5098,7 @@ function ensureMerchantWrap(inp) {
     inp.parentNode.appendChild(dd)
 
     const handlePick = ev => {
-      const item = ev.target.closest('[data-merchant-index], [data-create-merchant]')
+      const item = ev.target.closest('[data-merchant-index], [data-create-merchant], [data-rule-merchant]')
       if (!item) return
 
       ev.preventDefault()
@@ -5069,7 +5106,7 @@ function ensureMerchantWrap(inp) {
 
       clearTimeout(App._merchantBlurTimer)
 
-      if (item.dataset.createMerchant === '1') {
+      if (item.dataset.createMerchant === '1' || item.dataset.ruleMerchant === '1') {
         App._pickMerchant(String(item.dataset.merchantName || ''), { create: true })
         return
       }
@@ -5124,22 +5161,49 @@ App._showMerchantDropdown = function(q = '') {
   const exact = (S.merchants || [])
     .some(m => String(m.name || '').trim().toLowerCase() === norm)
 
+  // Rule merchant suggestions: collect from active benefit rules, match by compact text
+  const compactText = s => String(s || '').toLowerCase().replace(/\s+/g, '')
+  const normCompact = compactText(norm)
+  const existingNames = new Set((S.merchants || []).map(m => String(m.name || '').trim().toLowerCase()))
+  const ruleNames = []
+  ;(S.ccBenefitRules || []).forEach(rule => {
+    if (rule.active === false) return
+    const cond = rule.suggestedConditions || {}
+    ;[...(cond.merchants || []), ...(cond.excludedMerchants || [])].forEach(n => {
+      const name = String(n || '').trim()
+      if (!name) return
+      if (existingNames.has(name.toLowerCase())) return
+      if (ruleNames.some(r => r.toLowerCase() === name.toLowerCase())) return
+      if (compactText(name).includes(normCompact)) ruleNames.push(name)
+    })
+  })
+  const ruleMatches = ruleNames.slice(0, Math.max(0, 8 - matches.length))
+
+  const exactInRule = ruleMatches.some(n => n.toLowerCase() === norm)
+
   const matchRows = matches.map((m, index) => `
-    <div class="mt-merchant-item" data-merchant-index="${index}">
-      <span class="mmi-emoji">${esc(m.emoji || '🏪')}</span>
-      <span class="mmi-name">${esc(m.name)}</span>
+    <div class=”mt-merchant-item” data-merchant-index=”${index}”>
+      <span class=”mmi-emoji”>${esc(m.emoji || '🏪')}</span>
+      <span class=”mmi-name”>${esc(m.name)}</span>
     </div>
   `).join('')
 
-  const createRow = norm && !exact ? `
-    <div class="mt-merchant-item create" data-create-merchant="1" data-merchant-name="${esc(raw.trim())}">
-      <span class="mmi-emoji">＋</span>
-      <span class="mmi-name">สร้างร้านใหม่ “${esc(raw.trim())}”</span>
+  const ruleRows = ruleMatches.map(name => `
+    <div class=”mt-merchant-item” data-rule-merchant=”1” data-merchant-name=”${esc(name)}”>
+      <span class=”mmi-emoji”>💳</span>
+      <span class=”mmi-name”>${esc(name)}</span>
+    </div>
+  `).join('')
+
+  const createRow = norm && !exact && !exactInRule ? `
+    <div class=”mt-merchant-item create” data-create-merchant=”1” data-merchant-name=”${esc(raw.trim())}”>
+      <span class=”mmi-emoji”>＋</span>
+      <span class=”mmi-name”>สร้างร้านใหม่ “${esc(raw.trim())}”</span>
     </div>
   ` : ''
 
-  dd.innerHTML = matchRows + createRow
-  dd.classList.toggle('hidden', !matches.length && !createRow)
+  dd.innerHTML = matchRows + ruleRows + createRow
+  dd.classList.toggle('hidden', !matches.length && !ruleMatches.length && !createRow)
 }
 
 App._confirmTypedMerchant = function() {
