@@ -29,6 +29,9 @@ const KEYS = {
   splitBillDraft:      'mt_split_bill_draft',
   migrations:          'mt_migrations',
   aiInsightStore:      'mt_ai_insight_store',
+  financialMemory:     'mt_financial_memory',
+  monthlyFinancialFeatures: 'mt_monthly_financial_features',
+  financialRecommendationFeedback: 'mt_financial_recommendation_feedback',
 }
 
 const BACKUP_SCHEMA_VERSION = 3
@@ -65,6 +68,9 @@ const BACKUP_SCHEMA_KEYS = [
   'migrations',
   'settings',
   'aiInsightStore',
+  'financialMemory',
+  'monthlyFinancialFeatures',
+  'financialRecommendationFeedback',
 ]
 
 const BACKUP_DEFAULTS = {
@@ -98,6 +104,9 @@ const BACKUP_DEFAULTS = {
   migrations: { cryptoCentralizedV1: false },
   settings: {},
   aiInsightStore: { version: 1, lastRefreshed: null, payloadHash: '', insights: [], hiddenTypes: [], feedback: [] },
+  financialMemory: [],
+  monthlyFinancialFeatures: [],
+  financialRecommendationFeedback: [],
 }
 
 const Storage = {

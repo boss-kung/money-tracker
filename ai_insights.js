@@ -703,6 +703,7 @@ const InsightEngine = (() => {
     const ins = (store.insights||[]).find(i => i.id === id)
     if (ins) ins.userRating = rating
     saveStore(store)
+    try { FinanceIntelligence?.recommendationFeedback?.(id, rating, { source:'insight', type:ins?.type || '' }) } catch(_) {}
   }
 
   function invalidate() {

@@ -15701,39 +15701,16 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   function askParseRange(q) {
-    const month = now()
-    if (/เดือนก่อน|เดือนที่แล้ว|previous month/.test(q) && !/เทียบเดือนก่อน/.test(q)) return { kind:'month', month:prevM(month), label:`เดือน${mlbl(prevM(month))}` }
-    if (/3 เดือน|สามเดือน/.test(q)) return { kind:'window', months:Calc.getMonths?.(3) || [month], label:'3 เดือนล่าสุด' }
-    if (/6 เดือน|หกเดือน/.test(q)) return { kind:'window', months:Calc.getMonths?.(6) || [month], label:'6 เดือนล่าสุด' }
-    if (/สิ้นเดือน|ปลายเดือน/.test(q)) return { kind:'forecast', month, label:`สิ้นเดือน${mlbl(month)}` }
-    return { kind:'month', month, label:`เดือน${mlbl(month)}` }
+    return AskMyMoneyCore.parseRange(q, {
+      now,
+      prevMonth: prevM,
+      monthLabel: mlbl,
+      getMonths: n => Calc.getMonths?.(n) || [now()],
+    })
   }
 
   function askParseIntent(q, category, merchant) {
-    if (/ควรกังวล|ต้องระวัง|เสี่ยงอะไร|อะไรสำคัญที่สุด|recommend|แนะนำ/.test(q)) return 'priorities'
-    if (/อยากออมเพิ่ม|ออมเพิ่ม.*เดือนละ|ต้องลดตรงไหน/.test(q)) return 'savings_scenario'
-    if (/พอถึงสิ้นเดือน|เงินพอไหม|สิ้นเดือน.*พอ|อยู่รอดถึงสิ้นเดือน/.test(q)) return 'cashflow_forecast'
-    if (/อีก\s*\d+\s*วัน|14 วัน|7 วัน|ต้องจ่ายอะไร|ภาระข้างหน้า|บิล.*ข้างหน้า/.test(q)) return 'upcoming'
-    if (/เงินสำรอง|ฉุกเฉิน/.test(q)) return 'emergency_fund'
-    if (/รายจ่ายประจำ|fixed cost|subscription|ค่าใช้จ่ายคงที่/.test(q)) return 'fixed_cost'
-    if (/เป้าหมาย.*ตามทัน|ตามไม่ทัน|ต้องออมเพิ่ม|เป้าหมายไหน/.test(q)) return 'goal_feasibility'
-    if (/ทรัพย์สินสุทธิ|มูลค่าสุทธิ|net worth/.test(q)) return 'net_worth'
-    if (/ผิดปกติ|เงินหายเร็ว|ทำไม.*หาย|โตเร็วสุด/.test(q)) return 'anomaly'
-    if (/เปรียบเทียบ|เทียบ|มากกว่าเดือนก่อน|น้อยกว่าเดือนก่อน/.test(q) || (ASK_CTX.lastIntent && /แล้ว.*ล่ะ|เทียบเดือนก่อน/.test(q))) return 'comparison'
-    if (/หมวดไหน.*เสี่ยง|เสี่ยงเกินงบ|ใกล้เกินงบ/.test(q)) return 'budget_risk'
-    if (/งบ.*วันละ|ใช้ได้วันละ|อยู่ในงบ/.test(q)) return 'budget_forecast'
-    if (/ล่าสุด|recent/.test(q)) return 'recent'
-    if (/ร้านค้า|ร้านไหน|ใช้เงินมาก/.test(q) || merchant) return 'merchant'
-    if (/หมวดไหน|หมวดหมู่/.test(q) || category) return 'category'
-    if (/บัตรเครดิต|ค้างชำระ|วงเงิน/.test(q)) return 'credit'
-    if (/เป้าหมาย|goal/.test(q)) return 'goals'
-    if (/ออมได้|อัตราออม|เงินออม/.test(q)) return 'savings'
-    if (/งบ|เกินงบ|งบเหลือ/.test(q)) return 'budget'
-    if (/เงินเหลือ|เงินสด|เงินพร้อมใช้|คงเหลือ|มีเงิน/.test(q)) return 'cash'
-    if (/รายรับ|ได้เงิน|รับเงิน|เงินเดือน/.test(q)) return 'income'
-    if (/ใช้ไป|รายจ่าย|ใช้จ่าย|ค่าใช้จ่าย|จ่ายไป/.test(q)) return 'expense'
-    if (/สุขภาพ|ภาพรวม|สรุป|overview/.test(q)) return 'overview'
-    return 'fallback'
+    return AskMyMoneyCore.parseIntent(q, { category, merchant, lastIntent:ASK_CTX.lastIntent })
   }
 
   function buildAskContext(query) {
@@ -15748,6 +15725,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const merchant = (S.merchants || []).find(m => q.includes(String(m.name || '').toLowerCase()))?.name
       || (ASK_CTX.lastMerchant && /แล้ว.*ล่ะ|เทียบเดือนก่อน/.test(q) ? ASK_CTX.lastMerchant : null)
     const range = askParseRange(q)
+    const intelligence = typeof FinanceIntelligence !== 'undefined'
+      ? FinanceIntelligence.buildContext(S)
+      : null
     const payload = typeof InsightEngine !== 'undefined' && InsightEngine.buildPayload
       ? InsightEngine.buildPayload(S)
       : null
@@ -15764,7 +15744,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       return { month:m, income:s.income, expense:s.expense, net:s.netCashflow, rate:s.savingsRate }
     }) || [])
     const recentHistory = history.filter(h => h.month !== now() && (h.income > 0 || h.expense > 0))
-    const current = monthly || Calc.getMonthlyIncomeExpense(txs, now())
+    const current = monthly || intelligence?.monthly || Calc.getMonthlyIncomeExpense(txs, now())
     const budget = payload?.budget || Calc.getBudgetProgress(txs, S.budgets || [], cats, now()) || []
     const topInsights = (() => { try { return InsightEngine.getTopN?.(3, 'reports', S) || [] } catch(_) { return [] } })()
     const netSnapshots = [...(S.netWorthSnapshots || [])].sort((a,b)=>String(a.date).localeCompare(String(b.date)))
@@ -15775,7 +15755,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return {
       q, txs, wals, cats, gls, category, merchant, range, payload,
       monthly, previous, current, expCats, history, recentHistory, budget, topInsights,
-      avgExpense, liquid, netSnapshots, firstNet, lastNet,
+      avgExpense, liquid, netSnapshots, firstNet, lastNet, intelligence,
     }
   }
 
@@ -15802,11 +15782,78 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (ctx.merchant) ASK_CTX.lastMerchant = ctx.merchant
 
     if (intent === 'priorities') {
-      const rows = askRecommendationLines(ctx)
+      const recs = ctx.intelligence ? FinanceIntelligence.adaptiveRecommendations(ctx.intelligence) : []
+      const rows = recs.length
+        ? recs.slice(0,3).map((r,i)=>`${i+1}. ${esc(r.title)} — ${esc(r.body)}<br><button class="chip" onclick="App.recordRecommendationFeedback('${esc(r.id)}','helpful')">มีประโยชน์</button> <button class="chip" onclick="App.recordRecommendationFeedback('${esc(r.id)}','not_helpful')">ไม่เกี่ยวข้อง</button> <button class="chip" onclick="App.recordRecommendationFeedback('${esc(r.id)}','acted')">ทำแล้ว</button>`)
+        : askRecommendationLines(ctx)
       return ans('🧭', 'สิ่งที่ควรโฟกัสตอนนี้',
         rows.length
           ? rows.join('<br>') + askEvidence(ctx, 'ข้อมูลล่าสุด')
           : 'ตอนนี้ยังไม่พบความเสี่ยงเด่นชัดจากข้อมูลที่มี')
+    }
+
+    if (intent === 'memory') {
+      const rows = FinanceIntelligence.memoryForMonth(now()).slice(0,5)
+      return ans('📝', 'บริบทเดือนนี้',
+        rows.length
+          ? rows.map(m => `• ${esc(m.title)}${m.note ? ` — ${esc(m.note)}` : ''}`).join('<br>')
+          : 'ยังไม่มีบันทึกเหตุการณ์สำหรับเดือนนี้')
+    }
+
+    if (intent === 'shared_finance') {
+      const sh = FinanceIntelligence.sharedFinance(S)
+      return ans('🍽️', 'การเงินร่วม',
+        `มีบิลหารกัน ${sh.billCount} บิล<br>`
+        + `ค้างรับ ${fmt(sh.receivable)} · ค้างจ่าย ${fmt(sh.payable)}<br>`
+        + `สุทธิ ${sh.netSettlement>=0?'+':'-'}${fmt(sh.netSettlement)}`
+        + (sh.balances[0] ? `<br>ยอดเด่นสุด: ${esc(sh.balances[0].name)} ${sh.balances[0].net>=0?'+':'-'}${fmt(sh.balances[0].net)}` : ''))
+    }
+
+    if (intent === 'scenario') {
+      const sim = ctx.intelligence ? FinanceIntelligence.runScenario(ctx.intelligence, { incomeDelta:-0.2 * Number(ctx.intelligence.projectedIncome || 0) }) : null
+      return ans('🧪', 'สถานการณ์จำลอง',
+        sim
+          ? `ตัวอย่าง: ถ้ารายได้ลด 20%<br>รายรับคาดการณ์ ${fmt(sim.projectedIncome)} · รายจ่ายคาดการณ์ ${fmt(sim.projectedExpense)}<br>เงินสิ้นเดือน ${sim.monthEndCash>=0?fmt(sim.monthEndCash):'-'+fmt(sim.monthEndCash)} · ความเสี่ยง ${esc(sim.risk)}`
+          : 'ยังไม่สามารถจำลองสถานการณ์ได้')
+    }
+
+    if (intent === 'actions') {
+      const actions = ctx.intelligence ? FinanceIntelligence.actionProposals(ctx.intelligence) : []
+      return ans('⚙️', 'สิ่งที่ระบบช่วยทำได้',
+        actions.length
+          ? actions.map((a,i)=>`${i+1}. ${esc(a.title)} — ${esc(a.preview)}<br><button class="chip" onclick="App.openFinanceActionPreview('${esc(a.id)}')">ดูตัวอย่าง</button>`).join('<br>')
+          : 'ตอนนี้ยังไม่มี action ที่เหมาะจะเสนอ')
+    }
+
+    if (intent === 'health_score') {
+      const h = ctx.intelligence ? FinanceIntelligence.healthScore(ctx.intelligence) : null
+      if (!h) return ans('🩺', 'สุขภาพการเงิน', 'ยังไม่สามารถประเมินสุขภาพการเงินได้')
+      return ans('🩺', 'สุขภาพการเงิน',
+        `คะแนนรวม <strong>${h.total.toFixed(0)}/100 · เกรด ${esc(h.grade)}</strong><br>`
+        + `สภาพคล่อง ${h.components.liquidity.toFixed(0)} · การออม ${h.components.savings.toFixed(0)} · หนี้ ${h.components.debt.toFixed(0)}<br>`
+        + `วินัยงบ ${h.components.discipline.toFixed(0)} · เป้าหมาย ${h.components.goals.toFixed(0)} · ความยืดหยุ่น ${h.components.resilience.toFixed(0)}`)
+    }
+
+    if (intent === 'behavior') {
+      const b = ctx.intelligence ? FinanceIntelligence.behaviorProfile(ctx.intelligence) : null
+      if (!b) return ans('🧠', 'พฤติกรรมการเงิน', 'ยังไม่มีข้อมูลพอสำหรับวิเคราะห์พฤติกรรม')
+      return ans('🧠', 'พฤติกรรมการเงิน',
+        `${b.topCategory ? `หมวดที่ใช้มากสุดคือ ${esc(b.topCategory.label)} ${fmt(b.topCategory.amount)}<br>` : ''}`
+        + `${b.weekendBias ? `วันหยุดใช้เฉลี่ย ${b.weekendBias > 1 ? 'มากกว่า' : 'น้อยกว่า'} วันธรรมดา ${Math.abs((b.weekendBias-1)*100).toFixed(0)}%<br>` : ''}`
+        + `รายการเล็กไม่เกิน 200 บาท ${b.microSpendCount} รายการ รวม ${fmt(b.microSpendTotal)}`
+        + `<br>รายจ่ายจำเป็น ${fmt(b.essentialSpend)} · ไม่จำเป็น ${fmt(b.discretionarySpend)}`
+        + (b.recurringCandidates?.length ? `<br>อาจเป็นรายการประจำ: ${esc(b.recurringCandidates[0].name)}` : '')
+        + (b.lifestyleInflation ? `<br>หมวดที่โตเด่นสุดจากเดือนก่อน: ${esc(b.lifestyleInflation.label)} ${fmt(b.lifestyleInflation.delta)}` : ''))
+    }
+
+    if (intent === 'autopilot') {
+      const a = ctx.intelligence ? FinanceIntelligence.monthlyAutopilot(ctx.intelligence) : null
+      if (!a) return ans('🧭', 'แผนอัตโนมัติ', 'ยังไม่สามารถสร้างแผนได้')
+      return ans('🧭', 'แผนอัตโนมัติประจำเดือน',
+        `ต้นเดือนควรกันบิล ${fmt(a.openingPlan.reserveForBills)}<br>`
+        + `แนะนำออมอย่างน้อย ${fmt(a.openingPlan.suggestedSavings)}<br>`
+        + `โฟกัสหลัก: ${esc(a.openingPlan.topFocus?.title || 'ยังไม่มีประเด็นเร่งด่วน')}<br>`
+        + `สิ้นเดือนคาดว่าเงินสดจะเหลือ ${a.closingReview.projectedMonthEndCash>=0?fmt(a.closingReview.projectedMonthEndCash):'-'+fmt(a.closingReview.projectedMonthEndCash)}`)
     }
 
     if (intent === 'savings_scenario') {
@@ -15827,8 +15874,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
 
     if (intent === 'cashflow_forecast') {
-      const obligations = Number(payload?.upcomingCommitted || 0)
-      const projectedExpense = Number(payload?.projectedExpense || expense)
+      const f = ctx.intelligence ? FinanceIntelligence.forecasts(ctx.intelligence) : null
+      const obligations = Number(payload?.upcomingCommitted || ctx.intelligence?.upcomingCommitted || 0)
+      const projectedExpense = Number(f?.spendForecast ?? payload?.projectedExpense ?? expense)
       const projectedGap = income - projectedExpense
       const afterObligations = ctx.liquid - obligations
       const risk = afterObligations < 0 ? 'สูง' : afterObligations < ctx.liquid * 0.2 ? 'กลาง' : 'ต่ำ'
@@ -15836,6 +15884,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         `เงินพร้อมใช้ตอนนี้ <strong>${fmt(ctx.liquid)}</strong><br>`
         + `ภาระใน 14 วันข้างหน้า ${fmt(obligations)} · หลังหักภาระเหลือ ${afterObligations>=0?fmt(afterObligations):'-'+fmt(afterObligations)}<br>`
         + `คาดว่ารายจ่ายสิ้นเดือนจะอยู่ที่ ${fmt(projectedExpense)}`
+        + (f ? ` (ช่วง ${fmt(f.lowerBound)}–${fmt(f.upperBound)} · ความมั่นใจ ${esc(f.confidence)})` : '')
         + (income > 0 ? ` · กระแสเงินสดคาดการณ์ ${projectedGap>=0?'+':'-'}${fmt(projectedGap)}` : '')
         + `<br>ระดับความเสี่ยงสภาพคล่อง: <strong>${risk}</strong>`
         + (risk !== 'ต่ำ' ? '<br>แนะนำให้ชะลอรายจ่ายไม่จำเป็นและกันเงินสำหรับบิลที่จะถึงก่อน' : '<br>ตอนนี้ยังมี buffer พอสมควร')
@@ -15872,12 +15921,20 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
 
     if (intent === 'goal_feasibility') {
-      const rows = (payload?.goalProgress || []).filter(x => x.progress).map(({goal, progress}) => {
+      const optimized = ctx.intelligence ? FinanceIntelligence.goalOptimization(ctx.intelligence) : null
+      const rows = optimized?.priorities?.length
+        ? optimized.priorities.map(({goal, progress, gap}) => {
+            const risk = progress.daysLeft < 0 || gap > 0
+            return `${risk ? '⚠️' : '✅'} ${esc(goal.name)}: เหลือ ${fmt(progress.remaining || 0)}${gap > 0 ? ` · ควรเพิ่มอีก ${fmt(gap)}/เดือน` : ''}`
+          })
+        : (payload?.goalProgress || []).filter(x => x.progress).map(({goal, progress}) => {
         const risk = progress.daysLeft < 0 || (progress.suggestedMonthly && goal.monthlyContribution > 0 && progress.suggestedMonthly > goal.monthlyContribution * 1.2)
         return `${risk ? '⚠️' : '✅'} ${esc(goal.name)}: เหลือ ${fmt(progress.remaining || 0)}${progress.suggestedMonthly ? ` · ควรออม ${fmt(progress.suggestedMonthly)}/เดือน` : ''}`
       })
       return ans('🎯', 'ความเป็นไปได้ของเป้าหมาย',
-        rows.length ? rows.join('<br>') : 'ยังไม่มีเป้าหมายที่ประเมินได้')
+        rows.length
+          ? rows.join('<br>') + (optimized?.allocation?.length ? `<br>จัดสรรได้ตอนนี้ ${optimized.allocation.map(a => `${esc(a.goalName)} ${fmt(a.suggestedIncrease)}`).join(' · ')}` : '')
+          : 'ยังไม่มีเป้าหมายที่ประเมินได้')
     }
 
     if (intent === 'net_worth') {
@@ -15904,6 +15961,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           ? `หมวดที่เพิ่มขึ้นเด่นสุดคือ ${esc(top.label)} เพิ่ม ${fmt(top.diff)} จากเดือนก่อน`
             + (top.pct !== null ? ` (${top.pct.toFixed(0)}%)` : '')
             + `<br>เดือนนี้รายจ่ายรวม ${expense > ctx.avgExpense ? 'สูงกว่า' : 'ใกล้เคียงหรือต่ำกว่า'} ค่าเฉลี่ยย้อนหลัง`
+            + (ctx.intelligence?.events?.length ? `<br>มีเหตุการณ์พิเศษที่ถูกตัดออกจาก baseline ${ctx.intelligence.events.length} รายการ` : '')
             + askEvidence(ctx, 'เทียบเดือนก่อน')
           : 'ยังไม่พบหมวดที่เพิ่มขึ้นเด่นชัดจากเดือนก่อน')
     }
@@ -15925,16 +15983,17 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
 
     if (intent === 'budget_forecast') {
-      const totalLimit = ctx.budget.reduce((s,b)=>s+(b.monthlyLimit||0),0)
-      const totalSpent = ctx.budget.reduce((s,b)=>s+(b.spent||0),0)
-      const daysLeft = Number(payload?.daysLeft || 0)
+      const f = ctx.intelligence ? FinanceIntelligence.forecasts(ctx.intelligence) : null
+      const totalLimit = f?.budgetLimit ?? ctx.budget.reduce((s,b)=>s+(b.monthlyLimit||0),0)
+      const totalSpent = f?.budgetSpent ?? ctx.budget.reduce((s,b)=>s+(b.spent||0),0)
+      const daysLeft = Number(f?.remainingDays ?? payload?.daysLeft ?? 0)
       const remaining = totalLimit - totalSpent
       const daily = daysLeft > 0 ? remaining / daysLeft : 0
       return ans('📏', 'แนวโน้มงบประมาณ',
         totalLimit > 0
           ? `ใช้ไป ${fmt(totalSpent)} จากงบ ${fmt(totalLimit)}<br>เหลือ ${fmt(Math.max(0,remaining))}`
             + (daysLeft > 0 ? ` · ใช้ได้วันละประมาณ ${fmt(Math.max(0,daily))}` : '')
-            + (remaining < 0 ? '<br>ตอนนี้เกินงบรวมแล้ว' : Number(payload?.projectedExpense || 0) > totalLimit ? '<br>แนวโน้มสิ้นเดือนอาจเกินงบ' : '<br>ยังมีโอกาสจบเดือนในงบ')
+            + (remaining < 0 ? '<br>ตอนนี้เกินงบรวมแล้ว' : Number(f?.spendForecast ?? payload?.projectedExpense ?? 0) > totalLimit ? '<br>แนวโน้มสิ้นเดือนอาจเกินงบ' : '<br>ยังมีโอกาสจบเดือนในงบ')
           : 'ยังไม่ได้ตั้งงบประมาณ')
     }
 
@@ -16053,9 +16112,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     // ── Health / overview ────────────────────────────────────────
     if (intent === 'overview') {
       const g = (income>0||expense>0) ? calcGrade(sr, ctx.budget.filter(b=>(b.monthlyLimit||0)>0&&(b.spent||0)>(b.monthlyLimit||0)).length) : null
-      const emergencyMonths = ctx.avgExpense > 0 ? ctx.liquid / ctx.avgExpense : null
+      const h = ctx.intelligence ? FinanceIntelligence.healthScore(ctx.intelligence) : null
+      const emergencyMonths = h?.liquidMonths ?? (ctx.avgExpense > 0 ? ctx.liquid / ctx.avgExpense : null)
       const fixedRatio = income > 0 ? Number(payload?.monthlyRecurringTotal || 0) / income * 100 : null
       const obligationCover = Number(payload?.upcomingCommitted || 0) > 0 ? ctx.liquid / Number(payload.upcomingCommitted || 1) : null
+      const memories = FinanceIntelligence.memoryForMonth(now())
       return ans('📈', 'ภาพรวมเดือน'+ml,
         g ? `เกรด <strong style="color:${g.color}">${esc(g.grade)} — ${esc(g.label)}</strong><br>`
             + `รายรับ ${fmt(income)} · รายจ่าย ${fmt(expense)}<br>`
@@ -16064,6 +16125,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             + `<br>สภาพคล่อง ${obligationCover === null ? 'N/A' : obligationCover >= 1 ? 'พอรองรับภาระใกล้ถึง' : 'ตึงตัว'}`
             + ` · เงินสำรอง ${emergencyMonths === null ? 'N/A' : emergencyMonths.toFixed(1)+' เดือน'}`
             + ` · รายจ่ายประจำ ${fixedRatio === null ? 'N/A' : fixedRatio.toFixed(0)+'%'}`
+            + (h ? `<br>คะแนนสุขภาพ ${h.total.toFixed(0)}/100 · เกรด ${esc(h.grade)}` : '')
+            + (memories.length ? `<br>บริบทเดือนนี้: ${esc(memories[0].title)}` : '')
             + (ctx.topInsights.length ? `<br>ประเด็นเด่น: ${esc(ctx.topInsights[0].title)}` : '')
           : 'ยังไม่มีข้อมูลในเดือนนี้')
     }
@@ -16077,7 +16140,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const presets = [
       'ตอนนี้ควรกังวลอะไร','เงินพอถึงสิ้นเดือนไหม','อีก 14 วันต้องจ่ายอะไร',
       'เงินสำรองฉุกเฉินพอไหม','หมวดไหนเสี่ยงเกินงบ','เป้าหมายไหนตามไม่ทัน',
-      'เดือนนี้เงินหายเร็วเพราะอะไร','สรุปภาพรวม',
+      'คะแนนสุขภาพการเงิน','พฤติกรรมการเงิน','แผนอัตโนมัติประจำเดือน','เหตุการณ์เดือนนี้','สรุปภาพรวม',
+      'การเงินร่วม','ลองสถานการณ์','ช่วยทำอะไรได้บ้าง',
     ]
     App.openSubScreen(`
       <div class="sub-header">
@@ -16126,6 +16190,252 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       box.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px">ไม่สามารถประมวลผลได้</div>`
     }
     setTimeout(() => submit?.classList.remove('is-sending'), 320)
+  }
+
+  App.openFinanceCoachProfile = function() {
+    const p = FinanceIntelligence.loadProfile()
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>โปรไฟล์โค้ชการเงิน</h2>
+      </div>
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div class="card card-pad">
+          <div class="form-group"><label class="form-label">โฟกัสหลัก</label>
+            <select id="coach-focus" class="form-input">
+              <option value="resilience"${p.primaryFocus==='resilience'?' selected':''}>เงินสำรอง / ความมั่นคง</option>
+              <option value="goals"${p.primaryFocus==='goals'?' selected':''}>เป้าหมาย</option>
+              <option value="debt"${p.primaryFocus==='debt'?' selected':''}>ลดหนี้</option>
+              <option value="growth"${p.primaryFocus==='growth'?' selected':''}>เติบโตสินทรัพย์</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">อัตราออมเป้าหมาย (%)</label>
+            <input id="coach-savings-rate" class="form-input" type="number" min="0" max="80" value="${esc(p.preferredSavingsRate || 20)}">
+          </div>
+          <div class="form-group"><label class="form-label">สไตล์คำแนะนำ</label>
+            <select id="coach-style" class="form-input">
+              <option value="gentle"${p.coachingStyle==='gentle'?' selected':''}>นุ่มนวล</option>
+              <option value="balanced"${p.coachingStyle==='balanced'?' selected':''}>สมดุล</option>
+              <option value="direct"${p.coachingStyle==='direct'?' selected':''}>ตรงไปตรงมา</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="App.saveFinanceCoachProfile()">บันทึก</button>
+        </div>
+      </div>`)
+  }
+
+  App.openFeatureHistory = function() {
+    const store = FinanceIntelligence.loadFeatureStore()
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>ประวัติฟีเจอร์การเงิน</h2>
+      </div>
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div class="card card-pad">
+          ${store.rows.length ? store.rows.map(r => `
+            <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+              <div style="font-weight:600">${esc(mlbl(r.month))}</div>
+              <div style="font-size:12px;color:var(--muted)">รายรับ ${fmt(r.metrics.income)} · รายจ่าย ${fmt(r.metrics.expense)} · ปรับ baseline ${fmt(r.metrics.adjustedExpense)}</div>
+            </div>`).join('') : '<div style="color:var(--muted)">ยังไม่มี snapshot</div>'}
+        </div>
+      </div>`)
+  }
+
+  App.openScenarioLab = function() {
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>Scenario Lab</h2>
+      </div>
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div class="card card-pad">
+          <div class="form-group"><label class="form-label">รายรับเปลี่ยนแปลง</label><input id="scenario-income" class="form-input" type="number" value="0" oninput="App.renderScenarioPreview()"></div>
+          <div class="form-group"><label class="form-label">รายจ่ายเปลี่ยนแปลง</label><input id="scenario-expense" class="form-input" type="number" value="0" oninput="App.renderScenarioPreview()"></div>
+          <div class="form-group"><label class="form-label">ค่าใช้จ่ายก้อนเดียว</label><input id="scenario-oneoff" class="form-input" type="number" value="0" oninput="App.renderScenarioPreview()"></div>
+          <div class="form-group"><label class="form-label">ออมเพิ่ม</label><input id="scenario-savings" class="form-input" type="number" value="0" oninput="App.renderScenarioPreview()"></div>
+          <div id="scenario-preview" style="margin-top:12px"></div>
+        </div>
+      </div>`)
+    App.renderScenarioPreview()
+  }
+
+  App.renderScenarioPreview = function() {
+    const ctx = FinanceIntelligence.buildContext(S)
+    const sim = FinanceIntelligence.runScenario(ctx, {
+      incomeDelta:Number(document.getElementById('scenario-income')?.value || 0),
+      expenseDelta:Number(document.getElementById('scenario-expense')?.value || 0),
+      oneOffExpense:Number(document.getElementById('scenario-oneoff')?.value || 0),
+      savingsDelta:Number(document.getElementById('scenario-savings')?.value || 0),
+    })
+    const box = document.getElementById('scenario-preview')
+    if (!box) return
+    box.innerHTML = `
+      <div style="font-weight:700;margin-bottom:8px">ผลลัพธ์</div>
+      <div>รายรับคาดการณ์ ${fmt(sim.projectedIncome)}</div>
+      <div>รายจ่ายคาดการณ์ ${fmt(sim.projectedExpense)}</div>
+      <div>เงินสิ้นเดือน ${sim.monthEndCash>=0?fmt(sim.monthEndCash):'-'+fmt(sim.monthEndCash)}</div>
+      <div>อัตราออม ${sim.savingsRate===null?'N/A':sim.savingsRate.toFixed(1)+'%'}</div>
+      <div>ความเสี่ยง ${esc(sim.risk)}</div>`
+  }
+
+  App.openFinanceActionPreview = function(actionId) {
+    const ctx = FinanceIntelligence.buildContext(S)
+    const action = FinanceIntelligence.actionProposals(ctx).find(a => a.id === actionId)
+    if (!action) return
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>ตัวอย่างก่อนทำ</h2>
+      </div>
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div class="card card-pad">
+          <div style="font-weight:700">${esc(action.title)}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:6px">${esc(action.rationale)}</div>
+          <div style="margin-top:12px">${esc(action.preview)}</div>
+          <button class="btn btn-primary" style="margin-top:14px" onclick="App.applyFinanceAction('${esc(action.id)}')">ยืนยัน</button>
+        </div>
+      </div>`)
+  }
+
+  App.applyFinanceAction = function(actionId) {
+    const ctx = FinanceIntelligence.buildContext(S)
+    const action = FinanceIntelligence.actionProposals(ctx).find(a => a.id === actionId)
+    if (!action) return
+    if (action.type === 'create_goal') {
+      S.goals ||= []
+      S.goals.unshift({
+        id: `goal-${Date.now().toString(36)}`,
+        name: 'เงินสำรองฉุกเฉิน',
+        targetAmount: Number(action.payload.targetAmount || 0),
+        currentAmount: 0,
+        monthlyContribution: 0,
+        status: 'active',
+      })
+      App.saveAll?.()
+      App.toast?.('สร้างเป้าหมายเงินสำรองแล้ว')
+      App.openGoalsScreen?.()
+      return
+    }
+    if (action.type === 'create_recurring') {
+      S.recurring ||= []
+      S.recurring.unshift({
+        id: `rec-${Date.now().toString(36)}`,
+        name: action.payload.merchant,
+        merchant: action.payload.merchant,
+        amount: Number(action.payload.amount || 0),
+        frequency: 'monthly',
+        status: 'active',
+      })
+      App.saveAll?.()
+      App.toast?.('เพิ่มรายการประจำแล้ว')
+      App.openRecurringScreen?.()
+    }
+  }
+
+  App.saveFinanceCoachProfile = function() {
+    FinanceIntelligence.saveProfile({
+      primaryFocus: document.getElementById('coach-focus')?.value || 'resilience',
+      preferredSavingsRate: Number(document.getElementById('coach-savings-rate')?.value || 20),
+      coachingStyle: document.getElementById('coach-style')?.value || 'balanced',
+    })
+    App.toast?.('บันทึกโปรไฟล์โค้ชแล้ว')
+    App.closeSubScreen()
+  }
+
+  App.openFinancialMemory = function() {
+    const memories = FinanceIntelligence.loadMemory()
+    const expenseCats = S.categories?.expense || []
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>บันทึกเหตุการณ์การเงิน</h2>
+      </div>
+      <div class="sub-scroll" style="padding:16px 16px 40px">
+        <div class="card card-pad" style="margin-bottom:12px">
+          <div class="form-group"><label class="form-label">เหตุการณ์</label>
+            <input id="financial-memory-title" class="form-input" placeholder="เช่น ทริปญี่ปุ่น, โบนัส, ซ่อมรถ">
+          </div>
+          <div class="form-group"><label class="form-label">ประเภท</label>
+            <select id="financial-memory-type" class="form-input">
+              <option value="general">ทั่วไป</option>
+              <option value="trip">ทริป</option>
+              <option value="bonus">โบนัส</option>
+              <option value="medical">ค่ารักษา</option>
+              <option value="repair">ซ่อมแซม</option>
+              <option value="large_purchase">ซื้อของชิ้นใหญ่</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">จำนวนเงินโดยประมาณ</label>
+            <input id="financial-memory-amount" class="form-input" type="number" inputmode="decimal" placeholder="0">
+          </div>
+          <div class="form-group"><label class="form-label">ผลต่อการเงิน</label>
+            <select id="financial-memory-direction" class="form-input">
+              <option value="expense">รายจ่าย</option>
+              <option value="income">รายรับ</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">หมวดที่เกี่ยวข้อง</label>
+            <select id="financial-memory-category" class="form-input">
+              <option value="">ไม่ระบุ</option>
+              ${expenseCats.map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label"><input id="financial-memory-exclude" type="checkbox" checked> ไม่นำไปคำนวณ baseline ปกติ</label></div>
+          <div class="form-group"><label class="form-label">หมายเหตุ</label>
+            <textarea id="financial-memory-note" class="form-input" rows="3" placeholder="ช่วยให้ระบบเข้าใจบริบทของเดือนนี้"></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="App.saveFinancialMemory()">เพิ่มบันทึก</button>
+        </div>
+        <div class="card card-pad">
+          <div style="font-weight:700;margin-bottom:10px">ล่าสุด</div>
+          ${memories.length ? memories.slice(0,10).map(m => `
+            <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+              <div style="font-weight:600">${esc(m.title || 'เหตุการณ์')}</div>
+              <div style="font-size:12px;color:var(--muted)">${esc(m.type || 'general')} · ${esc(m.direction || 'expense')} · ${fmt(m.amount || 0)}${m.note ? ' · '+esc(m.note) : ''}</div>
+              <div style="margin-top:6px"><button class="chip" onclick="App.deleteFinancialMemory('${esc(m.id)}')">ลบ</button></div>
+            </div>`).join('') : '<div style="color:var(--muted)">ยังไม่มีบันทึก</div>'}
+        </div>
+      </div>`)
+  }
+
+  App.saveFinancialMemory = function() {
+    const title = document.getElementById('financial-memory-title')?.value?.trim()
+    const note = document.getElementById('financial-memory-note')?.value?.trim()
+    if (!title) return
+    const categoryId = document.getElementById('financial-memory-category')?.value || ''
+    FinanceIntelligence.remember({
+      title,
+      note,
+      type: document.getElementById('financial-memory-type')?.value || 'general',
+      amount: Number(document.getElementById('financial-memory-amount')?.value || 0),
+      direction: document.getElementById('financial-memory-direction')?.value || 'expense',
+      categoryIds: categoryId ? [categoryId] : [],
+      excludeFromBaseline: !!document.getElementById('financial-memory-exclude')?.checked,
+      month: now(),
+    })
+    FinanceIntelligence.rebuildFeatureStore(S, 12)
+    App.openFinancialMemory()
+  }
+
+  App.deleteFinancialMemory = function(id) {
+    FinanceIntelligence.deleteMemory(id)
+    FinanceIntelligence.rebuildFeatureStore(S, 12)
+    App.openFinancialMemory()
+  }
+
+  App.recordRecommendationFeedback = function(id, rating) {
+    FinanceIntelligence.recommendationFeedback(id, rating, { source:'ask_my_money' })
+    App.toast?.(rating === 'acted' ? 'บันทึกว่าทำแล้ว' : rating === 'helpful' ? 'ขอบคุณสำหรับ feedback' : 'รับทราบแล้ว')
+  }
+
+  try { FinanceIntelligence.rebuildFeatureStore(S, 12) } catch(_) {}
+
+  const _prevSaveAllForFinanceIntelligence = App.saveAll?.bind(App)
+  App.saveAll = function(...args) {
+    const result = _prevSaveAllForFinanceIntelligence?.(...args)
+    try { FinanceIntelligence.rebuildFeatureStore(S, 12) } catch(_) {}
+    return result
   }
 
   // ── Init ─────────────────────────────────────────────────────
@@ -18242,6 +18552,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="card card-pad">
         ${row({ icon: '📋', label: 'สรุปรายเดือน', onclick: 'App.openMonthlyReview()' })}
         ${row({ icon: '💬', label: 'ถามการเงินของคุณ', onclick: 'App.openAskMyMoney()' })}
+        ${row({ icon: '🧪', label: 'Scenario Lab', onclick: 'App.openScenarioLab()' })}
+        ${row({ icon: '🧭', label: 'โปรไฟล์โค้ชการเงิน', onclick: 'App.openFinanceCoachProfile()' })}
+        ${row({ icon: '📝', label: 'บันทึกเหตุการณ์การเงิน', onclick: 'App.openFinancialMemory()' })}
+        ${row({ icon: '📚', label: 'ประวัติฟีเจอร์การเงิน', onclick: 'App.openFeatureHistory()' })}
       </div>
       <div class="sec-title">วางแผน</div>
       <div class="card card-pad">

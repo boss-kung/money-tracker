@@ -11,6 +11,8 @@ const STATIC_ASSETS = [
   './calculations.js',
   './sample-data_v2.js',
   './ai_insights.js',
+  './finance_intelligence.js',
+  './ask_my_money_core.js',
   './notification_config.js',
   './notifications_v2.js',
   './manifest.json',
@@ -158,7 +160,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url)
   const path = url.pathname.split('/').pop()
   const acceptsHtml = request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html')
-  const isCoreCode = ['app_v2.js', 'storage_v2.js', 'calculations.js', 'sample-data_v2.js', 'ai_insights.js', 'notification_config.js', 'notifications_v2.js', 'style_v2.css', 'LINESeedSansTH_Rg.ttf', 'LINESeedSansTH_Bd.ttf', 'LINESeedSansTH_XBd.ttf'].includes(path)
+  const isCoreCode = ['app_v2.js', 'storage_v2.js', 'calculations.js', 'sample-data_v2.js', 'ai_insights.js', 'finance_intelligence.js', 'ask_my_money_core.js', 'notification_config.js', 'notifications_v2.js', 'style_v2.css', 'LINESeedSansTH_Rg.ttf', 'LINESeedSansTH_Bd.ttf', 'LINESeedSansTH_XBd.ttf'].includes(path)
 
   if (acceptsHtml) {
     event.respondWith(networkFirst(request, './index.html'))
