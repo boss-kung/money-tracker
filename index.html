@@ -165,7 +165,10 @@
       <div class="sheet-handle" aria-hidden="true"></div>
       <div class="sheet-header">
         <h2 id="wallet-form-title">เพิ่มกระเป๋าเงิน</h2>
-        <button class="btn-icon" onclick="App.closeOverlay('overlay-wallet-form')" aria-label="ปิด">✕</button>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button class="btn btn-primary btn-sm" id="wallet-form-save-btn" onclick="App.saveWallet()" style="width:auto">บันทึก</button>
+          <button class="btn-icon" onclick="App.closeOverlay('overlay-wallet-form')" aria-label="ปิด">✕</button>
+        </div>
       </div>
       <div class="sheet-body" id="wallet-form-content"></div>
     </div>

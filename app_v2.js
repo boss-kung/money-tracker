@@ -1035,7 +1035,10 @@ const App = {
           ss.querySelector('.sub-header .btn-icon')?.click()
       }, { passive: true })
     }
-    ss.classList.toggle('no-page-slide', opts.animate === false)
+    const suppressFromRecentSheet = opts.animate === undefined && Date.now() < Number(App._suppressNextSubScreenAnimationUntil || 0)
+    const suppressAnimation = opts.animate === false || suppressFromRecentSheet
+    ss.classList.toggle('no-page-slide', suppressAnimation)
+    if (suppressFromRecentSheet) App._suppressNextSubScreenAnimationUntil = 0
     ss.classList.remove('open')
     void ss.offsetHeight
     ss.classList.add('open')
@@ -2490,16 +2493,15 @@ App.render();
           <div class="sheet-handle"></div>
           <div class="sheet-header">
             <h2>${c ? 'แก้ไข' : 'เพิ่ม'}หมวดหมู่</h2>
-            <button class="btn-icon" onclick="document.getElementById('${overlayId}')?.remove()">✕</button>
+            <div style="display:flex;align-items:center;gap:6px">
+              <button class="btn btn-primary btn-sm" onclick="App.saveCategory('${esc(id || '')}')" style="width:auto">บันทึก</button>
+              <button class="btn-icon" onclick="document.getElementById('${overlayId}')?.remove()">✕</button>
+            </div>
           </div>
           <div class="sheet-body">
             <div class="form-group"><label class="form-label">ชื่อหมวดหมู่</label><input class="form-input" id="cat-name" value="${esc(c?.label || '')}" placeholder="เช่น อาหาร, เดินทาง"></div>
             <div class="form-group"><label class="form-label">อีโมจิ</label>${renderEditorEmoji('cat', c?.icon || '📦', 'cat-icon')}</div>
             <div class="form-group"><label class="form-label">สี</label>${renderEditorColor('cat', c?.color || '#2563EB', 'cat-color')}</div>
-            <div class="flex-row" style="margin-top:4px">
-              <button class="btn btn-secondary" onclick="document.getElementById('${overlayId}')?.remove()">ยกเลิก</button>
-              <button class="btn btn-primary" onclick="App.saveCategory('${esc(id || '')}')">บันทึก</button>
-            </div>
           </div>
         </div>
       </div>`)
@@ -2518,16 +2520,15 @@ App.render();
           <div class="sheet-handle"></div>
           <div class="sheet-header">
             <h2>${m ? 'แก้ไข' : 'เพิ่ม'}ร้านค้า</h2>
-            <button class="btn-icon" onclick="document.getElementById('${overlayId}')?.remove()">✕</button>
+            <div style="display:flex;align-items:center;gap:6px">
+              <button class="btn btn-primary btn-sm" onclick="App.saveMerchant('${esc(id || '')}')" style="width:auto">บันทึก</button>
+              <button class="btn-icon" onclick="document.getElementById('${overlayId}')?.remove()">✕</button>
+            </div>
           </div>
           <div class="sheet-body">
             <div class="form-group"><label class="form-label">ชื่อร้านค้า</label><input class="form-input" id="mer-name" value="${esc(m?.name || '')}" placeholder="เช่น Grab, Netflix"></div>
             <div class="form-group"><label class="form-label">อีโมจิ</label>${renderEditorEmoji('mer', m?.emoji || '🏪', 'mer-emoji')}</div>
             <div class="form-group"><label class="form-label">สี</label>${renderEditorColor('mer', m?.color || '#2563EB', 'mer-color')}</div>
-            <div class="flex-row" style="margin-top:4px">
-              <button class="btn btn-secondary" onclick="document.getElementById('${overlayId}')?.remove()">ยกเลิก</button>
-              <button class="btn btn-primary" onclick="App.saveMerchant('${esc(id || '')}')">บันทึก</button>
-            </div>
           </div>
         </div>
       </div>`)
@@ -8574,6 +8575,8 @@ App._pickMerchant = function(name, opts = {}) {
       </div>`
 
     document.getElementById('wallet-form-title').textContent = w ? 'แก้ไขกระเป๋า' : 'เพิ่มกระเป๋าเงิน'
+    const walletSaveBtn = document.getElementById('wallet-form-save-btn')
+    if (walletSaveBtn) walletSaveBtn.textContent = w ? 'บันทึก' : 'เพิ่ม'
     document.getElementById('wallet-form-content').innerHTML = `
       ${accordion('wf-basic-acc', 'ข้อมูลพื้นฐาน', `
         <div class="form-group"><label class="form-label">ชื่อกระเป๋า</label><input class="form-input" id="wf-name" value="${esc(w?.name||'')}"></div>
@@ -8599,10 +8602,7 @@ App._pickMerchant = function(name, opts = {}) {
       `, true)}
       <div id="wf-cc-fields" style="${isCC?'':'display:none'}">${ccExtraHtml}</div>
       ${investHtml}
-      <div class="flex-row" style="margin-top:12px">
-        ${w ? `<button class="btn btn-outline flex-1" onclick="App.deleteWallet('${esc(w.id)}')">ลบ</button>` : ''}
-        <button class="btn btn-primary${w?'':' flex-1'}" onclick="App.saveWallet()" style="${w?'flex:2':''}">${w ? 'บันทึก' : 'เพิ่มกระเป๋า'}</button>
-      </div>`
+      ${w ? `<button class="btn btn-outline" onclick="App.deleteWallet('${esc(w.id)}')" style="margin-top:12px">ลบ</button>` : ''}`
     App.openOverlay('overlay-wallet-form')
     App._syncWalletFormSections?.()
     if (isCC) try { App._refreshDueDatePreview?.() } catch (_) {}
@@ -9364,15 +9364,43 @@ App._pickMerchant = function(name, opts = {}) {
   // REWARD ACCOUNT MANAGEMENT
   // ══════════════════════════════════════════════════════════
 
+  App.openDynamicSheet = function(id, title, bodyHtml, actionsHtml = '') {
+    let overlay = document.getElementById(id)
+    if (!overlay) {
+      overlay = document.createElement('div')
+      overlay.id = id
+      overlay.className = 'overlay'
+      document.body.appendChild(overlay)
+    }
+    overlay.innerHTML = `
+      <div class="overlay-backdrop" onclick="App.closeDynamicSheet('${esc(id)}')"></div>
+      <div class="sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h2>${esc(title)}</h2>
+          <div style="display:flex;align-items:center;gap:6px">
+            ${actionsHtml}
+            <button class="btn-icon" onclick="App.closeDynamicSheet('${esc(id)}')" aria-label="ปิด">✕</button>
+          </div>
+        </div>
+        <div class="sheet-body">${bodyHtml}</div>
+      </div>`
+    App.openOverlay(id)
+  }
+
+  App.closeDynamicSheet = function(id) {
+    const overlay = document.getElementById(id)
+    if (!overlay) return
+    App.closeOverlay(id)
+    setTimeout(() => {
+      if (!overlay.classList.contains('open')) overlay.remove()
+    }, 390)
+  }
+
   App.openRewardAccountForm = function(accountId) {
     const a = accountId ? (S.rewardAccounts||[]).find(x => x.id === accountId) : null
-    App.openSubScreen(`
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App.openRewardLedgerScreen()">←</button>
-        <h2>${a ? 'แก้ไข' : 'เพิ่ม'}บัญชีคะแนน</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.saveRewardAccount('${esc(accountId||'')}')" style="width:auto">บันทึก</button>
-      </div>
-      <div class="sub-scroll" style="padding:12px 16px 40px">
+    App.openDynamicSheet('reward-account-form-overlay', `${a ? 'แก้ไข' : 'เพิ่ม'}บัญชีคะแนน`, `
+      <div style="padding:0 16px calc(12px + var(--safe-b))">
         <div class="form-group"><label class="form-label">ชื่อบัญชีคะแนน</label><input class="form-input" id="ra-name" value="${esc(a?.name||'')}" placeholder="เช่น KTC Forever Points"></div>
         <div class="form-group">
           <label class="form-label">ผู้ออกบัตร / ธนาคาร</label>
@@ -9381,7 +9409,8 @@ App._pickMerchant = function(name, opts = {}) {
         </div>
         <div class="form-group"><label class="form-label">คะแนนเริ่มต้น / ยอดคงเหลือปัจจุบัน</label><input class="form-input" type="number" min="0" id="ra-opening" value="${a?.openingBalance||0}"><div class="form-hint">ใส่ยอดคะแนนที่มีอยู่แล้ว ก่อนเริ่มใช้งานระบบนี้</div></div>
         ${a ? `<button class="btn btn-outline" style="margin-top:8px" onclick="App.deleteRewardAccount('${esc(a.id)}')">ลบบัญชีคะแนนนี้</button>` : ''}
-      </div>`)
+      </div>`,
+      `<button class="btn btn-primary btn-sm" onclick="App.saveRewardAccount('${esc(accountId||'')}')" style="width:auto">บันทึก</button>`)
   }
 
   App.saveRewardAccount = function(id) {
@@ -9395,7 +9424,7 @@ App._pickMerchant = function(name, opts = {}) {
     } else {
       S.rewardAccounts.push({ id:genId(), name, issuer, type:'points', openingBalance:opening, createdAt:nowISO(), updatedAt:nowISO() })
     }
-    persist(); App.openRewardLedgerScreen(); notify('บันทึกบัญชีคะแนนแล้ว', 'success')
+    persist(); App.closeDynamicSheet('reward-account-form-overlay'); App.openRewardLedgerScreen(); notify('บันทึกบัญชีคะแนนแล้ว', 'success')
   }
 
   App.deleteRewardAccount = function(id) {
@@ -9404,7 +9433,7 @@ App._pickMerchant = function(name, opts = {}) {
       onConfirm() {
         S.rewardAccounts = (S.rewardAccounts||[]).filter(a => a.id !== id)
         ;(S.wallets||[]).filter(w => w.rewardAccountId === id).forEach(w => { w.rewardAccountId = null })
-        persist(); App.openRewardLedgerScreen(); notify('ลบบัญชีคะแนนแล้ว', 'success')
+        persist(); App.closeDynamicSheet('reward-account-form-overlay'); App.openRewardLedgerScreen(); notify('ลบบัญชีคะแนนแล้ว', 'success')
       }
     })
   }
@@ -9413,13 +9442,8 @@ App._pickMerchant = function(name, opts = {}) {
     const a = (S.rewardAccounts||[]).find(x => x.id === accountId)
     if (!a) return
     const bal = App.getRewardAccountBalance(accountId)
-    App.openSubScreen(`
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App.openRewardLedgerScreen()">←</button>
-        <h2>ปรับคะแนน</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.saveAdjustPoints('${esc(accountId)}')" style="width:auto">บันทึก</button>
-      </div>
-      <div class="sub-scroll" style="padding:12px 16px 40px">
+    App.openDynamicSheet('adjust-points-form-overlay', 'ปรับคะแนน', `
+      <div style="padding:0 16px calc(12px + var(--safe-b))">
         <div class="card card-pad" style="margin-bottom:12px;text-align:center">
           <div style="font-size:13px;color:var(--muted)">คะแนนปัจจุบัน</div>
           <div style="font-size:28px;font-weight:800">${bal.toLocaleString('en-US')}</div>
@@ -9427,7 +9451,8 @@ App._pickMerchant = function(name, opts = {}) {
         </div>
         <div class="form-group"><label class="form-label">จำนวนคะแนนที่ปรับ (+ เพิ่ม / - ลด)</label><input class="form-input" type="number" id="adj-points" placeholder="เช่น 500 หรือ -200"><div class="form-hint">ใส่ค่าบวกเพื่อเพิ่มคะแนน ใส่ค่าลบเพื่อลดคะแนน</div></div>
         <div class="form-group"><label class="form-label">หมายเหตุ</label><input class="form-input" id="adj-note" placeholder="เช่น คะแนนจากโปรโมชั่น, แก้ไขยอดผิด"></div>
-      </div>`)
+      </div>`,
+      `<button class="btn btn-primary btn-sm" onclick="App.saveAdjustPoints('${esc(accountId)}')" style="width:auto">บันทึก</button>`)
   }
 
   App.saveAdjustPoints = function(accountId) {
@@ -9439,7 +9464,7 @@ App._pickMerchant = function(name, opts = {}) {
     const bal = App.getRewardAccountBalance(accountId)
     if (bal + pts < 0) { notify(`คะแนนหลังปรับจะติดลบ (${(bal+pts).toLocaleString('en-US')}) กรุณาตรวจสอบ`, 'error'); return }
     S.rewardLedger.push({ id:genId(), type:'points_adjustment', accountId, cardId:'', statementId:'', points:pts, amount:0, date:today(), note, createdAt:nowISO() })
-    persist(); App.openRewardLedgerScreen(); notify(`ปรับคะแนน ${pts>0?'+':''}${pts.toLocaleString('en-US')} แล้ว`, 'success')
+    persist(); App.closeDynamicSheet('adjust-points-form-overlay'); App.openRewardLedgerScreen(); notify(`ปรับคะแนน ${pts>0?'+':''}${pts.toLocaleString('en-US')} แล้ว`, 'success')
   }
 
   // ── ═══════════════════════════════════════════════════════
@@ -9486,13 +9511,8 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.openCreditLimitGroupForm = function(groupId) {
     const g = groupId ? (S.creditLimitGroups||[]).find(x => x.id === groupId) : null
-    App.openSubScreen(`
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App.openCreditLimitGroupScreen()">←</button>
-        <h2>${g ? 'แก้ไข' : 'เพิ่ม'}กลุ่มวงเงินร่วม</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.saveCreditLimitGroup('${esc(groupId||'')}')" style="width:auto">บันทึก</button>
-      </div>
-      <div class="sub-scroll" style="padding:12px 16px 40px">
+    App.openDynamicSheet('credit-limit-group-form-overlay', `${g ? 'แก้ไข' : 'เพิ่ม'}กลุ่มวงเงินร่วม`, `
+      <div style="padding:0 16px calc(12px + var(--safe-b))">
         <div class="form-group"><label class="form-label">ชื่อกลุ่ม</label><input class="form-input" id="clg-name" value="${esc(g?.name||'')}" placeholder="เช่น KTC วงเงินรวม"></div>
         <div class="form-group">
           <label class="form-label">ผู้ออกบัตร / ธนาคาร</label>
@@ -9501,7 +9521,8 @@ App._pickMerchant = function(name, opts = {}) {
         </div>
         <div class="form-group"><label class="form-label">วงเงินรวมของกลุ่ม (฿)</label><input class="form-input" type="number" min="0" id="clg-limit" value="${g?.limit||''}"></div>
         ${g ? `<button class="btn btn-outline" style="margin-top:8px" onclick="App.deleteCreditLimitGroup('${esc(g.id)}')">ลบกลุ่มนี้</button>` : ''}
-      </div>`)
+      </div>`,
+      `<button class="btn btn-primary btn-sm" onclick="App.saveCreditLimitGroup('${esc(groupId||'')}')" style="width:auto">บันทึก</button>`)
   }
 
   App.saveCreditLimitGroup = function(id) {
@@ -9516,7 +9537,7 @@ App._pickMerchant = function(name, opts = {}) {
     } else {
       S.creditLimitGroups.push({ id:genId(), name, issuer, limit, createdAt:nowISO(), updatedAt:nowISO() })
     }
-    persist(); App.openCreditLimitGroupScreen(); notify('บันทึกกลุ่มวงเงินแล้ว', 'success')
+    persist(); App.closeDynamicSheet('credit-limit-group-form-overlay'); App.openCreditLimitGroupScreen(); notify('บันทึกกลุ่มวงเงินแล้ว', 'success')
   }
 
   App.deleteCreditLimitGroup = function(id) {
@@ -9526,7 +9547,7 @@ App._pickMerchant = function(name, opts = {}) {
       onConfirm() {
         S.creditLimitGroups = (S.creditLimitGroups||[]).filter(g => g.id !== id)
         linkedCards.forEach(c => { c.creditLimitMode = 'individual'; c.creditLimitGroupId = null })
-        persist(); App.openCreditLimitGroupScreen(); notify('ลบกลุ่มวงเงินแล้ว', 'success')
+        persist(); App.closeDynamicSheet('credit-limit-group-form-overlay'); App.openCreditLimitGroupScreen(); notify('ลบกลุ่มวงเงินแล้ว', 'success')
       }
     })
   }
@@ -13305,8 +13326,8 @@ App._pickMerchant = function(name, opts = {}) {
       .filter(w => w.type !== 'credit')
       .map(w => `<option value="${esc(w.id)}"${goal.linkedWalletId === w.id ? ' selected' : ''}>${esc(w.icon || '')} ${esc(w.name)}</option>`)
       .join('')
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openGoalsScreen()">←</button><h2>${g ? 'แก้ไขเป้าหมาย' : 'เพิ่มเป้าหมาย'}</h2><button class="btn btn-primary btn-sm" onclick="App.saveGoal('${esc(goalId)}')" style="width:auto">บันทึก</button></div>
-      <div class="sub-scroll" style="padding:12px 16px 40px">
+    App.openDynamicSheet('goal-form-overlay', `${g ? 'แก้ไขเป้าหมาย' : 'เพิ่มเป้าหมาย'}`, `
+      <div style="padding:0 16px calc(12px + var(--safe-b))">
         <div class="form-group"><label class="form-label">ชื่อเป้าหมาย</label><input class="form-input" id="goal-name" value="${esc(g?.name || '')}" placeholder="เช่น Emergency fund"></div>
         <div class="form-split-row"><div class="form-group"><label class="form-label">Emoji</label><input class="form-input" id="goal-icon" value="${esc(g?.icon || '🎯')}" maxlength="4"></div><div class="form-group"><label class="form-label">เป้าหมาย (บาท)</label><input class="form-input" type="number" min="0" id="goal-target" value="${g?.targetAmount || ''}"></div></div>
         <div class="form-group"><label class="form-label">โหมด</label><select class="form-input" id="goal-mode" onchange="App._syncGoalFormMode()"><option value="manual"${goal.mode === 'manual' ? ' selected' : ''}>กรอกยอดเอง</option><option value="linked"${goal.mode === 'linked' ? ' selected' : ''}>เชื่อมกับกระเป๋า</option></select></div>
@@ -13315,7 +13336,8 @@ App._pickMerchant = function(name, opts = {}) {
         <div class="form-split-row"><div class="form-group"><label class="form-label">วันที่อยากให้ครบ</label><input class="form-input" type="date" id="goal-target-date" value="${esc(g?.targetDate || '')}"></div><div class="form-group"><label class="form-label">ออมต่อเดือน</label><input class="form-input" type="number" min="0" id="goal-monthly" value="${g?.monthlyContribution || ''}"></div></div>
         <div class="form-group"><label class="form-label">สถานะ</label><select class="form-input" id="goal-status"><option value="active"${goal.status === 'active' ? ' selected' : ''}>กำลังใช้งาน</option><option value="completed"${goal.status === 'completed' ? ' selected' : ''}>สำเร็จแล้ว</option><option value="archived"${goal.status === 'archived' ? ' selected' : ''}>เก็บถาวร</option></select></div>
         ${g ? `<div class="flex-row"><button class="btn btn-outline flex-1" onclick="App.archiveGoal('${esc(g.id)}')">เก็บถาวร</button><button class="btn btn-danger flex-1" onclick="App.deleteGoal('${esc(g.id)}')">ลบ</button></div>` : ''}
-      </div>`)
+      </div>`,
+      `<button class="btn btn-primary btn-sm" onclick="App.saveGoal('${esc(goalId)}')" style="width:auto">บันทึก</button>`)
     App._syncGoalFormMode()
   }
 
@@ -13354,6 +13376,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (idx >= 0) S.goals[idx] = normalized
     else S.goals.unshift(normalized)
     persist()
+    App.closeDynamicSheet('goal-form-overlay')
     App.openGoalsScreen(normalized.status === 'archived')
     notify('บันทึกเป้าหมายแล้ว', 'success')
   }
@@ -13363,13 +13386,14 @@ App._pickMerchant = function(name, opts = {}) {
     if (!g) return
     g.status = 'archived'
     g.updatedAt = nowISO()
-    persist(); App.openGoalsScreen(true); notify('เก็บเป้าหมายแล้ว', 'success')
+    persist(); App.closeDynamicSheet('goal-form-overlay'); App.openGoalsScreen(true); notify('เก็บเป้าหมายแล้ว', 'success')
   }
 
   App.deleteGoal = function(goalId) {
     const idx = (S.goals || []).findIndex(x => x.id === goalId)
     if (idx < 0) return
     const removed = S.goals.splice(idx, 1)[0]
+    App.closeDynamicSheet('goal-form-overlay')
     App.openGoalsScreen()
     App._withUndo(`ลบ “${removed.name}” แล้ว`, () => {
       S.goals.splice(idx, 0, removed)
@@ -14415,7 +14439,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     persist()
     if (S.page === 'dashboard') App.renderDashboard?.()
     if (S.page === 'more') App.renderMore?.()
-    if (keepScreen) App.openPrivilegesScreen(S.privilegesFilter || 'active', S.privilegeSearch || '')
+    if (keepScreen) App.openPrivilegesScreen(S.privilegesFilter || 'active', S.privilegeSearch || '', false)
   }
 
   function privilegeTemplateMeta(type = 'voucher') {
@@ -14703,13 +14727,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const draft = S.privilegeDraft
     const template = privilegeTemplateMeta(draft.type)
     const showFreeItemName = draft.type === 'free_item'
-    const html = `
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}')">←</button>
-        <h2>${existing ? 'แก้ไขสิทธิพิเศษ' : 'เพิ่มสิทธิพิเศษ'}</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.savePrivilege('${esc(privilegeId)}')" style="width:auto">บันทึก</button>
-      </div>
-      <div class="sub-scroll privilege-form-screen">
+    const bodyHtml = `
         <div class="form-group">
           <label class="form-label">Template สิทธิพิเศษ</label>
           <div class="chips privilege-template-row">
@@ -14730,8 +14748,37 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div class="form-group"><label class="form-label">จำนวนสิทธิ์</label><input id="priv-form-qty" class="form-input" type="number" min="${draft.status === 'used' ? 0 : 1}" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
         <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" rows="4" placeholder="เงื่อนไขเพิ่มเติม" oninput="App._updatePrivilegeDraft('note', this.value)">${esc(draft.note)}</textarea></div>
         ${existing ? `<button class="btn btn-outline privilege-delete-btn" onclick="App.deletePrivilege('${esc(existing.id)}')">ลบสิทธิพิเศษ</button>` : ''}
+      `
+    let overlay = document.getElementById('privilege-form-overlay')
+    if (!overlay) {
+      overlay = document.createElement('div')
+      overlay.id = 'privilege-form-overlay'
+      overlay.className = 'overlay'
+      document.body.appendChild(overlay)
+    }
+    overlay.innerHTML = `
+      <div class="overlay-backdrop" onclick="App.closePrivilegeForm()"></div>
+      <div class="sheet privilege-sheet privilege-form-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h2>${existing ? 'แก้ไขสิทธิพิเศษ' : 'เพิ่มสิทธิพิเศษ'}</h2>
+          <div style="display:flex;align-items:center;gap:6px">
+            <button class="btn btn-primary btn-sm" onclick="App.savePrivilege('${esc(privilegeId)}')" style="width:auto">บันทึก</button>
+            <button class="btn-icon" onclick="App.closePrivilegeForm()" aria-label="ปิด">✕</button>
+          </div>
+        </div>
+        <div class="sheet-body privilege-form-screen">${bodyHtml}</div>
       </div>`
-    App.openSubScreen(html, { animate })
+    if (animate || !overlay.classList.contains('open')) App.openOverlay('privilege-form-overlay')
+  }
+
+  App.closePrivilegeForm = function() {
+    const overlay = document.getElementById('privilege-form-overlay')
+    if (!overlay) return
+    App.closeOverlay('privilege-form-overlay')
+    setTimeout(() => {
+      if (!overlay.classList.contains('open')) overlay.remove()
+    }, 390)
   }
 
   App.savePrivilege = function(privilegeId = '') {
@@ -14759,6 +14806,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     } else {
       S.privileges.unshift(draft)
     }
+    App.closePrivilegeForm()
     persistPrivilegesAndRefresh(true)
     toast(idx >= 0 ? 'แก้ไขสิทธิพิเศษแล้ว' : 'เพิ่มสิทธิพิเศษแล้ว', 'success')
   }
@@ -14855,6 +14903,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const idx = (S.privileges || []).findIndex(row => row.id === privilegeId)
     if (idx < 0) return
     const removed = S.privileges.splice(idx, 1)[0]
+    App.closePrivilegeForm?.()
     document.getElementById('privilege-actions-overlay')?.remove()
     document.getElementById('privilege-detail-overlay')?.remove()
     App.openPrivilegesScreen(S.privilegesFilter || 'active', S.privilegeSearch || '')
@@ -15909,6 +15958,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
     const el = document.getElementById(id)
     if (!el?.classList.contains('open')) return
+    App._suppressNextSubScreenAnimationUntil = Date.now() + 700
     clearTimeout(_closeTimers[id])
     el.classList.add('mt-closing')
     _closeTimers[id] = setTimeout(() => {
