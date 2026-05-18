@@ -141,35 +141,328 @@
     return { date: t, clean: c }
   }
 
+  // ── Bank alias map ────────────────────────────────────────
+  // terms = what user might say/type · match = substrings in wallet names
+  const BANK_ALIASES = [
+    { terms: ['scb','ไทยพาณิชย์','พาณิชย์'],              match: ['scb','ไทยพาณิชย์'] },
+    { terms: ['kbank','กสิกร','กสิกรไทย','เคแบงก์'],       match: ['kbank','กสิกร'] },
+    { terms: ['ttb','tmb','ทีทีบี','fcd','ธนชาต'],         match: ['ttb','tmb','ทีทีบี','ธนชาต'] },
+    { terms: ['bbl','กรุงเทพ'],                            match: ['bbl','กรุงเทพ'] },
+    { terms: ['ktb','กรุงไทย'],                            match: ['ktb','กรุงไทย'] },
+    { terms: ['bay','กรุงศรี','krungsri','อยุธยา'],        match: ['bay','กรุงศรี','krungsri'] },
+    { terms: ['gsb','ออมสิน'],                             match: ['gsb','ออมสิน'] },
+    { terms: ['baac','ธกส','ธ.ก.ส'],                       match: ['baac','ธกส'] },
+    { terms: ['uob','ยูโอบี'],                             match: ['uob'] },
+    { terms: ['citi','ซิตี้'],                             match: ['citi'] },
+    { terms: ['truemoney','ทรูมันนี่','truewallet'],       match: ['truemoney','true'] },
+    { terms: ['rabbit','แรบบิท'],                          match: ['rabbit'] },
+    { terms: ['เป๋าตัง'],                                  match: ['เป๋าตัง'] },
+  ]
+
+  // ── Dynamic wallet map ────────────────────────────────────
+  // Builds token → walletId from actual wallet names + BANK_ALIASES cross-language bridge.
+  // Rebuilt each parse call (wallets are few, so cheap).
+  function _buildWalletMap(wallets) {
+    const map      = new Map() // lowercase_token → walletId
+    const spendable = (wallets || []).filter(w =>
+      !w.archived && ['bank','cash','ewallet','saving','credit'].includes(String(w.type || '')))
+
+    for (const w of spendable) {
+      const lower = (w.name || '').toLowerCase()
+
+      // 1. Tokens from the wallet name itself (split on spaces + punctuation)
+      lower.replace(/[^\wก-๛]+/g, ' ').split(' ')
+        .filter(t => t.length >= 2)
+        .forEach(t => { if (!map.has(t)) map.set(t, w.id) })
+
+      // 2. Cross-language bridge: if this wallet matches a BANK_ALIASES entry,
+      //    register ALL its user-facing terms so Thai ↔ English aliases work.
+      const entry = BANK_ALIASES.find(e => e.match.some(m => lower.includes(m)))
+      if (entry) entry.terms.forEach(t => { if (!map.has(t)) map.set(t, w.id) })
+    }
+
+    // 3. Special cash aliases
+    const cashW = spendable.find(w => w.type === 'cash')
+    if (cashW) ['เงินสด', 'สด', 'cash'].forEach(t => { if (!map.has(t)) map.set(t, cashW.id) })
+
+    return map
+  }
+
+  function _lookupWallet(token, wMap) {
+    if (!token) return null
+    const k = token.toLowerCase().trim()
+    return wMap.get(k) || null
+  }
+
   // ── Parser: Wallet match ──────────────────────────────────
-  function matchWallet(text, wallets) {
+  function matchWallet(text, wallets, wMap) {
     const lower     = text.toLowerCase()
+    wMap = wMap || _buildWalletMap(wallets)
     const spendable = (wallets || [])
       .filter(w => !w.archived && ['bank','cash','ewallet','saving','credit'].includes(String(w.type || '')))
-      .sort((a, b) => (b.name || '').length - (a.name || '').length) // longest name first
+      .sort((a, b) => (b.name || '').length - (a.name || '').length)
 
+    // 1. Direct substring match against actual wallet names (longest first)
     for (const w of spendable) {
       const name = String(w.name || '').toLowerCase()
       if (!name || !lower.includes(name)) continue
       const safeRe = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
       return { walletId: w.id, clean: text.replace(safeRe, '').replace(/\s+/g, ' ').trim() }
     }
+
+    // 2. "บัตร X" / "จ่ายด้วย X" / "โอน X" / "ใช้ X" prefix patterns
+    const cardPat = /(?:บัตร|จ่าย(?:ด้วย)?|โอน(?:จาก)?|ใช้)\s*([a-zA-Zก-๛0-9]+(?:\s+[a-zA-Zก-๛0-9]+)?)/i
+    const cardM = text.match(cardPat)
+    if (cardM) {
+      const wId = _lookupWallet(cardM[1], wMap) ||
+                  _lookupWallet(cardM[1].split(/\s+/)[0], wMap)
+      if (wId) return { walletId: wId, clean: text.replace(cardM[0], '').replace(/\s+/g, ' ').trim() }
+    }
+
+    // 3. เงินสด / cash → direct cash lookup
+    if (/เงินสด|cash/i.test(lower)) {
+      const cashW = spendable.find(w => w.type === 'cash')
+      if (cashW) return { walletId: cashW.id, clean: text.replace(/เงินสด|cash/gi, '').replace(/\s+/g, ' ').trim() }
+    }
+
+    // 4. Standalone token scan via dynamic map (right-to-left — wallet hint usually at end)
+    const tokens = text.split(/\s+/)
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      if (i + 1 < tokens.length) {
+        const two  = tokens[i] + ' ' + tokens[i + 1]
+        const wId2 = _lookupWallet(two, wMap)
+        if (wId2) {
+          const safeRe = new RegExp(two.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+          return { walletId: wId2, clean: text.replace(safeRe, '').replace(/\s+/g, ' ').trim() }
+        }
+      }
+      const wId = _lookupWallet(tokens[i], wMap)
+      if (wId) {
+        const safeRe = new RegExp(tokens[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+        return { walletId: wId, clean: text.replace(safeRe, '').replace(/\s+/g, ' ').trim() }
+      }
+    }
+
     return null
   }
 
   // ── Parser: Amount extraction ─────────────────────────────
+  // Returns { raw, val, idx, fullMatch } where fullMatch is the full text slice to remove
   function extractAmount(text) {
-    const re      = /(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/g
+    // Comma-formatted: require ≥1 comma group (35,000); plain: \d+ (35000)
+    const NUM = '\\d{1,3}(?:,\\d{3})+(?:\\.\\d{1,2})?|\\d+(?:\\.\\d{1,2})?'
+
+    // Priority 1: explicit unit markers (฿X  or  X บาท/บ.)
+    const unitPats = [
+      new RegExp(`฿\\s*(${NUM})`, 'i'),
+      new RegExp(`(${NUM})\\s*(?:บาท|บ\\.)`, 'i'),
+    ]
+    for (const re of unitPats) {
+      const m = text.match(re)
+      if (!m) continue
+      const numStr = (m[1] || m[2] || m[0]).replace(/,/g, '')
+      const val    = parseFloat(numStr)
+      if (val > 0) return { raw: m[1] || m[2] || m[0], val, idx: m.index, fullMatch: m[0] }
+    }
+
+    // Priority 2: largest plain number (exclude likely years)
+    const re      = new RegExp(NUM, 'g')
     const matches = [...text.matchAll(re)]
     if (!matches.length) return null
-
     const nums = matches
-      .map(m => ({ raw: m[0], val: parseFloat(m[0].replace(/,/g, '')), idx: m.index }))
-      // Exclude likely years (4-digit 2000–2100) and zeroes
-      .filter(n => n.val > 0 && !(n.val >= 2000 && n.val <= 2100 && n.raw.replace(/,/g,'').length === 4))
-
+      .map(m => ({ raw: m[0], val: parseFloat(m[0].replace(/,/g, '')), idx: m.index, fullMatch: m[0] }))
+      .filter(n => n.val > 0 && !(n.val >= 2000 && n.val <= 2100 && n.raw.replace(/,/g, '').length === 4))
     if (!nums.length) return null
-    return [...nums].sort((a, b) => b.val - a.val)[0] // largest = most likely amount
+    return [...nums].sort((a, b) => b.val - a.val)[0]
+  }
+
+  // ── Phonetic helpers for Tier 4 matching ─────────────────
+  // Thai char → approximate Latin phoneme (character map)
+  const _THAI_MAP = {
+    'ก':'k','ข':'k','ค':'k','ฆ':'k',
+    'ง':'n',
+    'จ':'j','ช':'ch','ฉ':'ch',
+    'ซ':'s','ส':'s','ศ':'s','ษ':'s',
+    'ญ':'y','ณ':'n','น':'n',
+    'ด':'d','ฎ':'d',
+    'ต':'t','ฏ':'t','ถ':'t','ท':'t','ธ':'t','ฐ':'t',
+    'บ':'b','ป':'p','ผ':'p','พ':'p','ภ':'p',
+    'ฝ':'f','ฟ':'f',
+    'ม':'m','ย':'y','ร':'r','ล':'l','ฬ':'l','ว':'w','ห':'h','ฮ':'h',
+    'อ':'',
+    // Vowels → keep for romanize step (stripped later in _phoneticKey)
+    'า':'a','ั':'a','ะ':'a','็':'e',
+    'ิ':'i','ี':'i','ึ':'u','ื':'u','ุ':'u','ู':'u',
+    'เ':'e','แ':'a','โ':'o','ไ':'a','ใ':'a',
+    // Tone marks + silent marker → strip
+    '่':'','้':'','๊':'','๋':'','์':'','ํ':'',
+    ' ':' ',
+  }
+
+  function _thaiRomanize(text) {
+    return text.split('').map(c => (_THAI_MAP[c] !== undefined ? _THAI_MAP[c] : c)).join('')
+  }
+
+  // Latin text → consonant skeleton (strips vowels + normalises digraphs)
+  function _phoneticKey(text) {
+    return text.toLowerCase()
+      .replace(/ng/g,  'n') // ng → n before other digraph rules
+      .replace(/wh/g,  'w')
+      .replace(/ph/g,  'f')
+      .replace(/ck/g,  'k')
+      .replace(/ght/g, 't')
+      .replace(/gh/g,  'g')
+      .replace(/tch/g, 'c')
+      .replace(/ch/g,  'c')
+      .replace(/sh/g,  's')
+      .replace(/th/g,  't')
+      .replace(/[^a-z]/g,   '')  // strip non-alpha
+      .replace(/(.)\1+/g,  '$1') // collapse repeated chars
+      .replace(/[aeiou]/g,  '')  // strip vowels → consonant skeleton
+  }
+
+  // Levenshtein edit distance (space-efficient DP)
+  function _editDist(a, b) {
+    if (!a.length) return b.length
+    if (!b.length) return a.length
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j)
+    for (let i = 1; i <= a.length; i++) {
+      const curr = [i]
+      for (let j = 1; j <= b.length; j++) {
+        curr[j] = a[i - 1] === b[j - 1]
+          ? prev[j - 1]
+          : 1 + Math.min(prev[j], curr[j - 1], prev[j - 1])
+      }
+      prev = curr
+    }
+    return prev[b.length]
+  }
+
+  // ── Dynamic merchant lookup (fuzzy) ──────────────────────
+  // Returns a function: query → best-matching merchant object (or null)
+  function _buildMerchantLookup(merchants) {
+    if (!merchants || !merchants.length) return () => null
+    const STRIP = /^(?:ร้านอาหาร|ร้านกาแฟ|ร้านขนม|ร้าน|คาเฟ่|café|cafe|restaurant|the\s+)/i
+    const SPLIT = /[\s\-_.\/,&()+]+/
+
+    const entries = (merchants || [])
+      .filter(m => (m.name || '').length >= 2)
+      .map(m => {
+        const raw    = (m.name || '').toLowerCase().trim()
+        const norm   = raw.replace(STRIP, '').trim()
+        const tokens = norm.split(SPLIT).filter(t => t.length >= 2)
+        const pKey   = _phoneticKey(_thaiRomanize(norm) || norm)
+        return { m, raw, norm, tokens, pKey }
+      })
+
+    return function fuzzyFind(query) {
+      if (!query || query.length < 2) return null
+      const qRaw    = query.toLowerCase().trim()
+      const qNorm   = qRaw.replace(STRIP, '').trim()
+      const qTokens = qNorm.split(SPLIT).filter(t => t.length >= 2)
+
+      let best = null, bestScore = 0
+
+      for (const e of entries) {
+        if (!e.raw) continue
+        let score = 0
+
+        // Tier 1 — exact or substring (raw)
+        if (qRaw === e.raw || qRaw.includes(e.raw) || e.raw.includes(qRaw)) {
+          score = 1.0
+        }
+        // Tier 2 — normalized substring (strips ร้าน/cafe prefix from both sides)
+        else if (qNorm.length >= 2 && e.norm.length >= 2 &&
+                 (qNorm.includes(e.norm) || e.norm.includes(qNorm))) {
+          score = 0.85
+        }
+        // Tier 3 — token overlap (each token must be ≥3 chars to avoid noise)
+        else if (qTokens.length && e.tokens.length) {
+          let hits = 0
+          for (const qt of qTokens) {
+            if (qt.length < 3) continue
+            if (e.tokens.some(t => t === qt || (t.length >= 3 && (t.includes(qt) || qt.includes(t))))) hits++
+          }
+          if (hits > 0) score = 0.5 + 0.35 * (hits / Math.max(qTokens.length, e.tokens.length))
+        }
+        // Tier 4 — Thai phonetic skeleton (e.g. "ไว้สตอรี่" ↔ "white story")
+        // Thai SR drops English final consonants (/t/ /d/ /s/) so we also accept
+        // prefix containment: "w" ⊂ "wt" means all Thai consonants appear in English word
+        if (score === 0 && e.pKey.length >= 2) {
+          const qKey = _phoneticKey(_thaiRomanize(qNorm))
+          if (qKey.length >= 2) {
+            const dist = _editDist(qKey, e.pKey)
+            const sim  = 1 - dist / Math.max(qKey.length, e.pKey.length)
+            // Subsequence check: all consonants of shorter appear in longer in order
+            // e.g. "wstr" ⊆ "wtstry" → Thai SR dropped final /t/ but all Thai consonants present
+            const shorter = qKey.length <= e.pKey.length ? qKey : e.pKey
+            const longer  = qKey.length <= e.pKey.length ? e.pKey : qKey
+            let si = 0
+            for (let li = 0; li < longer.length && si < shorter.length; li++) {
+              if (longer[li] === shorter[si]) si++
+            }
+            const isSubseq = shorter.length >= 2 && si === shorter.length
+              && shorter.length / longer.length >= 0.5
+            if (sim >= 0.65 || isSubseq) score = 0.65
+          }
+        }
+
+        if (score > bestScore) { bestScore = score; best = e.m }
+      }
+
+      return bestScore >= 0.6 ? best : null
+    }
+  }
+
+  // ── Parser: Item vs Merchant split ───────────────────────
+  // "สลัดอกไก่ร้านไว้สตอรี่" → { item:"สลัดอกไก่", merchant:"ร้านไว้สตอรี่" }
+  const MERCHANT_PREFIXES = [
+    'ร้านอาหาร','ร้านกาแฟ','ร้านขนม','ร้าน',
+    'คาเฟ่','cafe','café','restaurant','coffee shop',
+    'บาร์','bar','ผับ','pub','ไนท์คลับ',
+    'โรงแรม','hotel','รีสอร์ท','resort','hostel',
+    'ตลาด','market','ห้าง','mall','department store',
+    'โรงพยาบาล','hospital','คลินิก','clinic','pharmacy','เภสัช',
+    'ปั๊ม','ปั๊มน้ำมัน','gas station',
+    'สนามบิน','airport',
+  ].sort((a, b) => b.length - a.length) // longest first to avoid partial matches
+
+  function splitItemMerchant(text, fuzzyFind) {
+    if (!text) return { item: '', merchant: '' }
+    const lower = text.toLowerCase()
+
+    // 1. Merchant prefix in text → split at that position
+    for (const pfx of MERCHANT_PREFIXES) {
+      const idx = lower.indexOf(pfx.toLowerCase())
+      if (idx === -1) continue
+      const item     = text.slice(0, idx).trim()
+      const merchant = text.slice(idx).trim()
+      if (merchant) return { item, merchant }
+    }
+
+    // 2. Fuzzy / exact merchant match against known merchants
+    const fuzzyM = fuzzyFind?.(text) || (() => {
+      // Fallback: exact substring (original behaviour when no fuzzyFind passed)
+      return (S.merchants || [])
+        .sort((a, b) => (b.name || '').length - (a.name || '').length)
+        .find(m => { const mn = (m.name || '').toLowerCase(); return mn && (lower.includes(mn) || mn.includes(lower)) })
+    })()
+
+    if (fuzzyM) {
+      const mn  = (fuzzyM.name || '').toLowerCase()
+      const idx = lower.indexOf(mn)
+      if (idx >= 0) {
+        // Merchant name found literally in text — extract it
+        const item = (text.slice(0, idx) + text.slice(idx + fuzzyM.name.length)).trim()
+        return { item: item || text, merchant: fuzzyM.name }
+      }
+      // Fuzzy match but name not literally present (e.g. normalised/token match)
+      // → use canonical name, whole input treated as item for category inference
+      return { item: text, merchant: fuzzyM.name }
+    }
+
+    // 3. No match — whole text is merchant/description
+    return { item: text, merchant: text }
   }
 
   // ── Main parser ───────────────────────────────────────────
@@ -194,9 +487,11 @@
     const { date, clean: afterDate } = extractDate(text)
     text = afterDate
 
-    // 3. Wallet
+    // 3. Build lookup helpers once (cheap — few wallets/merchants)
+    const _wMap       = _buildWalletMap(S.wallets || [])
+    const _fuzzyMerch = _buildMerchantLookup(S.merchants || [])
     let walletId = ''
-    const wm = matchWallet(text, S.wallets || [])
+    const wm = matchWallet(text, S.wallets || [], _wMap)
     if (wm) { walletId = wm.walletId; text = wm.clean }
 
     // 4. Amount
@@ -204,41 +499,56 @@
     if (!amountMatch) {
       return { amount: 0, type, date, walletId, merchant: '', categoryId: '', note: raw.trim(), confidence: 'low' }
     }
-    const amount = Math.round(amountMatch.val * 100) / 100
-    text = (text.slice(0, amountMatch.idx) + text.slice(amountMatch.idx + amountMatch.raw.length))
+    const amount    = Math.round(amountMatch.val * 100) / 100
+    const amountEnd = amountMatch.idx + amountMatch.fullMatch.length
+    text = (text.slice(0, amountMatch.idx) + text.slice(amountEnd))
       .replace(/\s+/g, ' ').trim()
 
-    // 5. Merchant + category from remaining text
+    // 5. Split remaining into item description + merchant name
     let merchant   = ''
     let categoryId = ''
     const remaining = text.trim()
 
     if (remaining) {
-      const suggestion = App.getMerchantSuggestion?.(remaining)
+      let { item, merchant: merchantName } = splitItemMerchant(remaining, _fuzzyMerch)
+
+      // Second-pass wallet extraction on merchant string (reuse same map)
+      if (!walletId) {
+        const wm2 = matchWallet(merchantName, S.wallets || [], _wMap)
+        if (wm2) { walletId = wm2.walletId; merchantName = wm2.clean }
+      }
+      // Strip residual payment tokens ("บัตร X", "จ่ายด้วย X", etc.)
+      merchantName = merchantName
+        .replace(/\s*(?:บัตร|จ่าย(?:ด้วย)?|โอน(?:จาก)?|ใช้)\s+[a-zA-Zก-๛0-9]+/gi, '')
+        .replace(/\s+/g, ' ').trim()
+      // Strip standalone wallet-hint tokens (all terms registered in dynamic map)
+      const _bankTermSet = new Set([
+        ..._wMap.keys(),
+        ...BANK_ALIASES.flatMap(e => e.terms),
+      ])
+      merchantName = merchantName.split(/\s+/)
+        .filter(t => !_bankTermSet.has(t.toLowerCase()))
+        .join(' ').trim()
+
+      // Try known-merchant suggestion on the cleaned merchant portion
+      const suggestion = App.getMerchantSuggestion?.(merchantName)
       if (suggestion?.merchant) {
         merchant   = suggestion.merchant
         categoryId = suggestion.categoryId || ''
         if (!walletId && suggestion.walletId) walletId = suggestion.walletId
       } else {
-        // Partial match against known merchants (longest name first)
-        const lRem    = remaining.toLowerCase()
-        const knownM  = (S.merchants || [])
-          .sort((a, b) => (b.name || '').length - (a.name || '').length)
-          .find(m => {
-            const mn = String(m.name || '').toLowerCase()
-            return mn && (lRem.includes(mn) || mn.includes(lRem))
-          })
-        if (knownM) {
-          merchant = knownM.name
-          const sug2 = App.getMerchantSuggestion?.(knownM.name)
-          if (sug2?.categoryId) categoryId = sug2.categoryId
-        } else {
-          merchant = remaining
-        }
+        merchant = merchantName
       }
+
+      // Category: item description first (what was bought)
+      if (!categoryId && item && item !== merchantName) {
+        categoryId = inferCategoryId(item, type)
+      }
+      // Category: merchant name fallback
+      if (!categoryId) categoryId = inferCategoryId(merchantName, type)
     }
 
-    // 6. Infer category from keywords over the full raw input if still empty
+    // 6. Category: full raw input as last resort
     if (!categoryId) categoryId = inferCategoryId(raw, type)
 
     // 7. For income: make sure we pick an income category, not an expense one
@@ -364,14 +674,12 @@
             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
             onkeydown="if(event.key==='Enter'){event.preventDefault();App._qcSubmit()}">
           ${hasSpeech ? `
-            <button id="qc-mic-btn" type="button" aria-label="กดค้างเพื่อพูด"
+            <button id="qc-mic-btn" type="button" aria-label="กดเพื่อเริ่มบันทึกเสียง"
               style="position:absolute;right:6px;top:50%;transform:translateY(-50%);
                      background:none;border:none;padding:8px;cursor:pointer;
                      color:var(--muted);font-size:22px;line-height:1;border-radius:8px;
                      -webkit-tap-highlight-color:transparent;user-select:none"
-              onpointerdown="App._qcMicStart(event)"
-              onpointerup="App._qcMicStop()"
-              onpointercancel="App._qcMicStop()">🎤</button>` : ''}
+              onclick="App._qcMicStart(event)">🎤</button>` : ''}
         </div>
         ${errorMsg
           ? `<div style="color:var(--expense);font-size:13px;margin-bottom:10px;
@@ -379,8 +687,7 @@
                ⚠️ ${esc(errorMsg)}</div>`
           : ''}
         <div style="font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.7">
-          พิมพ์ฟรีฟอร์ม หรือกดค้าง 🎤 แล้วพูด<br>
-          <span style="opacity:.7">รองรับ: ยอดเงิน · ร้านค้า · กระเป๋า · "เมื่อวาน"</span>
+          พิมพ์สั้น ๆ หรือกด 🎤 เพื่อพูด
         </div>
         <button class="btn btn-primary" onclick="App._qcSubmit()" style="margin-bottom:10px">ถัดไป →</button>
         <button class="btn btn-secondary" onclick="App._qcOpenFull()">เปิดฟอร์มเต็ม</button>
@@ -465,10 +772,57 @@
   }
 
   // ── Mic visual state ──────────────────────────────────────
+  function _injectQcStyles() {
+    if (document.getElementById('qc-styles')) return
+    const s = document.createElement('style')
+    s.id = 'qc-styles'
+    s.textContent = `
+      @keyframes qc-wave {
+        0%, 100% { transform: scaleY(.25); }
+        50%       { transform: scaleY(1); }
+      }
+      @keyframes qc-dot-pulse {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: .35; }
+      }
+      .qc-wave-bar {
+        display: inline-block;
+        width: 3px;
+        background: var(--expense, #ef4444);
+        border-radius: 2px;
+        transform-origin: center;
+        animation: qc-wave .75s ease-in-out infinite;
+      }
+      .qc-rec-dot {
+        display: inline-block;
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: var(--expense, #ef4444);
+        flex-shrink: 0;
+        animation: qc-dot-pulse 1s ease-in-out infinite;
+      }`
+    document.head.appendChild(s)
+  }
+
   function _setMicListening(on) {
     const btn = document.getElementById('qc-mic-btn')
     const inp = document.getElementById('qc-input')
-    if (btn) btn.style.color = on ? 'var(--expense)' : ''
+    if (btn) {
+      if (on) {
+        _injectQcStyles()
+        const bars = [10, 16, 11, 20, 13, 18, 10]
+        btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:5px;line-height:1">
+          <span class="qc-rec-dot"></span>
+          <span style="display:inline-flex;align-items:center;gap:2px">
+            ${bars.map((h, i) =>
+              `<span class="qc-wave-bar" style="height:${h}px;animation-delay:${(i * 0.09).toFixed(2)}s"></span>`
+            ).join('')}
+          </span>
+        </span>`
+      } else {
+        btn.innerHTML = '🎤'
+      }
+    }
     if (inp) inp.placeholder = on
       ? 'กำลังฟัง...'
       : 'เช่น กาแฟ 65 · Grab 120 · ข้าว 80 เมื่อวาน'
@@ -491,6 +845,8 @@
 
   App.closeQuickCapture = function () {
     stopListening()
+    try { document.activeElement?.blur?.() } catch (_) {}
+    try { document.body?.classList.remove('keyboard-open') } catch (_) {}
     document.getElementById(QC_OVERLAY_ID)?.classList.remove('open')
     _qcResult = null
   }
