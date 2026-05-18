@@ -1511,6 +1511,51 @@ body.is-transactions #fab:active {
   stroke-width: 2.75 !important;
 }
 
+/* ── Quick Capture mic FAB ───────────────────────────────── */
+#fab-mic {
+  position: absolute !important;
+  right: max(16px, var(--safe-r)) !important;
+  bottom: calc(var(--nav-h) + var(--safe-b) + var(--app-bottom-gap) + 6px + var(--fab-size, 56px) + 12px) !important;
+  width: 46px !important;
+  height: 46px !important;
+  border-radius: 14px !important;
+  background: var(--surface) !important;
+  color: var(--primary) !important;
+  border: 1.5px solid var(--border) !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,.12) !important;
+  z-index: 320 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: opacity .18s ease, transform .18s ease, box-shadow .18s ease !important;
+}
+
+#fab-mic.hidden,
+body:not(.is-dashboard):not(.is-transactions) #fab-mic {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translate3d(0, 8px, 0) scale(.9) !important;
+}
+
+body.is-dashboard #fab-mic,
+body.is-transactions #fab-mic {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: translate3d(0,0,0) !important;
+}
+
+body.is-dashboard #fab-mic:active,
+body.is-transactions #fab-mic:active {
+  transform: translate3d(0,1px,0) scale(.96) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,.1) !important;
+}
+
+html.dark #fab-mic {
+  background: var(--card) !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,.3) !important;
+}
+
 .card,
 .wallet-card,
 .mt-alert-card,
