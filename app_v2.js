@@ -919,6 +919,9 @@ let S = {
   creditLimitGroups: [], rewardAccounts: [], rewardLedger: [], netWorthSnapshots: [], investmentSnapshots: [],
   goals: [],
   privileges: [],
+  splitBills: [],
+  splitPeople: [],
+  splitBillDraft: null,
 
   // Add-transaction flow
   tx: {
@@ -1528,6 +1531,9 @@ function init() {
   S.cryptoSyncMeta = data.cryptoSyncMeta || {}
   S.goals = data.goals || []
   S.privileges = data.privileges || []
+  S.splitBills = data.splitBills || []
+  S.splitPeople = data.splitPeople || []
+  S.splitBillDraft = data.splitBillDraft || null
   S.migrations = { cryptoCentralizedV1: false, ...(data.migrations || {}) }
   S.creditLimitGroups  = data.creditLimitGroups  || []
   S.rewardAccounts     = data.rewardAccounts     || []
@@ -5250,7 +5256,7 @@ App._showMerchantDropdown = function(q = '') {
         String(b[1].latestDate).localeCompare(String(a[1].latestDate)) ||
         String(merchantsByName.get(a[0])?.name || '').localeCompare(String(merchantsByName.get(b[0])?.name || ''))
       )
-      .slice(0, 10)
+      .slice(0, 20)
       .map(([key]) => merchantsByName.get(key))
       .filter(Boolean)
   })()
@@ -5259,7 +5265,7 @@ App._showMerchantDropdown = function(q = '') {
     ? merchants
       .filter(m => String(m.name || '').toLowerCase().includes(norm))
       .slice(0, 8)
-    : (recentPopularMerchants.length ? recentPopularMerchants : merchants.slice(0, 10))
+    : (recentPopularMerchants.length ? recentPopularMerchants : merchants.slice(0, 20))
 
   App._merchantDropdownMatches = matches
 
@@ -13109,6 +13115,8 @@ App._pickMerchant = function(name, opts = {}) {
       if (key === 'settings') S.settings = { ...(S.settings || {}), ...(normalized.settings || {}) }
       else if (key === 'aiInsightStore') {
         try { if (typeof InsightEngine !== 'undefined') InsightEngine.saveStore(normalized.aiInsightStore) } catch (_) {}
+      } else if (['splitBills', 'splitPeople', 'splitBillDraft'].includes(key)) {
+        S[key] = normalized[key]
       } else {
         S[key] = normalized[key]
       }
@@ -13443,7 +13451,10 @@ App._pickMerchant = function(name, opts = {}) {
 
   App._applyImportMergePayload = function(payload) {
     const stats = {}
-    ;['transactions','wallets','budgets','incomeBudgets','recurring','upcomingBills','merchants','ccBenefitRules','creditLimitGroups','rewardAccounts','rewardLedger','netWorthSnapshots','investmentSnapshots','cryptoAssets','cryptoHoldings','cryptoTransactions','goals','privileges'].forEach(key => {
+    S.splitBills = Storage.load?.(KEYS.splitBills) || S.splitBills || []
+    S.splitPeople = Storage.load?.(KEYS.splitPeople) || S.splitPeople || []
+    S.splitBillDraft = Storage.load?.(KEYS.splitBillDraft) || S.splitBillDraft || null
+    ;['transactions','wallets','budgets','incomeBudgets','recurring','upcomingBills','merchants','ccBenefitRules','creditLimitGroups','rewardAccounts','rewardLedger','netWorthSnapshots','investmentSnapshots','cryptoAssets','cryptoHoldings','cryptoTransactions','goals','privileges','splitBills','splitPeople'].forEach(key => {
       const result = mergeById(S[key] || [], payload[key] || [])
       S[key] = result.rows
       stats[key] = result
@@ -13456,6 +13467,12 @@ App._pickMerchant = function(name, opts = {}) {
     S.marketPrices = mergeObjectByKey(S.marketPrices || {}, payload.marketPrices || {})
     S.cryptoSyncMeta = { ...(payload.cryptoSyncMeta || {}), ...(S.cryptoSyncMeta || {}) }
     S.migrations = { ...(payload.migrations || {}), ...(S.migrations || {}) }
+    if (!S.splitBillDraft && payload.splitBillDraft) {
+      S.splitBillDraft = payload.splitBillDraft
+      stats.splitBillDraft = { added: 1, skipped: 0 }
+    } else {
+      stats.splitBillDraft = { added: 0, skipped: payload.splitBillDraft ? 1 : 0 }
+    }
     App.ensurePrivilegesState?.()
     App.ensureCryptoState?.()
     App.ensureLedgerBaselines?.(true)
@@ -13469,7 +13486,7 @@ App._pickMerchant = function(name, opts = {}) {
       ['กระเป๋า', 'wallets'], ['รายการ', 'transactions'], ['รายการรอจ่าย', 'upcomingBills'], ['สิทธิพิเศษ', 'privileges'], ['หมวดหมู่', 'categories'],
       ['ร้านค้า', 'merchants'], ['รายการประจำ', 'recurring'], ['เป้าหมาย', 'goals'],
       ['ผ่อนชำระ', 'installments'], ['บัญชีคะแนน', 'rewardAccounts'], ['Crypto holdings', 'cryptoHoldings'],
-      ['กฎสิทธิประโยชน์', 'ccBenefitRules'],
+      ['กฎสิทธิประโยชน์', 'ccBenefitRules'], ['หารบิล', 'splitBills'], ['คนหารบิล', 'splitPeople'],
     ]
     const counts = rows.map(([label, key]) => `<div class="reward-tile"><span>${esc(label)}</span><strong>${previewCount(payload, key).toLocaleString('en-US')}</strong></div>`).join('')
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen();${input ? "document.getElementById('import-file-v5').value=''" : ''}">←</button><h2>Preview นำเข้า</h2></div>

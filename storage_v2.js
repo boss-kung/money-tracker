@@ -24,11 +24,14 @@ const KEYS = {
   privileges:          'mt_privileges',
   creditCardPromoSearches: 'mt_credit_card_promo_searches',
   creditCardPromotions:    'mt_credit_card_promotions',
+  splitBills:          'mt_split_bills',
+  splitPeople:         'mt_split_people',
+  splitBillDraft:      'mt_split_bill_draft',
   migrations:          'mt_migrations',
   aiInsightStore:      'mt_ai_insight_store',
 }
 
-const BACKUP_SCHEMA_VERSION = 2
+const BACKUP_SCHEMA_VERSION = 3
 const LOCAL_BACKUP_KEY = 'mt_local_backup_snapshots'
 const LOCAL_BACKUP_LIMIT = 5
 const BACKUP_SCHEMA_KEYS = [
@@ -56,6 +59,9 @@ const BACKUP_SCHEMA_KEYS = [
   'privileges',
   'creditCardPromoSearches',
   'creditCardPromotions',
+  'splitBills',
+  'splitPeople',
+  'splitBillDraft',
   'migrations',
   'settings',
   'aiInsightStore',
@@ -86,6 +92,9 @@ const BACKUP_DEFAULTS = {
   privileges: [],
   creditCardPromoSearches: [],
   creditCardPromotions: [],
+  splitBills: [],
+  splitPeople: [],
+  splitBillDraft: null,
   migrations: { cryptoCentralizedV1: false },
   settings: {},
   aiInsightStore: { version: 1, lastRefreshed: null, payloadHash: '', insights: [], hiddenTypes: [], feedback: [] },
@@ -296,6 +305,9 @@ const Storage = {
     data.goals               = Storage.load(KEYS.goals)               || JSON.parse(JSON.stringify(typeof DEFAULT_GOALS !== 'undefined' ? DEFAULT_GOALS : []))
     data.creditCardPromoSearches = Storage.load(KEYS.creditCardPromoSearches) || []
     data.creditCardPromotions    = Storage.load(KEYS.creditCardPromotions)    || []
+    data.splitBills              = Storage.load(KEYS.splitBills)              || []
+    data.splitPeople             = Storage.load(KEYS.splitPeople)             || []
+    data.splitBillDraft          = Storage.load(KEYS.splitBillDraft)          || null
     const loadedPrivileges   = Storage.load(KEYS.privileges)
     data.privileges          = loadedPrivileges || JSON.parse(JSON.stringify(
       typeof DEFAULT_PRIVILEGES !== 'undefined'
@@ -333,6 +345,9 @@ const Storage = {
       Storage.save(KEYS.privileges,          state.privileges          || []),
       Storage.save(KEYS.creditCardPromoSearches, state.creditCardPromoSearches || []),
       Storage.save(KEYS.creditCardPromotions,    state.creditCardPromotions    || []),
+      Storage.save(KEYS.splitBills,              state.splitBills              || []),
+      Storage.save(KEYS.splitPeople,             state.splitPeople             || []),
+      Storage.save(KEYS.splitBillDraft,          state.splitBillDraft          || null),
       Storage.save(KEYS.migrations,          state.migrations          || { cryptoCentralizedV1: false }),
     ]
     if (!results.every(Boolean)) return false
@@ -350,6 +365,10 @@ const Storage = {
     BACKUP_SCHEMA_KEYS.forEach(key => {
       const fallback = BACKUP_DEFAULTS[key]
       let value = state?.[key]
+      if (['splitBills', 'splitPeople', 'splitBillDraft'].includes(key)) {
+        value = Storage.load(KEYS[key])
+        if (value === null) value = state?.[key]
+      }
       if (value === undefined && key === 'aiInsightStore') {
         try { value = JSON.parse(localStorage.getItem(KEYS.aiInsightStore) || 'null') } catch (_) { value = null }
       }
@@ -388,6 +407,13 @@ const Storage = {
           if (typeof incoming.version === 'number') emptyStore.version = incoming.version
         }
         normalized[key] = emptyStore
+        return
+      }
+
+      if (key === 'splitBillDraft') {
+        normalized[key] = incoming && typeof incoming === 'object' && !Array.isArray(incoming)
+          ? incoming
+          : null
         return
       }
 

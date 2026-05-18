@@ -32,9 +32,9 @@
   // ── Store ────────────────────────────────────────────────────
   const SbStore = {
     loadBills:    () => { try { return JSON.parse(localStorage.getItem(BILLS_KEY)||'[]')||[] } catch(_) { return [] } },
-    saveBills:    b  => { try { localStorage.setItem(BILLS_KEY,  JSON.stringify(b)); return true } catch(_) { return false } },
+    saveBills:    b  => { try { localStorage.setItem(BILLS_KEY,  JSON.stringify(b)); if (typeof S !== 'undefined') S.splitBills = b; return true } catch(_) { return false } },
     loadPeople:   () => { try { return JSON.parse(localStorage.getItem(PEOPLE_KEY)||'[]')||[] } catch(_) { return [] } },
-    savePeople:   p  => { try { localStorage.setItem(PEOPLE_KEY, JSON.stringify(p)); return true } catch(_) { return false } },
+    savePeople:   p  => { try { localStorage.setItem(PEOPLE_KEY, JSON.stringify(p)); if (typeof S !== 'undefined') S.splitPeople = p; return true } catch(_) { return false } },
     getBill:      id => SbStore.loadBills().find(b => b.id === id) || null,
     getPerson:    id => SbStore.loadPeople().find(p => p.id === id) || null,
     upsertBill:   bill => {
@@ -225,8 +225,8 @@
   let _step  = 1
   let _editingItemIdx = -1
 
-  function _saveDraft()  { if (_draft) try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ..._draft, _step })) } catch (_) {} }
-  function _clearDraft() { try { localStorage.removeItem(DRAFT_KEY) } catch (_) {} }
+  function _saveDraft()  { if (_draft) try { const draft = { ..._draft, _step }; localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); if (typeof S !== 'undefined') S.splitBillDraft = draft } catch (_) {} }
+  function _clearDraft() { try { localStorage.removeItem(DRAFT_KEY); if (typeof S !== 'undefined') S.splitBillDraft = null } catch (_) {} }
   function _loadDraft()  { try { const r = localStorage.getItem(DRAFT_KEY); return r ? JSON.parse(r) : null } catch (_) { return null } }
 
   const STEP_TITLES = ['','ข้อมูลบิล & คน','รายการอาหาร','ส่วนลด / ค่าบริการอื่น','ระบุคนจ่าย','สรุป']
@@ -1223,36 +1223,6 @@
   App.renderMore = function () {
     _prevRenderMoreSB?.()
     // หารบิล is now part of the วางแผน tab in the 3-tab More layout — skip standalone injection
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  //  EXPORT / IMPORT
-  // ══════════════════════════════════════════════════════════════
-  const _prevExport = App.exportData?.bind(App)
-  App.exportData = function () {
-    const _orig = Storage.buildExportPayload?.bind(Storage)
-    if (_orig) {
-      Storage.buildExportPayload = function (state) {
-        const p = _orig(state)
-        try { p.splitBills = SbStore.loadBills(); p.splitPeople = SbStore.loadPeople() } catch(_) {}
-        Storage.buildExportPayload = _orig; return p
-      }
-    }
-    _prevExport?.()
-  }
-
-  const _prevImport = App.importData?.bind(App)
-  App.importData = function (input) {
-    const _origNorm = Storage.normalizeBackupPayload?.bind(Storage)
-    if (_origNorm) {
-      Storage.normalizeBackupPayload = function (raw) {
-        const n = _origNorm(raw)
-        if (Array.isArray(raw.splitBills))  try { SbStore.saveBills(raw.splitBills)   } catch(_) {}
-        if (Array.isArray(raw.splitPeople)) try { SbStore.savePeople(raw.splitPeople) } catch(_) {}
-        Storage.normalizeBackupPayload = _origNorm; return n
-      }
-    }
-    _prevImport?.(input)
   }
 
   // ── Init ──────────────────────────────────────────────────────
