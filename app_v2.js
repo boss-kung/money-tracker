@@ -5205,6 +5205,25 @@ App._hideMerchantDropdown = function(applySuggestion = false) {
   }
 }
 
+App._positionMerchantDropdown = function() {
+  const inp = document.getElementById('tx-merchant')
+  const dd = document.getElementById('mt-merchant-dropdown')
+  if (!inp || !dd || dd.classList.contains('hidden')) return
+
+  const rect = inp.getBoundingClientRect()
+  dd.style.top = (rect.bottom + 4) + 'px'
+  dd.style.left = rect.left + 'px'
+  dd.style.width = rect.width + 'px'
+}
+
+;(function _bindMerchantDropdownPositioning() {
+  const reposition = () => App._positionMerchantDropdown?.()
+  window.addEventListener('resize', reposition)
+  window.addEventListener('scroll', reposition, true)
+  window.visualViewport?.addEventListener('resize', reposition)
+  window.visualViewport?.addEventListener('scroll', reposition)
+})()
+
 App._showMerchantDropdown = function(q = '') {
   App._ensureV2State?.()
 
@@ -5318,10 +5337,8 @@ App._showMerchantDropdown = function(q = '') {
   const hasItems = !!(matches.length || ruleMatches.length || createRow)
   dd.classList.toggle('hidden', !hasItems)
   if (hasItems) {
-    const rect = inp.getBoundingClientRect()
-    dd.style.top = (rect.bottom + 4) + 'px'
-    dd.style.left = rect.left + 'px'
-    dd.style.width = rect.width + 'px'
+    App._positionMerchantDropdown()
+    requestAnimationFrame(() => App._positionMerchantDropdown())
   }
 }
 
