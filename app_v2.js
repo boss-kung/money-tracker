@@ -877,7 +877,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.18-r8'
+const APP_VERSION = '2026.05.18-r11'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -2681,7 +2681,7 @@ App.render();
     </div>`
   : `<div class="form-group">
       <label class="form-label">ร้านค้า / แหล่งที่มา</label>
-      <div class="tx-merchant-input-wrap">
+      <div class="tx-merchant-input-wrap mt-merchant-wrap">
         <input
           class="form-input"
           id="tx-merchant"
@@ -2692,7 +2692,7 @@ App.render();
           oninput="App._txField('merchant', this.value); App._showMerchantDropdown?.(this.value)"
           onfocus="App._showMerchantDropdown?.(this.value)"
           onkeydown="if(event.key==='Enter'){event.preventDefault();App._confirmTypedMerchant?.()}"
-          onblur="App._merchantBlurTimer=setTimeout(()=>App._hideMerchantDropdown?.(true),260)"
+          onblur="App._merchantBlurTimer=setTimeout(()=>{if(!App._merchantDropdownInteracting)App._hideMerchantDropdown?.(true)},260)"
         >
         <button type="button" class="tx-merchant-clear" aria-label="ล้างร้านค้า" onclick="App.clearTxMerchant()">×</button>
       </div>
@@ -5108,10 +5108,13 @@ Calc.getUsableMoney = function(wallets, state = null) {
 function ensureMerchantWrap(inp) {
   if (!inp) return null
 
-  if (!inp.parentNode?.classList?.contains('mt-merchant-wrap')) {
+  const parent = inp.parentNode
+  if (parent?.classList?.contains('tx-merchant-input-wrap')) {
+    parent.classList.add('mt-merchant-wrap')
+  } else if (!parent?.classList?.contains('mt-merchant-wrap')) {
     const wrap = document.createElement('div')
     wrap.className = 'mt-merchant-wrap'
-    inp.parentNode.insertBefore(wrap, inp)
+    parent.insertBefore(wrap, inp)
     wrap.appendChild(inp)
   }
 
@@ -5120,11 +5123,34 @@ function ensureMerchantWrap(inp) {
     dd = document.createElement('div')
     dd.id = 'mt-merchant-dropdown'
     dd.className = 'hidden'
-    inp.parentNode.appendChild(dd)
+    document.body.appendChild(dd)
 
-    const handlePick = ev => {
-      const item = ev.target.closest('[data-merchant-index], [data-create-merchant], [data-rule-merchant]')
-      if (!item) return
+    let startX = 0
+    let startY = 0
+    let moved = false
+
+    const getItem = ev => ev.target.closest('[data-merchant-index], [data-create-merchant], [data-rule-merchant]')
+
+    const handleStart = ev => {
+      if (!getItem(ev)) return
+      App._merchantDropdownInteracting = true
+      clearTimeout(App._merchantBlurTimer)
+      startX = ev.clientX
+      startY = ev.clientY
+      moved = false
+    }
+
+    const handleMove = ev => {
+      if (!App._merchantDropdownInteracting) return
+      if (Math.abs(ev.clientX - startX) > 8 || Math.abs(ev.clientY - startY) > 8) moved = true
+    }
+
+    const handleEnd = ev => {
+      const item = getItem(ev)
+      const shouldPick = !!item && !moved
+      App._merchantDropdownInteracting = false
+      moved = false
+      if (!shouldPick) return
 
       ev.preventDefault()
       ev.stopPropagation()
@@ -5141,9 +5167,21 @@ function ensureMerchantWrap(inp) {
       if (merchant?.name) App._pickMerchant(merchant.name, { create: false })
     }
 
-    dd.addEventListener('pointerdown', handlePick)
-    dd.addEventListener('mousedown', handlePick)
-    dd.addEventListener('touchstart', handlePick, { passive: false })
+    const handleCancel = () => {
+      App._merchantDropdownInteracting = false
+      moved = false
+    }
+
+    /*
+     * Pick only after a tap completes. Starting selection on touchstart makes
+     * vertical drags impossible on mobile because the merchant is chosen before
+     * the list gets a chance to scroll.
+     */
+    dd.addEventListener('pointerdown', handleStart)
+    dd.addEventListener('pointermove', handleMove)
+    dd.addEventListener('pointerup', handleEnd)
+    dd.addEventListener('pointercancel', handleCancel)
+    dd.addEventListener('pointerleave', handleMove)
   }
 
   return dd
@@ -5170,16 +5208,58 @@ App._showMerchantDropdown = function(q = '') {
   const raw = String(q || '')
   const norm = raw.trim().toLowerCase()
 
-  if (!norm) {
-    dd.classList.add('hidden')
-    return
-  }
-
   clearTimeout(App._merchantBlurTimer)
 
-  const matches = (S.merchants || [])
-    .filter(m => !norm || String(m.name || '').toLowerCase().includes(norm))
-    .slice(0, 8)
+  const merchants = S.merchants || []
+  const recentPopularMerchants = (() => {
+    if (norm) return []
+
+    const todayStr = typeof getTODAY === 'function'
+      ? getTODAY()
+      : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0, 10))
+    const end = new Date(`${todayStr}T00:00:00`)
+    const start = new Date(end)
+    start.setDate(start.getDate() - 13)
+    const startStr = [
+      start.getFullYear(),
+      String(start.getMonth() + 1).padStart(2, '0'),
+      String(start.getDate()).padStart(2, '0'),
+    ].join('-')
+
+    const merchantsByName = new Map(
+      merchants.map(m => [String(m.name || '').trim().toLowerCase(), m])
+    )
+    const counts = new Map()
+    ;(S.transactions || []).forEach(tx => {
+      const name = String(tx.merchant || '').trim()
+      const date = String(tx.date || '')
+      if (!name || date < startStr || date > todayStr) return
+
+      const key = name.toLowerCase()
+      if (!merchantsByName.has(key)) return
+
+      const current = counts.get(key) || { count: 0, latestDate: '' }
+      current.count += 1
+      if (date > current.latestDate) current.latestDate = date
+      counts.set(key, current)
+    })
+
+    return [...counts.entries()]
+      .sort((a, b) =>
+        b[1].count - a[1].count ||
+        String(b[1].latestDate).localeCompare(String(a[1].latestDate)) ||
+        String(merchantsByName.get(a[0])?.name || '').localeCompare(String(merchantsByName.get(b[0])?.name || ''))
+      )
+      .slice(0, 10)
+      .map(([key]) => merchantsByName.get(key))
+      .filter(Boolean)
+  })()
+
+  const matches = norm
+    ? merchants
+      .filter(m => String(m.name || '').toLowerCase().includes(norm))
+      .slice(0, 8)
+    : (recentPopularMerchants.length ? recentPopularMerchants : merchants.slice(0, 10))
 
   App._merchantDropdownMatches = matches
 
@@ -5202,33 +5282,40 @@ App._showMerchantDropdown = function(q = '') {
       if (compactText(name).includes(normCompact)) ruleNames.push(name)
     })
   })
-  const ruleMatches = ruleNames.slice(0, Math.max(0, 8 - matches.length))
+  const ruleMatches = norm ? ruleNames.slice(0, Math.max(0, 8 - matches.length)) : []
 
   const exactInRule = ruleMatches.some(n => n.toLowerCase() === norm)
 
   const matchRows = matches.map((m, index) => `
-    <div class=”mt-merchant-item” data-merchant-index=”${index}”>
-      <span class=”mmi-emoji”>${esc(m.emoji || '🏪')}</span>
-      <span class=”mmi-name”>${esc(m.name)}</span>
+    <div class="mt-merchant-item" data-merchant-index="${index}">
+      <span class="mmi-emoji">${esc(m.emoji || '🏪')}</span>
+      <span class="mmi-name">${esc(m.name)}</span>
     </div>
   `).join('')
 
   const ruleRows = ruleMatches.map(name => `
-    <div class=”mt-merchant-item” data-rule-merchant=”1” data-merchant-name=”${esc(name)}”>
-      <span class=”mmi-emoji”>💳</span>
-      <span class=”mmi-name”>${esc(name)}</span>
+    <div class="mt-merchant-item" data-rule-merchant="1" data-merchant-name="${esc(name)}">
+      <span class="mmi-emoji">💳</span>
+      <span class="mmi-name">${esc(name)}</span>
     </div>
   `).join('')
 
   const createRow = norm && !exact && !exactInRule ? `
-    <div class=”mt-merchant-item create” data-create-merchant=”1” data-merchant-name=”${esc(raw.trim())}”>
-      <span class=”mmi-emoji”>＋</span>
-      <span class=”mmi-name”>สร้างร้านใหม่ “${esc(raw.trim())}”</span>
+    <div class="mt-merchant-item create" data-create-merchant="1" data-merchant-name="${esc(raw.trim())}">
+      <span class="mmi-emoji">＋</span>
+      <span class="mmi-name">สร้างร้านใหม่ “${esc(raw.trim())}”</span>
     </div>
   ` : ''
 
   dd.innerHTML = matchRows + ruleRows + createRow
-  dd.classList.toggle('hidden', !matches.length && !ruleMatches.length && !createRow)
+  const hasItems = !!(matches.length || ruleMatches.length || createRow)
+  dd.classList.toggle('hidden', !hasItems)
+  if (hasItems) {
+    const rect = inp.getBoundingClientRect()
+    dd.style.top = (rect.bottom + 4) + 'px'
+    dd.style.left = rect.left + 'px'
+    dd.style.width = rect.width + 'px'
+  }
 }
 
 App._confirmTypedMerchant = function() {
@@ -14982,6 +15069,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   App._renderAddTxDetail = function() {
     _prevRenderAddTxDetail?.()
     _injectCardPicker()
+    const _box = document.getElementById('add-tx-content')
+    if (_box) {
+      const _mg = _box.querySelector('#tx-merchant')?.closest('.form-group')
+      const _cp = _box.querySelector('.card-picker-widget')
+      const _wg = _box.querySelector('#tx-wallet')?.closest('.form-group')
+      if (_mg) (_cp || _wg)?.before(_mg)
+    }
   }
 
   function _injectCardPicker() {
@@ -15067,9 +15161,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
     const walletGroup = box.querySelector('#tx-wallet')?.closest('.form-group')
     walletGroup?.insertAdjacentHTML('beforebegin', widget)
-    const _cardPicker = box.querySelector('.card-picker-widget')
-    const _merchantGroup = box.querySelector('#tx-merchant')?.closest('.form-group')
-    if (_cardPicker && _merchantGroup) _cardPicker.before(_merchantGroup)
   }
 
   // ── Apply ─────────────────────────────────────────────────
@@ -17410,63 +17501,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         } catch (_) {}
       }
       _prev?.(key)
-    }
-  })()
-
-  // ── D21: Merchant suggestion animated custom dropdown ──────────
-  ;(function _injectMerchantSuggestD21() {
-    function _close(wrap) {
-      wrap?.querySelector('.mt-merchant-suggest')?.remove()
-    }
-    function _show(input) {
-      const wrap = input.closest('.form-group') || input.parentElement
-      if (!wrap) return
-      _close(wrap)
-      const q = input.value.trim().toLowerCase()
-      const matches = (S.merchants || [])
-        .filter(m => !q || String(m.name || '').toLowerCase().includes(q))
-        .slice(0, 12)
-      if (!matches.length) return
-      if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative'
-      const dd = document.createElement('div')
-      dd.className = 'mt-merchant-suggest'
-      dd.addEventListener('pointerdown', () => clearTimeout(App._merchantBlurTimer))
-      matches.forEach((m, i) => {
-        const item = document.createElement('div')
-        item.className = 'mt-merchant-suggest-item'
-        item.innerHTML = `<span style="font-size:17px;flex-shrink:0">${String(m.emoji || m.icon || '🏪')}</span><span>${String(m.name || '')}</span>`
-        item.style.animationDelay = `${i * 38}ms`
-        let startX = 0, startY = 0
-        item.addEventListener('pointerdown', e => {
-          startX = e.clientX
-          startY = e.clientY
-        })
-        item.addEventListener('pointerup', e => {
-          if (Math.abs(e.clientX - startX) > 8 || Math.abs(e.clientY - startY) > 8) return
-          input.value = m.name
-          App._txField?.('merchant', m.name)
-          input.dispatchEvent(new Event('input', { bubbles: true }))
-          _close(wrap)
-        })
-        dd.appendChild(item)
-        requestAnimationFrame(() => requestAnimationFrame(() => item.classList.add('mt-si')))
-      })
-      wrap.appendChild(dd)
-    }
-    function _hookInput(input) {
-      if (!input) return
-      input.removeAttribute('list')
-      if (input.dataset.mtSugD21) return
-      input.dataset.mtSugD21 = '1'
-      const wrap = input.closest('.form-group') || input.parentElement
-      input.addEventListener('input',  () => _show(input))
-      input.addEventListener('focus',  () => { if (input.value.trim()) _show(input) })
-      input.addEventListener('blur',   () => setTimeout(() => _close(wrap), 180))
-    }
-    const _prev = App._renderAddTxDetail?.bind(App)
-    App._renderAddTxDetail = function (...args) {
-      _prev?.(...args)
-      try { _hookInput(document.getElementById('tx-merchant')) } catch (_) {}
     }
   })()
 
