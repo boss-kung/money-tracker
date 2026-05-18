@@ -485,7 +485,7 @@ window.__mountUpcomingBillsFeature = function() {
         <button class="btn btn-primary btn-sm" onclick="App.openUpcomingBillForm()" style="width:auto">+ เพิ่ม</button>
       </div>
       <div class="sub-scroll upcoming-bills-screen">
-        <div class="card card-pad upcoming-summary-card">
+        <div class="card card-pad upcoming-summary-card" style="margin-top:12px">
           <div class="upcoming-summary-title">กันไว้จ่าย</div>
           <div class="upcoming-summary-total">${money(summary.pendingTotal)}</div>
           <div class="upcoming-summary-grid">
@@ -15672,48 +15672,303 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // PHASE 4 — Ask My Money
   // ─────────────────────────────────────────────────────────────
 
-  function buildAskAnswer(query) {
-    const q    = (query||'').trim().toLowerCase()
+  const ASK_CTX = { lastIntent:null, lastCategoryId:null, lastMerchant:null, lastRange:null }
+
+  function avg(nums) {
+    const rows = (nums || []).filter(v => Number.isFinite(Number(v)))
+    return rows.length ? rows.reduce((s,v)=>s+Number(v||0),0) / rows.length : 0
+  }
+
+  function pct(cur, prev) {
+    return Math.abs(Number(prev||0)) > 0 ? ((Number(cur||0) - Number(prev||0)) / Math.abs(Number(prev||0))) * 100 : null
+  }
+
+  function askPlainText(html) {
+    return String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  }
+
+  function askEvidence(ctx, label) {
+    const txCount = Calc.getMonthlyTransactions?.(ctx.txs, ctx.range.month)?.length || 0
+    return `<br><span style="font-size:12px;color:var(--muted)">อิงจาก ${esc(label || mlbl(ctx.range.month))} · ${txCount} รายการที่บันทึกแล้ว</span>`
+  }
+
+  function askFindCategory(q, cats) {
+    const all = [...(cats.expense || []), ...(cats.income || [])]
+    return all.find(c => {
+      const label = String(c.label || '').toLowerCase()
+      return label && q.includes(label)
+    }) || null
+  }
+
+  function askParseRange(q) {
+    const month = now()
+    if (/เดือนก่อน|เดือนที่แล้ว|previous month/.test(q) && !/เทียบเดือนก่อน/.test(q)) return { kind:'month', month:prevM(month), label:`เดือน${mlbl(prevM(month))}` }
+    if (/3 เดือน|สามเดือน/.test(q)) return { kind:'window', months:Calc.getMonths?.(3) || [month], label:'3 เดือนล่าสุด' }
+    if (/6 เดือน|หกเดือน/.test(q)) return { kind:'window', months:Calc.getMonths?.(6) || [month], label:'6 เดือนล่าสุด' }
+    if (/สิ้นเดือน|ปลายเดือน/.test(q)) return { kind:'forecast', month, label:`สิ้นเดือน${mlbl(month)}` }
+    return { kind:'month', month, label:`เดือน${mlbl(month)}` }
+  }
+
+  function askParseIntent(q, category, merchant) {
+    if (/ควรกังวล|ต้องระวัง|เสี่ยงอะไร|อะไรสำคัญที่สุด|recommend|แนะนำ/.test(q)) return 'priorities'
+    if (/อยากออมเพิ่ม|ออมเพิ่ม.*เดือนละ|ต้องลดตรงไหน/.test(q)) return 'savings_scenario'
+    if (/พอถึงสิ้นเดือน|เงินพอไหม|สิ้นเดือน.*พอ|อยู่รอดถึงสิ้นเดือน/.test(q)) return 'cashflow_forecast'
+    if (/อีก\s*\d+\s*วัน|14 วัน|7 วัน|ต้องจ่ายอะไร|ภาระข้างหน้า|บิล.*ข้างหน้า/.test(q)) return 'upcoming'
+    if (/เงินสำรอง|ฉุกเฉิน/.test(q)) return 'emergency_fund'
+    if (/รายจ่ายประจำ|fixed cost|subscription|ค่าใช้จ่ายคงที่/.test(q)) return 'fixed_cost'
+    if (/เป้าหมาย.*ตามทัน|ตามไม่ทัน|ต้องออมเพิ่ม|เป้าหมายไหน/.test(q)) return 'goal_feasibility'
+    if (/ทรัพย์สินสุทธิ|มูลค่าสุทธิ|net worth/.test(q)) return 'net_worth'
+    if (/ผิดปกติ|เงินหายเร็ว|ทำไม.*หาย|โตเร็วสุด/.test(q)) return 'anomaly'
+    if (/เปรียบเทียบ|เทียบ|มากกว่าเดือนก่อน|น้อยกว่าเดือนก่อน/.test(q) || (ASK_CTX.lastIntent && /แล้ว.*ล่ะ|เทียบเดือนก่อน/.test(q))) return 'comparison'
+    if (/หมวดไหน.*เสี่ยง|เสี่ยงเกินงบ|ใกล้เกินงบ/.test(q)) return 'budget_risk'
+    if (/งบ.*วันละ|ใช้ได้วันละ|อยู่ในงบ/.test(q)) return 'budget_forecast'
+    if (/ล่าสุด|recent/.test(q)) return 'recent'
+    if (/ร้านค้า|ร้านไหน|ใช้เงินมาก/.test(q) || merchant) return 'merchant'
+    if (/หมวดไหน|หมวดหมู่/.test(q) || category) return 'category'
+    if (/บัตรเครดิต|ค้างชำระ|วงเงิน/.test(q)) return 'credit'
+    if (/เป้าหมาย|goal/.test(q)) return 'goals'
+    if (/ออมได้|อัตราออม|เงินออม/.test(q)) return 'savings'
+    if (/งบ|เกินงบ|งบเหลือ/.test(q)) return 'budget'
+    if (/เงินเหลือ|เงินสด|เงินพร้อมใช้|คงเหลือ|มีเงิน/.test(q)) return 'cash'
+    if (/รายรับ|ได้เงิน|รับเงิน|เงินเดือน/.test(q)) return 'income'
+    if (/ใช้ไป|รายจ่าย|ใช้จ่าย|ค่าใช้จ่าย|จ่ายไป/.test(q)) return 'expense'
+    if (/สุขภาพ|ภาพรวม|สรุป|overview/.test(q)) return 'overview'
+    return 'fallback'
+  }
+
+  function buildAskContext(query) {
+    const q = (query || '').trim().toLowerCase()
     const txs  = S.transactions || []
     const wals = S.wallets || []
-    const bds  = S.budgets || []
     const cats = S.categories || {}
-    const gls  = (S.goals||[]).filter(g => g.status === 'active')
-    const mo   = now()
+    const gls  = (S.goals || []).filter(g => g.status === 'active')
+    const category = askFindCategory(q, cats) || (ASK_CTX.lastCategoryId
+      ? [...(cats.expense || []), ...(cats.income || [])].find(c => c.id === ASK_CTX.lastCategoryId)
+      : null)
+    const merchant = (S.merchants || []).find(m => q.includes(String(m.name || '').toLowerCase()))?.name
+      || (ASK_CTX.lastMerchant && /แล้ว.*ล่ะ|เทียบเดือนก่อน/.test(q) ? ASK_CTX.lastMerchant : null)
+    const range = askParseRange(q)
+    const payload = typeof InsightEngine !== 'undefined' && InsightEngine.buildPayload
+      ? InsightEngine.buildPayload(S)
+      : null
+    const monthly = range.kind === 'window'
+      ? null
+      : Calc.getMonthlyIncomeExpense(txs, range.month)
+    const prevMonth = range.month ? prevM(range.month) : prevM(now())
+    const previous = Calc.getMonthlyIncomeExpense(txs, prevMonth)
+    const expCats = range.kind === 'window'
+      ? []
+      : Calc.getCategoryBreakdown(txs, range.month, { type:'expense', categories:cats.expense || [] })
+    const history = (payload?.history || Calc.getMonths?.(6)?.map(m => {
+      const s = Calc.getMonthlyIncomeExpense(txs, m)
+      return { month:m, income:s.income, expense:s.expense, net:s.netCashflow, rate:s.savingsRate }
+    }) || [])
+    const recentHistory = history.filter(h => h.month !== now() && (h.income > 0 || h.expense > 0))
+    const current = monthly || Calc.getMonthlyIncomeExpense(txs, now())
+    const budget = payload?.budget || Calc.getBudgetProgress(txs, S.budgets || [], cats, now()) || []
+    const topInsights = (() => { try { return InsightEngine.getTopN?.(3, 'reports', S) || [] } catch(_) { return [] } })()
+    const netSnapshots = [...(S.netWorthSnapshots || [])].sort((a,b)=>String(a.date).localeCompare(String(b.date)))
+    const firstNet = netSnapshots[0]?.netWorth ?? netSnapshots[0]?.net ?? null
+    const lastNet  = netSnapshots.at(-1)?.netWorth ?? netSnapshots.at(-1)?.net ?? null
+    const avgExpense = avg(recentHistory.map(h => h.expense))
+    const liquid = Number(payload?.usable?.liquid ?? Calc.getUsableMoney?.(wals, S)?.liquid ?? 0)
+    return {
+      q, txs, wals, cats, gls, category, merchant, range, payload,
+      monthly, previous, current, expCats, history, recentHistory, budget, topInsights,
+      avgExpense, liquid, netSnapshots, firstNet, lastNet,
+    }
+  }
 
-    let monthly = { income:0, expense:0, netCashflow:0 }
-    let budProg = [], expCats = []
-    try { monthly = Calc.getMonthlyIncomeExpense(txs, mo) }                           catch(_) {}
-    try { budProg = Calc.getBudgetProgress(txs, bds, cats, mo) || [] }                catch(_) {}
-    try { expCats = Calc.getCategoryBreakdown(txs, mo, { type:'expense', categories:cats.expense||[] }) || [] } catch(_) {}
+  function askRecommendationLines(ctx) {
+    return (ctx.topInsights || []).slice(0, 3).map((ins, i) =>
+      `${i+1}. ${esc(ins.title)}${ins.body ? ` — ${esc(askPlainText(ins.body))}` : ''}`
+    )
+  }
 
+  function buildAskAnswer(query) {
+    const ctx = buildAskContext(query)
+    const { q, cats, gls, txs, wals, expCats, range, payload } = ctx
+    const mo      = range.month || now()
     const ml      = mlbl(mo)
-    const income  = Number(monthly.income)  || 0
-    const expense = Number(monthly.expense) || 0
+    const income  = Number(ctx.current.income)  || 0
+    const expense = Number(ctx.current.expense) || 0
     const net     = income - expense
     const sr      = income > 0 ? net/income*100 : null
     const ans     = (icon, title, body) => ({ icon, title, body })
+    const intent  = askParseIntent(q, ctx.category, ctx.merchant)
+    ASK_CTX.lastIntent = intent
+    ASK_CTX.lastRange = range
+    if (ctx.category) ASK_CTX.lastCategoryId = ctx.category.id
+    if (ctx.merchant) ASK_CTX.lastMerchant = ctx.merchant
+
+    if (intent === 'priorities') {
+      const rows = askRecommendationLines(ctx)
+      return ans('🧭', 'สิ่งที่ควรโฟกัสตอนนี้',
+        rows.length
+          ? rows.join('<br>') + askEvidence(ctx, 'ข้อมูลล่าสุด')
+          : 'ตอนนี้ยังไม่พบความเสี่ยงเด่นชัดจากข้อมูลที่มี')
+    }
+
+    if (intent === 'savings_scenario') {
+      const targetMatch = q.match(/(\d[\d,]*)/)
+      const target = Number(String(targetMatch?.[1] || '').replace(/,/g, '')) || 5000
+      const rows = [...expCats]
+        .filter(c => c.amount > 0)
+        .sort((a,b)=>b.amount-a.amount)
+        .slice(0, 3)
+      const avgCut = rows.length ? target / rows.length : target
+      return ans('🧮', 'จำลองการออมเพิ่ม',
+        `ถ้าอยากออมเพิ่ม ${fmt(target)}/เดือน`
+        + (rows.length
+          ? `<br>ลองลดจากหมวดที่ใช้สูงสุด 3 หมวดนี้หมวดละประมาณ ${fmt(avgCut)}:<br>`
+            + rows.map(c => `• ${esc(c.label)} ปัจจุบัน ${fmt(c.amount)}`).join('<br>')
+          : '<br>ยังไม่มีข้อมูลรายจ่ายพอสำหรับเสนอแผนลดรายจ่าย')
+        + `<br>หลังทำได้ อัตราออมโดยประมาณจะเพิ่มจาก ${(sr||0).toFixed(1)}% เป็น ${income > 0 ? (((net + target) / income) * 100).toFixed(1) : 'N/A'}%`)
+    }
+
+    if (intent === 'cashflow_forecast') {
+      const obligations = Number(payload?.upcomingCommitted || 0)
+      const projectedExpense = Number(payload?.projectedExpense || expense)
+      const projectedGap = income - projectedExpense
+      const afterObligations = ctx.liquid - obligations
+      const risk = afterObligations < 0 ? 'สูง' : afterObligations < ctx.liquid * 0.2 ? 'กลาง' : 'ต่ำ'
+      return ans('🔭', 'คาดการณ์ถึงสิ้นเดือน',
+        `เงินพร้อมใช้ตอนนี้ <strong>${fmt(ctx.liquid)}</strong><br>`
+        + `ภาระใน 14 วันข้างหน้า ${fmt(obligations)} · หลังหักภาระเหลือ ${afterObligations>=0?fmt(afterObligations):'-'+fmt(afterObligations)}<br>`
+        + `คาดว่ารายจ่ายสิ้นเดือนจะอยู่ที่ ${fmt(projectedExpense)}`
+        + (income > 0 ? ` · กระแสเงินสดคาดการณ์ ${projectedGap>=0?'+':'-'}${fmt(projectedGap)}` : '')
+        + `<br>ระดับความเสี่ยงสภาพคล่อง: <strong>${risk}</strong>`
+        + (risk !== 'ต่ำ' ? '<br>แนะนำให้ชะลอรายจ่ายไม่จำเป็นและกันเงินสำหรับบิลที่จะถึงก่อน' : '<br>ตอนนี้ยังมี buffer พอสมควร')
+        + askEvidence(ctx, 'เดือนปัจจุบัน'))
+    }
+
+    if (intent === 'upcoming') {
+      const items = (payload?.upcoming || []).slice(0, 6)
+      if (!items.length) return ans('🗓️', 'รายการที่จะถึง', 'ยังไม่มีรายการที่จะถึงในช่วงใกล้ ๆ')
+      return ans('🗓️', 'รายการที่จะถึง',
+        items.map(r => `${esc(r.date || '')} ${esc(r.title || 'รายการ')} ${fmt(r.amount || 0)}`).join('<br>')
+        + `<br>รวมภาระที่ผูกพันแล้ว ${fmt(payload?.upcomingCommitted || 0)}`)
+    }
+
+    if (intent === 'emergency_fund') {
+      const months = ctx.avgExpense > 0 ? ctx.liquid / ctx.avgExpense : null
+      if (months === null) return ans('🛟', 'เงินสำรองฉุกเฉิน', 'ยังมีข้อมูลย้อนหลังไม่พอสำหรับประเมินเงินสำรอง')
+      return ans('🛟', 'เงินสำรองฉุกเฉิน',
+        `เงินพร้อมใช้ ${fmt(ctx.liquid)} เทียบกับค่าใช้จ่ายเฉลี่ย ${fmt(ctx.avgExpense)}/เดือน<br>`
+        + `ครอบคลุมได้ประมาณ <strong>${months.toFixed(1)} เดือน</strong>`
+        + (months < 1 ? '<br>ระดับเสี่ยงสูง ควรเร่งสร้างเงินสำรองก่อนลงทุนเพิ่ม'
+          : months < 3 ? '<br>ยังต่ำกว่าเป้าหมายพื้นฐาน 3 เดือน'
+          : '<br>อยู่เหนือเกณฑ์พื้นฐาน 3 เดือนแล้ว')
+        + askEvidence(ctx, `${ctx.recentHistory.length} เดือนย้อนหลัง`))
+    }
+
+    if (intent === 'fixed_cost') {
+      const fixed = Number(payload?.monthlyRecurringTotal || 0)
+      const ratio = income > 0 ? fixed / income * 100 : null
+      return ans('🔁', 'รายจ่ายประจำ',
+        `รายจ่ายประจำประมาณ <strong>${fmt(fixed)}</strong>/เดือน`
+        + (ratio !== null ? `<br>คิดเป็น ${ratio.toFixed(0)}% ของรายรับเดือนนี้` : '')
+        + (ratio !== null && ratio > 55 ? '<br>สัดส่วนค่อนข้างสูง เหลือความยืดหยุ่นน้อย ควรทบทวนรายการที่ตัดได้' : '<br>ยังอยู่ในระดับที่ควบคุมได้'))
+    }
+
+    if (intent === 'goal_feasibility') {
+      const rows = (payload?.goalProgress || []).filter(x => x.progress).map(({goal, progress}) => {
+        const risk = progress.daysLeft < 0 || (progress.suggestedMonthly && goal.monthlyContribution > 0 && progress.suggestedMonthly > goal.monthlyContribution * 1.2)
+        return `${risk ? '⚠️' : '✅'} ${esc(goal.name)}: เหลือ ${fmt(progress.remaining || 0)}${progress.suggestedMonthly ? ` · ควรออม ${fmt(progress.suggestedMonthly)}/เดือน` : ''}`
+      })
+      return ans('🎯', 'ความเป็นไปได้ของเป้าหมาย',
+        rows.length ? rows.join('<br>') : 'ยังไม่มีเป้าหมายที่ประเมินได้')
+    }
+
+    if (intent === 'net_worth') {
+      const trend = (ctx.firstNet !== null && ctx.lastNet !== null)
+        ? Number(ctx.lastNet) - Number(ctx.firstNet)
+        : null
+      return ans('📈', 'มูลค่าสุทธิ',
+        trend === null
+          ? 'ยังไม่มี snapshot เพียงพอสำหรับดูแนวโน้มมูลค่าสุทธิ'
+          : `ล่าสุด ${fmt(ctx.lastNet)}<br>เปลี่ยนแปลงจาก snapshot แรก ${trend>=0?'+':'-'}${fmt(trend)}`
+            + `<br>มี snapshot ${ctx.netSnapshots.length} จุดสำหรับติดตามแนวโน้ม`)
+    }
+
+    if (intent === 'anomaly') {
+      const curCats = Calc.getCategoryBreakdown(txs, now(), { type:'expense', categories:cats.expense || [] })
+      const prevCats = Calc.getCategoryBreakdown(txs, prevM(now()), { type:'expense', categories:cats.expense || [] })
+      const prevMap = new Map(prevCats.map(c => [c.id, c]))
+      const jumps = curCats.map(c => ({ ...c, diff:c.amount - Number(prevMap.get(c.id)?.amount || 0), pct:pct(c.amount, prevMap.get(c.id)?.amount || 0) }))
+        .filter(c => c.diff > 0)
+        .sort((a,b)=>b.diff-a.diff)
+      const top = jumps[0]
+      return ans('🕵️', 'สิ่งที่ผิดปกติ',
+        top
+          ? `หมวดที่เพิ่มขึ้นเด่นสุดคือ ${esc(top.label)} เพิ่ม ${fmt(top.diff)} จากเดือนก่อน`
+            + (top.pct !== null ? ` (${top.pct.toFixed(0)}%)` : '')
+            + `<br>เดือนนี้รายจ่ายรวม ${expense > ctx.avgExpense ? 'สูงกว่า' : 'ใกล้เคียงหรือต่ำกว่า'} ค่าเฉลี่ยย้อนหลัง`
+            + askEvidence(ctx, 'เทียบเดือนก่อน')
+          : 'ยังไม่พบหมวดที่เพิ่มขึ้นเด่นชัดจากเดือนก่อน')
+    }
+
+    if (intent === 'comparison') {
+      const targetCat = ctx.category
+      if (targetCat) {
+        const cur = Calc.getCategoryBreakdown(txs, now(), { type:'expense', categories:cats.expense || [] }).find(c => c.id === targetCat.id)?.amount || 0
+        const prev = Calc.getCategoryBreakdown(txs, prevM(now()), { type:'expense', categories:cats.expense || [] }).find(c => c.id === targetCat.id)?.amount || 0
+        const d = cur - prev
+        return ans('⚖️', `เทียบหมวด ${targetCat.label}`,
+          `${mlbl(now())}: ${fmt(cur)}<br>${mlbl(prevM(now()))}: ${fmt(prev)}<br>`
+          + `${d>=0?'เพิ่ม':'ลด'} ${fmt(d)}${prev > 0 ? ` (${Math.abs(d/prev*100).toFixed(0)}%)` : ''}`)
+      }
+      const d = expense - Number(ctx.previous.expense || 0)
+      return ans('⚖️', 'เทียบเดือนก่อน',
+        `รายจ่ายเดือน${mlbl(now())} ${fmt(expense)} เทียบกับ ${fmt(ctx.previous.expense || 0)} ในเดือน${mlbl(prevM(now()))}<br>`
+        + `${d>=0?'เพิ่ม':'ลด'} ${fmt(d)}${ctx.previous.expense > 0 ? ` (${Math.abs(d/ctx.previous.expense*100).toFixed(0)}%)` : ''}`)
+    }
+
+    if (intent === 'budget_forecast') {
+      const totalLimit = ctx.budget.reduce((s,b)=>s+(b.monthlyLimit||0),0)
+      const totalSpent = ctx.budget.reduce((s,b)=>s+(b.spent||0),0)
+      const daysLeft = Number(payload?.daysLeft || 0)
+      const remaining = totalLimit - totalSpent
+      const daily = daysLeft > 0 ? remaining / daysLeft : 0
+      return ans('📏', 'แนวโน้มงบประมาณ',
+        totalLimit > 0
+          ? `ใช้ไป ${fmt(totalSpent)} จากงบ ${fmt(totalLimit)}<br>เหลือ ${fmt(Math.max(0,remaining))}`
+            + (daysLeft > 0 ? ` · ใช้ได้วันละประมาณ ${fmt(Math.max(0,daily))}` : '')
+            + (remaining < 0 ? '<br>ตอนนี้เกินงบรวมแล้ว' : Number(payload?.projectedExpense || 0) > totalLimit ? '<br>แนวโน้มสิ้นเดือนอาจเกินงบ' : '<br>ยังมีโอกาสจบเดือนในงบ')
+          : 'ยังไม่ได้ตั้งงบประมาณ')
+    }
+
+    if (intent === 'budget_risk') {
+      const rows = [...ctx.budget]
+        .filter(b => Number(b.monthlyLimit || 0) > 0)
+        .map(b => ({ ...b, ratio:(b.spent || 0) / (b.monthlyLimit || 1), gap:(b.monthlyLimit || 0) - (b.spent || 0) }))
+        .sort((a,b)=>b.ratio-a.ratio)
+        .slice(0, 5)
+      if (!rows.length) return ans('🚦', 'หมวดที่เสี่ยงเกินงบ', 'ยังไม่ได้ตั้งงบประมาณ')
+      return ans('🚦', 'หมวดที่เสี่ยงเกินงบ',
+        rows.map(b => `${b.ratio >= 1 ? '🔴' : b.ratio >= .85 ? '🟡' : '🟢'} ${esc(b.label)}: ${(b.ratio*100).toFixed(0)}%${b.gap >= 0 ? ` · เหลือ ${fmt(b.gap)}` : ` · เกิน ${fmt(b.gap)}`}`).join('<br>'))
+    }
 
     // ── Expense ──────────────────────────────────────────────────
-    if (/ใช้ไป|รายจ่าย|ใช้จ่าย|ค่าใช้จ่าย|จ่ายไป/.test(q)) {
+    if (intent === 'expense') {
       const top = expCats[0]
       return ans('💸', 'รายจ่ายเดือน'+ml,
         `ใช้จ่ายไป <strong>${fmt(expense)}</strong> ในเดือน${ml}`
         + (top ? `<br>หมวดสูงสุด: ${esc(top.icon||'📦')} ${esc(top.label)} ${fmt(top.amount)}` : '')
-        + (income > 0 ? `<br>คิดเป็น ${(expense/income*100).toFixed(0)}% ของรายรับ` : ''))
+        + (income > 0 ? `<br>คิดเป็น ${(expense/income*100).toFixed(0)}% ของรายรับ` : '')
+        + askEvidence(ctx))
     }
 
     // ── Income ───────────────────────────────────────────────────
-    if (/รายรับ|ได้เงิน|รับเงิน|เงินเดือน/.test(q)) {
+    if (intent === 'income') {
       return ans('💰', 'รายรับเดือน'+ml,
         `รายรับทั้งหมด <strong>${fmt(income)}</strong> ในเดือน${ml}`
         + (net >= 0 ? `<br>หักรายจ่ายแล้วเหลือ ${fmt(net)}` : `<br>รายจ่ายเกินรายรับ ${fmt(Math.abs(net))}`))
     }
 
     // ── Cash balance ────────────────────────────────────────────
-    if (/เงินเหลือ|เงินสด|เงินพร้อมใช้|คงเหลือ|มีเงิน/.test(q)) {
-      let liquid = 0
-      try { if (typeof Calc.getUsableMoney === 'function') { const u = Calc.getUsableMoney(wals, S); liquid = u.liquid||0 } } catch(_) {}
+    if (intent === 'cash') {
+      const liquid = ctx.liquid
       const cash = wals.filter(w => ['cash','bank'].includes(w.type) && !w.archived)
         .sort((a,b) => (b.balance||0)-(a.balance||0)).slice(0,4)
       return ans('🏦', 'เงินพร้อมใช้',
@@ -15722,7 +15977,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
 
     // ── Goals (before savings to avoid "ออม" prefix match) ──────
-    if (/เป้าหมาย|goal/.test(q)) {
+    if (intent === 'goals') {
       if (!gls.length) return ans('🎯', 'เป้าหมาย', 'ยังไม่มีเป้าหมาย — ไปตั้งได้ที่เมนูวางแผน')
       const rows = gls.map(g => {
         let p = null
@@ -15736,7 +15991,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
 
     // ── Savings ──────────────────────────────────────────────────
-    if (/ออมได้|อัตราออม|เงินออม/.test(q)) {
+    if (intent === 'savings') {
       const msg = income > 0
         ? `ออมได้ <strong>${fmt(Math.max(0,net))}</strong> อัตราออม ${(sr||0).toFixed(1)}%`
           + (net < 0 ? '<br>⚠️ รายจ่ายเกินรายรับ ควรทบทวนรายจ่าย'
@@ -15747,10 +16002,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
 
     // ── Budget ───────────────────────────────────────────────────
-    if (/งบ|เกินงบ|งบเหลือ/.test(q)) {
-      const totL = budProg.reduce((s,b) => s+(b.monthlyLimit||0), 0)
-      const totS = budProg.reduce((s,b) => s+(b.spent||0), 0)
-      const over = budProg.filter(b => (b.monthlyLimit||0)>0 && (b.spent||0)>(b.monthlyLimit||0))
+    if (intent === 'budget') {
+      const totL = ctx.budget.reduce((s,b) => s+(b.monthlyLimit||0), 0)
+      const totS = ctx.budget.reduce((s,b) => s+(b.spent||0), 0)
+      const over = ctx.budget.filter(b => (b.monthlyLimit||0)>0 && (b.spent||0)>(b.monthlyLimit||0))
       if (!totL) return ans('📊', 'งบประมาณ', 'ยังไม่ได้ตั้งงบประมาณ — ไปตั้งได้ที่เมนูงบประมาณ')
       return ans('📊', 'งบประมาณเดือน'+ml,
         `ใช้ไป <strong>${fmt(totS)}</strong> / ${fmt(totL)}<br>เหลือ ${fmt(Math.max(0,totL-totS))}`
@@ -15758,17 +16013,18 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
 
     // ── Credit card ──────────────────────────────────────────────
-    if (/บัตรเครดิต|ค้างชำระ/.test(q)) {
-      const ccs = wals.filter(w => w.type === 'credit' && !w.archived)
+    if (intent === 'credit') {
+      const summary = Calc.getCreditLiabilitySummary?.(wals) || null
+      const ccs = summary?.cards || wals.filter(w => w.type === 'credit' && !w.archived).map(card => ({ card, statementDue:Math.abs(card.balance||0), committedInstallments:0, availableLimit:Math.max(0, Number(card.limit||0)-Math.abs(card.balance||0)) }))
       if (!ccs.length) return ans('💳', 'บัตรเครดิต', 'ไม่พบบัตรเครดิตในระบบ')
-      const total = ccs.reduce((s,w) => s+Math.abs(w.balance||0), 0)
+      const total = summary?.totals?.totalLiability ?? ccs.reduce((s,row) => s + Number(row.statementDue||0) + Number(row.committedInstallments||0), 0)
       return ans('💳', 'ยอดบัตรเครดิต',
         `ค้างชำระรวม <strong>${fmt(total)}</strong><br>`
-        + ccs.map(w => `${esc(w.icon||'💳')} ${esc(w.name)}: ${fmt(Math.abs(w.balance||0))}`).join('<br>'))
+        + ccs.map(row => `${esc(row.card.icon||'💳')} ${esc(row.card.name)}: ${fmt(row.statementDue||0)}${row.availableLimit != null ? ` · วงเงินเหลือ ${fmt(row.availableLimit)}` : ''}`).join('<br>'))
     }
 
     // ── Top merchant ─────────────────────────────────────────────
-    if (/ร้านค้า|ร้านไหน|ใช้เงินมาก/.test(q)) {
+    if (intent === 'merchant') {
       let ms = []
       try { ms = Calc.getMerchantBreakdown?.(txs, mo) || [] } catch(_) {}
       if (!ms.length) return ans('🏪', 'ร้านค้า', 'ยังไม่มีข้อมูลร้านค้าในเดือนนี้')
@@ -15777,14 +16033,14 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
 
     // ── Top category ─────────────────────────────────────────────
-    if (/หมวดไหน|ใช้มากสุด|หมวดหมู่/.test(q)) {
+    if (intent === 'category') {
       if (!expCats.length) return ans('📦', 'หมวดรายจ่าย', 'ยังไม่มีข้อมูลในเดือนนี้')
       return ans('📦', 'หมวดรายจ่ายสูงสุดเดือน'+ml,
         expCats.slice(0,5).map((c,i) => `${i+1}. ${esc(c.icon||'📦')} ${esc(c.label)}: <strong>${fmt(c.amount)}</strong>`).join('<br>'))
     }
 
     // ── Recent transactions ──────────────────────────────────────
-    if (/ล่าสุด|recent/.test(q)) {
+    if (intent === 'recent') {
       const recent = [...txs].sort((a,b) => (b.date||'').localeCompare(a.date||'')).slice(0,5)
       if (!recent.length) return ans('📋', 'รายการล่าสุด', 'ยังไม่มีรายการ')
       return ans('📋', 'รายการล่าสุด 5 รายการ',
@@ -15795,26 +16051,33 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
 
     // ── Health / overview ────────────────────────────────────────
-    if (/สุขภาพ|ภาพรวม|สรุป|overview/.test(q)) {
-      const g = (income>0||expense>0) ? calcGrade(sr, budProg.filter(b=>(b.monthlyLimit||0)>0&&(b.spent||0)>(b.monthlyLimit||0)).length) : null
+    if (intent === 'overview') {
+      const g = (income>0||expense>0) ? calcGrade(sr, ctx.budget.filter(b=>(b.monthlyLimit||0)>0&&(b.spent||0)>(b.monthlyLimit||0)).length) : null
+      const emergencyMonths = ctx.avgExpense > 0 ? ctx.liquid / ctx.avgExpense : null
+      const fixedRatio = income > 0 ? Number(payload?.monthlyRecurringTotal || 0) / income * 100 : null
+      const obligationCover = Number(payload?.upcomingCommitted || 0) > 0 ? ctx.liquid / Number(payload.upcomingCommitted || 1) : null
       return ans('📈', 'ภาพรวมเดือน'+ml,
         g ? `เกรด <strong style="color:${g.color}">${esc(g.grade)} — ${esc(g.label)}</strong><br>`
             + `รายรับ ${fmt(income)} · รายจ่าย ${fmt(expense)}<br>`
             + `สุทธิ ${net>=0?'+':'-'}${fmt(net)}`
             + (sr !== null ? ` · ออม ${sr.toFixed(1)}%` : '')
+            + `<br>สภาพคล่อง ${obligationCover === null ? 'N/A' : obligationCover >= 1 ? 'พอรองรับภาระใกล้ถึง' : 'ตึงตัว'}`
+            + ` · เงินสำรอง ${emergencyMonths === null ? 'N/A' : emergencyMonths.toFixed(1)+' เดือน'}`
+            + ` · รายจ่ายประจำ ${fixedRatio === null ? 'N/A' : fixedRatio.toFixed(0)+'%'}`
+            + (ctx.topInsights.length ? `<br>ประเด็นเด่น: ${esc(ctx.topInsights[0].title)}` : '')
           : 'ยังไม่มีข้อมูลในเดือนนี้')
     }
 
     // ── Fallback ─────────────────────────────────────────────────
     return ans('🤔', 'ไม่เข้าใจคำถาม',
-      'ลองถามเช่น:<br>• เดือนนี้ใช้จ่ายเท่าไร<br>• มีเงินสดเหลือเท่าไร<br>• งบประมาณเหลือเท่าไร<br>• บัตรเครดิตค้างเท่าไร<br>• ออมได้เท่าไร<br>• เป้าหมายการออม')
+      'ลองถามเช่น:<br>• ตอนนี้ควรกังวลอะไร<br>• เงินพอถึงสิ้นเดือนไหม<br>• หมวดไหนเสี่ยงเกินงบ<br>• เงินสำรองฉุกเฉินพอไหม<br>• เป้าหมายไหนตามไม่ทัน<br>• เดือนนี้ใช้จ่ายเท่าไร')
   }
 
   App.openAskMyMoney = function() {
     const presets = [
-      'เดือนนี้ใช้จ่ายเท่าไร','มีเงินสดเหลือเท่าไร','งบประมาณเหลือเท่าไร',
-      'ออมได้เท่าไร','บัตรเครดิตค้างเท่าไร','ร้านไหนใช้เงินมากสุด',
-      'หมวดไหนใช้มากสุด','สรุปภาพรวม',
+      'ตอนนี้ควรกังวลอะไร','เงินพอถึงสิ้นเดือนไหม','อีก 14 วันต้องจ่ายอะไร',
+      'เงินสำรองฉุกเฉินพอไหม','หมวดไหนเสี่ยงเกินงบ','เป้าหมายไหนตามไม่ทัน',
+      'เดือนนี้เงินหายเร็วเพราะอะไร','สรุปภาพรวม',
     ]
     App.openSubScreen(`
       <div class="sub-header">
