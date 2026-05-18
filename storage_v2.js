@@ -32,6 +32,8 @@ const KEYS = {
   financialMemory:     'mt_financial_memory',
   monthlyFinancialFeatures: 'mt_monthly_financial_features',
   financialRecommendationFeedback: 'mt_financial_recommendation_feedback',
+  financialActionLog: 'mt_financial_action_log',
+  financialLifePlans: 'mt_financial_life_plans',
 }
 
 const BACKUP_SCHEMA_VERSION = 3
@@ -71,6 +73,8 @@ const BACKUP_SCHEMA_KEYS = [
   'financialMemory',
   'monthlyFinancialFeatures',
   'financialRecommendationFeedback',
+  'financialActionLog',
+  'financialLifePlans',
 ]
 
 const BACKUP_DEFAULTS = {
@@ -107,6 +111,8 @@ const BACKUP_DEFAULTS = {
   financialMemory: [],
   monthlyFinancialFeatures: [],
   financialRecommendationFeedback: [],
+  financialActionLog: [],
+  financialLifePlans: [],
 }
 
 const Storage = {

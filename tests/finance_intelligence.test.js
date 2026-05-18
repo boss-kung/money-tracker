@@ -51,9 +51,9 @@ test('feature store persists versioned rows', () => {
 })
 
 test('feedback changes recommendation ordering score', () => {
-  FI.recommendationFeedback('trim-micro-spend', 'not_helpful')
+  FI.recommendationFeedback('trim-micro-spend', 'not_relevant')
   const map = FI.recommendationFeedbackMap()
-  assert.equal(map.get('trim-micro-spend').not_helpful, 1)
+  assert.equal(map.get('trim-micro-spend').not_relevant, 1)
 })
 
 test('forecast exposes confidence interval and goal optimizer allocates capacity', () => {
@@ -63,4 +63,61 @@ test('forecast exposes confidence interval and goal optimizer allocates capacity
   assert.ok(['low','medium','high'].includes(f.confidence))
   const g = FI.goalOptimization(ctx)
   assert.equal(Array.isArray(g.allocation), true)
+})
+
+test('forecast accuracy summary and richer behavior classifier are available', () => {
+  const store = {
+    version: 2,
+    rows: [{ month:'2026-04', forecast:{ predictedExpense:25000, actualExpense:30000 } }],
+  }
+  localStorage.setItem('mt_monthly_financial_features', JSON.stringify(store))
+  const acc = FI.forecastAccuracySummary()
+  assert.equal(acc.count, 1)
+  assert.equal(acc.mape, 0.17)
+  const ctx = FI.buildContext({ transactions:[], categories:{ expense:[], income:[] }, wallets:[], recurring:[], goals:[] })
+  const b = FI.behaviorProfile(ctx)
+  assert.equal('semiEssentialSpend' in b, true)
+})
+
+test('category accuracy, seasonality, and rebalance scenarios are exposed', () => {
+  localStorage.setItem('mt_monthly_financial_features', JSON.stringify({
+    version: 2,
+    rows: [
+      { month:'2025-05', categoryActuals:{ food:1000 }, categoryForecasts:{ food:900 } },
+      { month:'2026-04', categoryActuals:{ food:800 }, categoryForecasts:{ food:850 } },
+    ],
+  }))
+  assert.equal(FI.categoryForecastAccuracy('food').count, 2)
+  assert.equal(typeof FI.categorySeasonality('food').factor, 'number')
+  const ctx = FI.buildContext({ transactions:[], categories:{ expense:[], income:[] }, wallets:[], recurring:[], goals:[] })
+  assert.equal(Array.isArray(FI.goalRebalanceScenarios(ctx)), true)
+})
+
+test('action logs can be recorded and undone', () => {
+  const row = FI.recordActionLog({ type:'create_goal', title:'test', payload:{ goalId:'g1' } })
+  assert.ok(row.id)
+  FI.markActionUndone(row.id)
+  assert.ok(FI.loadActionLog().find(x => x.id === row.id).undoneAt)
+})
+
+test('scenario compare and personalization expose decision-ready summaries', () => {
+  const ctx = FI.buildContext({ transactions:[], categories:{ expense:[], income:[] }, wallets:[], recurring:[], goals:[] })
+  const rows = FI.compareScenarios(ctx, [
+    { name:'ฐาน', input:{} },
+    { name:'รายรับเพิ่ม', input:{ incomeDelta:10000 } },
+  ])
+  assert.equal(rows.length, 2)
+  assert.ok(rows[1].deltaCash > rows[0].deltaCash)
+  assert.ok(FI.inferredArchetype(ctx).label)
+  assert.ok(FI.personalizedGuidance(ctx).topLever)
+})
+
+test('proactive brief and life planning summarize next actions', () => {
+  const ctx = FI.buildContext({ transactions:[], categories:{ expense:[], income:[] }, wallets:[], recurring:[], goals:[] })
+  const brief = FI.proactiveBrief(ctx)
+  assert.ok(brief.headline)
+  FI.saveLifePlan({ title:'บ้าน', targetAmount:1200000, currentAmount:200000, targetDate:'2030-05-01' })
+  const summary = FI.lifePlanningSummary(ctx)
+  assert.equal(summary.plans.length, 1)
+  assert.ok(summary.requiredMonthlyTotal > 0)
 })

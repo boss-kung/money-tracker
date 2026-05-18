@@ -12,6 +12,9 @@ const FinanceIntelligence = (() => {
   const FEEDBACK_KEY = 'mt_financial_recommendation_feedback'
   const FEATURE_KEY = 'mt_monthly_financial_features'
   const FEATURE_SCHEMA_VERSION = 2
+  const FEEDBACK_RATINGS = new Set(['helpful','not_relevant','already_knew','acted','snoozed','hide_type'])
+  const ACTION_LOG_KEY = 'mt_financial_action_log'
+  const LIFE_PLAN_KEY = 'mt_financial_life_plans'
 
   const round2 = n => Math.round((Number(n) || 0) * 100) / 100
   const avg = arr => {
@@ -185,13 +188,17 @@ const FinanceIntelligence = (() => {
     const spendForecast = round2(ctx.projectedExpense)
     const lowerBound = round2(Math.max(0, spendForecast - stdev))
     const upperBound = round2(spendForecast + stdev)
-    const confidence = adjustedExpenses.length >= 5 ? 'high' : adjustedExpenses.length >= 3 ? 'medium' : 'low'
+    const accuracy = forecastAccuracySummary()
+    const confidence = adjustedExpenses.length >= 5 && (accuracy.mape === null || accuracy.mape <= 0.2)
+      ? 'high'
+      : adjustedExpenses.length >= 3 ? 'medium' : 'low'
     const monthEndCash = round2(ctx.usable.liquid + (ctx.projectedIncome - spendForecast) - ctx.upcomingCommitted)
     const categories = ctx.expenseCategories.map(c => ({
       ...c,
-      projected: round2(c.amount / ctx.elapsedRatio),
+      seasonality: categorySeasonality(c.id),
+      projected: round2((c.amount / ctx.elapsedRatio) * categorySeasonality(c.id).factor),
       previousAmount: Number(ctx.previousExpenseCategories.find(p => p.id === c.id)?.amount || 0),
-    })).map(c => ({ ...c, deltaPct:pct(c.amount, c.previousAmount) }))
+    })).map(c => ({ ...c, deltaPct:pct(c.amount, c.previousAmount), accuracy:categoryForecastAccuracy(c.id) }))
     const budgetRisk = ctx.budgets.map(b => {
       const projected = round2(Number(b.spent || 0) / ctx.elapsedRatio)
       const probability = b.monthlyLimit > 0 ? clamp(projected / b.monthlyLimit * 100, 0, 100) : 0
@@ -204,9 +211,38 @@ const FinanceIntelligence = (() => {
       return { goal, progress, monthsToGoal }
     })
     return {
-      spendForecast, lowerBound, upperBound, confidence, monthEndCash, remainingDays, budgetLimit, budgetSpent,
+      spendForecast, lowerBound, upperBound, confidence, accuracy, monthEndCash, remainingDays, budgetLimit, budgetSpent,
       budgetRemaining: round2(budgetLimit - budgetSpent),
       categories, budgetRisk, goalForecasts,
+    }
+  }
+
+  function categorySeasonality(categoryId) {
+    const rows = loadFeatureStore().rows
+    const currentMonthNo = Number(currentMonth().slice(-2))
+    const sameMonth = rows.map(r => ({
+      month:r.month,
+      amount:Number(r.categoryActuals?.[categoryId] || 0),
+      monthNo:Number(String(r.month || '').slice(-2)),
+    })).filter(r => r.amount > 0)
+    const sameMonthRows = sameMonth.filter(r => r.monthNo === currentMonthNo)
+    const baseline = avg(sameMonth.map(r => r.amount))
+    const sameMonthAvg = avg(sameMonthRows.map(r => r.amount))
+    const factor = baseline > 0 && sameMonthAvg > 0 ? clamp(sameMonthAvg / baseline, 0.75, 1.35) : 1
+    return { factor:round2(factor), sampleSize:sameMonthRows.length }
+  }
+
+  function categoryForecastAccuracy(categoryId) {
+    const rows = loadFeatureStore().rows
+      .map(r => ({
+        predicted:Number(r.categoryForecasts?.[categoryId]),
+        actual:Number(r.categoryActuals?.[categoryId]),
+      }))
+      .filter(r => Number.isFinite(r.predicted) && r.predicted > 0 && Number.isFinite(r.actual) && r.actual >= 0)
+    if (!rows.length) return { count:0, mape:null }
+    return {
+      count:rows.length,
+      mape:round2(avg(rows.map(r => Math.abs(r.actual-r.predicted) / Math.max(1, r.actual)))),
     }
   }
 
@@ -232,6 +268,23 @@ const FinanceIntelligence = (() => {
     }
   }
 
+  function compareScenarios(ctx, scenarios = []) {
+    const baseline = runScenario(ctx, {})
+    return scenarios.map((scenario, index) => {
+      const result = runScenario(ctx, scenario.input || {})
+      return {
+        id: scenario.id || `scenario-${index + 1}`,
+        name: scenario.name || `Scenario ${index + 1}`,
+        note: scenario.note || '',
+        ...result,
+        deltaCash: round2(result.monthEndCash - baseline.monthEndCash),
+        deltaSavingsRate: result.savingsRate === null || baseline.savingsRate === null
+          ? null
+          : round2(result.savingsRate - baseline.savingsRate),
+      }
+    })
+  }
+
   function goalOptimization(ctx) {
     const rows = ctx.goals.map(({goal, progress}) => {
       const remaining = Number(progress?.remaining || 0)
@@ -240,15 +293,30 @@ const FinanceIntelligence = (() => {
       const required = Number(progress?.suggestedMonthly || 0)
       const pressure = daysLeft < 0 ? 100 : daysLeft <= 90 ? 80 : daysLeft <= 180 ? 60 : 40
       const gap = Math.max(0, required - current)
-      const score = pressure + Math.min(20, gap > 0 ? 20 : 0)
-      return { goal, progress, gap, score }
+      const type = /ฉุกเฉิน/.test(goal.name || '') ? 'emergency'
+        : /หนี้|debt/.test(goal.name || '') ? 'debt'
+        : daysLeft <= 180 ? 'near_term'
+        : 'long_term'
+      const typeBoost = { emergency:40, debt:30, near_term:20, long_term:0 }[type]
+      const score = pressure + Math.min(20, gap > 0 ? 20 : 0) + typeBoost
+      const minContribution = Number(goal.minimumContribution || 0)
+      return { goal, progress, gap, score, type, minContribution }
     }).sort((a,b)=>b.score-a.score)
     const availableMonthly = Math.max(0, Number(ctx.projectedIncome || 0) - Number(ctx.projectedExpense || 0))
     let remainingCapacity = availableMonthly
     const allocation = rows.map(r => {
+      const baseline = Math.min(r.minContribution, remainingCapacity)
+      remainingCapacity -= baseline
       const allocated = Math.min(r.gap, remainingCapacity)
       remainingCapacity -= allocated
-      return { goalId:r.goal.id, goalName:r.goal.name, suggestedIncrease:round2(allocated), unmetGap:round2(Math.max(0, r.gap - allocated)) }
+      return {
+        goalId:r.goal.id,
+        goalName:r.goal.name,
+        type:r.type,
+        baselineContribution:round2(baseline),
+        suggestedIncrease:round2(allocated),
+        unmetGap:round2(Math.max(0, r.gap - allocated)),
+      }
     })
     return {
       priorities: rows,
@@ -256,6 +324,28 @@ const FinanceIntelligence = (() => {
       availableMonthly: round2(availableMonthly),
       allocation,
     }
+  }
+
+  function goalRebalanceScenarios(ctx) {
+    const base = goalOptimization(ctx)
+    const makeScenario = (name, factorMap) => {
+      const rows = base.priorities.map(r => {
+        const factor = factorMap[r.type] ?? 1
+        return { ...r, adjustedGap:round2(r.gap * factor) }
+      })
+      let remaining = base.availableMonthly
+      const allocation = rows.map(r => {
+        const amount = Math.min(r.adjustedGap, remaining)
+        remaining -= amount
+        return { goalName:r.goal.name, type:r.type, amount:round2(amount) }
+      })
+      return { name, allocation, unallocated:round2(remaining) }
+    }
+    return [
+      makeScenario('สมดุล', {}),
+      makeScenario('เร่งความมั่นคง', { emergency:1.3, long_term:0.7 }),
+      makeScenario('เร่งเป้าหมายใกล้ถึง', { near_term:1.3, long_term:0.7 }),
+    ]
   }
 
   function behaviorProfile(ctx) {
@@ -283,7 +373,13 @@ const FinanceIntelligence = (() => {
       .filter(c => c.delta > 0)
       .sort((a,b)=>b.delta-a.delta)[0] || null
     const essentialIds = new Set(['utility','health','education','transport'])
-    const essential = ctx.expenseCategories.filter(c => essentialIds.has(c.id)).reduce((s,c)=>s+c.amount,0)
+    const semiEssentialIds = new Set(['food'])
+    const classified = ctx.expenseCategories.map(c => ({
+      ...c,
+      class: essentialIds.has(c.id) ? 'essential' : semiEssentialIds.has(c.id) ? 'semi_essential' : 'discretionary',
+    }))
+    const essential = classified.filter(c => c.class === 'essential').reduce((s,c)=>s+c.amount,0)
+    const semiEssential = classified.filter(c => c.class === 'semi_essential').reduce((s,c)=>s+c.amount,0)
     const discretionary = Math.max(0, ctx.monthly.expense - essential)
     const recurringMerchantNames = new Set((ctx.recurring || []).map(r => String(r.merchant || r.name || '').toLowerCase()))
     const merchantRecurrence = Object.entries(merchantCounts)
@@ -292,6 +388,13 @@ const FinanceIntelligence = (() => {
       .sort((a,b)=>b.count-a.count)
     const txByDay = {}
     postedExpenses.forEach(t => { const day = String(t.date || '').slice(-2); txByDay[day] = (txByDay[day] || 0) + Calc.getExpenseLedgerAmount(t) })
+    const merchantRules = postedExpenses.reduce((acc, t) => {
+      const merchant = String(t.merchant || '').toLowerCase()
+      if (/netflix|spotify|youtube|apple/.test(merchant)) acc.subscriptionLike += Calc.getExpenseLedgerAmount(t)
+      if (/grab|bolt|taxi/.test(merchant)) acc.transportConvenience += Calc.getExpenseLedgerAmount(t)
+      if (/shopee|lazada/.test(merchant)) acc.marketplace += Calc.getExpenseLedgerAmount(t)
+      return acc
+    }, { subscriptionLike:0, transportConvenience:0, marketplace:0 })
     return {
       weekendBias: weekdayAvg > 0 ? round2(weekendAvg / weekdayAvg) : null,
       microSpendCount: microSpend.length,
@@ -300,10 +403,55 @@ const FinanceIntelligence = (() => {
       topCategory: currentTop || null,
       lifestyleInflation,
       essentialSpend: round2(essential),
+      semiEssentialSpend: round2(semiEssential),
       discretionarySpend: round2(discretionary),
       discretionaryRatio: ctx.monthly.expense > 0 ? round2(discretionary / ctx.monthly.expense) : null,
+      categoryClasses: classified,
       recurringCandidates: merchantRecurrence,
       paydayWindowSpend: round2(Object.entries(txByDay).filter(([day]) => Number(day) <= 5).reduce((s,[,v])=>s+v,0)),
+      merchantRules:{
+        subscriptionLike:round2(merchantRules.subscriptionLike),
+        transportConvenience:round2(merchantRules.transportConvenience),
+        marketplace:round2(merchantRules.marketplace),
+      },
+    }
+  }
+
+  function inferredArchetype(ctx) {
+    const h = healthScore(ctx)
+    const b = behaviorProfile(ctx)
+    if (h.components.liquidity < 45) return { id:'stabilizer', label:'สายตั้งหลัก', focus:'resilience' }
+    if (ctx.credit?.totals?.totalLiability > Math.max(1, ctx.monthly.income) * 0.5) return { id:'debt_clearer', label:'สายเคลียร์หนี้', focus:'debt' }
+    if ((ctx.goals || []).length >= 2) return { id:'goal_builder', label:'สายพิชิตเป้าหมาย', focus:'goals' }
+    if ((ctx.assets?.netWorth || 0) > (ctx.avgExpense || 0) * 6) return { id:'wealth_builder', label:'สายต่อยอดสินทรัพย์', focus:'growth' }
+    if ((b.discretionaryRatio || 0) > 0.45) return { id:'optimizer', label:'สายปรับพฤติกรรม', focus:'discipline' }
+    return { id:'balanced', label:'สายสมดุล', focus:'balanced' }
+  }
+
+  function personalizedGuidance(ctx) {
+    const profile = loadProfile()
+    const archetype = inferredArchetype(ctx)
+    const h = healthScore(ctx)
+    const b = behaviorProfile(ctx)
+    const topLever = h.components.liquidity < 60
+      ? 'กันเงินสำรองก่อน'
+      : b.microSpendTotal > ctx.monthly.expense * 0.15
+        ? 'ลดรายจ่ายย่อยสะสม'
+        : profile.primaryFocus === 'goals'
+          ? 'เร่งเป้าหมายหลัก'
+          : 'รักษา cashflow ให้เสถียร'
+    return {
+      archetype,
+      preferredTone: profile.coachingStyle,
+      scorecard: {
+        resilience: round2(h.components.resilience),
+        discipline: round2(h.components.discipline),
+        goalReadiness: round2(h.components.goals),
+      },
+      topLever,
+      recommendedFocus: profile.primaryFocus === 'resilience' && archetype.focus !== 'balanced'
+        ? archetype.focus
+        : profile.primaryFocus,
     }
   }
 
@@ -338,6 +486,88 @@ const FinanceIntelligence = (() => {
       netSettlement:round2(receivable - payable),
       sharedExpense:round2(sharedExpense),
       balances:rows,
+    }
+  }
+
+  function proactiveBrief(ctx) {
+    const h = healthScore(ctx)
+    const f = forecasts(ctx)
+    const recs = adaptiveRecommendations(ctx)
+    const shared = sharedFinance(typeof S !== 'undefined' ? S : {})
+    const alerts = []
+    if (f.monthEndCash < 0) alerts.push({ level:'high', title:'เงินสดสิ้นเดือนเสี่ยงติดลบ', body:`คาดการณ์ ${Math.round(f.monthEndCash)} บาท` })
+    if (f.budgetRisk[0]?.risk === 'high') alerts.push({ level:'medium', title:`งบ ${f.budgetRisk[0].label} เสี่ยงเกิน`, body:`แนวโน้ม ${Math.round(f.budgetRisk[0].projected)} บาท` })
+    if (shared.receivable > 0) alerts.push({ level:'info', title:'มีเงินรอรับจากหารบิล', body:`ประมาณ ${Math.round(shared.receivable)} บาท` })
+    return {
+      generatedAt:new Date().toISOString(),
+      headline: h.total >= 70 ? 'ภาพรวมยังแข็งแรง' : 'มีจุดที่ควรดูแลวันนี้',
+      today: {
+        health:h,
+        projectedMonthEndCash:f.monthEndCash,
+        remainingBudget:f.budgetRemaining,
+      },
+      alerts,
+      nextBestAction: recs[0] || null,
+      openingBrief: monthlyAutopilot(ctx).openingPlan,
+      closingBrief: monthlyAutopilot(ctx).closingReview,
+    }
+  }
+
+  function normalizeLifePlan(plan = {}) {
+    const targetDate = plan.targetDate || ''
+    const targetAmount = round2(plan.targetAmount || 0)
+    const currentAmount = round2(plan.currentAmount || 0)
+    return {
+      id: plan.id || `life-${Date.now().toString(36)}`,
+      type: plan.type || 'other',
+      title: plan.title || 'แผนชีวิต',
+      targetAmount,
+      currentAmount,
+      targetDate,
+      priority: plan.priority || 'medium',
+      linkedGoalId: plan.linkedGoalId || '',
+      createdAt: plan.createdAt || new Date().toISOString(),
+    }
+  }
+
+  function loadLifePlans() {
+    return loadJson(LIFE_PLAN_KEY, []).map(normalizeLifePlan)
+  }
+
+  function saveLifePlan(plan) {
+    const rows = loadLifePlans()
+    const next = normalizeLifePlan(plan)
+    const idx = rows.findIndex(r => r.id === next.id)
+    if (idx >= 0) rows[idx] = next
+    else rows.unshift(next)
+    saveJson(LIFE_PLAN_KEY, rows.slice(0,100))
+    return next
+  }
+
+  function deleteLifePlan(id) {
+    const rows = loadLifePlans().filter(p => p.id !== id)
+    saveJson(LIFE_PLAN_KEY, rows)
+    return rows
+  }
+
+  function lifePlanningSummary(ctx) {
+    const today = new Date()
+    const plans = loadLifePlans().map(plan => {
+      const remaining = Math.max(0, plan.targetAmount - plan.currentAmount)
+      const monthsLeft = plan.targetDate
+        ? Math.max(1, Math.ceil((new Date(plan.targetDate) - today) / (1000 * 60 * 60 * 24 * 30.4375)))
+        : null
+      const requiredMonthly = monthsLeft ? round2(remaining / monthsLeft) : null
+      return { ...plan, remaining, monthsLeft, requiredMonthly }
+    })
+    const requiredMonthlyTotal = round2(plans.reduce((s,p)=>s+Number(p.requiredMonthly || 0),0))
+    const availableMonthly = round2(Math.max(0, Number(ctx.projectedIncome || 0) - Number(ctx.projectedExpense || 0)))
+    return {
+      plans,
+      requiredMonthlyTotal,
+      availableMonthly,
+      gap: round2(Math.max(0, requiredMonthlyTotal - availableMonthly)),
+      feasible: requiredMonthlyTotal <= availableMonthly,
     }
   }
 
@@ -397,9 +627,18 @@ const FinanceIntelligence = (() => {
   }
 
   function recommendationFeedback(id, rating, meta = {}) {
+    const normalizedRating = FEEDBACK_RATINGS.has(rating) ? rating : 'helpful'
     const list = loadJson(FEEDBACK_KEY, [])
-    const next = list.filter(x => !(x.id === id && x.rating === rating))
-    next.push({ id, rating, type:meta.type || '', source:meta.source || '', at:new Date().toISOString() })
+    const next = list.filter(x => !(x.id === id && x.rating === normalizedRating))
+    next.push({
+      id,
+      rating: normalizedRating,
+      type:meta.type || '',
+      source:meta.source || '',
+      reason:meta.reason || '',
+      context:meta.context || null,
+      at:new Date().toISOString(),
+    })
     saveJson(FEEDBACK_KEY, next.slice(-200))
   }
 
@@ -407,9 +646,10 @@ const FinanceIntelligence = (() => {
     const rows = loadJson(FEEDBACK_KEY, [])
     const map = new Map()
     rows.forEach(r => {
-      const cur = map.get(r.id) || { helpful:0, not_helpful:0, acted:0, snoozed:0 }
+      const cur = map.get(r.id) || { helpful:0, not_relevant:0, already_knew:0, acted:0, snoozed:0, hide_type:0 }
       if (r.rating === 'helpful') cur.helpful++
-      if (r.rating === 'not_helpful') cur.not_helpful++
+      if (r.rating === 'not_relevant') cur.not_relevant++
+      if (r.rating === 'already_knew') cur.already_knew++
       if (r.rating === 'acted') cur.acted++
       if (r.rating === 'snoozed') cur.snoozed++
       map.set(r.id, cur)
@@ -422,11 +662,27 @@ const FinanceIntelligence = (() => {
     const byType = {}
     rows.forEach(r => {
       const key = r.type || r.id || 'unknown'
-      const cur = byType[key] || { helpful:0, not_helpful:0, acted:0, snoozed:0 }
+      const cur = byType[key] || { helpful:0, not_relevant:0, already_knew:0, acted:0, snoozed:0, hide_type:0 }
       if (r.rating in cur) cur[r.rating]++
       byType[key] = cur
     })
     return byType
+  }
+
+  function loadActionLog() {
+    return loadJson(ACTION_LOG_KEY, [])
+  }
+
+  function recordActionLog(entry) {
+    const rows = loadActionLog()
+    rows.unshift({ id:`act-${Date.now().toString(36)}`, at:new Date().toISOString(), undoneAt:null, ...entry })
+    saveJson(ACTION_LOG_KEY, rows.slice(0,100))
+    return rows[0]
+  }
+
+  function markActionUndone(id) {
+    const rows = loadActionLog().map(r => r.id === id ? { ...r, undoneAt:new Date().toISOString() } : r)
+    saveJson(ACTION_LOG_KEY, rows)
   }
 
   function adaptiveRecommendations(ctx) {
@@ -442,12 +698,19 @@ const FinanceIntelligence = (() => {
     if (g.priorities[0]?.gap > 0) rows.push({ id:'repair-goal-plan', priority:profile.primaryFocus === 'goals' ? 90 : 70, title:`เร่งเป้าหมาย ${g.priorities[0].goal.name}`, body:`ควรเพิ่มเงินออมอีกประมาณ ${Math.round(g.priorities[0].gap)} บาทต่อเดือน` })
     if (b.weekendBias && b.weekendBias > 1.25) rows.push({ id:'watch-weekend-spend', priority:50, title:'จับตารายจ่ายช่วงวันหยุด', body:'ค่าใช้จ่ายเฉลี่ยวันหยุดสูงกว่าวันธรรมดาชัดเจน' })
     if (b.microSpendTotal > ctx.monthly.expense * 0.2 && ctx.monthly.expense > 0) rows.push({ id:'trim-micro-spend', priority:55, title:'รายจ่ายเล็กสะสมสูง', body:`รายการไม่เกิน 200 บาทรวม ${Math.round(b.microSpendTotal)} บาท` })
+    const personalization = personalizedGuidance(ctx)
+    if (personalization.archetype.id === 'optimizer' && b.merchantRules.marketplace > 0) rows.push({ id:'reduce-marketplace-drift', priority:58, title:'ช้อป marketplace เริ่มเด่น', body:`เดือนนี้รวม ${Math.round(b.merchantRules.marketplace)} บาท` })
     const feedback = recommendationFeedbackMap()
     return rows.map(r => {
       const f = feedback.get(r.id)
-      const learned = f ? (f.helpful * 8) + (f.acted * 12) - (f.not_helpful * 14) - (f.snoozed * 3) : 0
+      const outcomeBoost = loadJson(FEEDBACK_KEY, []).filter(x => x.id === r.id && x.source === 'outcome').length * 6
+      const learned = (f ? (f.helpful * 8) + (f.acted * 12) - (f.not_relevant * 14) - (f.already_knew * 5) - (f.snoozed * 3) - (f.hide_type * 100) : 0) + outcomeBoost
       return { ...r, learnedPriority: r.priority + learned, feedback:f || null }
     }).sort((a,b)=>b.learnedPriority-a.learnedPriority)
+  }
+
+  function recordRecommendationOutcome(id, outcome, metrics = {}) {
+    recommendationFeedback(id, 'acted', { source:'outcome', context:{ outcome, metrics } })
   }
 
   function monthlyAutopilot(ctx) {
@@ -477,6 +740,8 @@ const FinanceIntelligence = (() => {
     const previousExpenseCategories = Calc.getCategoryBreakdown(txs, prevMonth(month), { type:'expense', categories:cats.expense || [] })
     const ctx = buildContext({ ...state, transactions:txs })
     const previousMap = new Map(previousExpenseCategories.map(c => [c.id, c]))
+    const categoryActuals = Object.fromEntries(expenseCategories.map(c => [c.id, round2(c.amount)]))
+    const categoryForecasts = Object.fromEntries(expenseCategories.map(c => [c.id, round2(c.amount)]))
     return {
       schemaVersion:FEATURE_SCHEMA_VERSION,
       month,
@@ -494,8 +759,14 @@ const FinanceIntelligence = (() => {
           .map(c => ({ ...c, delta:c.amount - Number(previousMap.get(c.id)?.amount || 0) }))
           .sort((a,b)=>b.delta-a.delta)[0] || null,
       },
+      categoryActuals,
+      categoryForecasts,
       events:memoryForMonth(month),
       health:month === currentMonth() ? healthScore(ctx) : null,
+      forecast:{
+        predictedExpense: month === currentMonth() ? forecasts(ctx).spendForecast : null,
+        actualExpense:round2(monthly.expense),
+      },
     }
   }
 
@@ -516,13 +787,37 @@ const FinanceIntelligence = (() => {
     return rows
   }
 
+  function forecastAccuracyRows() {
+    return loadFeatureStore().rows
+      .map(r => ({
+        month:r.month,
+        predicted:Number(r.forecast?.predictedExpense),
+        actual:Number(r.forecast?.actualExpense),
+      }))
+      .filter(r => Number.isFinite(r.predicted) && r.predicted > 0 && Number.isFinite(r.actual) && r.actual >= 0)
+  }
+
+  function forecastAccuracySummary() {
+    const rows = forecastAccuracyRows()
+    if (!rows.length) return { count:0, mape:null, bias:null }
+    const ape = rows.map(r => Math.abs(r.actual - r.predicted) / Math.max(1, r.actual))
+    const bias = rows.map(r => r.predicted - r.actual)
+    return {
+      count:rows.length,
+      mape:round2(avg(ape)),
+      bias:round2(avg(bias)),
+    }
+  }
+
   return {
-    buildContext, healthScore, forecasts, runScenario, goalOptimization,
-    behaviorProfile, loadProfile, saveProfile, loadMemory, remember,
+    buildContext, healthScore, forecasts, runScenario, compareScenarios, goalOptimization, goalRebalanceScenarios,
+    behaviorProfile, inferredArchetype, personalizedGuidance, loadProfile, saveProfile, loadMemory, remember,
     memoryForMonth, memoryById, updateMemory, deleteMemory,
-    recommendationFeedback, recommendationFeedbackMap, recommendationFeedbackSummary,
-    adaptiveRecommendations, monthlyAutopilot, sharedFinance, actionProposals, featureForMonth,
-    loadFeatureStore, rebuildFeatureStore,
+    recommendationFeedback, recommendationFeedbackMap, recommendationFeedbackSummary, recordRecommendationOutcome,
+    loadActionLog, recordActionLog, markActionUndone,
+    adaptiveRecommendations, monthlyAutopilot, proactiveBrief, sharedFinance, actionProposals, featureForMonth,
+    loadLifePlans, saveLifePlan, deleteLifePlan, lifePlanningSummary,
+    loadFeatureStore, rebuildFeatureStore, forecastAccuracyRows, forecastAccuracySummary, categoryForecastAccuracy, categorySeasonality,
   }
 })()
 
