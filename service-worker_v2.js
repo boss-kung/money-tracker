@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.05.18-r7'
+const APP_VERSION = '2026.05.18-r8'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 
@@ -120,14 +120,21 @@ function routeHash(route = '') {
   return map[route] || '#dashboard'
 }
 
+function notificationRoute(data = {}, action = '') {
+  return (action && action !== 'open') ? action : (data.route || 'dashboard')
+}
+
 function notificationTargetUrl(data = {}, action = '') {
-  const route = action && action !== 'open' ? action : data.route
+  const route = notificationRoute(data, action)
   return new URL(`./index.html${routeHash(route)}`, self.location.href).href
 }
 
 self.addEventListener('notificationclick', event => {
   event.notification?.close()
-  const targetUrl = notificationTargetUrl(event.notification?.data || {}, event.action || '')
+  const data = event.notification?.data || {}
+  const action = event.action || ''
+  const route = notificationRoute(data, action)
+  const targetUrl = notificationTargetUrl(data, action)
   event.waitUntil((async () => {
     const windowClients = await clients.matchAll({ type: 'window', includeUncontrolled: true })
     for (const client of windowClients) {
@@ -135,7 +142,8 @@ self.addEventListener('notificationclick', event => {
       const target = new URL(targetUrl)
       if (url.origin === target.origin && url.pathname === target.pathname) {
         await client.focus()
-        try { client.navigate(targetUrl) } catch (_) {}
+        // postMessage is reliable on iOS PWA; client.navigate() often fails silently
+        try { client.postMessage({ type: 'NOTIFICATION_NAVIGATE', route }) } catch (_) {}
         return
       }
     }
