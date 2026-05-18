@@ -1316,7 +1316,8 @@ Object.assign(Calc, {
     const prevM = new Date(endY, endM - 1, 1)
     const startY = prevM.getFullYear(), startM = prevM.getMonth()
     const prevEndD = Calc.clampDay(startY, startM, cycleDay)
-    const startDate = new Date(startY, startM, prevEndD + 1)
+    const startDate = new Date(startY, startM, prevEndD)
+    startDate.setDate(startDate.getDate() + 1)  // explicit +1 day so JS handles month overflow correctly
     const localStr = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
     return { start: localStr(startDate), end: `${endY}-${String(endM+1).padStart(2,'0')}-${String(endD).padStart(2,'0')}` }
   },
@@ -1341,7 +1342,7 @@ Object.assign(Calc, {
     })
     if (p.maxPerCycle) points = Math.min(points, p.maxPerCycle)
     if (c.maxPerCycle) cashback = Math.min(cashback, c.maxPerCycle)
-    return { points: Math.floor(points), cashback }
+    return { points: Math.floor(points), cashback: Math.round(cashback * 100) / 100 }
   },
 })
 
@@ -1687,7 +1688,6 @@ init()
 const COLORS10=['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#16A34A','#EA580C','#475569'];
 const EMOJIS30=['🍔','🚗','🛍️','💊','🎬','💡','📚','📦','💼','💻','📈','💰','🏠','☕','🍱','✈️','🧾','🎮','🐶','🎁','💄','🏋️','🚌','🛒','📱','💳','🏦','🥇','₿','💱'];
 
-Calc.getCardRewards=function(txns,b){const pe=!!(b?.points?.enabled||b?.enabled),ce=!!(b?.cashback?.enabled||b?.enabled),p=b?.points||{},c=b?.cashback||{};let points=0,cashback=0;(txns||[]).forEach(t=>{if(pe&&t.rewardIncludePoints!==false){let pt=0;if(p.bahtPerPoint)pt+=Math.floor(t.amount/p.bahtPerPoint);pt*=p.multiplier||1;if(p.maxPerTxn)pt=Math.min(pt,p.maxPerTxn);points+=pt}if(ce&&t.rewardIncludeCashback!==false&&(!c.minSpend||t.amount>=c.minSpend)){let base=c.everyBaht?Math.floor(t.amount/c.everyBaht)*c.everyBaht:t.amount,cb=base*((c.percent||0)/100);if(c.tierThreshold&&t.amount<c.tierThreshold)cb=0;if(c.maxPerTxn)cb=Math.min(cb,c.maxPerTxn);cashback+=cb}});if(p.maxPerCycle)points=Math.min(points,p.maxPerCycle);if(c.maxPerCycle)cashback=Math.min(cashback,c.maxPerCycle);return{points:Math.floor(points),cashback:Math.round(cashback*100)/100}};
 App._benefit=id=>S.ccBenefits?.[id]||{points:{},cashback:{}};App._rewardForTx=tx=>{const card=S.wallets.find(w=>w.id===tx.walletId&&w.type==='credit');if(!(card&&tx.type==='expense'))return{points:0,cashback:0};if(App.getTransactionRewardEstimate){const est=App.getTransactionRewardEstimate(tx)||{points:0,cashback:0};return{points:Number(est.points||0),cashback:Number(est.cashback||0)}}return Calc.getCardRewards([tx],App._benefit(card.id))};
 
 // Provide baseline investment pricing before later market-sync layers load.
@@ -3601,6 +3601,11 @@ Calc.getUsableMoney = function(wallets, state = null) {
             </div>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,Math.max(0,b.pct))}%;background:${barColor}"></div></div>
+          ${b.over
+            ? `<div style="font-size:11px;color:var(--expense);margin-top:3px;font-weight:600">เกิน ${FMT(b.spent - b.monthlyLimit)}</div>`
+            : b.pct > 80
+              ? `<div style="font-size:11px;color:var(--amber);margin-top:3px">เหลือ ${FMT(b.monthlyLimit - b.spent)}</div>`
+              : ''}
         </div>`
       })
       html += `</div>`
@@ -4303,8 +4308,23 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return Number(w.manualPrice || 0)
   }
 
+  App._validateLedgerIntegrity = function() {
+    const walletIds = new Set((S.wallets || []).map(w => w.id))
+    const issues = []
+    ;(S.transactions || []).forEach(tx => {
+      if (!App._isPostedTx(tx)) return
+      if (!tx.walletId || !walletIds.has(tx.walletId))
+        issues.push({ txId: tx.id, date: tx.date, field: 'walletId', value: tx.walletId })
+      if ((tx.type === 'transfer' || tx.type === 'cc_payment') && (!tx.toWalletId || !walletIds.has(tx.toWalletId)))
+        issues.push({ txId: tx.id, date: tx.date, field: 'toWalletId', value: tx.toWalletId })
+    })
+    return issues
+  }
+
   App.recalculateWalletBalances = function({ save = false, recordSnapshot = false } = {}) {
     ensureV4State()
+    const issues = App._validateLedgerIntegrity()
+    if (issues.length > 0) console.warn('[MoneyTracker] ledger integrity issues found:', issues)
     App.ensureLedgerBaselines(false)
     const flows = App._ledgerFlows()
     ;(S.wallets || []).forEach(w => {
@@ -4363,7 +4383,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
       walletId: S.tx.walletId,
       toWalletId: S.tx.toWalletId || undefined,
       categoryId: S.tx.categoryId || undefined,
-      merchant: S.tx.type === 'transfer' ? '' : String(S.tx.merchant || '').trim(),
+      merchant: S.tx.type === 'transfer' ? '' : (() => {
+        const raw = String(S.tx.merchant || '').trim()
+        if (!raw) return ''
+        const canonical = (S.merchants || []).find(m => String(m.name || '').trim().toLowerCase() === raw.toLowerCase())
+        return canonical ? canonical.name : raw
+      })(),
       channel: S.tx.type === 'expense' ? String(S.tx.channel || '').trim() : '',
       note: S.tx.note || '',
       date: S.tx.date || today(),
@@ -9662,7 +9687,15 @@ App._pickMerchant = function(name, opts = {}) {
     if (!t || !r) return false
     const key = instanceKey(r.id, occurrenceNo, scheduledDate)
     if (t.recurringInstanceKey && t.recurringInstanceKey === key) return true
-    if (t.sourceRecurringId !== r.id && t.recurringId !== r.id) return false
+    if (t.sourceRecurringId !== r.id && t.recurringId !== r.id) {
+      // Fallback for legacy transactions that predate sourceRecurringId/recurringInstanceKey fields.
+      // Match by date + amount + walletId + type to catch duplicates after backup restore.
+      const sameDate   = String(t.date || '') === String(scheduledDate || '')
+      const sameAmt    = Math.abs(Number(t.amount || 0) - Number(r.amount || 0)) < 0.01
+      const sameWallet = String(t.walletId || '') === String(r.walletId || '')
+      const sameType   = String(t.type || '') === String(r.type || 'expense')
+      return sameDate && sameAmt && sameWallet && sameType
+    }
     if (Number(t.recurringOccurrenceNo || 0) === Number(occurrenceNo)) return true
     return String(t.recurringDueDate || '') === String(scheduledDate)
   }
@@ -11472,7 +11505,10 @@ App._pickMerchant = function(name, opts = {}) {
     const year = y || new Date().getFullYear()
     const monthIndex = (m || 1) - 1
     const end = new Date(year, monthIndex, Calc.clampDay(year, monthIndex, clampCycleDay(cycleDay)))
-    const dueMonthIndex = Number(dueDay || 1) > Number(cycleDay || 25) ? monthIndex : monthIndex + 1
+    // Use the actual clamped end day (not raw cycleDay) to decide if due falls in same or next month.
+    // Raw cycleDay can be 31 while the effective end is 28 (February), causing wrong month assignment.
+    const effectiveCycleDay = end.getDate()
+    const dueMonthIndex = Number(dueDay || 1) > effectiveCycleDay ? monthIndex : monthIndex + 1
     const dueYear = new Date(year, dueMonthIndex, 1).getFullYear()
     const dueMonth = new Date(year, dueMonthIndex, 1).getMonth()
     const due = new Date(dueYear, dueMonth, Calc.clampDay(dueYear, dueMonth, Number(dueDay || 1)))
@@ -14501,6 +14537,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           </div>
         </div>
         <div class="chips privilege-filter-row">${chips}</div>
+        ${S.privilegesFilter === 'expired' && rows.length ? `<div style="padding:0 0 8px;text-align:right"><button class="btn btn-outline btn-sm" style="color:var(--expense);border-color:var(--expense)" onclick="App.archiveExpiredPrivileges()">เก็บถาวรทั้งหมด (${rows.length})</button></div>` : ''}
         <div class="privilege-search-wrap">
           <input class="form-input search-input" id="privilege-search" placeholder="ค้นหาชื่อ Platform ร้านค้า โค้ด หรือโน้ต" value="${esc(S.privilegeSearch || '')}" oninput="App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}', this.value)">
         </div>
@@ -14687,6 +14724,24 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         privilege.updatedAt = nowISO()
         persistPrivilegesAndRefresh(true)
         toast('เก็บถาวรสิทธิพิเศษแล้ว', 'success')
+      },
+    })
+  }
+
+  App.archiveExpiredPrivileges = function() {
+    ensurePrivilegesState()
+    const expired = (S.privileges || []).filter(row => privilegeStatusMeta(row).key === 'expired')
+    if (!expired.length) return
+    App.showConfirm?.({
+      title: 'เก็บถาวรหมดอายุทั้งหมด',
+      body: `เก็บถาวร ${expired.length} สิทธิ์ที่หมดอายุแล้ว`,
+      confirmLabel: 'เก็บถาวร',
+      danger: false,
+      onConfirm() {
+        const now = nowISO()
+        expired.forEach(row => { row.status = 'archived'; row.updatedAt = now })
+        persistPrivilegesAndRefresh(true)
+        toast(`เก็บถาวร ${expired.length} สิทธิ์แล้ว`, 'success')
       },
     })
   }
@@ -17799,7 +17854,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const activeTab = S.moreTab || 'plan'
     const budgetCount = (S.budgets || []).length + (S.incomeBudgets || []).length
     const activePrivCount = App.getPrivilegesSummary?.().activeCount
-      ?? (S.privileges || []).filter(p => p.status === 'active').length
+      ?? (S.privileges || []).filter(p => p.status === 'active' && !isPrivilegeExpired(p)).length
     const meta = S.settings?.storageMeta || {}
     const lastSaved = meta.lastSavedAt ? new Date(meta.lastSavedAt).toLocaleString('th-TH') : 'ยังไม่บันทึก'
     const lastExport = meta.lastExportedAt ? new Date(meta.lastExportedAt).toLocaleString('th-TH') : 'ยังไม่เคย Export'

@@ -220,9 +220,14 @@
   }
 
   // ── Wizard state ─────────────────────────────────────────────
+  const DRAFT_KEY = 'mt_split_bill_draft'
   let _draft = null
   let _step  = 1
   let _editingItemIdx = -1
+
+  function _saveDraft()  { if (_draft) try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ..._draft, _step })) } catch (_) {} }
+  function _clearDraft() { try { localStorage.removeItem(DRAFT_KEY) } catch (_) {} }
+  function _loadDraft()  { try { const r = localStorage.getItem(DRAFT_KEY); return r ? JSON.parse(r) : null } catch (_) { return null } }
 
   const STEP_TITLES = ['','ข้อมูลบิล & คน','รายการอาหาร','ส่วนลด / ค่าบริการอื่น','ระบุคนจ่าย','สรุป']
   const noAnim = { animate: false }
@@ -431,8 +436,20 @@
   // ══════════════════════════════════════════════════════════════
   App.openSplitBillForm = function (billId = '') {
     const existing = billId ? SbStore.getBill(billId) : null
-    _draft = newDraft(existing ? JSON.parse(JSON.stringify(existing)) : {})
-    _step  = 1
+    if (existing) {
+      _draft = newDraft(JSON.parse(JSON.stringify(existing)))
+      _step  = 1
+    } else {
+      const saved = _loadDraft()
+      if (saved) {
+        const { _step: savedStep, ...draftData } = saved
+        _draft = newDraft(draftData)
+        _step  = Number(savedStep) || 1
+      } else {
+        _draft = newDraft({})
+        _step  = 1
+      }
+    }
     _editingItemIdx = -1
     _sbRender()
   }
@@ -526,7 +543,7 @@
         item.participants = _draft.peopleIds.map(id => ({ personId: id, ratio: 1 }))
       }
     })
-    _step = 2; _sbRender()
+    _step = 2; _saveDraft(); _sbRender()
   }
 
   App._sbTogglePerson = function (id) {
@@ -716,7 +733,7 @@
     _sbStep3(noAnim)
   }
 
-  App._sbNext3 = function () { _step = 3; _sbRender() }
+  App._sbNext3 = function () { _step = 3; _saveDraft(); _sbRender() }
 
   function _sbItemSaveFields() {
     const item = _draft.items[_editingItemIdx]
@@ -942,7 +959,7 @@
     })
   }
 
-  App._sbNext4 = function () { _sbPipeSaveAll(); _step = 4; _sbRender() }
+  App._sbNext4 = function () { _sbPipeSaveAll(); _step = 4; _saveDraft(); _sbRender() }
 
   // ══════════════════════════════════════════════════════════════
   //  STEP 5 — ใครจ่ายไปแล้ว
@@ -1013,7 +1030,7 @@
     })
   }
 
-  App._sbNext5 = function () { _sbSavePayments(); _step = 5; _sbRender() }
+  App._sbNext5 = function () { _sbSavePayments(); _step = 5; _saveDraft(); _sbRender() }
 
   App._sbUpdatePayRemaining = function () {
     const el = document.getElementById('sb-pay-remaining')
@@ -1098,6 +1115,7 @@
     if (!_draft) return
     _draft.updatedAt = nowISO()
     SbStore.upsertBill(_draft)
+    _clearDraft()
     notify('บันทึกบิลแล้ว 🎉', 'success')
     const id = _draft.id; _draft = null
     App.openSplitBillDetail(id)
@@ -1109,7 +1127,7 @@
       App._sbItemCancel()
       return
     }
-    if (_step <= 1) return App.openSplitBillScreen()
+    if (_step <= 1) { _clearDraft(); return App.openSplitBillScreen() }
     _step--; _sbRender()
   }
 

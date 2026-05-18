@@ -7,6 +7,7 @@
 const InsightEngine = (() => {
   const STORE_KEY = 'mt_ai_insight_store'
   const CACHE_TTL_MS = 4 * 60 * 60 * 1000
+  const DISMISS_TTL_MS = 30 * 24 * 60 * 60 * 1000
   const VERSION = 1
 
   // ── Helpers ─────────────────────────────────────────────────
@@ -31,12 +32,15 @@ const InsightEngine = (() => {
   function payloadHash(p) {
     try {
       return simpleHash(JSON.stringify({
-        liq: Math.round(p.usable?.liquid || 0),
-        exp: Math.round(p.monthly?.expense || 0),
-        inc: Math.round(p.monthly?.income || 0),
-        tc:  p.txCount,
-        mo:  p.month,
-        ts:  Math.floor(Date.now() / CACHE_TTL_MS),
+        liq:      Math.round(p.usable?.liquid || 0),
+        exp:      Math.round(p.monthly?.expense || 0),
+        inc:      Math.round(p.monthly?.income || 0),
+        tc:       p.txCount,
+        mo:       p.month,
+        ts:       Math.floor(Date.now() / CACHE_TTL_MS),
+        bud:      (p.budget || []).map(b => `${b.categoryId}:${Math.round(b.spent || 0)}:${b.limit || 0}`).sort().join(','),
+        bills:    (p.billsDue || []).length,
+        privExp:  (p.privExpiring || []).length,
       }))
     } catch (_) { return 'err' }
   }
@@ -586,10 +590,11 @@ const InsightEngine = (() => {
 
   // ── Ranking ──────────────────────────────────────────────────
   function rankAndFilter(insights, store) {
-    const dismissed  = new Set((store.insights||[]).filter(i => i.state === 'dismissed').map(i => i.id))
-    const snoozedMap = new Map((store.insights||[]).filter(i => i.state === 'snoozed' && i.snoozedUntil).map(i => [i.id, i.snoozedUntil]))
-    const seenMap    = new Map((store.insights||[]).map(i => [i.id, i.seenCount||0]))
-    const ratingMap  = new Map((store.feedback||[]).map(f => [f.insightId, f.rating]))
+    // dismissed = time-based: re-surfaces after DISMISS_TTL_MS (30 days)
+    const dismissedMap = new Map((store.insights||[]).filter(i => i.state === 'dismissed' && i.dismissedAt).map(i => [i.id, new Date(i.dismissedAt).getTime()]))
+    const snoozedMap  = new Map((store.insights||[]).filter(i => i.state === 'snoozed' && i.snoozedUntil).map(i => [i.id, i.snoozedUntil]))
+    const seenMap     = new Map((store.insights||[]).map(i => [i.id, i.seenCount||0]))
+    const ratingMap   = new Map((store.feedback||[]).map(f => [f.insightId, f.rating]))
     const hiddenTypes = new Set(store.hiddenTypes||[])
     const now = Date.now()
 
@@ -597,7 +602,8 @@ const InsightEngine = (() => {
 
     return insights
       .filter(i => {
-        if (dismissed.has(i.id)) return false
+        const dismissedAt = dismissedMap.get(i.id)
+        if (dismissedAt && (now - dismissedAt) < DISMISS_TTL_MS) return false
         if (hiddenTypes.has(i.type)) return false
         const su = snoozedMap.get(i.id)
         if (su && new Date(su).getTime() > now) return false

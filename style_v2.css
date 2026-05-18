@@ -5490,7 +5490,7 @@ html.dark .ins-card.severity-positive  { border-color: rgba(52,211,153,.3);  bac
 }
 
 .ins-snooze-select {
-  font-size: 12px;
+  font-size: 12px !important;
   padding: 4px 8px;
   border-radius: 8px;
   border: 1px solid var(--border);
