@@ -877,7 +877,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.19-r6'
+const APP_VERSION = '2026.05.19-r7'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -16312,6 +16312,73 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     <div style="font-size:12px;color:var(--muted);margin-top:6px">เงินพร้อมใช้ + รายรับ - รายจ่าย - ภาระที่จะถึง</div>`
   }
 
+  App._financeAlertRows = function(alerts = [], limit = 3) {
+    const rows = alerts.slice(0, limit)
+    if (!rows.length) return '<div style="color:var(--muted)">ยังไม่มี alert สำคัญ</div>'
+    const label = level => level === 'high' ? 'ด่วน' : level === 'medium' ? 'ควรดู' : level === 'low' ? 'ข้อมูลเพิ่ม' : 'แจ้งไว้'
+    return `<div class="finance-alert-list">
+      ${rows.map(a => `<div class="finance-alert-row is-${esc(a.level || 'info')}">
+        <div class="finance-alert-main">
+          <div class="finance-card-title"><span class="finance-alert-dot"></span><span>${esc(a.title)}</span></div>
+          <div class="finance-alert-body">${esc(a.body || '')}</div>
+        </div>
+        <div class="finance-alert-side">
+          <span class="finance-alert-severity">${esc(label(a.level))}</span>
+          <span>${esc(a.actionLabel || 'ดูรายละเอียด')}</span>
+        </div>
+      </div>`).join('')}
+    </div>`
+  }
+
+  App._financeCopilotActionQueue = function(brief = {}) {
+    const actions = brief.actionQueue || []
+    return `<div class="finance-copilot-queue">
+      ${actions.length ? actions.slice(0, 3).map((a, i) => `<div class="finance-copilot-step">
+        <span>${i + 1}</span>
+        <div>
+          <b>${esc(a.title)}</b>
+          <small>${esc(a.body || '')}</small>
+        </div>
+      </div>`).join('') : App._financeEmptyVisual('🧭', 'ยังไม่มี action เร่งด่วน', 'ระบบจะเสนอเมื่อเห็นสัญญาณที่ชัดเจน')}
+    </div>`
+  }
+
+  App._financeWeeklyBrief = function(weekly = {}) {
+    return `<div class="card card-pad finance-mb-md">
+      <div class="finance-section-title">รีวิว 7 วัน</div>
+      <div class="finance-weekly-brief">
+        <div>
+          <div class="finance-headline">${esc(weekly.title || 'ยังไม่มีรีวิวสัปดาห์')}</div>
+          <div class="finance-action">${esc(weekly.body || '')}</div>
+        </div>
+        <span class="chip">${esc(weekly.focus || 'ดูภาพรวม')}</span>
+      </div>
+      <div class="finance-brief-points">
+        ${(weekly.highlights || []).slice(0, 3).map(x => `<span>${esc(x)}</span>`).join('')}
+      </div>
+    </div>`
+  }
+
+  App._financeMonthlyCloseChecklist = function(monthlyClose = {}) {
+    const rows = monthlyClose.checklist || []
+    return `<div class="card card-pad finance-mb-md">
+      <div class="finance-section-title">เช็กก่อนปิดเดือน</div>
+      <div class="finance-muted-row" style="margin-bottom:10px">
+        <div>
+          <div class="finance-headline">${esc(monthlyClose.title || 'รีวิวก่อนปิดเดือน')}</div>
+          <div class="finance-action">${esc(monthlyClose.body || '')}</div>
+        </div>
+        <span class="chip">Grade ${esc(monthlyClose.healthGrade || '-')}</span>
+      </div>
+      <div class="finance-check-list">
+        ${rows.map(r => `<div class="finance-check-item${r.done ? ' is-done' : ''}">
+          <span>${r.done ? '✓' : '!'}</span>
+          <b>${esc(r.label)}</b>
+        </div>`).join('')}
+      </div>
+    </div>`
+  }
+
   App.openAskMyMoney = function() {
     const presets = [
       'ตอนนี้ควรกังวลอะไร','เงินพอถึงสิ้นเดือนไหม','อีก 14 วันต้องจ่ายอะไร',
@@ -16454,11 +16521,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           ${App._financeAssumptionEditor(ctx, forecast)}
           <div class="card card-pad finance-mb-md">
             <div class="finance-section-title">สิ่งที่ควรดูวันนี้</div>
-            ${brief.alerts.length ? brief.alerts.map(a => `<div style="padding:8px 0;border-bottom:1px solid var(--border)"><b>${esc(a.title)}</b><div style="font-size:12px;color:var(--muted)">${esc(a.body)}</div></div>`).join('') : '<div style="color:var(--muted)">ยังไม่มี alert สำคัญ</div>'}
+            ${App._financeAlertRows(brief.alerts, 3)}
           </div>
+          ${App._financeWeeklyBrief(brief.weeklyReview)}
           <div class="card card-pad">
             <div class="finance-section-title">สิ่งที่ควรทำต่อ</div>
-            <div style="margin-top:8px">${brief.nextBestAction ? `${esc(brief.nextBestAction.title)}<div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(brief.nextBestAction.body)}</div>` : 'ยังไม่มีข้อเสนอเด่น'}</div>
+            ${App._financeCopilotActionQueue(brief)}
             ${brief.nextBestAction ? App._financeExplainPanel(brief.nextBestAction.explanation, 'เหตุผลของคำแนะนำ') : ''}
           </div>` : `
           <div class="card card-pad finance-mb-md">
@@ -16478,7 +16546,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             <div style="font-size:13px;color:var(--muted);margin-bottom:12px">ถ้าต้องการ breakdown รายหมวด งบ และเป้าหมาย ให้เปิดรีวิวแบบเต็ม</div>
             ${App._financeExplainPanel(forecastTrace)}
             <button class="btn btn-secondary" onclick="App.openMonthlyReview()">เปิดสรุปรายเดือนแบบเต็ม</button>
-          </div>`}
+          </div>
+          ${App._financeMonthlyCloseChecklist(brief.monthlyClose)}`}
         ${App._financeJourneyLinks([
           ['ถามการเงินของคุณ','App.openAskMyMoney()'],
           ['ลองและเปรียบเทียบแผน','App.openPlanningLab()'],
@@ -16624,6 +16693,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   App.openCoachingHub = function() {
     const p = FinanceIntelligence.loadProfile()
     const ctx = FinanceIntelligence.buildContext(S)
+    const brief = FinanceIntelligence.proactiveBrief(ctx)
     const guide = FinanceIntelligence.personalizedGuidance(ctx)
     const topRecommendation = FinanceIntelligence.adaptiveRecommendations(ctx)[0] || null
     const profileTrace = {
@@ -16663,6 +16733,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           ${App._financeMiniStat('Resilience', Math.round(guide.scorecard.resilience))}
           ${App._financeMiniStat('Discipline', Math.round(guide.scorecard.discipline))}
           ${App._financeMiniStat('Goals', Math.round(guide.scorecard.goalReadiness))}
+        </div>
+        <div class="card card-pad finance-mb-md">
+          <div class="finance-section-title">คิวผู้ช่วยวันนี้</div>
+          ${App._financeCopilotActionQueue(brief)}
+          <div style="margin-top:10px">${App._financeAlertRows(brief.alerts, 2)}</div>
         </div>
         <div class="card card-pad" style="margin-bottom:12px">
           <div class="finance-section-title">ตั้งค่าคำแนะนำ</div>
@@ -16754,21 +16829,20 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div class="card card-pad finance-mb-md">
           <div style="font-size:12px;color:var(--muted)">Brief วันนี้</div>
           <div style="font-size:20px;font-weight:700;margin-top:4px">${esc(brief.headline)}</div>
-          <div style="font-size:13px;color:var(--muted);margin-top:8px">เงินสิ้นเดือนคาดการณ์ ${fmt(brief.today.projectedMonthEndCash)} · งบคงเหลือ ${fmt(brief.today.remainingBudget)}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:8px">เงินสิ้นเดือนคาดการณ์ ${fmt(brief.today.projectedMonthEndCash)} · งบคงเหลือ ${fmt(brief.today.remainingBudget)} · alert ${brief.notificationReady.alertCount}</div>
           ${App._financeExplainPanel(trace)}
         </div>
         <div class="card card-pad finance-mb-md">
-          <div class="finance-section-title">สิ่งที่ระบบอยากบอกก่อน</div>
-          ${brief.alerts.length ? brief.alerts.map(a => `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
-            <div style="font-weight:600">${esc(a.title)}</div>
-            <div style="font-size:12px;color:var(--muted)">${esc(a.body)}</div>
-          </div>`).join('') : '<div style="color:var(--muted)">ยังไม่มี alert สำคัญ</div>'}
+          <div class="finance-section-title">ลำดับเรื่องสำคัญ</div>
+          ${App._financeAlertRows(brief.alerts, 5)}
         </div>
-        <div class="card card-pad">
-          <div class="finance-section-title">สิ่งที่ควรทำต่อ</div>
-          <div style="margin-top:8px">${brief.nextBestAction ? `${esc(brief.nextBestAction.title)}<div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(brief.nextBestAction.body)}</div>` : 'ยังไม่มีข้อเสนอเด่น'}</div>
+        <div class="card card-pad finance-mb-md">
+          <div class="finance-section-title">คิวที่แนะนำ</div>
+          ${App._financeCopilotActionQueue(brief)}
           ${brief.nextBestAction ? App._financeExplainPanel(brief.nextBestAction.explanation, 'เหตุผลของคำแนะนำ') : ''}
         </div>
+        ${App._financeWeeklyBrief(brief.weeklyReview)}
+        ${App._financeMonthlyCloseChecklist(brief.monthlyClose)}
         ${App._financeJourneyLinks([
           ['ลองแผนการเงิน','App.openScenarioLab()'],
           ['ถามการเงินของคุณ','App.openAskMyMoney()'],

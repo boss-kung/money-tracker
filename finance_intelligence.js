@@ -549,28 +549,214 @@ const FinanceIntelligence = (() => {
     }
   }
 
-  function proactiveBrief(ctx) {
+  function alertPriority(level) {
+    return ({ high:100, medium:70, info:40, low:20 })[level] || 30
+  }
+
+  function normalizeCopilotAlert(alert = {}, index = 0) {
+    const level = alert.level || 'info'
+    const priority = Number(alert.priority ?? alertPriority(level))
+    return {
+      id: alert.id || `alert-${index + 1}`,
+      level,
+      severity: level,
+      priority,
+      title: alert.title || 'เรื่องที่ควรดู',
+      body: alert.body || '',
+      source: alert.source || 'copilot',
+      actionLabel: alert.actionLabel || (level === 'high' ? 'จัดการตอนนี้' : 'ดูรายละเอียด'),
+      metric: alert.metric || null,
+    }
+  }
+
+  function proactiveAlertQueue(ctx, refs = {}) {
+    const h = refs.health || healthScore(ctx)
+    const f = refs.forecast || forecasts(ctx)
+    const shared = refs.shared || sharedFinance(typeof S !== 'undefined' ? S : {})
+    const alerts = []
+    if (f.monthEndCash < 0) alerts.push({
+      id:'cashflow-negative',
+      level:'high',
+      title:'เงินสดสิ้นเดือนเสี่ยงติดลบ',
+      body:`คาดการณ์ ${Math.round(f.monthEndCash)} บาท หลังหักรายจ่ายและภาระที่จะถึง`,
+      source:'forecast',
+      actionLabel:'กันเงินสดก่อน',
+      metric:f.monthEndCash,
+    })
+    if (f.monthEndCash >= 0 && f.monthEndCash < Math.max(1000, Number(ctx.usable?.liquid || 0) * 0.15)) alerts.push({
+      id:'cash-buffer-thin',
+      level:'medium',
+      title:'เงินสดปลายเดือนค่อนข้างบาง',
+      body:`เหลือ buffer คาดการณ์ ${Math.round(f.monthEndCash)} บาท`,
+      source:'forecast',
+      actionLabel:'ดู buffer',
+      metric:f.monthEndCash,
+    })
+    ;(f.budgetRisk || []).filter(b => ['high','medium'].includes(b.risk)).slice(0, 2).forEach((b, i) => {
+      alerts.push({
+        id:`budget-${b.id || b.categoryId || i}`,
+        level:b.risk === 'high' ? 'high' : 'medium',
+        priority:(b.risk === 'high' ? 90 : 62) + Math.min(8, i),
+        title:`งบ ${b.label || b.name || 'หมวดนี้'} ${b.risk === 'high' ? 'เสี่ยงเกิน' : 'ใกล้เต็ม'}`,
+        body:`แนวโน้ม ${Math.round(b.projected)} บาท จากวงเงิน ${Math.round(b.monthlyLimit || 0)} บาท`,
+        source:'budget',
+        actionLabel:'คุมงบ',
+        metric:b.probability,
+      })
+    })
+    if (ctx.upcomingCommitted > 0 && ctx.upcomingCommitted > Math.max(1, Number(ctx.usable?.liquid || 0)) * 0.6) alerts.push({
+      id:'upcoming-heavy',
+      level:'medium',
+      title:'ภาระที่จะถึงกินเงินสดสูง',
+      body:`อีก 30 วันมีรายการรอจ่ายประมาณ ${Math.round(ctx.upcomingCommitted)} บาท`,
+      source:'upcoming',
+      actionLabel:'กันเงินจ่ายบิล',
+      metric:ctx.upcomingCommitted,
+    })
+    if (shared.receivable > 0) alerts.push({
+      id:'shared-receivable',
+      level:'info',
+      title:'มีเงินรอรับจากหารบิล',
+      body:`ยอดรอรับประมาณ ${Math.round(shared.receivable)} บาท`,
+      source:'shared',
+      actionLabel:'ดูยอดหารบิล',
+      metric:shared.receivable,
+    })
+    const offTrackGoal = (f.goalForecasts || []).find(g => g.monthsToGoal === null || Number(g.progress?.daysLeft || 9999) < 0)
+    if (offTrackGoal) alerts.push({
+      id:`goal-${offTrackGoal.goal?.id || 'off-track'}`,
+      level:'medium',
+      title:`เป้าหมาย ${offTrackGoal.goal?.name || ''} ต้องทบทวน`,
+      body: offTrackGoal.monthsToGoal === null ? 'ยังไม่มีเงินออมต่อเดือนที่พาไปถึงเป้าหมายได้' : 'เลยกำหนดหรือใกล้พลาดจากแผนเดิม',
+      source:'goal',
+      actionLabel:'ปรับแผนเป้าหมาย',
+    })
+    if (f.confidence === 'low') alerts.push({
+      id:'forecast-low-confidence',
+      level:'low',
+      priority:18,
+      title:'คาดการณ์ยังต้องใช้ข้อมูลเพิ่ม',
+      body:'ระบบจะมั่นใจขึ้นเมื่อมีประวัติรายเดือนมากขึ้น',
+      source:'explainability',
+      actionLabel:'ดูเหตุผล',
+    })
+    if (h.total < 55) alerts.push({
+      id:'health-watch',
+      level:'medium',
+      title:'สุขภาพการเงินต้องดูแลใกล้ชิด',
+      body:`คะแนนรวม ${Math.round(h.total)}/100 จุดอ่อนหลักคือ ${Object.entries(h.components).sort((a,b)=>a[1]-b[1])[0]?.[0] || 'cashflow'}`,
+      source:'health',
+      actionLabel:'ดูคะแนน',
+      metric:h.total,
+    })
+    return alerts.map(normalizeCopilotAlert).sort((a,b)=>b.priority-a.priority)
+  }
+
+  function txDateValue(t) {
+    const d = new Date(t?.date || '')
+    return Number.isFinite(d.getTime()) ? d.getTime() : 0
+  }
+
+  function weeklyReview(ctx, refs = {}) {
+    const b = refs.behavior || behaviorProfile(ctx)
+    const f = refs.forecast || forecasts(ctx)
+    const now = new Date()
+    const postedExpenses = Calc.getPostedTransactions?.(ctx.txs)?.filter(t => t.type === 'expense') || []
+    const last7Start = now.getTime() - 7 * 24 * 60 * 60 * 1000
+    const prev7Start = now.getTime() - 14 * 24 * 60 * 60 * 1000
+    const last7 = postedExpenses.filter(t => txDateValue(t) >= last7Start)
+    const prev7 = postedExpenses.filter(t => txDateValue(t) >= prev7Start && txDateValue(t) < last7Start)
+    const last7Total = round2(last7.reduce((s,t)=>s+Calc.getExpenseLedgerAmount(t),0))
+    const prev7Total = round2(prev7.reduce((s,t)=>s+Calc.getExpenseLedgerAmount(t),0))
+    const deltaPct = pct(last7Total, prev7Total)
+    const direction = deltaPct === null ? 'ยังเทียบสัปดาห์ก่อนไม่ได้' : deltaPct > 10 ? 'ใช้เพิ่มจากสัปดาห์ก่อน' : deltaPct < -10 ? 'ใช้ลดลงจากสัปดาห์ก่อน' : 'ค่อนข้างนิ่ง'
+    const top = b.topCategory
+    const highlights = [
+      `7 วันล่าสุดใช้ ${Math.round(last7Total)} บาท`,
+      top ? `หมวดเด่นคือ ${top.label || top.name || top.id}` : 'ยังไม่มีหมวดเด่น',
+      b.weekendBias && b.weekendBias > 1.2 ? `วันหยุดสูงกว่าวันธรรมดา ${Math.round((b.weekendBias - 1) * 100)}%` : 'พฤติกรรมวันธรรมดา/วันหยุดไม่ต่างมาก',
+    ]
+    const focus = f.budgetRisk?.[0]?.risk === 'high'
+      ? `คุมงบ ${f.budgetRisk[0].label || f.budgetRisk[0].name || 'หมวดเสี่ยง'}`
+      : b.microSpendTotal > ctx.monthly.expense * 0.15
+        ? 'ลดรายจ่ายเล็กสะสม'
+        : 'รักษาจังหวะใช้เงินให้คงที่'
+    return {
+      title: direction,
+      body: deltaPct === null ? 'ระบบเริ่มเก็บจังหวะรายสัปดาห์ให้แล้ว' : `เปลี่ยน ${Math.round(deltaPct)}% จากสัปดาห์ก่อน`,
+      last7Total,
+      prev7Total,
+      highlights,
+      focus,
+    }
+  }
+
+  function monthlyCloseBrief(ctx, refs = {}) {
+    const h = refs.health || healthScore(ctx)
+    const f = refs.forecast || forecasts(ctx)
+    const recs = refs.recommendations || adaptiveRecommendations(ctx)
+    const checklist = [
+      { id:'reserve-bills', label:'กันเงินสำหรับบิลที่กำลังจะถึง', done: ctx.upcomingCommitted <= 0 || Number(ctx.usable?.liquid || 0) >= ctx.upcomingCommitted },
+      { id:'review-budget', label:'เช็กงบหมวดที่เสี่ยงเกิน', done: !f.budgetRisk?.some(b => b.risk === 'high') },
+      { id:'review-goals', label:'ทบทวนเป้าหมายที่ต้องเพิ่มเงินออม', done: !f.goalForecasts?.some(g => g.monthsToGoal === null) },
+      { id:'learn-next-action', label:'เลือก action ถัดไปของเดือนนี้', done: !recs[0] },
+    ]
+    return {
+      title: h.total >= 70 ? 'ปิดเดือนได้ค่อนข้างมั่นใจ' : 'ควรปิดเดือนแบบระวัง',
+      body:`เงินสิ้นเดือนคาดการณ์ ${Math.round(f.monthEndCash)} บาท · คะแนน ${Math.round(h.total)}/100`,
+      healthGrade:h.grade,
+      projectedMonthEndCash:f.monthEndCash,
+      checklist,
+    }
+  }
+
+  function copilotBrief(ctx) {
     const h = healthScore(ctx)
     const f = forecasts(ctx)
+    const b = behaviorProfile(ctx)
     const recs = adaptiveRecommendations(ctx)
     const shared = sharedFinance(typeof S !== 'undefined' ? S : {})
-    const alerts = []
-    if (f.monthEndCash < 0) alerts.push({ level:'high', title:'เงินสดสิ้นเดือนเสี่ยงติดลบ', body:`คาดการณ์ ${Math.round(f.monthEndCash)} บาท` })
-    if (f.budgetRisk[0]?.risk === 'high') alerts.push({ level:'medium', title:`งบ ${f.budgetRisk[0].label} เสี่ยงเกิน`, body:`แนวโน้ม ${Math.round(f.budgetRisk[0].projected)} บาท` })
-    if (shared.receivable > 0) alerts.push({ level:'info', title:'มีเงินรอรับจากหารบิล', body:`ประมาณ ${Math.round(shared.receivable)} บาท` })
+    const monthly = monthlyAutopilot(ctx)
+    const refs = { health:h, forecast:f, behavior:b, recommendations:recs, shared }
+    const alerts = proactiveAlertQueue(ctx, refs)
+    const weekly = weeklyReview(ctx, refs)
+    const closing = monthlyCloseBrief(ctx, refs)
+    const nextBestAction = recs[0] || null
+    const actionQueue = [
+      nextBestAction ? { id:`rec-${nextBestAction.id}`, type:'recommendation', title:nextBestAction.title, body:nextBestAction.body, priority:nextBestAction.learnedPriority || nextBestAction.priority || 50 } : null,
+      alerts[0] ? { id:`alert-${alerts[0].id}`, type:'alert', title:alerts[0].title, body:alerts[0].body, priority:alerts[0].priority } : null,
+      { id:'weekly-review', type:'review', title:weekly.focus, body:weekly.body, priority:45 },
+    ].filter(Boolean).sort((a,b)=>b.priority-a.priority)
     return {
       generatedAt:new Date().toISOString(),
-      headline: h.total >= 70 ? 'ภาพรวมยังแข็งแรง' : 'มีจุดที่ควรดูแลวันนี้',
+      headline: alerts.some(a => a.level === 'high')
+        ? 'มีเรื่องสำคัญที่ควรดูวันนี้'
+        : h.total >= 70 ? 'ภาพรวมยังแข็งแรง' : 'มีจุดที่ควรดูแลวันนี้',
+      priority: alerts[0]?.level || (h.total >= 70 ? 'low' : 'medium'),
       today: {
         health:h,
         projectedMonthEndCash:f.monthEndCash,
         remainingBudget:f.budgetRemaining,
+        confidence:f.confidence,
       },
       alerts,
-      nextBestAction: recs[0] || null,
-      openingBrief: monthlyAutopilot(ctx).openingPlan,
-      closingBrief: monthlyAutopilot(ctx).closingReview,
+      nextBestAction,
+      weeklyReview: weekly,
+      monthlyClose: closing,
+      actionQueue,
+      notificationReady: {
+        schedule:'daily',
+        channels:['in_app'],
+        alertCount:alerts.length,
+        highPriorityCount:alerts.filter(a => a.level === 'high').length,
+      },
+      openingBrief: monthly.openingPlan,
+      closingBrief: monthly.closingReview,
     }
+  }
+
+  function proactiveBrief(ctx) {
+    return copilotBrief(ctx)
   }
 
   function normalizeLifePlan(plan = {}) {
@@ -876,7 +1062,7 @@ const FinanceIntelligence = (() => {
     memoryForMonth, memoryById, updateMemory, deleteMemory,
     recommendationFeedback, recommendationFeedbackMap, recommendationFeedbackSummary, recordRecommendationOutcome,
     loadActionLog, recordActionLog, markActionUndone,
-    adaptiveRecommendations, monthlyAutopilot, proactiveBrief, sharedFinance, actionProposals, featureForMonth,
+    adaptiveRecommendations, monthlyAutopilot, proactiveBrief, copilotBrief, proactiveAlertQueue, weeklyReview, monthlyCloseBrief, sharedFinance, actionProposals, featureForMonth,
     loadLifePlans, saveLifePlan, deleteLifePlan, lifePlanningSummary,
     loadFeatureStore, rebuildFeatureStore, forecastAccuracyRows, forecastAccuracySummary, categoryForecastAccuracy, categorySeasonality,
     confidenceMeta, forecastExplanation, recommendationExplanation,
