@@ -217,6 +217,66 @@ const FinanceIntelligence = (() => {
     }
   }
 
+  function confidenceMeta(level) {
+    return ({
+      high: { level:'high', label:'มั่นใจสูง', tone:'good', reason:'มีข้อมูลย้อนหลังเพียงพอและ error เดิมอยู่ในระดับรับได้' },
+      medium: { level:'medium', label:'มั่นใจปานกลาง', tone:'warn', reason:'มีข้อมูลย้อนหลังพอประมาณ แต่ยังควรดูช่วงคาดการณ์ประกอบ' },
+      low: { level:'low', label:'มั่นใจต่ำ', tone:'danger', reason:'ข้อมูลย้อนหลังยังน้อยหรือความคลาดเคลื่อนเดิมสูง' },
+    }[level] || { level:'low', label:'มั่นใจต่ำ', tone:'danger', reason:'ข้อมูลยังไม่พอสำหรับประเมินเต็มที่' })
+  }
+
+  function forecastExplanation(ctx, forecast = forecasts(ctx)) {
+    const accuracy = forecast.accuracy || { count:0, mape:null, bias:null }
+    return {
+      id:'cashflow-forecast',
+      title:'เหตุผลของคาดการณ์',
+      confidence: confidenceMeta(forecast.confidence),
+      sources:['เงินพร้อมใช้','รายรับ/รายจ่ายเดือนนี้','บิล/รายการที่จะถึง','ประวัติย้อนหลัง','เหตุการณ์พิเศษ'],
+      formula:'เงินสิ้นเดือน = เงินพร้อมใช้ + รายรับคาดการณ์ - รายจ่ายคาดการณ์ - ภาระที่กำลังจะถึง',
+      assumptions:[
+        `รายรับคาดการณ์ ${Math.round(ctx.projectedIncome || 0)} บาท`,
+        `รายจ่ายคาดการณ์ ${Math.round(forecast.spendForecast || 0)} บาท`,
+        `ภาระที่จะถึง ${Math.round(ctx.upcomingCommitted || 0)} บาท`,
+        `ใช้ข้อมูลผ่านไป ${Math.round((ctx.elapsedRatio || 0) * 100)}% ของเดือน`,
+      ],
+      signals:[
+        `ช่วงคาดการณ์ ${Math.round(forecast.lowerBound || 0)}-${Math.round(forecast.upperBound || 0)} บาท`,
+        accuracy.mape === null ? 'ยังไม่มีประวัติ error พอสำหรับเทียบย้อนหลัง' : `error เฉลี่ยย้อนหลัง ${(accuracy.mape * 100).toFixed(0)}%`,
+        ctx.events?.length ? `มีเหตุการณ์พิเศษเดือนนี้ ${ctx.events.length} รายการ` : 'ยังไม่มีเหตุการณ์พิเศษเดือนนี้',
+      ],
+    }
+  }
+
+  function recommendationExplanation(rec, ctx, refs = {}) {
+    const h = refs.health || healthScore(ctx)
+    const f = refs.forecast || forecasts(ctx)
+    const g = refs.goals || goalOptimization(ctx)
+    const b = refs.behavior || behaviorProfile(ctx)
+    const base = {
+      id:rec?.id || 'recommendation',
+      title:'เหตุผลของคำแนะนำ',
+      confidence: confidenceMeta(f.confidence || 'medium'),
+      sources:['สุขภาพการเงิน','คาดการณ์เงินสด','งบประมาณ','เป้าหมาย','พฤติกรรมใช้จ่าย','feedback'],
+      formula:'ลำดับคำแนะนำ = ความเสี่ยงปัจจุบัน + ผลกระทบต่อเงินสด/เป้าหมาย + feedback ที่เคยให้',
+      assumptions:[
+        `คะแนนสุขภาพ ${Math.round(h.total || 0)}/100`,
+        `เงินสิ้นเดือนคาดการณ์ ${Math.round(f.monthEndCash || 0)} บาท`,
+      ],
+      signals:[],
+    }
+    if (!rec) return base
+    const signalMap = {
+      'build-emergency-fund': [`สภาพคล่อง ${Math.round(h.components.liquidity || 0)}/100`, 'เงินสำรองต่ำกว่าเกณฑ์พื้นฐาน'],
+      'protect-cashflow': [`เงินสิ้นเดือนคาดการณ์ ${Math.round(f.monthEndCash || 0)} บาท`, 'มีโอกาสที่ cashflow จะตึงตัว'],
+      'fix-budget-overrun': f.budgetRisk[0] ? [`งบ ${f.budgetRisk[0].label} ใช้คาดการณ์ ${Math.round(f.budgetRisk[0].projected)} บาท`, `ความเสี่ยง ${f.budgetRisk[0].risk}`] : ['งบประมาณบางหมวดมีความเสี่ยง'],
+      'repair-goal-plan': g.priorities[0] ? [`เป้าหมาย ${g.priorities[0].goal.name}`, `ควรเพิ่ม ${Math.round(g.priorities[0].gap || 0)} บาท/เดือน`] : ['เป้าหมายบางรายการยังตามไม่ทัน'],
+      'watch-weekend-spend': [`วันหยุดใช้มากกว่าวันธรรมดา ${Math.round(((b.weekendBias || 1) - 1) * 100)}%`],
+      'trim-micro-spend': [`รายการเล็กสะสม ${Math.round(b.microSpendTotal || 0)} บาท`, `จำนวน ${b.microSpendCount || 0} รายการ`],
+      'reduce-marketplace-drift': [`Marketplace รวม ${Math.round(b.merchantRules?.marketplace || 0)} บาท`],
+    }
+    return { ...base, signals: signalMap[rec.id] || [rec.title || 'คำแนะนำนี้มาจากภาพรวมความเสี่ยงและ feedback ล่าสุด'] }
+  }
+
   function categorySeasonality(categoryId) {
     const rows = loadFeatureStore().rows
     const currentMonthNo = Number(currentMonth().slice(-2))
@@ -702,10 +762,11 @@ const FinanceIntelligence = (() => {
     if (personalization.archetype.id === 'optimizer' && b.merchantRules.marketplace > 0) rows.push({ id:'reduce-marketplace-drift', priority:58, title:'ช้อป marketplace เริ่มเด่น', body:`เดือนนี้รวม ${Math.round(b.merchantRules.marketplace)} บาท` })
     const feedback = recommendationFeedbackMap()
     return rows.map(r => {
-      const f = feedback.get(r.id)
+      const fb = feedback.get(r.id)
       const outcomeBoost = loadJson(FEEDBACK_KEY, []).filter(x => x.id === r.id && x.source === 'outcome').length * 6
-      const learned = (f ? (f.helpful * 8) + (f.acted * 12) - (f.not_relevant * 14) - (f.already_knew * 5) - (f.snoozed * 3) - (f.hide_type * 100) : 0) + outcomeBoost
-      return { ...r, learnedPriority: r.priority + learned, feedback:f || null }
+      const learned = (fb ? (fb.helpful * 8) + (fb.acted * 12) - (fb.not_relevant * 14) - (fb.already_knew * 5) - (fb.snoozed * 3) - (fb.hide_type * 100) : 0) + outcomeBoost
+      const ranked = { ...r, learnedPriority: r.priority + learned, feedback:fb || null }
+      return { ...ranked, explanation: recommendationExplanation(ranked, ctx, { health:h, forecast:f, goals:g, behavior:b }) }
     }).sort((a,b)=>b.learnedPriority-a.learnedPriority)
   }
 
@@ -818,6 +879,7 @@ const FinanceIntelligence = (() => {
     adaptiveRecommendations, monthlyAutopilot, proactiveBrief, sharedFinance, actionProposals, featureForMonth,
     loadLifePlans, saveLifePlan, deleteLifePlan, lifePlanningSummary,
     loadFeatureStore, rebuildFeatureStore, forecastAccuracyRows, forecastAccuracySummary, categoryForecastAccuracy, categorySeasonality,
+    confidenceMeta, forecastExplanation, recommendationExplanation,
   }
 })()
 
