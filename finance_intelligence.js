@@ -3,6 +3,7 @@
    Phase 1: unified context + health scoring
    Phase 2: forecasts + scenarios + goal optimization
    Phase 3: behavior profile + memory + adaptive coaching
+   Phase 4: personal learning engine + finance cockpit signals
    ============================================================ */
 'use strict'
 
@@ -17,6 +18,10 @@ const FinanceIntelligence = (() => {
   const LIFE_PLAN_KEY = 'mt_financial_life_plans'
 
   const round2 = n => Math.round((Number(n) || 0) * 100) / 100
+  const formatNumber = (n, digits = 0) => Number(n || 0).toLocaleString('en-US', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })
   const avg = arr => {
     const rows = (arr || []).map(Number).filter(Number.isFinite)
     return rows.length ? rows.reduce((s,v)=>s+v,0) / rows.length : 0
@@ -234,13 +239,13 @@ const FinanceIntelligence = (() => {
       sources:['เงินพร้อมใช้','รายรับ/รายจ่ายเดือนนี้','บิล/รายการที่จะถึง','ประวัติย้อนหลัง','เหตุการณ์พิเศษ'],
       formula:'เงินสิ้นเดือน = เงินพร้อมใช้ + รายรับคาดการณ์ - รายจ่ายคาดการณ์ - ภาระที่กำลังจะถึง',
       assumptions:[
-        `รายรับคาดการณ์ ${Math.round(ctx.projectedIncome || 0)} บาท`,
-        `รายจ่ายคาดการณ์ ${Math.round(forecast.spendForecast || 0)} บาท`,
-        `ภาระที่จะถึง ${Math.round(ctx.upcomingCommitted || 0)} บาท`,
+        `รายรับคาดการณ์ ${formatNumber(ctx.projectedIncome || 0)} บาท`,
+        `รายจ่ายคาดการณ์ ${formatNumber(forecast.spendForecast || 0)} บาท`,
+        `ภาระที่จะถึง ${formatNumber(ctx.upcomingCommitted || 0)} บาท`,
         `ใช้ข้อมูลผ่านไป ${Math.round((ctx.elapsedRatio || 0) * 100)}% ของเดือน`,
       ],
       signals:[
-        `ช่วงคาดการณ์ ${Math.round(forecast.lowerBound || 0)}-${Math.round(forecast.upperBound || 0)} บาท`,
+        `ช่วงคาดการณ์ ${formatNumber(forecast.lowerBound || 0)}-${formatNumber(forecast.upperBound || 0)} บาท`,
         accuracy.mape === null ? 'ยังไม่มีประวัติ error พอสำหรับเทียบย้อนหลัง' : `error เฉลี่ยย้อนหลัง ${(accuracy.mape * 100).toFixed(0)}%`,
         ctx.events?.length ? `มีเหตุการณ์พิเศษเดือนนี้ ${ctx.events.length} รายการ` : 'ยังไม่มีเหตุการณ์พิเศษเดือนนี้',
       ],
@@ -256,25 +261,25 @@ const FinanceIntelligence = (() => {
       id:rec?.id || 'recommendation',
       title:'เหตุผลของคำแนะนำ',
       confidence: confidenceMeta(f.confidence || 'medium'),
-      sources:['สุขภาพการเงิน','คาดการณ์เงินสด','งบประมาณ','เป้าหมาย','พฤติกรรมใช้จ่าย','feedback'],
-      formula:'ลำดับคำแนะนำ = ความเสี่ยงปัจจุบัน + ผลกระทบต่อเงินสด/เป้าหมาย + feedback ที่เคยให้',
+      sources:['สุขภาพการเงิน','คาดการณ์เงินสด','งบประมาณ','เป้าหมาย','พฤติกรรมใช้จ่าย','สิ่งที่คุณเคยกดบอก'],
+      formula:'ลำดับคำแนะนำ = ความเสี่ยงตอนนี้ + ผลต่อเงินสด/เป้าหมาย + สิ่งที่คุณเคยกดบอก',
       assumptions:[
         `คะแนนสุขภาพ ${Math.round(h.total || 0)}/100`,
-        `เงินสิ้นเดือนคาดการณ์ ${Math.round(f.monthEndCash || 0)} บาท`,
+        `เงินสิ้นเดือนคาดการณ์ ${formatNumber(f.monthEndCash || 0)} บาท`,
       ],
       signals:[],
     }
     if (!rec) return base
     const signalMap = {
       'build-emergency-fund': [`สภาพคล่อง ${Math.round(h.components.liquidity || 0)}/100`, 'เงินสำรองต่ำกว่าเกณฑ์พื้นฐาน'],
-      'protect-cashflow': [`เงินสิ้นเดือนคาดการณ์ ${Math.round(f.monthEndCash || 0)} บาท`, 'มีโอกาสที่ cashflow จะตึงตัว'],
-      'fix-budget-overrun': f.budgetRisk[0] ? [`งบ ${f.budgetRisk[0].label} ใช้คาดการณ์ ${Math.round(f.budgetRisk[0].projected)} บาท`, `ความเสี่ยง ${f.budgetRisk[0].risk}`] : ['งบประมาณบางหมวดมีความเสี่ยง'],
-      'repair-goal-plan': g.priorities[0] ? [`เป้าหมาย ${g.priorities[0].goal.name}`, `ควรเพิ่ม ${Math.round(g.priorities[0].gap || 0)} บาท/เดือน`] : ['เป้าหมายบางรายการยังตามไม่ทัน'],
+      'protect-cashflow': [`เงินสิ้นเดือนคาดการณ์ ${formatNumber(f.monthEndCash || 0)} บาท`, 'มีโอกาสที่เงินเดือนนี้จะตึงตัว'],
+      'fix-budget-overrun': f.budgetRisk[0] ? [`งบ ${f.budgetRisk[0].label} ใช้คาดการณ์ ${formatNumber(f.budgetRisk[0].projected)} บาท`, `ความเสี่ยง ${f.budgetRisk[0].risk}`] : ['งบประมาณบางหมวดมีความเสี่ยง'],
+      'repair-goal-plan': g.priorities[0] ? [`เป้าหมาย ${g.priorities[0].goal.name}`, `ควรเพิ่ม ${formatNumber(g.priorities[0].gap || 0)} บาท/เดือน`] : ['เป้าหมายบางรายการยังตามไม่ทัน'],
       'watch-weekend-spend': [`วันหยุดใช้มากกว่าวันธรรมดา ${Math.round(((b.weekendBias || 1) - 1) * 100)}%`],
-      'trim-micro-spend': [`รายการเล็กสะสม ${Math.round(b.microSpendTotal || 0)} บาท`, `จำนวน ${b.microSpendCount || 0} รายการ`],
-      'reduce-marketplace-drift': [`Marketplace รวม ${Math.round(b.merchantRules?.marketplace || 0)} บาท`],
+      'trim-micro-spend': [`รายการเล็กสะสม ${formatNumber(b.microSpendTotal || 0)} บาท`, `จำนวน ${b.microSpendCount || 0} รายการ`],
+      'reduce-marketplace-drift': [`Marketplace รวม ${formatNumber(b.merchantRules?.marketplace || 0)} บาท`],
     }
-    return { ...base, signals: signalMap[rec.id] || [rec.title || 'คำแนะนำนี้มาจากภาพรวมความเสี่ยงและ feedback ล่าสุด'] }
+    return { ...base, signals: signalMap[rec.id] || [rec.title || 'คำแนะนำนี้มาจากภาพรวมความเสี่ยงและสิ่งที่คุณเคยกดบอก'] }
   }
 
   function categorySeasonality(categoryId) {
@@ -499,7 +504,7 @@ const FinanceIntelligence = (() => {
         ? 'ลดรายจ่ายย่อยสะสม'
         : profile.primaryFocus === 'goals'
           ? 'เร่งเป้าหมายหลัก'
-          : 'รักษา cashflow ให้เสถียร'
+        : 'รักษาเงินเข้าออกให้เสถียร'
     return {
       archetype,
       preferredTone: profile.coachingStyle,
@@ -513,6 +518,17 @@ const FinanceIntelligence = (() => {
         ? archetype.focus
         : profile.primaryFocus,
     }
+  }
+
+  function focusLabel(id) {
+    return ({
+      resilience:'เงินสำรอง',
+      goals:'เป้าหมาย',
+      debt:'ลดหนี้',
+      growth:'ต่อยอดสินทรัพย์',
+      discipline:'คุมพฤติกรรม',
+      balanced:'สมดุล',
+    })[id] || 'สมดุล'
   }
 
   function sharedFinance(state = {}) {
@@ -578,7 +594,7 @@ const FinanceIntelligence = (() => {
       id:'cashflow-negative',
       level:'high',
       title:'เงินสดสิ้นเดือนเสี่ยงติดลบ',
-      body:`คาดการณ์ ${Math.round(f.monthEndCash)} บาท หลังหักรายจ่ายและภาระที่จะถึง`,
+      body:`คาดการณ์ ${formatNumber(f.monthEndCash)} บาท หลังหักรายจ่ายและภาระที่จะถึง`,
       source:'forecast',
       actionLabel:'กันเงินสดก่อน',
       metric:f.monthEndCash,
@@ -587,9 +603,9 @@ const FinanceIntelligence = (() => {
       id:'cash-buffer-thin',
       level:'medium',
       title:'เงินสดปลายเดือนค่อนข้างบาง',
-      body:`เหลือ buffer คาดการณ์ ${Math.round(f.monthEndCash)} บาท`,
+      body:`เหลือ buffer คาดการณ์ ${formatNumber(f.monthEndCash)} บาท`,
       source:'forecast',
-      actionLabel:'ดู buffer',
+      actionLabel:'ดูเงินสำรอง',
       metric:f.monthEndCash,
     })
     ;(f.budgetRisk || []).filter(b => ['high','medium'].includes(b.risk)).slice(0, 2).forEach((b, i) => {
@@ -598,7 +614,7 @@ const FinanceIntelligence = (() => {
         level:b.risk === 'high' ? 'high' : 'medium',
         priority:(b.risk === 'high' ? 90 : 62) + Math.min(8, i),
         title:`งบ ${b.label || b.name || 'หมวดนี้'} ${b.risk === 'high' ? 'เสี่ยงเกิน' : 'ใกล้เต็ม'}`,
-        body:`แนวโน้ม ${Math.round(b.projected)} บาท จากวงเงิน ${Math.round(b.monthlyLimit || 0)} บาท`,
+        body:`แนวโน้ม ${formatNumber(b.projected)} บาท จากวงเงิน ${formatNumber(b.monthlyLimit || 0)} บาท`,
         source:'budget',
         actionLabel:'คุมงบ',
         metric:b.probability,
@@ -608,7 +624,7 @@ const FinanceIntelligence = (() => {
       id:'upcoming-heavy',
       level:'medium',
       title:'ภาระที่จะถึงกินเงินสดสูง',
-      body:`อีก 30 วันมีรายการรอจ่ายประมาณ ${Math.round(ctx.upcomingCommitted)} บาท`,
+      body:`อีก 30 วันมีรายการรอจ่ายประมาณ ${formatNumber(ctx.upcomingCommitted)} บาท`,
       source:'upcoming',
       actionLabel:'กันเงินจ่ายบิล',
       metric:ctx.upcomingCommitted,
@@ -617,7 +633,7 @@ const FinanceIntelligence = (() => {
       id:'shared-receivable',
       level:'info',
       title:'มีเงินรอรับจากหารบิล',
-      body:`ยอดรอรับประมาณ ${Math.round(shared.receivable)} บาท`,
+      body:`ยอดรอรับประมาณ ${formatNumber(shared.receivable)} บาท`,
       source:'shared',
       actionLabel:'ดูยอดหารบิล',
       metric:shared.receivable,
@@ -644,7 +660,7 @@ const FinanceIntelligence = (() => {
       id:'health-watch',
       level:'medium',
       title:'สุขภาพการเงินต้องดูแลใกล้ชิด',
-      body:`คะแนนรวม ${Math.round(h.total)}/100 จุดอ่อนหลักคือ ${Object.entries(h.components).sort((a,b)=>a[1]-b[1])[0]?.[0] || 'cashflow'}`,
+      body:`คะแนนรวม ${Math.round(h.total)}/100 ควรดูจุดที่อ่อนที่สุดก่อน`,
       source:'health',
       actionLabel:'ดูคะแนน',
       metric:h.total,
@@ -672,7 +688,7 @@ const FinanceIntelligence = (() => {
     const direction = deltaPct === null ? 'ยังเทียบสัปดาห์ก่อนไม่ได้' : deltaPct > 10 ? 'ใช้เพิ่มจากสัปดาห์ก่อน' : deltaPct < -10 ? 'ใช้ลดลงจากสัปดาห์ก่อน' : 'ค่อนข้างนิ่ง'
     const top = b.topCategory
     const highlights = [
-      `7 วันล่าสุดใช้ ${Math.round(last7Total)} บาท`,
+      `7 วันล่าสุดใช้ ${formatNumber(last7Total)} บาท`,
       top ? `หมวดเด่นคือ ${top.label || top.name || top.id}` : 'ยังไม่มีหมวดเด่น',
       b.weekendBias && b.weekendBias > 1.2 ? `วันหยุดสูงกว่าวันธรรมดา ${Math.round((b.weekendBias - 1) * 100)}%` : 'พฤติกรรมวันธรรมดา/วันหยุดไม่ต่างมาก',
     ]
@@ -699,11 +715,11 @@ const FinanceIntelligence = (() => {
       { id:'reserve-bills', label:'กันเงินสำหรับบิลที่กำลังจะถึง', done: ctx.upcomingCommitted <= 0 || Number(ctx.usable?.liquid || 0) >= ctx.upcomingCommitted },
       { id:'review-budget', label:'เช็กงบหมวดที่เสี่ยงเกิน', done: !f.budgetRisk?.some(b => b.risk === 'high') },
       { id:'review-goals', label:'ทบทวนเป้าหมายที่ต้องเพิ่มเงินออม', done: !f.goalForecasts?.some(g => g.monthsToGoal === null) },
-      { id:'learn-next-action', label:'เลือก action ถัดไปของเดือนนี้', done: !recs[0] },
+      { id:'learn-next-action', label:'เลือกสิ่งที่ควรทำต่อของเดือนนี้', done: !recs[0] },
     ]
     return {
       title: h.total >= 70 ? 'ปิดเดือนได้ค่อนข้างมั่นใจ' : 'ควรปิดเดือนแบบระวัง',
-      body:`เงินสิ้นเดือนคาดการณ์ ${Math.round(f.monthEndCash)} บาท · คะแนน ${Math.round(h.total)}/100`,
+      body:`เงินสิ้นเดือนคาดการณ์ ${formatNumber(f.monthEndCash)} บาท · คะแนน ${Math.round(h.total)}/100`,
       healthGrade:h.grade,
       projectedMonthEndCash:f.monthEndCash,
       checklist,
@@ -757,6 +773,77 @@ const FinanceIntelligence = (() => {
 
   function proactiveBrief(ctx) {
     return copilotBrief(ctx)
+  }
+
+  function decisionLab(ctx, customScenarios = []) {
+    const defaults = [
+      { id:'baseline', name:'ฐานปัจจุบัน', note:'ไม่เปลี่ยนอะไร', input:{}, intent:'stability' },
+      { id:'save-more', name:'ออมเพิ่ม', note:'เพิ่มเงินออม 5,000 บาท', input:{ savingsDelta:5000 }, intent:'goals' },
+      { id:'cut-spend', name:'ลดรายจ่าย', note:'ลดรายจ่าย 5,000 บาท', input:{ expenseDelta:-5000 }, intent:'discipline' },
+      { id:'income-up', name:'เพิ่มรายรับ', note:'รายรับเพิ่ม 10,000 บาท', input:{ incomeDelta:10000 }, intent:'growth' },
+      { id:'purchase', name:'ซื้อของก้อนใหญ่', note:'ค่าใช้จ่ายก้อนเดียว 30,000 บาท', input:{ oneOffExpense:30000 }, intent:'spend' },
+    ]
+    const scenarios = compareScenarios(ctx, customScenarios.length ? customScenarios : defaults)
+    const baseline = scenarios.find(s => s.id === 'baseline') || runScenario(ctx, {})
+    const bufferBase = Math.max(1, Math.abs(Number(baseline.monthEndCash || 0)), Number(ctx.avgExpense || 0), Number(ctx.usable?.liquid || 0))
+    const options = scenarios.map(s => {
+      const cashScore = clamp((Number(s.monthEndCash || 0) / bufferBase) * 45 + 35, 0, 55)
+      const savingsScore = s.savingsRate === null ? 12 : clamp(Number(s.savingsRate || 0), 0, 35)
+      const riskPenalty = s.risk === 'high' ? 28 : s.risk === 'medium' ? 12 : 0
+      const deltaBoost = clamp(Number(s.deltaCash || 0) / Math.max(1, ctx.avgExpense || 1) * 12, -12, 12)
+      const score = round2(clamp(cashScore + savingsScore + deltaBoost - riskPenalty, 0, 100))
+      const tradeoffs = []
+      if (s.monthEndCash < 0) tradeoffs.push('เงินสิ้นเดือนติดลบ')
+      else if (s.monthEndCash < Math.max(1000, Number(ctx.usable?.liquid || 0) * 0.15)) tradeoffs.push('เงินสำรองปลายเดือนบาง')
+      if (s.savingsRate !== null && s.savingsRate < 10) tradeoffs.push('อัตราออมต่ำกว่าเกณฑ์สบายใจ')
+      if (s.input?.oneOffExpense > 0) tradeoffs.push('มีค่าใช้จ่ายก้อนเดียว')
+      if (s.deltaCash > 0) tradeoffs.push(`เงินสดดีขึ้น ${formatNumber(s.deltaCash)} บาท`)
+      const why = s.risk === 'low'
+        ? 'เงินเดือนนี้ยังรับไหวและความเสี่ยงต่ำ'
+        : s.risk === 'medium'
+          ? 'ทำได้แต่ควรเผื่อ buffer'
+          : 'กระทบเงินสดแรงกว่าระดับที่ควรรับ'
+      return {
+        ...s,
+        score,
+        verdict: score >= 75 ? 'น่าเลือก' : score >= 55 ? 'เลือกได้แบบระวัง' : 'ยังไม่ควรเลือก',
+        why,
+        tradeoffs: tradeoffs.length ? tradeoffs : ['ยังไม่มีข้อควรระวังเด่นจากข้อมูลตอนนี้'],
+      }
+    }).sort((a,b)=>b.score-a.score)
+    const recommended = options[0] || null
+    const sensitivity = [
+      {
+        id:'expense-plus-5000',
+        label:'ถ้ารายจ่ายเพิ่มอีก 5,000',
+        result:runScenario(ctx, { expenseDelta:5000 }),
+      },
+      {
+        id:'income-minus-5000',
+        label:'ถ้ารายรับลดลง 5,000',
+        result:runScenario(ctx, { incomeDelta:-5000 }),
+      },
+      {
+        id:'bill-plus-5000',
+        label:'ถ้ามีภาระก้อนเพิ่ม 5,000',
+        result:runScenario(ctx, { oneOffExpense:5000 }),
+      },
+    ].map(row => ({
+      ...row,
+      monthEndCash:row.result.monthEndCash,
+      risk:row.result.risk,
+    }))
+    return {
+      generatedAt:new Date().toISOString(),
+      recommended,
+      options,
+      sensitivity,
+      guardrails:[
+        `รักษาเงินสิ้นเดือนให้มากกว่า ${formatNumber(Math.max(1000, Number(ctx.usable?.liquid || 0) * 0.15))} บาท`,
+        `ภาระที่จะถึง 30 วันประมาณ ${formatNumber(ctx.upcomingCommitted || 0)} บาท`,
+        `รายจ่ายคาดการณ์เดือนนี้ ${formatNumber(ctx.projectedExpense || 0)} บาท`,
+      ],
+    }
   }
 
   function normalizeLifePlan(plan = {}) {
@@ -827,7 +914,7 @@ const FinanceIntelligence = (() => {
         type:'create_recurring',
         title:`เพิ่ม "${repeatedMerchant.merchant}" เป็นรายการประจำ`,
         rationale:'พบหลายครั้งในเดือนนี้และยังไม่ได้ตั้งเป็น recurring',
-        preview:`สร้างรายการประจำประมาณ ${Math.round(repeatedMerchant.amount / repeatedMerchant.count)} บาท`,
+        preview:`สร้างรายการประจำประมาณ ${formatNumber(repeatedMerchant.amount / repeatedMerchant.count)} บาท`,
         payload:{ merchant:repeatedMerchant.merchant, amount:round2(repeatedMerchant.amount / repeatedMerchant.count) },
       })
     }
@@ -838,7 +925,7 @@ const FinanceIntelligence = (() => {
         type:'create_goal',
         title:'สร้างเป้าหมายเงินสำรองฉุกเฉิน',
         rationale:'เงินสำรองยังต่ำกว่าเกณฑ์พื้นฐาน',
-        preview:`ตั้งเป้า ${Math.round((ctx.avgExpense || 0) * 3)} บาท`,
+        preview:`ตั้งเป้า ${formatNumber((ctx.avgExpense || 0) * 3)} บาท`,
         payload:{ targetAmount:round2((ctx.avgExpense || 0) * 3) },
       })
     }
@@ -940,12 +1027,12 @@ const FinanceIntelligence = (() => {
     const rows = []
     if (h.components.liquidity < 60) rows.push({ id:'build-emergency-fund', priority:profile.primaryFocus === 'resilience' ? 105 : 95, title:'เร่งสร้างเงินสำรอง', body:'เงินสำรองยังต่ำกว่าเกณฑ์พื้นฐาน ควรกันเงินก่อนลงทุนเพิ่ม' })
     if (f.monthEndCash < 0) rows.push({ id:'protect-cashflow', priority:100, title:'ป้องกันเงินสดติดลบ', body:'คาดการณ์สิ้นเดือนอาจติดลบ ควรลดรายจ่ายและกันเงินสำหรับบิลก่อน' })
-    if (f.budgetRisk[0]?.risk === 'high') rows.push({ id:'fix-budget-overrun', priority:85, title:`คุมงบ ${f.budgetRisk[0].label}`, body:`แนวโน้มอาจใช้ถึง ${Math.round(f.budgetRisk[0].projected)} บาท` })
-    if (g.priorities[0]?.gap > 0) rows.push({ id:'repair-goal-plan', priority:profile.primaryFocus === 'goals' ? 90 : 70, title:`เร่งเป้าหมาย ${g.priorities[0].goal.name}`, body:`ควรเพิ่มเงินออมอีกประมาณ ${Math.round(g.priorities[0].gap)} บาทต่อเดือน` })
+    if (f.budgetRisk[0]?.risk === 'high') rows.push({ id:'fix-budget-overrun', priority:85, title:`คุมงบ ${f.budgetRisk[0].label}`, body:`แนวโน้มอาจใช้ถึง ${formatNumber(f.budgetRisk[0].projected)} บาท` })
+    if (g.priorities[0]?.gap > 0) rows.push({ id:'repair-goal-plan', priority:profile.primaryFocus === 'goals' ? 90 : 70, title:`เร่งเป้าหมาย ${g.priorities[0].goal.name}`, body:`ควรเพิ่มเงินออมอีกประมาณ ${formatNumber(g.priorities[0].gap)} บาทต่อเดือน` })
     if (b.weekendBias && b.weekendBias > 1.25) rows.push({ id:'watch-weekend-spend', priority:50, title:'จับตารายจ่ายช่วงวันหยุด', body:'ค่าใช้จ่ายเฉลี่ยวันหยุดสูงกว่าวันธรรมดาชัดเจน' })
-    if (b.microSpendTotal > ctx.monthly.expense * 0.2 && ctx.monthly.expense > 0) rows.push({ id:'trim-micro-spend', priority:55, title:'รายจ่ายเล็กสะสมสูง', body:`รายการไม่เกิน 200 บาทรวม ${Math.round(b.microSpendTotal)} บาท` })
+    if (b.microSpendTotal > ctx.monthly.expense * 0.2 && ctx.monthly.expense > 0) rows.push({ id:'trim-micro-spend', priority:55, title:'รายจ่ายเล็กสะสมสูง', body:`รายการไม่เกิน 200 บาทรวม ${formatNumber(b.microSpendTotal)} บาท` })
     const personalization = personalizedGuidance(ctx)
-    if (personalization.archetype.id === 'optimizer' && b.merchantRules.marketplace > 0) rows.push({ id:'reduce-marketplace-drift', priority:58, title:'ช้อป marketplace เริ่มเด่น', body:`เดือนนี้รวม ${Math.round(b.merchantRules.marketplace)} บาท` })
+    if (personalization.archetype.id === 'optimizer' && b.merchantRules.marketplace > 0) rows.push({ id:'reduce-marketplace-drift', priority:58, title:'ช้อป marketplace เริ่มเด่น', body:`เดือนนี้รวม ${formatNumber(b.merchantRules.marketplace)} บาท` })
     const feedback = recommendationFeedbackMap()
     return rows.map(r => {
       const fb = feedback.get(r.id)
@@ -958,6 +1045,98 @@ const FinanceIntelligence = (() => {
 
   function recordRecommendationOutcome(id, outcome, metrics = {}) {
     recommendationFeedback(id, 'acted', { source:'outcome', context:{ outcome, metrics } })
+  }
+
+  function learningEngine(ctx) {
+    const profile = loadProfile()
+    const guide = personalizedGuidance(ctx)
+    const behavior = behaviorProfile(ctx)
+    const feedbackRows = loadJson(FEEDBACK_KEY, [])
+    const feedbackSummary = recommendationFeedbackSummary()
+    const actions = loadActionLog()
+    const memories = loadMemory()
+    const recommendations = adaptiveRecommendations(ctx).slice(0, 3)
+    const activeActions = actions.filter(a => !a.undoneAt)
+    const feedbackTotals = feedbackRows.reduce((acc, r) => {
+      acc.total++
+      acc[r.rating] = (acc[r.rating] || 0) + 1
+      return acc
+    }, { total:0, helpful:0, not_relevant:0, already_knew:0, acted:0, snoozed:0, hide_type:0 })
+    const typeScores = Object.entries(feedbackSummary).map(([type, v]) => ({
+      type,
+      score: Number(v.helpful || 0) * 2 + Number(v.acted || 0) * 3 - Number(v.not_relevant || 0) * 2 - Number(v.snoozed || 0) - Number(v.hide_type || 0) * 4,
+      stats:v,
+    })).sort((a,b)=>b.score-a.score)
+    const usefulTypes = typeScores.filter(x => x.score > 0).slice(0, 3).map(x => x.type)
+    const avoidedTypes = typeScores.filter(x => x.score < 0).slice(-3).map(x => x.type)
+    const signalCount = feedbackTotals.total + activeActions.length + memories.length + Math.min(4, recommendations.length)
+    const learningScore = clamp(
+      24 +
+      feedbackTotals.helpful * 6 +
+      feedbackTotals.acted * 10 +
+      activeActions.length * 6 +
+      memories.length * 3 -
+      feedbackTotals.not_relevant * 3 -
+      feedbackTotals.hide_type * 8,
+      0,
+      100
+    )
+    const confidence = signalCount >= 12
+      ? { level:'high', label:'มั่นใจสูง', tone:'good', reason:'มีสิ่งที่คุณเคยกดบอกและกดทำมากพอให้จัดลำดับคำแนะนำได้ดีขึ้น' }
+      : signalCount >= 5
+        ? { level:'medium', label:'มั่นใจกลาง', tone:'info', reason:'เริ่มเห็นรูปแบบจากสิ่งที่คุณกดบอกและพฤติกรรมแล้ว' }
+        : { level:'low', label:'กำลังเรียนรู้', tone:'warn', reason:'ยังต้องใช้สิ่งที่คุณกดบอกหรือกดทำเพิ่ม เพื่อปรับคำแนะนำให้แม่นขึ้น' }
+    const adaptations = [
+      feedbackTotals.acted > 0 ? `ให้ความสำคัญกับเรื่องที่คุณเคยกดทำจริง (${feedbackTotals.acted} ครั้ง)` : 'รอดูว่าคำแนะนำแบบไหนที่คุณกดทำจริง',
+      usefulTypes.length ? `แนะนำเรื่องที่เคยช่วยได้ก่อน: ${usefulTypes.join(', ')}` : `เริ่มจากโฟกัสหลัก: ${focusLabel(guide.recommendedFocus)}`,
+      avoidedTypes.length ? `ลดเรื่องที่คุณบอกว่ายังไม่ตรง: ${avoidedTypes.join(', ')}` : `ใช้โทนคำแนะนำแบบ${profile.coachingStyle === 'direct' ? 'ตรงไปตรงมา' : profile.coachingStyle === 'gentle' ? 'นุ่มนวล' : 'สมดุล'}`,
+      behavior.discretionaryRatio > 0.35 ? 'จับตารายจ่ายยืดหยุ่น เพราะมีสัดส่วนเด่นในเดือนนี้' : 'ใช้ภาพรวมเงินเข้าออกเป็นสัญญาณหลัก',
+    ]
+    const nextExperiments = recommendations.map((r, i) => ({
+      id:r.id,
+      rank:i + 1,
+      title:r.title,
+      body:r.body,
+      priority:round2(r.learnedPriority || r.priority || 0),
+    }))
+    return {
+      learningScore:round2(learningScore),
+      confidence,
+      profile:{
+        archetype:guide.archetype,
+        focus:guide.recommendedFocus,
+        focusLabel:focusLabel(guide.recommendedFocus),
+        tone:profile.coachingStyle,
+        savingsRate:profile.preferredSavingsRate,
+      },
+      learnedPreferences:{
+        usefulTypes,
+        avoidedTypes,
+        actedCount:feedbackTotals.acted,
+        helpfulCount:feedbackTotals.helpful,
+        notRelevantCount:feedbackTotals.not_relevant,
+        activeActionCount:activeActions.length,
+        memoryCount:memories.length,
+      },
+      adaptations,
+      nextExperiments,
+      signals:{
+        feedbackCount:feedbackTotals.total,
+        actionCount:actions.length,
+        activeActionCount:activeActions.length,
+        memoryCount:memories.length,
+      },
+    }
+  }
+
+  function learningNudges(ctx) {
+    const learning = learningEngine(ctx)
+    const rows = []
+    if (learning.signals.feedbackCount < 3) rows.push({ id:'add-feedback', title:'บอกระบบเพิ่มอีกนิด', body:'กดว่าคำแนะนำไหนช่วยได้หรือยังไม่ตรง ระบบจะจัดลำดับได้แม่นขึ้น' })
+    if (learning.learnedPreferences.notRelevantCount > learning.learnedPreferences.helpfulCount) rows.push({ id:'clarify-preference', title:'ปรับโฟกัสคำแนะนำ', body:'มีสัญญาณว่าบางคำแนะนำไม่ตรง อาจปรับโฟกัสหรือสไตล์โค้ช' })
+    if (!learning.nextExperiments.length) rows.push({ id:'add-data', title:'เติมข้อมูลให้เห็น pattern', body:'เพิ่มรายการ เป้าหมาย หรืองบ เพื่อให้ระบบทดลองคำแนะนำถัดไปได้' })
+    if (!rows.length) rows.push({ id:'keep-learning', title:'ระบบเริ่มจับทางได้แล้ว', body:'กดบอกหลังลองทำต่อไป เพื่อให้คำแนะนำรอบถัดไปเฉียบขึ้น' })
+    return rows
   }
 
   function monthlyAutopilot(ctx) {
@@ -1062,7 +1241,7 @@ const FinanceIntelligence = (() => {
     memoryForMonth, memoryById, updateMemory, deleteMemory,
     recommendationFeedback, recommendationFeedbackMap, recommendationFeedbackSummary, recordRecommendationOutcome,
     loadActionLog, recordActionLog, markActionUndone,
-    adaptiveRecommendations, monthlyAutopilot, proactiveBrief, copilotBrief, proactiveAlertQueue, weeklyReview, monthlyCloseBrief, sharedFinance, actionProposals, featureForMonth,
+    adaptiveRecommendations, monthlyAutopilot, proactiveBrief, copilotBrief, proactiveAlertQueue, weeklyReview, monthlyCloseBrief, decisionLab, learningEngine, learningNudges, sharedFinance, actionProposals, featureForMonth,
     loadLifePlans, saveLifePlan, deleteLifePlan, lifePlanningSummary,
     loadFeatureStore, rebuildFeatureStore, forecastAccuracyRows, forecastAccuracySummary, categoryForecastAccuracy, categorySeasonality,
     confidenceMeta, forecastExplanation, recommendationExplanation,
