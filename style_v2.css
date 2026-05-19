@@ -7235,13 +7235,22 @@ html.dark .spcal-l5    { background: #DC2626; border-color: #B91C1C; }
 
 .finance-ring-card {
   min-height: 184px;
-  display: grid;
-  align-content: start;
-  gap: 12px;
+  height: auto;
+  display: block;
+  overflow: visible !important;
 }
 
 .finance-ring-card .finance-explain-panel {
-  margin-top: 0;
+  margin-top: 12px;
+}
+
+.finance-ring-card .finance-explain-panel[open] {
+  display: block;
+  padding-bottom: 2px;
+}
+
+.finance-ring-card:has(.finance-explain-panel[open]) {
+  min-height: fit-content;
 }
 
 .finance-cash-detail-card {
