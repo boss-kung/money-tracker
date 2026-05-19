@@ -877,7 +877,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.18-r16'
+const APP_VERSION = '2026.05.19-r3'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -11313,7 +11313,7 @@ App._pickMerchant = function(name, opts = {}) {
     const targetUnits = type === 'adjust' ? (holding ? holding.units : 0) : ''
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCryptoPortfolioDetail('${esc(holdingId)}')">←</button><h2>${type === 'buy' ? 'ซื้อ' : type === 'sell' ? 'ขาย' : 'ปรับจำนวน'} ${esc(asset?.symbol || '')}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCryptoTx('${esc(type)}','${esc(holdingId)}')" style="width:auto">บันทึก</button></div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="card card-pad" style="margin-bottom:12px">
+        <div class="card card-pad finance-mb-md">
           <div class="list-item-name">${esc(asset?.symbol || '')} · ${esc(asset?.name || '')}</div>
           <div class="list-item-sub">ถืออยู่ ${unitFmt(holding?.units || 0, asset?.decimals || 8)} ${esc(asset?.symbol || '')}${location ? ` · ${esc(location)}` : ''}</div>
         </div>
@@ -16175,11 +16175,18 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       'ลองถามเช่น:<br>• ตอนนี้ควรกังวลอะไร<br>• เงินพอถึงสิ้นเดือนไหม<br>• หมวดไหนเสี่ยงเกินงบ<br>• เงินสำรองฉุกเฉินพอไหม<br>• เป้าหมายไหนตามไม่ทัน<br>• เดือนนี้ใช้จ่ายเท่าไร')
   }
 
-  App._financeScreenIntro = function(purpose, headline, action) {
-    return `<div class="card card-pad" style="margin-bottom:12px">
-      <div style="font-size:12px;color:var(--muted)">${esc(purpose)}</div>
-      <div style="font-size:17px;font-weight:700;margin-top:6px">${headline}</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:8px">ควรทำต่อ: ${action}</div>
+  App._financeScreenIntro = function(purpose, headline, action, opts = {}) {
+    const icon = opts.icon || '✨'
+    const tone = opts.tone || 'primary'
+    return `<div class="card card-pad finance-hero-card is-${esc(tone)} finance-mb-md">
+      <div class="finance-intro-row">
+        <span class="finance-page-cue" aria-hidden="true">${esc(icon)}</span>
+        <div>
+          <div class="finance-eyebrow">${esc(purpose)}</div>
+          <div class="finance-headline">${headline}</div>
+          <div class="finance-action">ควรทำต่อ: ${action}</div>
+        </div>
+      </div>
     </div>`
   }
 
@@ -16201,6 +16208,62 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     </div>`
   }
 
+  App._financeScenarioIcon = function(id) {
+    return ({ baseline:'📍', 'save-more':'💰', 'income-up':'📈' }[id] || '🧪')
+  }
+
+  App._financeLifeIcon = function(type) {
+    return ({ home:'🏠', car:'🚗', education:'🎓', retirement:'🌿', family:'👪', other:'🗺️' }[type] || '🗺️')
+  }
+
+  App._financeRing = function(value, max, label, caption, tone = 'var(--primary)') {
+    const pct = max > 0 ? Math.max(0, Math.min(100, Number(value || 0) / max * 100)) : 0
+    return `<div class="finance-ring-wrap">
+      <div class="finance-ring" style="--pct:${pct};--tone:${tone}">
+        <div><b>${Math.round(pct)}%</b><span>${esc(label)}</span></div>
+      </div>
+      <div class="finance-ring-copy">${caption}</div>
+    </div>`
+  }
+
+  App._financeSplitBar = function(parts = []) {
+    const total = Math.max(1, parts.reduce((s, p) => s + Math.max(0, Number(p.value || 0)), 0))
+    return `<div class="finance-split-bar">
+      ${parts.map(p => `<span style="width:${Math.max(0, Number(p.value || 0)) / total * 100}%;background:${p.color || 'var(--primary)'}"></span>`).join('')}
+    </div>
+    <div class="finance-split-legend">${parts.map(p => `<span><i style="background:${p.color || 'var(--primary)'}"></i>${esc(p.label)}</span>`).join('')}</div>`
+  }
+
+  App._financeSparkBars = function(rows = [], valueFn = r => r.value, opts = {}) {
+    const values = rows.map(r => Math.max(0, Number(valueFn(r) || 0)))
+    const max = Math.max(1, ...values)
+    return `<div class="finance-spark-bars" aria-hidden="true">
+      ${rows.map((r, i) => `<span title="${esc(opts.labelFn ? opts.labelFn(r) : '')}" style="height:${Math.max(8, values[i] / max * 100)}%;background:${opts.color || 'var(--primary)'}"></span>`).join('')}
+    </div>`
+  }
+
+  App._financeScenarioStrip = function(scenarios = [], max = 1) {
+    return `<div class="finance-scenario-strip">
+      ${scenarios.map(s => {
+        const tone = s.risk === 'high' ? 'var(--expense)' : s.risk === 'medium' ? '#D97706' : 'var(--income)'
+        const pct = Math.min(100, Math.abs(Number(s.monthEndCash || 0)) / Math.max(1, max) * 100)
+        return `<div class="finance-scenario-pill">
+          <div class="finance-card-title"><span class="finance-page-cue">${App._financeScenarioIcon(s.id)}</span><span>${esc(s.name)}</span></div>
+          <div class="finance-axis"><span style="width:${pct}%;background:${tone}"></span></div>
+          <div class="finance-tiny-row"><span>${fmt(s.monthEndCash)}</span><span>${esc(s.risk)}</span></div>
+        </div>`
+      }).join('')}
+    </div>`
+  }
+
+  App._financeEmptyVisual = function(icon, title, body) {
+    return `<div class="finance-empty-visual">
+      <div>${esc(icon)}</div>
+      <b>${esc(title)}</b>
+      <span>${esc(body)}</span>
+    </div>`
+  }
+
   App.openAskMyMoney = function() {
     const presets = [
       'ตอนนี้ควรกังวลอะไร','เงินพอถึงสิ้นเดือนไหม','อีก 14 วันต้องจ่ายอะไร',
@@ -16214,7 +16277,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <h2>ถามการเงินของคุณ</h2>
       </div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('ถามเรื่องการเงิน', 'ถามสั้น ๆ ระบบช่วยตีความให้', 'เลือกตัวอย่างหรือพิมพ์เอง')}
+        ${App._financeScreenIntro('ถามเรื่องการเงิน', 'ถามสั้น ๆ ระบบช่วยตีความให้', 'เลือกตัวอย่างหรือพิมพ์เอง', { icon:'💬', tone:'primary' })}
         <div style="display:grid;grid-template-columns: 4fr 1fr;gap:8px;margin-bottom:12px">
           <input id="ask-q-input" class="form-input" placeholder="เช่น เดือนนี้ใช้จ่ายเท่าไร..." style="flex:1;padding:10px 12px;font-size:14px"
             onkeydown="if(event.key==='Enter')App.submitAskQuery()">
@@ -16267,7 +16330,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <h2>โปรไฟล์โค้ชการเงิน</h2>
       </div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('ตั้งค่าคำแนะนำ', `คุณคือ ${esc(guide.archetype.label)}`, 'ปรับโฟกัสเมื่อเป้าหมายเปลี่ยน')}
+        ${App._financeScreenIntro('ตั้งค่าคำแนะนำ', `คุณคือ ${esc(guide.archetype.label)}`, 'ปรับโฟกัสเมื่อเป้าหมายเปลี่ยน', { icon:'🧭', tone:'primary' })}
         <div class="card card-pad" style="margin-bottom:12px">
           <div style="font-size:12px;color:var(--muted)">โปรไฟล์ที่ระบบอ่านได้</div>
           <div style="font-size:18px;font-weight:700;margin-top:4px">${esc(guide.archetype.label)}</div>
@@ -16315,16 +16378,21 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const cashTone = projectedCash < 0 ? 'var(--expense)' : projectedCash < cashMax * .2 ? '#D97706' : 'var(--income)'
     const totalFlow = Math.max(1, Number(monthly.income || 0) + Number(monthly.expense || 0))
     const incomePct = Math.round(Number(monthly.income || 0) / totalFlow * 100)
+    const healthTotal = Number(brief.today.health?.total || 0)
+    const healthTone = healthTotal >= 70 ? 'var(--income)' : healthTotal >= 50 ? '#D97706' : 'var(--expense)'
     App.openSubScreen(`
-      <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>สรุปการเงิน</h2></div>
+      <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ภาพรวมการเงิน</h2></div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('ภาพรวมการเงิน', mode === 'today' ? brief.headline : monthHeadline, mode === 'today' ? 'เริ่มจากเรื่องสำคัญวันนี้' : 'ดูแนวโน้มของเดือน')}
+        ${App._financeScreenIntro('ภาพรวมการเงิน', mode === 'today' ? brief.headline : monthHeadline, mode === 'today' ? 'เริ่มจากเรื่องสำคัญวันนี้' : 'ดูแนวโน้มของเดือน', { icon:'📊', tone: projectedCash < 0 || monthly.netCashflow < 0 ? 'danger' : projectedCash < cashMax * .2 ? 'warn' : 'good' })}
         <div style="display:flex;gap:6px;margin-bottom:12px">
           <button class="chip${mode==='today'?' active':''}" onclick="App.openFinanceSummary('today', false)">วันนี้</button>
           <button class="chip${mode==='month'?' active':''}" onclick="App.openFinanceSummary('month', false)">เดือนนี้</button>
         </div>
         ${mode === 'today' ? `
-          <div class="card card-pad" style="margin-bottom:12px">
+          <div class="card card-pad finance-mb-md">
+            ${App._financeRing(healthTotal, 100, 'health', `เงินสิ้นเดือน ${fmt(projectedCash)} · งบคงเหลือ ${fmt(brief.today.remainingBudget)}`, healthTone)}
+          </div>
+          <div class="card card-pad finance-mb-md">
             <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
               <div><div style="font-size:12px;color:var(--muted)">เงินสิ้นเดือนคาดการณ์</div><div style="font-size:22px;font-weight:700;color:${cashTone}">${fmt(projectedCash)}</div></div>
               <span class="chip">${projectedCash < 0 ? 'เสี่ยง' : projectedCash < cashMax*.2 ? 'บาง' : 'ปลอดภัย'}</span>
@@ -16332,17 +16400,20 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             ${App._financeMeter(Math.max(0, projectedCash), cashMax, cashTone)}
             <div style="font-size:12px;color:var(--muted);margin-top:8px">งบคงเหลือ ${fmt(brief.today.remainingBudget)}</div>
           </div>
-          <div class="card card-pad" style="margin-bottom:12px">
-            <div style="font-weight:700;margin-bottom:8px">สิ่งที่ควรดูวันนี้</div>
+          <div class="card card-pad finance-mb-md">
+            <div class="finance-section-title">สิ่งที่ควรดูวันนี้</div>
             ${brief.alerts.length ? brief.alerts.map(a => `<div style="padding:8px 0;border-bottom:1px solid var(--border)"><b>${esc(a.title)}</b><div style="font-size:12px;color:var(--muted)">${esc(a.body)}</div></div>`).join('') : '<div style="color:var(--muted)">ยังไม่มี alert สำคัญ</div>'}
           </div>
           <div class="card card-pad">
-            <div style="font-weight:700">สิ่งที่ควรทำต่อ</div>
+            <div class="finance-section-title">สิ่งที่ควรทำต่อ</div>
             <div style="margin-top:8px">${brief.nextBestAction ? `${esc(brief.nextBestAction.title)}<div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(brief.nextBestAction.body)}</div>` : 'ยังไม่มีข้อเสนอเด่น'}</div>
           </div>` : `
-          <div class="card card-pad" style="margin-bottom:12px">
+          <div class="card card-pad finance-mb-md">
             <div style="font-size:12px;color:var(--muted)">${esc(mlbl(month))}</div>
-            <div style="height:10px;border-radius:999px;background:var(--expense);overflow:hidden;margin:12px 0 10px"><div style="height:100%;width:${incomePct}%;background:var(--income)"></div></div>
+            ${App._financeSplitBar([
+              { label:`รายรับ ${incomePct}%`, value:monthly.income, color:'var(--income)' },
+              { label:`รายจ่าย ${100 - incomePct}%`, value:monthly.expense, color:'var(--expense)' },
+            ])}
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
               <div><div style="font-size:11px;color:var(--muted)">รายรับ</div><b style="color:var(--income)">${fmt(monthly.income)}</b></div>
               <div><div style="font-size:11px;color:var(--muted)">รายจ่าย</div><b style="color:var(--expense)">${fmt(monthly.expense)}</b></div>
@@ -16350,7 +16421,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             </div>
           </div>
           <div class="card card-pad">
-            <div style="font-weight:700;margin-bottom:8px">ดูรายละเอียดเดือนนี้</div>
+            <div class="finance-section-title">ดูรายละเอียดเดือนนี้</div>
             <div style="font-size:13px;color:var(--muted);margin-bottom:12px">ถ้าต้องการ breakdown รายหมวด งบ และเป้าหมาย ให้เปิดรีวิวแบบเต็ม</div>
             <button class="btn btn-secondary" onclick="App.openMonthlyReview()">เปิดสรุปรายเดือนแบบเต็ม</button>
           </div>`}
@@ -16370,14 +16441,20 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <h2>ประวัติการเงินย้อนหลัง</h2>
       </div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('แนวโน้มย้อนหลัง', store.rows.length ? `มีข้อมูล ${store.rows.length} เดือน` : 'ยังไม่มีข้อมูลย้อนหลัง', store.rows.length ? 'ดูการเปลี่ยนแปลงรายเดือน' : 'ใช้งานต่อ แล้วระบบจะเก็บให้')}
+        ${App._financeScreenIntro('แนวโน้มย้อนหลัง', store.rows.length ? `มีข้อมูล ${store.rows.length} เดือน` : 'ยังไม่มีข้อมูลย้อนหลัง', store.rows.length ? 'ดูการเปลี่ยนแปลงรายเดือน' : 'ใช้งานต่อ แล้วระบบจะเก็บให้', { icon:'📈', tone: store.rows.length ? 'info' : 'warn' })}
         <div class="card card-pad">
-          ${store.rows.length ? store.rows.map(r => `
+          ${store.rows.length ? `
+            ${App._financeSparkBars(store.rows.slice().reverse(), r => r.metrics?.expense, { color:'var(--expense)', labelFn:r => mlbl(r.month) })}
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px">แท่งสูง = รายจ่ายสูง · เดือนที่มี ✦ คือมีเหตุการณ์พิเศษ</div>
+            ${store.rows.map(r => `
             <div style="padding:8px 0;border-bottom:1px solid var(--border)">
-              <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px"><b>${esc(mlbl(r.month))}</b><span style="font-size:12px;color:var(--muted)">${fmt(r.metrics.expense)}</span></div>
+              <div class="finance-muted-row" style="margin-bottom:6px">
+                <div class="finance-card-title"><span class="finance-page-cue">${r.events?.length ? '✦' : '📅'}</span><b>${esc(mlbl(r.month))}</b></div>
+                <span style="font-size:12px;color:var(--muted)">${fmt(r.metrics.expense)}</span>
+              </div>
               ${App._financeMeter(r.metrics.expense, maxExpense, 'var(--expense)')}
               <div style="font-size:12px;color:var(--muted);margin-top:6px">รายรับ ${fmt(r.metrics.income)} · baseline ${fmt(r.metrics.adjustedExpense)}</div>
-            </div>`).join('') : '<div style="color:var(--muted)">ยังไม่มี snapshot</div>'}
+            </div>`).join('')}` : App._financeEmptyVisual('📈', 'ยังไม่มีแนวโน้ม', 'ใช้งานต่ออีกสักระยะ แล้วระบบจะวาดภาพย้อนหลังให้')}
         </div>
         ${App._financeJourneyLinks([
           ['ถามการเงินของคุณ','App.openAskMyMoney()'],
@@ -16391,9 +16468,14 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     App.openSubScreen(`
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>เปรียบเทียบแผนเป้าหมาย</h2></div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('จัดสรรเป้าหมาย', 'เทียบหลายวิธีแบ่งเงิน', 'เลือกแผนที่เหมาะตอนนี้')}
-        ${plans.map(p => `<div class="card card-pad" style="margin-bottom:12px">
-          <div style="font-weight:700">${esc(p.name)}</div>
+        ${App._financeScreenIntro('จัดสรรเป้าหมาย', 'เทียบหลายวิธีแบ่งเงิน', 'เลือกแผนที่เหมาะตอนนี้', { icon:'⚖️', tone:'primary' })}
+        ${plans.map((p, i) => `<div class="card card-pad" style="margin-bottom:12px">
+          <div class="finance-card-title"><span class="finance-page-cue">${i === 0 ? '🎯' : i === 1 ? '🛡️' : '⚖️'}</span><span>${esc(p.name)}</span></div>
+          ${p.allocation?.length ? `<div style="margin-top:10px">${App._financeSplitBar(p.allocation.map((a, idx) => ({
+            label:a.goalName,
+            value:a.amount,
+            color:['var(--primary)', 'var(--income)', '#0891B2', '#D97706'][idx % 4],
+          })))}</div>` : App._financeEmptyVisual('🎯', 'ยังไม่มีเป้าหมายให้จัดสรร', 'เพิ่มเป้าหมายก่อน แล้วระบบจะเทียบแผนให้')}
           <div style="margin-top:8px">${p.allocation.map(a => `${esc(a.goalName)} ${fmt(a.amount)}`).join('<br>') || 'ยังไม่มีการจัดสรร'}</div>
         </div>`).join('')}
       </div>`)
@@ -16406,13 +16488,18 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       { id:'save-more', name:'ออมเพิ่ม', note:'ออมเพิ่ม 5,000', input:{ savingsDelta:5000 } },
       { id:'income-up', name:'รายรับเพิ่ม', note:'รายรับเพิ่ม 10,000', input:{ incomeDelta:10000 } },
     ])
+    const compareMax = Math.max(1, ...scenarios.map(s => Math.abs(Number(s.monthEndCash || 0))))
     App.openSubScreen(`
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>เปรียบเทียบทางเลือก</h2></div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('เทียบทางเลือก', 'ดูเงินสิ้นเดือน อัตราออม และความเสี่ยง', 'อยากปรับเอง ให้ไปลองแผน')}
+        ${App._financeScreenIntro('เทียบทางเลือก', 'ดูเงินสิ้นเดือน อัตราออม และความเสี่ยง', 'อยากปรับเอง ให้ไปลองแผน', { icon:'🧪', tone:'primary' })}
+        <div class="card card-pad finance-mb-md">
+          <div class="finance-section-title">แผนเทียบกันเร็ว</div>
+          ${App._financeScenarioStrip(scenarios, compareMax)}
+        </div>
         <div style="display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:10px;overflow:auto;padding-bottom:4px">
           ${scenarios.map(s => `<div class="card card-pad" style="min-width:220px">
-            <div style="font-weight:700">${esc(s.name)}</div>
+            <div class="finance-card-title"><span class="finance-page-cue">${App._financeScenarioIcon(s.id)}</span><span>${esc(s.name)}</span></div>
             <div style="font-size:12px;color:var(--muted);margin:4px 0 12px">${esc(s.note)}</div>
             <div style="display:grid;gap:8px;font-size:13px">
               <div>เงินสิ้นเดือน <b>${fmt(s.monthEndCash)}</b></div>
@@ -16440,7 +16527,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     App.openSubScreen(`
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ลองและเปรียบเทียบแผน</h2></div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('ลองก่อนตัดสินใจ', mode === 'try' ? 'ปรับสมมติฐานทีละแผน' : 'เทียบหลายทางเลือก', mode === 'try' ? 'เลือก preset หรือกรอกเอง' : 'เทียบแล้วกลับมาปรับ')}
+        ${App._financeScreenIntro('ลองก่อนตัดสินใจ', mode === 'try' ? 'ปรับสมมติฐานทีละแผน' : 'เทียบหลายทางเลือก', mode === 'try' ? 'เลือก preset หรือกรอกเอง' : 'เทียบแล้วกลับมาปรับ', { icon:'🧪', tone: mode === 'compare' ? 'info' : 'primary' })}
         <div style="display:flex;gap:6px;margin-bottom:12px">
           <button class="chip${mode==='try'?' active':''}" onclick="App.openPlanningLab('try', false)">ลองทีละแผน</button>
           <button class="chip${mode==='compare'?' active':''}" onclick="App.openPlanningLab('compare', false)">เทียบหลายแผน</button>
@@ -16458,9 +16545,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             <div class="form-group"><label class="form-label">ออมเพิ่ม</label><input id="scenario-savings" class="form-input" type="number" value="0" oninput="App.renderScenarioPreview()"></div>
             <div id="scenario-preview" style="margin-top:12px"></div>
           </div>` : `
+          <div class="card card-pad finance-mb-md">
+            <div class="finance-section-title">แผนเทียบกันเร็ว</div>
+            ${App._financeScenarioStrip(scenarios, compareMax)}
+          </div>
           <div style="display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:10px;overflow:auto;padding-bottom:4px">
             ${scenarios.map(s => `<div class="card card-pad" style="min-width:220px">
-              <div style="font-weight:700">${esc(s.name)}</div>
+              <div class="finance-card-title"><span class="finance-page-cue">${App._financeScenarioIcon(s.id)}</span><span>${esc(s.name)}</span></div>
               <div style="font-size:12px;color:var(--muted);margin:4px 0 12px">${esc(s.note)}</div>
               ${App._financeMeter(Math.max(0, s.monthEndCash), compareMax, s.risk === 'high' ? 'var(--expense)' : s.risk === 'medium' ? '#D97706' : 'var(--income)')}
               <div style="display:grid;gap:8px;font-size:13px">
@@ -16490,14 +16581,25 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     App.openSubScreen(`
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ระบบช่วยคุณ</h2></div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('ปรับผู้ช่วยให้เข้ากับคุณ', `คุณคือ ${esc(guide.archetype.label)}`, 'ตั้งค่า ดู feedback และ action')}
+        ${App._financeScreenIntro('ปรับผู้ช่วยให้เข้ากับคุณ', `คุณคือ ${esc(guide.archetype.label)}`, 'ตั้งค่า ดู feedback และ action', { icon:'🧭', tone:'primary' })}
+        <div class="card card-pad finance-mb-md">
+          <div class="finance-section-title">โปรไฟล์คะแนน</div>
+          ${[
+            ['Resilience', guide.scorecard.resilience, 'var(--income)'],
+            ['Discipline', guide.scorecard.discipline, 'var(--primary)'],
+            ['Goals', guide.scorecard.goalReadiness, '#0891B2'],
+          ].map(([label, value, color]) => `<div style="margin:10px 0">
+            <div class="finance-muted-row" style="font-size:12px;margin-bottom:5px"><b>${esc(label)}</b><span>${Math.round(value)}/100</span></div>
+            ${App._financeMeter(value, 100, color)}
+          </div>`).join('')}
+        </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
           ${App._financeMiniStat('Resilience', Math.round(guide.scorecard.resilience))}
           ${App._financeMiniStat('Discipline', Math.round(guide.scorecard.discipline))}
           ${App._financeMiniStat('Goals', Math.round(guide.scorecard.goalReadiness))}
         </div>
         <div class="card card-pad" style="margin-bottom:12px">
-          <div style="font-weight:700;margin-bottom:10px">ตั้งค่าคำแนะนำ</div>
+          <div class="finance-section-title">ตั้งค่าคำแนะนำ</div>
           <div class="form-group"><label class="form-label">โฟกัสหลัก</label><select id="coach-focus" class="form-input">
             <option value="resilience"${p.primaryFocus==='resilience'?' selected':''}>เงินสำรอง / ความมั่นคง</option>
             <option value="goals"${p.primaryFocus==='goals'?' selected':''}>เป้าหมาย</option>
@@ -16512,7 +16614,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           </select></div>
           <button class="btn btn-primary" onclick="App.saveFinanceCoachProfile()">บันทึก</button>
         </div>
-        <details class="card card-pad" style="margin-bottom:12px">
+        <details class="card card-pad finance-mb-md">
           <summary style="font-weight:700;cursor:pointer">สิ่งที่ระบบเรียนรู้จากคุณ</summary>
           <div style="margin-top:10px">${summary.length ? `<div style="height:10px;border-radius:999px;background:var(--border);overflow:hidden;display:flex;margin-bottom:10px">
             <div style="width:${feedbackTotals.helpful/feedbackTotal*100}%;background:var(--income)"></div>
@@ -16538,7 +16640,17 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     App.openSubScreen(`
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>เงินที่แชร์กับคนอื่น</h2></div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('สรุปเงินร่วมกัน', headline, s.billCount ? 'เช็กยอดก่อนปิดบิล' : 'เริ่มจากสร้างบิลแรก')}
+        ${App._financeScreenIntro('สรุปเงินร่วมกัน', headline, s.billCount ? 'เช็กยอดก่อนปิดบิล' : 'เริ่มจากสร้างบิลแรก', { icon:'🤝', tone: s.netSettlement > 0 ? 'good' : s.netSettlement < 0 ? 'warn' : 'primary' })}
+        <div class="card card-pad finance-mb-md">
+          <div class="finance-section-title">แผนที่ยอดร่วม</div>
+          ${s.balances.length ? `<div class="finance-balance-map">
+            ${s.balances.slice(0, 5).map(p => `<div class="finance-balance-map-row">
+              <b style="justify-self:end;color:${p.net >= 0 ? 'var(--income)' : 'var(--muted)'}">${p.net >= 0 ? '+' + fmt(p.net) : ''}</b>
+              <span class="finance-avatar">${esc(String(p.name || '?').trim().slice(0, 1) || '?')}</span>
+              <b style="justify-self:start;color:${p.net < 0 ? 'var(--expense)' : 'var(--muted)'}">${p.net < 0 ? fmt(Math.abs(p.net)) : ''}</b>
+            </div>`).join('')}
+          </div>` : App._financeEmptyVisual('🤝', 'ยังไม่มีบิลร่วม', 'สร้างบิลแรกเพื่อเห็นว่าใครควรรับหรือจ่ายคืน')}
+        </div>
         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px">
           <div class="card card-pad"><div style="font-size:12px;color:var(--muted)">ยอดรอรับ</div><div style="font-size:22px;font-weight:700">${fmt(s.receivable)}</div></div>
           <div class="card card-pad"><div style="font-size:12px;color:var(--muted)">ยอดต้องจ่าย</div><div style="font-size:22px;font-weight:700">${fmt(s.payable)}</div></div>
@@ -16549,9 +16661,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           ['ไปหารบิล','App.openSplitBillScreen()'],
         ])}
         <div class="card card-pad">
-          <div style="font-weight:700;margin-bottom:10px">ยอดตามคน</div>
+          <div class="finance-section-title">ยอดตามคน</div>
           ${s.balances.length ? s.balances.map(p => `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
-            <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>${esc(p.name)}</span><b>${p.net>=0?'+':''}${fmt(p.net)}</b></div>
+            <div class="finance-muted-row" style="margin-bottom:6px">
+              <div class="finance-card-title"><span class="finance-avatar">${esc(String(p.name || '?').trim().slice(0, 1) || '?')}</span><span>${esc(p.name)}</span></div>
+              <b>${p.net>=0?'+':''}${fmt(p.net)}</b>
+            </div>
             ${App._financeMeter(Math.abs(p.net), sharedMax, p.net >= 0 ? 'var(--income)' : 'var(--expense)')}
           </div>`).join('') : '<div style="color:var(--muted)">ยังไม่มีข้อมูลหารบิล เริ่มจากเมนู “หารบิล” เพื่อเพิ่มบิลแรก</div>'}
         </div>
@@ -16567,21 +16682,21 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     App.openSubScreen(`
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>สิ่งที่ควรรู้วันนี้</h2></div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('เรื่องสำคัญวันนี้', brief.headline, brief.nextBestAction ? `เริ่มจาก “${esc(brief.nextBestAction.title)}”` : 'ยังไม่มีเรื่องเร่งด่วน')}
-        <div class="card card-pad" style="margin-bottom:12px">
+        ${App._financeScreenIntro('เรื่องสำคัญวันนี้', brief.headline, brief.nextBestAction ? `เริ่มจาก “${esc(brief.nextBestAction.title)}”` : 'ยังไม่มีเรื่องเร่งด่วน', { icon:'🛰️', tone: brief.alerts.length ? 'warn' : 'good' })}
+        <div class="card card-pad finance-mb-md">
           <div style="font-size:12px;color:var(--muted)">Brief วันนี้</div>
           <div style="font-size:20px;font-weight:700;margin-top:4px">${esc(brief.headline)}</div>
           <div style="font-size:13px;color:var(--muted);margin-top:8px">เงินสิ้นเดือนคาดการณ์ ${fmt(brief.today.projectedMonthEndCash)} · งบคงเหลือ ${fmt(brief.today.remainingBudget)}</div>
         </div>
-        <div class="card card-pad" style="margin-bottom:12px">
-          <div style="font-weight:700;margin-bottom:8px">สิ่งที่ระบบอยากบอกก่อน</div>
+        <div class="card card-pad finance-mb-md">
+          <div class="finance-section-title">สิ่งที่ระบบอยากบอกก่อน</div>
           ${brief.alerts.length ? brief.alerts.map(a => `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
             <div style="font-weight:600">${esc(a.title)}</div>
             <div style="font-size:12px;color:var(--muted)">${esc(a.body)}</div>
           </div>`).join('') : '<div style="color:var(--muted)">ยังไม่มี alert สำคัญ</div>'}
         </div>
         <div class="card card-pad">
-          <div style="font-weight:700">สิ่งที่ควรทำต่อ</div>
+          <div class="finance-section-title">สิ่งที่ควรทำต่อ</div>
           <div style="margin-top:8px">${brief.nextBestAction ? `${esc(brief.nextBestAction.title)}<div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(brief.nextBestAction.body)}</div>` : 'ยังไม่มีข้อเสนอเด่น'}</div>
         </div>
         ${App._financeJourneyLinks([
@@ -16597,8 +16712,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     App.openSubScreen(`
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>แผนชีวิตระยะยาว</h2></div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('เป้าหมายชีวิตเป็นเงิน', summary.feasible ? 'แผนรวมยังไหว' : `ยังขาด ${fmt(summary.gap)} ต่อเดือน`, summary.plans.length ? 'ทบทวนลำดับแผน' : 'เริ่มจากเป้าหมายแรก')}
-        <div class="card card-pad" style="margin-bottom:12px">
+        ${App._financeScreenIntro('เป้าหมายชีวิตเป็นเงิน', summary.feasible ? 'แผนรวมยังไหว' : `ยังขาด ${fmt(summary.gap)} ต่อเดือน`, summary.plans.length ? 'ทบทวนลำดับแผน' : 'เริ่มจากเป้าหมายแรก', { icon:'🗺️', tone: summary.feasible ? 'good' : 'warn' })}
+        <div class="card card-pad finance-mb-md">
+          ${App._financeRing(Math.min(summary.requiredMonthlyTotal, planCapacityMax), planCapacityMax, 'capacity', `ต้องออม ${fmt(summary.requiredMonthlyTotal)} / เดือน · ทำได้ ${fmt(summary.availableMonthly)}`, summary.feasible ? 'var(--income)' : 'var(--expense)')}
+          <div style="height:12px"></div>
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
             <div>
               <div style="font-size:12px;color:var(--muted)">ภาระออมรวมต่อเดือน</div>
@@ -16608,14 +16725,21 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             <span class="chip">${summary.feasible ? 'ทำได้' : 'ต้องจัดลำดับใหม่'}</span>
           </div>
           <div style="margin-top:12px">${App._financeMeter(summary.requiredMonthlyTotal, planCapacityMax, summary.feasible ? 'var(--income)' : 'var(--expense)')}</div>
+          ${summary.plans.length ? `<div class="finance-life-lanes" style="margin-top:14px">
+            ${summary.plans.slice(0, 4).map(p => `<div class="finance-life-lane">
+              <span class="finance-page-cue">${App._financeLifeIcon(p.type)}</span>
+              <div class="finance-life-lane-track"><span style="width:${Math.max(0, Math.min(100, Number(p.currentAmount || 0) / Math.max(1, Number(p.targetAmount || 0)) * 100))}%"></span></div>
+              <b>${p.monthsLeft ? `${p.monthsLeft} ด.` : 'ไม่กำหนด'}</b>
+            </div>`).join('')}
+          </div>` : ''}
         </div>
-        <div class="card card-pad" style="margin-bottom:12px">
-          <div style="font-weight:700;margin-bottom:10px">เพิ่มแผนชีวิต</div>
+        <div class="card card-pad finance-mb-md">
+          <div class="finance-section-title">เพิ่มแผนชีวิต</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-            <button class="chip" onclick="App.prefillLifePlan('บ้านหลังแรก','home')">บ้าน</button>
-            <button class="chip" onclick="App.prefillLifePlan('รถคันใหม่','car')">รถ</button>
-            <button class="chip" onclick="App.prefillLifePlan('ทุนการศึกษา','education')">การศึกษา</button>
-            <button class="chip" onclick="App.prefillLifePlan('เกษียณ','retirement')">เกษียณ</button>
+            <button class="chip" onclick="App.prefillLifePlan('บ้านหลังแรก','home')">🏠 บ้าน</button>
+            <button class="chip" onclick="App.prefillLifePlan('รถคันใหม่','car')">🚗 รถ</button>
+            <button class="chip" onclick="App.prefillLifePlan('ทุนการศึกษา','education')">🎓 การศึกษา</button>
+            <button class="chip" onclick="App.prefillLifePlan('เกษียณ','retirement')">🌿 เกษียณ</button>
           </div>
           <div class="form-group"><input id="life-title" class="form-input" placeholder="เช่น บ้านหลังแรก"></div>
           <div class="form-group"><select id="life-type" class="form-input"><option value="home">บ้าน</option><option value="car">รถ</option><option value="family">ครอบครัว</option><option value="education">การศึกษา</option><option value="retirement">เกษียณ</option><option value="other">อื่น ๆ</option></select></div>
@@ -16625,14 +16749,15 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <button class="btn btn-primary" onclick="App.saveLifePlan()">บันทึกแผน</button>
         </div>
         <div class="card card-pad">
-          <div style="font-weight:700;margin-bottom:10px">แผนทั้งหมด</div>
+          <div class="finance-section-title">แผนทั้งหมด</div>
           ${summary.plans.length ? summary.plans.map(p => `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
-            <div style="display:flex;justify-content:space-between;gap:8px">
-              <b>${esc(p.title)}</b><button class="chip" onclick="App.deleteLifePlan('${esc(p.id)}')">ลบ</button>
+            <div class="finance-muted-row">
+              <div class="finance-card-title"><span class="finance-page-cue">${App._financeLifeIcon(p.type)}</span><b>${esc(p.title)}</b></div>
+              <button class="chip" onclick="App.deleteLifePlan('${esc(p.id)}')">ลบ</button>
             </div>
             <div style="margin-top:8px">${App._financeMeter(p.currentAmount, Math.max(1, p.targetAmount), 'var(--primary)')}</div>
             <div style="font-size:12px;color:var(--muted);margin-top:4px">เหลือ ${fmt(p.remaining)} · ต้องออม ${p.requiredMonthly===null?'N/A':fmt(p.requiredMonthly)+'/เดือน'}</div>
-          </div>`).join('') : '<div style="color:var(--muted)">ยังไม่มีแผนชีวิต เริ่มจากเลือกตัวอย่างด้านบนเพื่อดูว่าเป้าหมายนั้นต้องออมเดือนละเท่าไร</div>'}
+          </div>`).join('') : App._financeEmptyVisual('🗺️', 'ยังไม่มีแผนชีวิต', 'เลือกตัวอย่างด้านบนเพื่อดูว่าเป้าหมายนั้นต้องออมเดือนละเท่าไร')}
         </div>
       </div>`, { animate })
   }
@@ -16669,7 +16794,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     App.openSubScreen(`
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>สิ่งที่ระบบเรียนรู้จากคุณ</h2></div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('สิ่งที่ระบบเรียนรู้', rows.length ? `มี feedback ${rows.length} ประเภท` : 'ยังไม่มี feedback', rows.length ? 'ดูว่าอะไรเวิร์กกับคุณ' : 'เริ่มให้ feedback ก่อน')}
+        ${App._financeScreenIntro('สิ่งที่ระบบเรียนรู้', rows.length ? `มี feedback ${rows.length} ประเภท` : 'ยังไม่มี feedback', rows.length ? 'ดูว่าอะไรเวิร์กกับคุณ' : 'เริ่มให้ feedback ก่อน', { icon:'🧠', tone: rows.length ? 'info' : 'warn' })}
         <div class="card card-pad">
           ${rows.length ? rows.map(([k,v]) => `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
             <div style="font-weight:600">${esc(k)}</div>
@@ -16684,7 +16809,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     App.openSubScreen(`
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>สิ่งที่ระบบเคยช่วยทำ</h2></div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('ประวัติ action', rows.length ? `มี ${rows.length} รายการ` : 'ยังไม่มี action', rows.length ? 'ย้อนกลับได้จากด้านล่าง' : 'เริ่มจากคำแนะนำก่อน')}
+        ${App._financeScreenIntro('ประวัติ action', rows.length ? `มี ${rows.length} รายการ` : 'ยังไม่มี action', rows.length ? 'ย้อนกลับได้จากด้านล่าง' : 'เริ่มจากคำแนะนำก่อน', { icon:'↩️', tone: rows.length ? 'info' : 'warn' })}
         <div class="card card-pad">
           ${rows.length ? rows.map(r => `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
             <div style="font-weight:600">${esc(r.title || r.type)}</div>
@@ -16702,7 +16827,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <h2>ลองแผนการเงิน</h2>
       </div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('ลองก่อนตัดสินใจ', 'ดูผลต่อเงินสิ้นเดือนและความเสี่ยง', 'เลือก preset หรือกรอกเอง')}
+        ${App._financeScreenIntro('ลองก่อนตัดสินใจ', 'ดูผลต่อเงินสิ้นเดือนและความเสี่ยง', 'เลือก preset หรือกรอกเอง', { icon:'🧪', tone:'primary' })}
         <div class="card card-pad">
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
             <button class="chip" onclick="App.applyScenarioPreset('save')">ออมเพิ่ม 5,000</button>
@@ -16736,6 +16861,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         : 'แผนนี้ยังอยู่ในระดับปลอดภัย'
     box.innerHTML = `
       <div style="font-weight:700;margin-bottom:8px">${esc(verdict)}</div>
+      ${App._financeRing(Math.max(0, sim.monthEndCash), Math.max(1, sim.projectedIncome), 'buffer', `สิ้นเดือน ${sim.monthEndCash>=0?fmt(sim.monthEndCash):'-'+fmt(Math.abs(sim.monthEndCash))}`, sim.risk === 'high' ? 'var(--expense)' : sim.risk === 'medium' ? '#D97706' : 'var(--income)')}
       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px">
         ${App._financeMiniStat('รายรับ', fmt(sim.projectedIncome), 'var(--income)')}
         ${App._financeMiniStat('รายจ่าย', fmt(sim.projectedExpense), 'var(--expense)')}
@@ -16833,7 +16959,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <h2>บันทึกเหตุการณ์การเงิน</h2>
       </div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('บันทึกเหตุการณ์พิเศษ', 'ช่วยให้การวิเคราะห์แม่นขึ้น', 'เลือกตัวอย่างแล้วเติมรายละเอียด')}
+        ${App._financeScreenIntro('บันทึกเหตุการณ์พิเศษ', 'ช่วยให้การวิเคราะห์แม่นขึ้น', 'เลือกตัวอย่างแล้วเติมรายละเอียด', { icon:'📝', tone:'warn' })}
         <div class="card card-pad" style="margin-bottom:12px">
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
             <button class="chip" onclick="App.prefillFinancialMemory('ทริป','trip','expense')">ทริป</button>
@@ -19110,31 +19236,31 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const planHtml = `
       <div class="sec-title">สรุปของฉัน</div>
       <div class="card card-pad">
-        ${row({ icon: '🛰️', label: 'สรุปการเงิน', desc: 'วันนี้ + เดือนนี้', badge: brief.alerts.length ? `${brief.alerts.length} เรื่อง` : '', onclick: 'App.openFinanceSummary()' })}
+        ${row({ icon: '🛰️', label: 'ภาพรวมการเงิน', badge: brief.alerts.length ? `${brief.alerts.length} เรื่อง` : '', onclick: 'App.openFinanceSummary()' })}
       </div>
       <div class="sec-title">ควบคุมเงินเดือนนี้</div>
       <div class="card card-pad">
-        ${row({ icon: '💰', label: 'งบประมาณรายรับ/รายจ่าย', desc: 'คุมงบเดือนนี้', value: budgetCount ? `${budgetCount} หมวด` : 'ยังไม่ตั้ง', onclick: 'App.openBudgetScreen()' })}
-        ${row({ icon: '🧾', label: 'รายการรอจ่าย', desc: 'บิลที่ต้องจ่าย', value: `${(S.upcomingBills || []).filter(b => b.status === 'pending').length} รอจ่าย`, onclick: 'App.openUpcomingBillsScreen()' })}
-        ${row({ icon: '🔁', label: 'รายการประจำ', desc: 'รายการเกิดซ้ำ', value: `${(S.recurring || []).length} รายการ`, onclick: 'App.openRecurringScreen()' })}
-        ${row({ icon: '📅', label: 'ปฏิทินบิล / รายการที่จะถึง', desc: 'รายการใกล้ถึง', onclick: 'App.openUpcomingScreen()' })}
+        ${row({ icon: '💰', label: 'งบประมาณรายรับ/รายจ่าย', value: budgetCount ? `${budgetCount} หมวด` : 'ยังไม่ตั้ง', onclick: 'App.openBudgetScreen()' })}
+        ${row({ icon: '🧾', label: 'รายการรอจ่าย', value: `${(S.upcomingBills || []).filter(b => b.status === 'pending').length} รอจ่าย`, onclick: 'App.openUpcomingBillsScreen()' })}
+        ${row({ icon: '🔁', label: 'รายการประจำ', value: `${(S.recurring || []).length} รายการ`, onclick: 'App.openRecurringScreen()' })}
+        ${row({ icon: '📅', label: 'ปฏิทินบิล / รายการที่จะถึง', onclick: 'App.openUpcomingScreen()' })}
       </div>
       <div class="sec-title">วางแผนอนาคต</div>
       <div class="card card-pad">
-        ${row({ icon: '🎯', label: 'เป้าหมายการเงิน', desc: 'ติดตามเป้าหมาย', value: `${(S.goals || []).filter(g => g.status !== 'archived').length} เป้าหมาย`, onclick: 'App.openGoalsScreen()' })}
-        ${row({ icon: '🗺️', label: 'แผนชีวิตระยะยาว', desc: 'บ้าน รถ เกษียณ', value: `${lifePlanCount} แผน`, onclick: 'App.openLifePlanning()' })}
-        ${row({ icon: '🧪', label: 'ลองและเปรียบเทียบแผน', desc: 'ลองแผน / เทียบผล', onclick: 'App.openPlanningLab()' })}
-        ${row({ icon: '⚖️', label: 'เปรียบเทียบแผนเป้าหมาย', desc: 'จัดสรรเงินให้ goals', onclick: 'App.openGoalRebalanceCompare()' })}
+        ${row({ icon: '🎯', label: 'เป้าหมายการเงิน', value: `${(S.goals || []).filter(g => g.status !== 'archived').length} เป้าหมาย`, onclick: 'App.openGoalsScreen()' })}
+        ${row({ icon: '🗺️', label: 'แผนชีวิตระยะยาว', value: `${lifePlanCount} แผน`, onclick: 'App.openLifePlanning()' })}
+        ${row({ icon: '🧪', label: 'ลองและเปรียบเทียบแผน', onclick: 'App.openPlanningLab()' })}
+        ${row({ icon: '⚖️', label: 'เปรียบเทียบแผนเป้าหมาย', desc: 'จัดสรรเงินให้ตรงเป้าหมาย', onclick: 'App.openGoalRebalanceCompare()' })}
       </div>
       <div class="sec-title">เข้าใจพฤติกรรม</div>
       <div class="card card-pad">
-        ${row({ icon: '💬', label: 'ถามการเงินของคุณ', desc: 'ถามด้วยภาษาปกติ', onclick: 'App.openAskMyMoney()' })}
+        ${row({ icon: '💬', label: 'ถามการเงินของคุณ', desc: 'พูดคุยกับ AI', onclick: 'App.openAskMyMoney()' })}
         ${row({ icon: '📚', label: 'ประวัติการเงินย้อนหลัง', desc: 'แนวโน้มรายเดือน', onclick: 'App.openFeatureHistory()' })}
       </div>
       <div class="sec-title">เงินร่วมกัน</div>
       <div class="card card-pad">
-        ${row({ icon: '🍽️', label: 'หารบิล', desc: 'จัดการบิลร่วม', value: splitBillCount ? `${splitBillCount} บิล` : '', onclick: 'App.openSplitBillScreen()' })}
-        ${row({ icon: '🤝', label: 'เงินที่แชร์กับคนอื่น', desc: 'ใครติดใคร', onclick: 'App.openSharedFinanceDashboard()' })}
+        ${row({ icon: '🍽️', label: 'หารบิล', value: splitBillCount ? `${splitBillCount} บิล` : '', onclick: 'App.openSplitBillScreen()' })}
+        ${row({ icon: '🤝', label: 'เงินที่แชร์กับคนอื่น', onclick: 'App.openSharedFinanceDashboard()' })}
       </div>
       <div class="sec-title">ระบบช่วยคุณ</div>
       <div class="card card-pad">
@@ -19188,7 +19314,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(window.MT_APP_VERSION || (typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''))}</div>
       </div>`
 
-    content.innerHTML = `<div style="padding:0 16px">
+    content.innerHTML = `<div style="padding:0px 16px 30px 16px">
       <div class="more-sticky-header">
         <div style="font-size:20px;font-weight:800;padding:12px 0 8px">เพิ่มเติม</div>
         <input class="form-input more-search-input" id="more-search" placeholder="🔍 ค้นหาฟีเจอร์..." autocomplete="off" oninput="App._filterMoreContent(this.value)" style="padding:10px 14px;font-size:14px;margin-bottom:10px">
