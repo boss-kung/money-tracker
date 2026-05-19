@@ -877,7 +877,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.19-r3'
+const APP_VERSION = '2026.05.19-r4'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -16860,14 +16860,16 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         ? 'แผนนี้ยังพอทำได้ แต่ buffer จะบางลง'
         : 'แผนนี้ยังอยู่ในระดับปลอดภัย'
     box.innerHTML = `
-      <div style="font-weight:700;margin-bottom:8px">${esc(verdict)}</div>
-      ${App._financeRing(Math.max(0, sim.monthEndCash), Math.max(1, sim.projectedIncome), 'buffer', `สิ้นเดือน ${sim.monthEndCash>=0?fmt(sim.monthEndCash):'-'+fmt(Math.abs(sim.monthEndCash))}`, sim.risk === 'high' ? 'var(--expense)' : sim.risk === 'medium' ? '#D97706' : 'var(--income)')}
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px">
-        ${App._financeMiniStat('รายรับ', fmt(sim.projectedIncome), 'var(--income)')}
-        ${App._financeMiniStat('รายจ่าย', fmt(sim.projectedExpense), 'var(--expense)')}
-      </div>
-      ${App._financeMeter(Math.max(0, sim.monthEndCash), Math.max(1, sim.projectedIncome), sim.risk === 'high' ? 'var(--expense)' : sim.risk === 'medium' ? '#D97706' : 'var(--income)')}
-      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:8px"><span>สิ้นเดือน ${sim.monthEndCash>=0?fmt(sim.monthEndCash):'-'+fmt(sim.monthEndCash)}</span><span>ออม ${sim.savingsRate===null?'N/A':sim.savingsRate.toFixed(1)+'%'}</span></div>`
+      <div class="finance-refresh-soft">
+        <div style="font-weight:700;margin-bottom:8px">${esc(verdict)}</div>
+        ${App._financeRing(Math.max(0, sim.monthEndCash), Math.max(1, sim.projectedIncome), 'buffer', `สิ้นเดือน ${sim.monthEndCash>=0?fmt(sim.monthEndCash):'-'+fmt(Math.abs(sim.monthEndCash))}`, sim.risk === 'high' ? 'var(--expense)' : sim.risk === 'medium' ? '#D97706' : 'var(--income)')}
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px;margin-top:10px">
+          ${App._financeMiniStat('รายรับ', fmt(sim.projectedIncome), 'var(--income)')}
+          ${App._financeMiniStat('รายจ่าย', fmt(sim.projectedExpense), 'var(--expense)')}
+        </div>
+        ${App._financeMeter(Math.max(0, sim.monthEndCash), Math.max(1, sim.projectedIncome), sim.risk === 'high' ? 'var(--expense)' : sim.risk === 'medium' ? '#D97706' : 'var(--income)')}
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:8px"><span>สิ้นเดือน ${sim.monthEndCash>=0?fmt(sim.monthEndCash):'-'+fmt(sim.monthEndCash)}</span><span>ออม ${sim.savingsRate===null?'N/A':sim.savingsRate.toFixed(1)+'%'}</span></div>
+      </div>`
   }
 
   App.applyScenarioPreset = function(type) {
