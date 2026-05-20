@@ -128,6 +128,13 @@ Deno.serve(async req => {
     return jsonResponse({
       ok: true,
       synced: rows.length,
+      appVersion: cleanText(body.appVersion, 80) || null,
+      received: rules.map((rule: CustomRule) => ({
+        ruleId: cleanText(rule.id, 80),
+        title: cleanText(rule.title, 120),
+        triggerType: String(rule.triggerType || ''),
+        route: String(rule.route || ''),
+      })),
       routes: rows.map(row => ({
         ruleId: row?.rule_id,
         title: row?.title,
