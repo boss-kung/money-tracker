@@ -1,6 +1,8 @@
 import { adminClient } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
+const FUNCTION_VERSION = 'sync-notification-rules-2026.05.20-r32'
+
 type CustomRule = {
   id?: string
   enabled?: boolean
@@ -128,6 +130,7 @@ Deno.serve(async req => {
     return jsonResponse({
       ok: true,
       synced: rows.length,
+      functionVersion: FUNCTION_VERSION,
       appVersion: cleanText(body.appVersion, 80) || null,
       received: rules.map((rule: CustomRule) => ({
         ruleId: cleanText(rule.id, 80),

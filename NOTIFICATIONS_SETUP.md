@@ -53,9 +53,11 @@ supabase secrets set FIREBASE_PRIVATE_KEY='-----BEGIN PRIVATE KEY-----\n...\n---
 supabase secrets set MT_APP_LINK='https://your-deployed-money-tracker-url/'
 ```
 
-Then redeploy the sender function:
+Then redeploy the sender and sync functions:
 
 ```bash
+supabase functions deploy sync-notification-rules --project-ref bwtoyxxwwmsaoaitihqj
+supabase functions deploy send-custom-notification-rules --project-ref bwtoyxxwwmsaoaitihqj
 supabase functions deploy send-daily-expense-reminders
 ```
 

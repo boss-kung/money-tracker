@@ -11,6 +11,7 @@
   const RULE_SAVE_DEBUG_KEY = 'mt_notification_last_rule_save_debug'
   const RULE_SYNC_PAYLOAD_KEY = 'mt_notification_last_rule_sync_payload'
   const RULE_SYNC_RESPONSE_KEY = 'mt_notification_last_rule_sync_response'
+  const EXPECTED_RULE_SYNC_FUNCTION_VERSION = 'sync-notification-rules-2026.05.20-r32'
   const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch]))
 
   function notify(message, type = 'info') {
@@ -469,6 +470,22 @@
     return value
   }
 
+  function ruleSyncFunctionStatus(response = {}) {
+    const hasDebugShape = Array.isArray(response.received) && Array.isArray(response.routes)
+    const version = String(response.functionVersion || '')
+    return {
+      expected: EXPECTED_RULE_SYNC_FUNCTION_VERSION,
+      actual: version || 'missing',
+      hasDebugShape,
+      ok: hasDebugShape && version === EXPECTED_RULE_SYNC_FUNCTION_VERSION,
+      reason: !hasDebugShape
+        ? 'Edge Function response lacks received/routes, so Supabase is still running an older sync-notification-rules deployment.'
+        : version !== EXPECTED_RULE_SYNC_FUNCTION_VERSION
+          ? 'Edge Function response version does not match this app build.'
+          : 'Edge Function version matches this app build.',
+    }
+  }
+
   function currentFormDebug(root, ruleId, existing, resolved = {}) {
     const trigger = root?.querySelector?.('#nr-trigger')
     const route = root?.querySelector?.('#nr-route')
@@ -555,6 +572,7 @@
       rememberNotificationDebug(RULE_SYNC_RESPONSE_KEY, {
         at: new Date().toISOString(),
         appVersion: window.MT_APP_VERSION || '',
+        functionStatus: ruleSyncFunctionStatus(data),
         response: data,
       })
       console.table?.(data.routes || [])
@@ -720,6 +738,7 @@
     const cacheKeys = await caches?.keys?.().catch(() => []) || []
     const registration = await navigator.serviceWorker?.getRegistration?.().catch(() => null)
     const prefs = ensureSettings()
+    const lastSyncResponse = readNotificationDebugKey(RULE_SYNC_RESPONSE_KEY)
     return {
       at: new Date().toISOString(),
       appVersion: window.MT_APP_VERSION || '',
@@ -737,7 +756,8 @@
       rawCustomRules: (prefs.customRules || []).map(compactRuleDebug),
       lastSaveDebug: readNotificationDebugKey(RULE_SAVE_DEBUG_KEY),
       lastSyncPayload: readNotificationDebugKey(RULE_SYNC_PAYLOAD_KEY),
-      lastSyncResponse: readNotificationDebugKey(RULE_SYNC_RESPONSE_KEY),
+      lastSyncResponse,
+      edgeFunctionStatus: ruleSyncFunctionStatus(lastSyncResponse?.response || {}),
     }
   }
 
@@ -1076,6 +1096,11 @@
     ])
       .then(([, rulesResult]) => {
         const routes = Array.isArray(rulesResult?.routes) ? rulesResult.routes : []
+        const functionStatus = ruleSyncFunctionStatus(rulesResult || {})
+        if (!functionStatus.ok) {
+          notify(`ซิงค์แล้ว แต่ Edge Function ยังไม่ใช่เวอร์ชันล่าสุด: ${functionStatus.actual}`, 'warn')
+          return
+        }
         const routeSummary = routes.length
           ? ` · ${routes.map(row => `${row.triggerType}:${row.route}`).join(', ')}`
           : ''
