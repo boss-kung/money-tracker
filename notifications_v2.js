@@ -309,6 +309,45 @@
     return prefs.customRules
   }
 
+  function notificationRuleMinutes(rule) {
+    const match = String(rule?.triggerConfig?.time || '09:00').match(/^(\d{2}):(\d{2})$/)
+    if (!match) return 9 * 60
+    const hour = Number(match[1])
+    const minute = Number(match[2])
+    if (hour > 23 || minute > 59) return 9 * 60
+    return hour * 60 + minute
+  }
+
+  function notificationTriggerOrder(triggerType) {
+    const order = [
+      'daily_time',
+      'weekday_only_time',
+      'weekly_time',
+      'monthly_time',
+      'one_time',
+      'no_transaction_today',
+      'no_tx_streak',
+      'budget_over',
+      'recurring_due_today',
+      'upcoming_bill_due',
+      'credit_card_due',
+      'privilege_expiry',
+      'backup_stale',
+    ]
+    const idx = order.indexOf(triggerType)
+    return idx >= 0 ? idx : order.length
+  }
+
+  function sortNotificationRulesForSummary(rules) {
+    return [...rules].sort((a, b) => {
+      const timeDiff = notificationRuleMinutes(a) - notificationRuleMinutes(b)
+      if (timeDiff) return timeDiff
+      const typeDiff = notificationTriggerOrder(a.triggerType) - notificationTriggerOrder(b.triggerType)
+      if (typeDiff) return typeDiff
+      return String(a.title || '').localeCompare(String(b.title || ''), 'th')
+    })
+  }
+
   async function syncCustomRules() {
     if (!isConfigured()) return false
     await callFunction('sync-notification-rules', {
@@ -499,7 +538,7 @@
 
   App.openCustomNotificationRulesScreen = function(animate = true) {
     S.notificationRuleDraft = null
-    const rules = getCustomRules()
+    const rules = sortNotificationRulesForSummary(getCustomRules())
     const rows = rules.map(rule => `
       <div class="list-item" onclick="App.openNotificationRuleForm('${esc(rule.id)}')">
         <div class="list-item-icon" style="background:${rule.enabled ? 'rgba(37,99,235,.12)' : 'rgba(148,163,184,.18)'}">${rule.enabled ? '🔔' : '🔕'}</div>
