@@ -138,7 +138,7 @@
     const overlay = ensureOverlay()
     clearTimeout(overlayCloseTimer)
     if (open) {
-      overlay.classList.remove('unlocking')
+      overlay.classList.remove('unlocking', 'unlocked')
       overlay.classList.add('open', 'locking')
       overlay.classList.toggle('privacy-only', !!privacyOnly)
       document.documentElement.classList.add('mt-app-lock-open')
@@ -175,7 +175,10 @@
     const canUseBiometric = !!(config?.biometric?.enabled && config?.biometric?.credentialId && hasWebAuthn())
     const panel = ensureOverlay().querySelector('.mt-lock-panel')
     panel.innerHTML = `<div class="mt-lock-brand">Money Tracker</div>
-      <h1>ล็อกอยู่</h1>
+      <div class="mt-lock-icon" aria-label="ล็อกอยู่">
+        <div class="mt-lock-shackle"></div>
+        <div class="mt-lock-body"><span></span></div>
+      </div>
       <p>${waitSec > 0 ? `รอ ${waitSec} วินาที` : (canUseBiometric ? 'กำลังยืนยันตัวตน' : 'ใส่รหัสเพื่อเข้าแอป')}</p>
       ${message ? `<div class="mt-lock-error">${esc(message)}</div>` : ''}
       ${keypadHtml()}`
@@ -209,13 +212,13 @@
     const panel = ensureOverlay().querySelector('.mt-lock-panel')
     panel.innerHTML = `<div class="mt-lock-brand">ความปลอดภัย</div>
       <h1>App Lock</h1>
-      <p>${enabled ? 'เปิดใช้งานแล้ว กลับเข้า PWA จะต้องปลดล็อกก่อนเห็นข้อมูล' : 'ยังไม่ได้เปิด App Lock'}</p>
+      <p>${enabled ? 'เปิดใช้งานเพื่อป้องกันการเห็นข้อมูล' : 'ยังไม่ได้เปิดใช้งานรหัสผ่านแอป'}</p>
       <div class="mt-lock-setting-row">
-        <div><strong>ล็อกเมื่อออกจากแอป</strong><span>เหมาะกับ PWA และ app switcher</span></div>
+        <div><strong>ล็อกเมื่อออกจากแอป</strong><span>ล็อกรหัสอัตโนมัติทันที</span></div>
         <button class="toggle${config?.lockOnBackground !== false ? ' on' : ''}" type="button" onclick="MTAppLock.toggleBackgroundLock()"></button>
       </div>
       ${enabled ? `<div class="mt-lock-setting-row">
-        <div><strong>Face ID / Touch ID</strong><span>${biometricSupported ? (biometricEnabled ? 'ใช้ปลดล็อกแทนการกด PIN บนอุปกรณ์นี้' : 'PIN ยังเป็นทางสำรองเสมอ') : 'ต้องเปิดผ่าน HTTPS หรือ PWA ที่รองรับ WebAuthn'}</span></div>
+        <div><strong>Face ID / Touch ID</strong><span>${biometricSupported ? (biometricEnabled ? 'ใช้ปลดล็อกแทนการกด PIN บนอุปกรณ์นี้' : 'ยังสามารถใช้ PIN ได้เป็นทางเลือกได้อยู่') : 'ต้องเปิดผ่าน HTTPS หรือ PWA ที่รองรับ WebAuthn'}</span></div>
         <button class="toggle${biometricEnabled ? ' on' : ''}" type="button" ${biometricSupported ? 'onclick="MTAppLock.toggleBiometric()"' : 'disabled'}></button>
       </div>` : ''}
       <div class="mt-lock-actions stacked">
@@ -246,7 +249,9 @@
       lastUnlockMethod: method,
     })
     try { sessionStorage.setItem(SESSION_KEY, String(now())) } catch (_) {}
-    setOverlay(false)
+    const overlay = ensureOverlay()
+    overlay.classList.add('unlocked')
+    setTimeout(() => setOverlay(false), 360)
     try { if (typeof App !== 'undefined') App.renderMore?.() } catch (_) {}
     if (!appStarted && typeof bootCallback === 'function') {
       appStarted = true

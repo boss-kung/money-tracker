@@ -8731,6 +8731,65 @@ details summary::marker {
   line-height: 1.15;
   letter-spacing: 0;
 }
+.mt-lock-icon {
+  position: relative;
+  width: 76px;
+  height: 86px;
+  margin: 2px auto 16px;
+  animation: mt-lock-icon-pulse 1.7s ease-in-out infinite;
+}
+.mt-lock-shackle {
+  position: absolute;
+  left: 18px;
+  top: 2px;
+  width: 40px;
+  height: 42px;
+  border: 7px solid rgba(255,255,255,.92);
+  border-bottom: 0;
+  border-radius: 28px 28px 0 0;
+  transform-origin: 12px 40px;
+  transition: transform .34s cubic-bezier(.2,.8,.2,1), opacity .2s ease;
+}
+.mt-lock-body {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 5px;
+  height: 52px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 18px 40px rgba(0,0,0,.24);
+}
+.mt-lock-body span {
+  position: absolute;
+  left: 50%;
+  top: 15px;
+  width: 9px;
+  height: 19px;
+  border-radius: 99px;
+  background: #0f172a;
+  transform: translateX(-50%);
+}
+.mt-lock-body span::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -7px;
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  background: #0f172a;
+  transform: translateX(-50%);
+}
+#mt-app-lock.unlocked .mt-lock-icon {
+  animation: mt-lock-icon-unlock .42s ease-out both;
+}
+#mt-app-lock.unlocked .mt-lock-shackle {
+  transform: translate(16px, -9px) rotate(34deg);
+}
+#mt-app-lock.unlocked .mt-lock-body {
+  animation: mt-lock-body-unlock .42s ease-out both;
+}
 .mt-lock-panel p {
   margin: 8px 0 18px;
   color: rgba(255,255,255,.72);
@@ -8749,12 +8808,12 @@ details summary::marker {
 .mt-lock-dots {
   display: flex;
   justify-content: center;
-  gap: 10px;
+  gap: 14px;
   margin: 20px 0;
 }
 .mt-lock-dots span {
-  width: 12px;
-  height: 12px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   border: 1px solid rgba(255,255,255,.42);
   background: transparent;
@@ -8793,7 +8852,7 @@ details summary::marker {
   color: #fff;
   background: rgba(255,255,255,.13);
   font: inherit;
-  font-size: 20px;
+  font-size: 20px!important;
   font-weight: 800;
 }
 .mt-lock-keypad button:active {
@@ -8884,4 +8943,17 @@ details summary::marker {
     opacity: 0;
     transform: translateY(8px) scale(.97);
   }
+}
+@keyframes mt-lock-icon-pulse {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-2px) scale(1.025); }
+}
+@keyframes mt-lock-icon-unlock {
+  0% { transform: translateY(0) scale(1); }
+  55% { transform: translateY(-3px) scale(1.08); }
+  100% { transform: translateY(0) scale(1.02); }
+}
+@keyframes mt-lock-body-unlock {
+  0% { background: rgba(255,255,255,.94); }
+  100% { background: #bbf7d0; }
 }
