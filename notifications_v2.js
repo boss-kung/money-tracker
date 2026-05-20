@@ -29,7 +29,27 @@
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Bangkok',
       customRules: [],
       seededDefaultRuleV1: false,
+      routedDefaultRuleV1: false,
     }
+  }
+
+  function defaultRouteForTrigger(triggerType) {
+    return {
+      no_transaction_today: 'addTx',
+      upcoming_bill_due: 'upcomingBills',
+      credit_card_due: 'creditCards',
+      budget_over: 'budgets',
+      recurring_due_today: 'recurring',
+      privilege_expiry: 'privileges',
+      backup_stale: 'more',
+      no_tx_streak: 'addTx',
+    }[triggerType] || 'dashboard'
+  }
+
+  function shouldUseTriggerDefaultRoute(route, triggerType = '') {
+    if (!route) return true
+    if (route === 'dashboard' || route === 'more') return true
+    return route === defaultRouteForTrigger(triggerType)
   }
 
   function defaultDailyExpenseRule() {
@@ -55,6 +75,20 @@
         S.settings.notifications.customRules = [defaultDailyExpenseRule()]
       }
       S.settings.notifications.seededDefaultRuleV1 = true
+      try { persist() } catch (_) {}
+    }
+    if (!S.settings.notifications.routedDefaultRuleV1) {
+      let changed = false
+      S.settings.notifications.customRules = S.settings.notifications.customRules.map(rule => {
+        const normalized = normalizeCustomRule(rule)
+        const route = defaultRouteForTrigger(normalized.triggerType)
+        if (route !== 'dashboard' && shouldUseTriggerDefaultRoute(normalized.route, normalized.triggerType)) {
+          changed = true
+          return { ...normalized, route, updatedAt: new Date().toISOString() }
+        }
+        return normalized
+      })
+      S.settings.notifications.routedDefaultRuleV1 = true
       try { persist() } catch (_) {}
     }
     return S.settings.notifications
@@ -574,11 +608,15 @@
       triggerType: nextTriggerType || 'daily_time',
       title: '',
       body: '',
-      route: 'dashboard',
+      route: defaultRouteForTrigger(nextTriggerType || 'daily_time'),
       actionLabel: 'เปิดดู',
       triggerConfig: { time: '09:00', date: todayStr(), weekdays: ['mon','tue','wed','thu','fri'], daysBefore: 1, staleDays: 30 },
     })
-    if (nextTriggerType) rule.triggerType = nextTriggerType
+    if (nextTriggerType) {
+      const previousTriggerType = rule.triggerType
+      if (shouldUseTriggerDefaultRoute(rule.route, previousTriggerType)) rule.route = defaultRouteForTrigger(nextTriggerType)
+      rule.triggerType = nextTriggerType
+    }
     S.notificationRuleDraft = rule
     const cfg = rule.triggerConfig || {}
     const selected = (value, current) => String(value) === String(current) ? ' selected' : ''
@@ -690,12 +728,14 @@
   }
 
   App.changeNotificationRuleTrigger = function(ruleId, triggerType) {
+    const previousTriggerType = S.notificationRuleDraft?.triggerType || 'daily_time'
+    const currentRoute = document.getElementById('nr-route')?.value || S.notificationRuleDraft?.route || 'dashboard'
     const current = normalizeCustomRule({
       ...(S.notificationRuleDraft || {}),
       id: ruleId,
       title: document.getElementById('nr-title')?.value || S.notificationRuleDraft?.title || '',
       body: document.getElementById('nr-body')?.value || S.notificationRuleDraft?.body || '',
-      route: document.getElementById('nr-route')?.value || S.notificationRuleDraft?.route || 'dashboard',
+      route: shouldUseTriggerDefaultRoute(currentRoute, previousTriggerType) ? defaultRouteForTrigger(triggerType) : currentRoute,
       actionLabel: document.getElementById('nr-action-label')?.value || S.notificationRuleDraft?.actionLabel || 'เปิดดู',
       triggerType,
       triggerConfig: {
