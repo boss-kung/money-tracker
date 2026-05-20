@@ -46,6 +46,34 @@
     }[triggerType] || 'dashboard'
   }
 
+  function triggerDisplayName(triggerType) {
+    return {
+      daily_time: 'ทุกวัน',
+      weekly_time: 'ทุกสัปดาห์',
+      one_time: 'ครั้งเดียว',
+      no_transaction_today: 'วันนี้ยังไม่มีรายการ',
+      upcoming_bill_due: 'บิลใกล้ครบกำหนด',
+      credit_card_due: 'บัตรเครดิตใกล้ครบกำหนด',
+      backup_stale: 'ไม่ได้ backup นานเกินกำหนด',
+      monthly_time: 'ทุกเดือน',
+      weekday_only_time: 'จันทร์-ศุกร์ เท่านั้น',
+      no_tx_streak: 'ไม่มีรายการติดต่อกัน X วัน',
+      budget_over: 'งบหมวดหมู่ถึง X%',
+      recurring_due_today: 'รายการประจำถึงกำหนดวันนี้',
+      privilege_expiry: 'สิทธิพิเศษใกล้หมดอายุ',
+    }[triggerType] || triggerType || 'ไม่ระบุ'
+  }
+
+  function suggestedSpecificTriggerFromText(title = '', body = '') {
+    const text = `${title} ${body}`.toLowerCase()
+    if (/งบประมาณ|เกินงบ|budget/.test(text)) return 'budget_over'
+    if (/สิทธิพิเศษ|voucher|privilege|คูปอง/.test(text)) return 'privilege_expiry'
+    if (/รายการประจำ|recurring/.test(text)) return 'recurring_due_today'
+    if (/บัตรเครดิต|credit card|creditcard/.test(text)) return 'credit_card_due'
+    if (/บิล|รายการรอจ่าย|ครบกำหนด|upcoming bill/.test(text)) return 'upcoming_bill_due'
+    return ''
+  }
+
   function shouldUseTriggerDefaultRoute(route, triggerType = '') {
     if (!route) return true
     if (route === 'dashboard' || route === 'more') return defaultRouteForTrigger(triggerType) !== 'dashboard'
@@ -385,6 +413,19 @@
       if (typeDiff) return typeDiff
       return String(a.title || '').localeCompare(String(b.title || ''), 'th')
     })
+  }
+
+  function notificationRuleFormRoot() {
+    return document.getElementById('sub-screen') || document
+  }
+
+  function formFieldValue(root, id, fallback = '') {
+    const field = root?.querySelector?.(`#${id}`)
+    return field ? field.value : fallback
+  }
+
+  function selectedRuleWeekdays(root) {
+    return [...(root?.querySelectorAll?.('input[name="nr-weekday"]:checked') || [])].map(input => input.value)
   }
 
   async function syncCustomRules() {
@@ -728,6 +769,7 @@
                 <option value="more"${selected('more', rule.route)}>เมนูเพิ่มเติม</option>
               </optgroup>
             </select>
+            <p class="form-hint" style="margin-top:4px">ค่าเริ่มต้นของ Trigger นี้คือ “${esc(routeLabel(defaultRouteForTrigger(rule.triggerType)))}” และจะ sync ไป Supabase ตามค่านี้เมื่อไม่ได้เลือกหน้าเอง</p>
           </div>
           <div class="form-group"><label class="form-label">ป้ายปุ่ม Action</label><input class="form-input" id="nr-action-label" value="${esc(rule.actionLabel || 'เปิดดู')}" placeholder="เช่น เปิดดู, เพิ่มรายการ"></div>
           <button class="btn btn-secondary" onclick="App.testNotificationRuleFromForm('${esc(rule.id)}')">ทดสอบกฎนี้ในเครื่อง</button>
@@ -737,26 +779,27 @@
   }
 
   App.changeNotificationRuleTrigger = function(ruleId, triggerType) {
+    const root = notificationRuleFormRoot()
     const previousTriggerType = S.notificationRuleDraft?.triggerType || 'daily_time'
-    const currentRoute = document.getElementById('nr-route')?.value || S.notificationRuleDraft?.route || 'dashboard'
+    const currentRoute = formFieldValue(root, 'nr-route', S.notificationRuleDraft?.route || 'dashboard')
     const current = normalizeCustomRule({
       ...(S.notificationRuleDraft || {}),
       id: ruleId,
-      title: document.getElementById('nr-title')?.value || S.notificationRuleDraft?.title || '',
-      body: document.getElementById('nr-body')?.value || S.notificationRuleDraft?.body || '',
+      title: formFieldValue(root, 'nr-title', S.notificationRuleDraft?.title || ''),
+      body: formFieldValue(root, 'nr-body', S.notificationRuleDraft?.body || ''),
       route: shouldUseTriggerDefaultRoute(currentRoute, previousTriggerType) ? defaultRouteForTrigger(triggerType) : currentRoute,
-      actionLabel: document.getElementById('nr-action-label')?.value || S.notificationRuleDraft?.actionLabel || 'เปิดดู',
+      actionLabel: formFieldValue(root, 'nr-action-label', S.notificationRuleDraft?.actionLabel || 'เปิดดู'),
       triggerType,
       triggerConfig: {
         ...(S.notificationRuleDraft?.triggerConfig || {}),
-        time: document.getElementById('nr-time')?.value || S.notificationRuleDraft?.triggerConfig?.time || '09:00',
-        date: document.getElementById('nr-date')?.value || S.notificationRuleDraft?.triggerConfig?.date || todayStr(),
-        weekdays: [...document.querySelectorAll('input[name="nr-weekday"]:checked')].map(input => input.value),
-        daysBefore: Number(document.getElementById('nr-days-before')?.value || S.notificationRuleDraft?.triggerConfig?.daysBefore || 1),
-        staleDays: Number(document.getElementById('nr-stale-days')?.value || S.notificationRuleDraft?.triggerConfig?.staleDays || 30),
-        dayOfMonth: Number(document.getElementById('nr-day-of-month')?.value || S.notificationRuleDraft?.triggerConfig?.dayOfMonth || 1),
-        streakDays: Number(document.getElementById('nr-streak-days')?.value || S.notificationRuleDraft?.triggerConfig?.streakDays || 3),
-        threshold: Number(document.getElementById('nr-threshold')?.value || S.notificationRuleDraft?.triggerConfig?.threshold || 90),
+        time: formFieldValue(root, 'nr-time', S.notificationRuleDraft?.triggerConfig?.time || '09:00'),
+        date: formFieldValue(root, 'nr-date', S.notificationRuleDraft?.triggerConfig?.date || todayStr()),
+        weekdays: selectedRuleWeekdays(root),
+        daysBefore: Number(formFieldValue(root, 'nr-days-before', S.notificationRuleDraft?.triggerConfig?.daysBefore || 1)),
+        staleDays: Number(formFieldValue(root, 'nr-stale-days', S.notificationRuleDraft?.triggerConfig?.staleDays || 30)),
+        dayOfMonth: Number(formFieldValue(root, 'nr-day-of-month', S.notificationRuleDraft?.triggerConfig?.dayOfMonth || 1)),
+        streakDays: Number(formFieldValue(root, 'nr-streak-days', S.notificationRuleDraft?.triggerConfig?.streakDays || 3)),
+        threshold: Number(formFieldValue(root, 'nr-threshold', S.notificationRuleDraft?.triggerConfig?.threshold || 90)),
       },
     })
     S.notificationRuleDraft = current
@@ -764,29 +807,38 @@
   }
 
   App.saveNotificationRule = function(ruleId) {
+    const root = notificationRuleFormRoot()
     const prefs = ensureSettings()
     const rules = getCustomRules()
     const existing = rules.find(rule => rule.id === ruleId)
-    const triggerType = document.getElementById('nr-trigger')?.value || 'daily_time'
-    const weekdays = [...document.querySelectorAll('input[name="nr-weekday"]:checked')].map(input => input.value)
+    const triggerType = formFieldValue(root, 'nr-trigger', 'daily_time')
+    const weekdays = selectedRuleWeekdays(root)
+    const title = formFieldValue(root, 'nr-title', '')
+    const body = formFieldValue(root, 'nr-body', '')
+    const route = formFieldValue(root, 'nr-route', defaultRouteForTrigger(triggerType))
+    const suggestedTrigger = suggestedSpecificTriggerFromText(title, body)
+    const timeOnlyTriggers = ['daily_time', 'weekly_time', 'monthly_time', 'weekday_only_time', 'one_time']
+    if (suggestedTrigger && timeOnlyTriggers.includes(triggerType) && ['dashboard', 'more'].includes(route)) {
+      return notify(`กฎนี้ดูเหมือน “${triggerDisplayName(suggestedTrigger)}” แต่ Trigger ยังเป็น “${triggerDisplayName(triggerType)}” กรุณาเปลี่ยน Trigger หรือเลือกหน้าเปิดเองก่อนบันทึก`, 'warn')
+    }
     const rule = normalizeCustomRule({
       ...(existing || {}),
       id: ruleId,
       enabled: existing?.enabled !== false,
-      title: document.getElementById('nr-title')?.value || '',
-      body: document.getElementById('nr-body')?.value || '',
-      route: document.getElementById('nr-route')?.value || defaultRouteForTrigger(triggerType),
-      actionLabel: document.getElementById('nr-action-label')?.value || 'เปิดดู',
+      title,
+      body,
+      route,
+      actionLabel: formFieldValue(root, 'nr-action-label', 'เปิดดู'),
       triggerType,
       triggerConfig: {
-        time: document.getElementById('nr-time')?.value || existing?.triggerConfig?.time || '09:00',
-        date: document.getElementById('nr-date')?.value || existing?.triggerConfig?.date || todayStr(),
+        time: formFieldValue(root, 'nr-time', existing?.triggerConfig?.time || '09:00'),
+        date: formFieldValue(root, 'nr-date', existing?.triggerConfig?.date || todayStr()),
         weekdays: weekdays.length ? weekdays : existing?.triggerConfig?.weekdays || ['mon','tue','wed','thu','fri'],
-        daysBefore: Number(document.getElementById('nr-days-before')?.value || existing?.triggerConfig?.daysBefore || 1),
-        staleDays: Number(document.getElementById('nr-stale-days')?.value || existing?.triggerConfig?.staleDays || 30),
-        dayOfMonth: Number(document.getElementById('nr-day-of-month')?.value || existing?.triggerConfig?.dayOfMonth || 1),
-        streakDays: Number(document.getElementById('nr-streak-days')?.value || existing?.triggerConfig?.streakDays || 3),
-        threshold: Number(document.getElementById('nr-threshold')?.value || existing?.triggerConfig?.threshold || 90),
+        daysBefore: Number(formFieldValue(root, 'nr-days-before', existing?.triggerConfig?.daysBefore || 1)),
+        staleDays: Number(formFieldValue(root, 'nr-stale-days', existing?.triggerConfig?.staleDays || 30)),
+        dayOfMonth: Number(formFieldValue(root, 'nr-day-of-month', existing?.triggerConfig?.dayOfMonth || 1)),
+        streakDays: Number(formFieldValue(root, 'nr-streak-days', existing?.triggerConfig?.streakDays || 3)),
+        threshold: Number(formFieldValue(root, 'nr-threshold', existing?.triggerConfig?.threshold || 90)),
       },
       createdAt: existing?.createdAt,
       updatedAt: new Date().toISOString(),
@@ -860,12 +912,13 @@
   }
 
   App.testNotificationRuleFromForm = async function(ruleId) {
+    const root = notificationRuleFormRoot()
     const temp = normalizeCustomRule({
       id: ruleId,
-      title: document.getElementById('nr-title')?.value || 'ทดสอบแจ้งเตือน',
-      body: document.getElementById('nr-body')?.value || 'ข้อความทดสอบจากกฎแจ้งเตือน',
-      route: document.getElementById('nr-route')?.value || 'dashboard',
-      actionLabel: document.getElementById('nr-action-label')?.value || 'เปิดดู',
+      title: formFieldValue(root, 'nr-title', 'ทดสอบแจ้งเตือน'),
+      body: formFieldValue(root, 'nr-body', 'ข้อความทดสอบจากกฎแจ้งเตือน'),
+      route: formFieldValue(root, 'nr-route', 'dashboard'),
+      actionLabel: formFieldValue(root, 'nr-action-label', 'เปิดดู'),
     })
     await App._showCustomNotificationRule(temp)
   }

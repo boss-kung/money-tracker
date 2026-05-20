@@ -33,10 +33,7 @@ for each row execute function public.mt_normalize_notification_rule_route_by_tri
 update public.mt_notification_rules
 set route = 'recurring'
 where route = 'budgets'
-  and (
-    trigger_type = 'recurring_due_today'
-    or lower(coalesce(title, '') || ' ' || coalesce(body, '')) ~ '(ประจำ|recurring)'
-  );
+  and trigger_type = 'recurring_due_today';
 
 update public.mt_notification_rules
 set route = case
