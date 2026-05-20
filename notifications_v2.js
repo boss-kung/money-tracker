@@ -343,15 +343,15 @@
     if (rule.triggerType === 'weekly_time') return `ทุกสัปดาห์ ${((cfg.weekdays || []).map(d => days[d] || d).join(', ') || 'ไม่ระบุ')} ${cfg.time || '09:00'}`
     if (rule.triggerType === 'one_time') return `${cfg.date || todayStr()} ${cfg.time || '09:00'}`
     if (rule.triggerType === 'no_transaction_today') return `ถ้าวันนี้ยังไม่มีรายการ เวลา ${cfg.time || '20:30'}`
-    if (rule.triggerType === 'upcoming_bill_due') return `บิลครบใน ${Number(cfg.daysBefore ?? 1)} วัน`
-    if (rule.triggerType === 'credit_card_due') return `บัตรครบใน ${Number(cfg.daysBefore ?? 1)} วัน`
-    if (rule.triggerType === 'backup_stale') return `ไม่ได้ backup ${Number(cfg.staleDays ?? 30)} วัน`
+    if (rule.triggerType === 'upcoming_bill_due') return `บิลครบใน ${Number(cfg.daysBefore ?? 1)} วัน เวลา ${cfg.time || '09:00'}`
+    if (rule.triggerType === 'credit_card_due') return `บัตรครบใน ${Number(cfg.daysBefore ?? 1)} วัน เวลา ${cfg.time || '09:00'}`
+    if (rule.triggerType === 'backup_stale') return `ไม่ได้ backup ${Number(cfg.staleDays ?? 30)} วัน เวลา ${cfg.time || '09:00'}`
     if (rule.triggerType === 'monthly_time') return `ทุกเดือน วันที่ ${Number(cfg.dayOfMonth ?? 1)} เวลา ${cfg.time || '09:00'}`
     if (rule.triggerType === 'weekday_only_time') return `จ-ศ เวลา ${cfg.time || '09:00'}`
     if (rule.triggerType === 'no_tx_streak') return `ไม่มีรายการ ${Number(cfg.streakDays ?? 3)} วันติด เวลา ${cfg.time || '09:00'}`
     if (rule.triggerType === 'budget_over') return `งบถึง ${Number(cfg.threshold ?? 90)}% เวลา ${cfg.time || '09:00'}`
     if (rule.triggerType === 'recurring_due_today') return `รายการประจำถึงกำหนด เวลา ${cfg.time || '09:00'}`
-    if (rule.triggerType === 'privilege_expiry') return `สิทธิพิเศษหมดใน ${Number(cfg.daysBefore ?? 3)} วัน`
+    if (rule.triggerType === 'privilege_expiry') return `สิทธิพิเศษหมดใน ${Number(cfg.daysBefore ?? 3)} วัน เวลา ${cfg.time || '09:00'}`
     return 'กฎแจ้งเตือน'
   }
 
@@ -545,8 +545,7 @@
     const selected = (value, current) => String(value) === String(current) ? ' selected' : ''
     const checked = day => (cfg.weekdays || []).includes(day) ? ' checked' : ''
 
-    const TIME_TRIGGERS = ['daily_time','weekly_time','one_time','no_transaction_today','monthly_time','weekday_only_time','no_tx_streak','budget_over','recurring_due_today']
-    const showTime      = TIME_TRIGGERS.includes(rule.triggerType)
+    const showTime      = true
     const showDate      = rule.triggerType === 'one_time'
     const showWeekdays  = rule.triggerType === 'weekly_time'
     const showDaysBefore   = ['upcoming_bill_due','credit_card_due','privilege_expiry'].includes(rule.triggerType)

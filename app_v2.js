@@ -877,7 +877,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.20-r22'
+const APP_VERSION = '2026.05.20-r23'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -16272,9 +16272,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   App._financeJourneyLinks = function(items = []) {
-    return items.length ? `<div class="finance-journey-links">
-      ${items.map(([label, onclick]) => `<button class="chip" onclick="${onclick}">${esc(label)}</button>`).join('')}
+    return items.length ? `<div class="finance-journey-links" aria-label="ทางลัดที่เกี่ยวข้อง">
+      ${items.map(([label, onclick]) => `<button class="finance-link-btn" onclick="${onclick}">${esc(label)}</button>`).join('')}
     </div>` : ''
+  }
+
+  App._financePill = function(label, tone = 'info') {
+    return `<span class="finance-pill is-${esc(tone)}">${esc(label)}</span>`
   }
 
   App._financeMeter = function(value, max, tone = 'var(--primary)') {
@@ -16368,6 +16372,121 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     </details>`
   }
 
+  App._financeForecastBoard = function(ctx, brief, forecast, trace) {
+    const projectedCash = Number(brief.today?.projectedMonthEndCash ?? forecast.monthEndCash ?? 0)
+    const liquid = Number(ctx.usable?.liquid || 0)
+    const income = Number(ctx.projectedIncome || ctx.monthly?.income || 0)
+    const expense = Number(forecast.spendForecast || ctx.projectedExpense || 0)
+    const upcoming = Number(ctx.upcomingCommitted || 0)
+    const cashMax = Math.max(1, Math.abs(projectedCash), liquid, income)
+    const cashTone = projectedCash < 0 ? 'var(--expense)' : projectedCash < cashMax * .2 ? '#D97706' : 'var(--income)'
+    const confidenceTone = forecast.confidence === 'high' ? 'good' : forecast.confidence === 'medium' ? 'warn' : 'danger'
+    const rangeMax = Math.max(1, Number(forecast.upperBound || 0), expense)
+    const lowerPct = Math.max(0, Math.min(100, Number(forecast.lowerBound || 0) / rangeMax * 100))
+    const upperPct = Math.max(lowerPct, Math.min(100, Number(forecast.upperBound || 0) / rangeMax * 100))
+    const expensePct = Math.max(0, Math.min(100, expense / rangeMax * 100))
+    const budgetRisks = (forecast.budgetRisk || []).slice(0, 3)
+    return `<div class="card card-pad finance-visual-card finance-mb-md">
+      <div class="finance-visual-head">
+        <div>
+          <div class="finance-eyebrow">Forecast</div>
+          <div class="finance-visual-number" style="color:${cashTone}">${projectedCash >= 0 ? fmt(projectedCash) : '-' + fmt(Math.abs(projectedCash))}</div>
+          <div class="finance-visual-copy">เงินปลายเดือนโดยประมาณ</div>
+        </div>
+        ${App._financePill(projectedCash < 0 ? 'เสี่ยง' : projectedCash < cashMax * .2 ? 'ควรระวัง' : 'รับไหว', projectedCash < 0 ? 'danger' : projectedCash < cashMax * .2 ? 'warn' : 'good')}
+      </div>
+      <div class="finance-waterfall" aria-label="ภาพรวมเงินไหล">
+        ${[
+          ['เงินตอนนี้', liquid, 'info'],
+          ['รายรับ', income, 'good'],
+          ['รายจ่าย', expense, 'danger'],
+          ['บิล', upcoming, 'warn'],
+          ['เหลือ', projectedCash, projectedCash < 0 ? 'danger' : 'good'],
+        ].map(([label, value, tone]) => `<div class="finance-waterfall-step is-${tone}">
+          <span>${esc(label)}</span>
+          <b>${Number(value) < 0 ? '-' : ''}${fmt(Math.abs(Number(value || 0)))}</b>
+        </div>`).join('')}
+      </div>
+      <div class="finance-range-card">
+        <div class="finance-muted-row"><b>ช่วงคาดการณ์รายจ่าย</b>${App._financePill(trace?.confidence?.label || 'กำลังประเมิน', confidenceTone)}</div>
+        <div class="finance-range-band">
+          <span style="left:${lowerPct}%;width:${Math.max(3, upperPct - lowerPct)}%"></span>
+          <i style="left:${expensePct}%"></i>
+        </div>
+        <div class="finance-tiny-row"><span>${fmt(forecast.lowerBound || 0)}</span><span>${fmt(forecast.upperBound || 0)}</span></div>
+      </div>
+      ${budgetRisks.length ? `<div class="finance-risk-strip">
+        ${budgetRisks.map(b => `<div>
+          <span>${esc(b.label || b.name || 'หมวด')}</span>
+          ${App._financeMeter(b.probability || 0, 100, b.risk === 'high' ? 'var(--expense)' : b.risk === 'medium' ? '#D97706' : 'var(--income)')}
+        </div>`).join('')}
+      </div>` : ''}
+      ${App._financeExplainPanel(trace, 'ดูที่มา')}
+    </div>`
+  }
+
+  App._financeBehaviorBoard = function(ctx, guide, learning) {
+    const b = FinanceIntelligence.behaviorProfile(ctx)
+    const weekend = b.weekendBias ? Math.round((b.weekendBias - 1) * 100) : 0
+    const discretionary = Math.round((b.discretionaryRatio || 0) * 100)
+    const merchantTotal = Number(b.merchantRules?.marketplace || 0) + Number(b.merchantRules?.transportConvenience || 0) + Number(b.merchantRules?.subscriptionLike || 0)
+    const bars = [
+      { label:'วันหยุด', value:Math.max(0, weekend), tone:weekend > 25 ? 'warn' : 'good' },
+      { label:'รายจ่ายเล็ก', value:b.microSpendTotal, tone:b.microSpendTotal > ctx.monthly.expense * .2 ? 'warn' : 'info' },
+      { label:'ยืดหยุ่น', value:discretionary, tone:discretionary > 45 ? 'warn' : 'good' },
+      { label:'ร้านซ้ำ', value:merchantTotal, tone:merchantTotal > 0 ? 'info' : 'good' },
+    ]
+    const max = Math.max(1, ...bars.map(x => Math.abs(Number(x.value || 0))))
+    return `<div class="card card-pad finance-visual-card finance-mb-md">
+      <div class="finance-visual-head">
+        <div>
+          <div class="finance-eyebrow">Behavior</div>
+          <div class="finance-headline">${esc(guide.archetype?.label || 'ภาพรวมพฤติกรรม')}</div>
+          <div class="finance-visual-copy">${esc(guide.topLever || learning?.profile?.focusLabel || 'รักษาจังหวะใช้เงินให้คงที่')}</div>
+        </div>
+        ${App._financePill(learning?.confidence?.label || 'กำลังเรียนรู้', learning?.confidence?.tone || 'info')}
+      </div>
+      <div class="finance-behavior-bars">
+        ${bars.map(x => `<div class="is-${esc(x.tone)}">
+          <span>${esc(x.label)}</span>
+          <b>${x.label === 'วันหยุด' || x.label === 'ยืดหยุ่น' ? `${Math.max(0, Math.round(x.value))}%` : fmt(x.value)}</b>
+          <i style="height:${Math.max(10, Math.abs(Number(x.value || 0)) / max * 100)}%"></i>
+        </div>`).join('')}
+      </div>
+      <div class="finance-insight-row">
+        <div><small>หมวดเด่น</small><b>${esc(b.topCategory?.label || b.topCategory?.name || 'ยังไม่ชัด')}</b></div>
+        <div><small>ร้านที่เจอบ่อย</small><b>${esc(b.mostFrequentMerchant?.[0] || 'ยังไม่ชัด')}</b></div>
+      </div>
+    </div>`
+  }
+
+  App._financeGoalBoard = function(plans = []) {
+    const first = plans[0] || {}
+    const total = (first.allocation || []).reduce((s, a) => s + Number(a.amount || 0), 0)
+    return `<div class="card card-pad finance-visual-card finance-mb-md">
+      <div class="finance-visual-head">
+        <div>
+          <div class="finance-eyebrow">Goal Plan</div>
+          <div class="finance-headline">${esc(first.name || 'แผนจัดสรรเงิน')}</div>
+          <div class="finance-visual-copy">${total > 0 ? `แบ่งเงินรวม ${fmt(total)}` : 'เพิ่มเป้าหมายเพื่อเริ่มจัดสรร'}</div>
+        </div>
+        ${App._financePill(plans.length ? `${plans.length} แผน` : 'รอข้อมูล', plans.length ? 'info' : 'warn')}
+      </div>
+      ${first.allocation?.length ? `${App._financeSplitBar(first.allocation.map((a, idx) => ({
+        label:a.goalName,
+        value:a.amount,
+        color:['var(--primary)', 'var(--income)', '#0891B2', '#D97706', '#7C3AED'][idx % 5],
+      })))}
+      <div class="finance-goal-lanes">
+        ${first.allocation.slice(0, 5).map((a, idx) => `<div>
+          <span>${idx + 1}</span>
+          <b>${esc(a.goalName)}</b>
+          <strong>${fmt(a.amount)}</strong>
+        </div>`).join('')}
+      </div>` : App._financeEmptyVisual('🎯', 'ยังไม่มีเป้าหมายให้จัดสรร', 'เพิ่มเป้าหมายก่อน แล้วระบบจะวาดแผนให้')}
+    </div>`
+  }
+
   App._financeAssumptionEditor = function(ctx, forecast) {
     return `<div class="card card-pad finance-mb-md finance-assumption-card">
       <div class="finance-section-title">ลองปรับตัวเลขดู</div>
@@ -16436,7 +16555,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <div class="finance-headline">${esc(weekly.title || 'ยังไม่มีรีวิวสัปดาห์')}</div>
           <div class="finance-action">${esc(weekly.body || '')}</div>
         </div>
-        <span class="chip">${esc(weekly.focus || 'ดูภาพรวม')}</span>
+        ${App._financePill(weekly.focus || 'ดูภาพรวม', 'info')}
       </div>
       <div class="finance-brief-points">
         ${(weekly.highlights || []).slice(0, 3).map(x => `<span>${esc(x)}</span>`).join('')}
@@ -16453,7 +16572,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <div class="finance-headline">${esc(monthlyClose.title || 'รีวิวก่อนปิดเดือน')}</div>
           <div class="finance-action">${esc(monthlyClose.body || '')}</div>
         </div>
-        <span class="chip">Grade ${esc(monthlyClose.healthGrade || '-')}</span>
+        ${App._financePill(`Grade ${monthlyClose.healthGrade || '-'}`, 'info')}
       </div>
       <div class="finance-check-list">
         ${rows.map(r => `<div class="finance-check-item${r.done ? ' is-done' : ''}">
@@ -16603,7 +16722,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div>
           <div class="finance-eyebrow">ภาพรวมวันนี้</div>
           <div class="finance-headline">${esc(status.headline)}</div>
-          <div class="finance-action">ดูเงินปลายเดือน เรื่องที่ควรระวัง และสิ่งที่ควรเริ่มก่อน</div>
+          <div class="finance-action">สรุปสั้น ๆ ว่าเงินยังไหวไหม</div>
         </div>
         <span class="finance-status-pill is-${status.tone}">${esc(status.label)}</span>
       </div>
@@ -16630,7 +16749,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <span>${esc(next.body || (rec.score ? `แผนนี้เหมาะ ${Math.round(rec.score)}/100` : 'ยังไม่มีเรื่องเร่งด่วน'))}</span>
       </div>
       <div class="finance-summary-foot">
-        <span>คำแนะนำเฉพาะคุณ ${Math.round(learning.learningScore || 0)}/100</span>
+        <span>เรียนรู้จากคุณ ${Math.round(learning.learningScore || 0)}/100</span>
         <span>โฟกัส ${esc(learning.profile?.focusLabel || 'เงินสด')}</span>
       </div>
     </div>`
@@ -16638,10 +16757,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   App.openAskMyMoney = function() {
     const presets = [
-      'ตอนนี้ควรกังวลอะไร','เงินพอถึงสิ้นเดือนไหม','อีก 14 วันต้องจ่ายอะไร',
-      'เงินสำรองฉุกเฉินพอไหม','หมวดไหนเสี่ยงเกินงบ','เป้าหมายไหนตามไม่ทัน',
-      'คะแนนสุขภาพการเงิน','พฤติกรรมการเงิน','แผนอัตโนมัติประจำเดือน','เหตุการณ์เดือนนี้','สรุปภาพรวม',
-      'การเงินร่วม','ลองสถานการณ์','ช่วยทำอะไรได้บ้าง',
+      'เงินพอถึงสิ้นเดือนไหม','ควรระวังอะไร','หมวดไหนเสี่ยง','เป้าหมายไหนตามไม่ทัน',
+      'พฤติกรรมการเงิน','ลองสถานการณ์','การเงินร่วม','ช่วยทำอะไรได้บ้าง',
     ]
     App.openSubScreen(`
       <div class="sub-header">
@@ -16655,8 +16772,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             onkeydown="if(event.key==='Enter')App.submitAskQuery()">
           <button id="ask-submit-btn" class="btn btn-primary ask-submit-btn" onclick="App.submitAskQuery()" style="padding:10px 16px;white-space:nowrap;min-width:60px"><span>ถาม</span></button>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
-          ${presets.map(p => `<button class="chip" onclick="App._askPreset(${esc(JSON.stringify(p))})" style="font-size:12px;padding:5px 10px">${esc(p)}</button>`).join('')}
+        <div class="finance-prompt-grid">
+          ${presets.map(p => `<button onclick="App._askPreset(${esc(JSON.stringify(p))})">${esc(p)}</button>`).join('')}
         </div>
         <div id="ask-answer-box">
           <div style="text-align:center;padding:24px 0;color:var(--muted);font-size:13px">เลือกคำถามด้านบน หรือพิมพ์คำถามของคุณ</div>
@@ -16708,9 +16825,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <div style="font-size:18px;font-weight:700;margin-top:4px">${esc(guide.archetype.label)}</div>
           <div style="font-size:13px;color:var(--muted);margin-top:6px">คันโยกหลักตอนนี้: ${esc(guide.topLever)}</div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-            <span class="chip">เงินสำรอง ${Math.round(guide.scorecard.resilience)}</span>
-            <span class="chip">วินัยใช้จ่าย ${Math.round(guide.scorecard.discipline)}</span>
-            <span class="chip">เป้าหมาย ${Math.round(guide.scorecard.goalReadiness)}</span>
+            ${App._financePill(`เงินสำรอง ${Math.round(guide.scorecard.resilience)}`, 'good')}
+            ${App._financePill(`วินัย ${Math.round(guide.scorecard.discipline)}`, 'primary')}
+            ${App._financePill(`เป้าหมาย ${Math.round(guide.scorecard.goalReadiness)}`, 'info')}
           </div>
         </div>
         <div class="card card-pad">
@@ -16766,22 +16883,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         </div>
         ${App._financeCockpitPanel({ ctx, brief, forecast, learning, decision })}
         ${mode === 'today' ? `
-          <div class="card card-pad finance-mb-md finance-quiet-card finance-ring-card">
-            ${App._financeRing(healthTotal, 100, 'health', `เงินสิ้นเดือน ${fmt(projectedCash)} · งบคงเหลือ ${fmt(brief.today.remainingBudget)}`, healthTone)}
-            ${App._financeExplainPanel(forecastTrace)}
-          </div>
-          <div class="card card-pad finance-mb-md finance-quiet-card finance-cash-detail-card">
-            <div class="finance-muted-row" style="align-items:flex-end;margin-bottom:10px">
-              <div><div style="font-size:12px;color:var(--muted)">เงินสิ้นเดือนคาดการณ์</div><div style="font-size:22px;font-weight:700;color:${cashTone}">${fmt(projectedCash)}</div></div>
-              <span class="chip">${projectedCash < 0 ? 'เสี่ยง' : projectedCash < cashMax*.2 ? 'บาง' : 'ปลอดภัย'}</span>
-            </div>
-            ${App._financeMeter(Math.max(0, projectedCash), cashMax, cashTone)}
-            <div style="font-size:12px;color:var(--muted);margin-top:8px">งบคงเหลือ ${fmt(brief.today.remainingBudget)}</div>
-          </div>
+          ${App._financeForecastBoard(ctx, brief, forecast, forecastTrace)}
           ${App._financeAssumptionEditor(ctx, forecast)}
-          <div class="card card-pad finance-quiet-card">
-            ${App._financeExplainPanel(forecastTrace, 'ทำไมถึงประเมินแบบนี้')}
-          </div>
           <div class="card card-pad finance-mb-md">
             <div class="finance-section-title">สิ่งที่ควรดูวันนี้</div>
             ${App._financeAlertRows(brief.alerts, 3)}
@@ -16792,7 +16895,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             ${App._financeCopilotActionQueue(brief)}
             ${brief.nextBestAction ? App._financeExplainPanel(brief.nextBestAction.explanation, 'เหตุผลของคำแนะนำ') : ''}
           </div>` : `
-          <div class="card card-pad finance-mb-md">
+          <div class="card card-pad finance-visual-card finance-mb-md">
             <div style="font-size:12px;color:var(--muted)">${esc(mlbl(month))}</div>
             ${App._financeSplitBar([
               { label:`รายรับ ${incomePct}%`, value:monthly.income, color:'var(--income)' },
@@ -16805,9 +16908,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             </div>
           </div>
           <div class="card card-pad">
-            <div class="finance-section-title">ดูรายละเอียดเดือนนี้</div>
-            <div style="font-size:13px;color:var(--muted);margin-bottom:12px">ถ้าต้องการ breakdown รายหมวด งบ และเป้าหมาย ให้เปิดรีวิวแบบเต็ม</div>
-            ${App._financeExplainPanel(forecastTrace)}
+            <div class="finance-section-title">รีวิวเต็ม</div>
+            <div class="finance-action finance-mb-md">ดูรายหมวด งบ และเป้าหมายแบบละเอียด</div>
             <button class="btn btn-secondary" onclick="App.openMonthlyReview()">เปิดสรุปรายเดือนแบบเต็ม</button>
           </div>
           ${App._financeMonthlyCloseChecklist(brief.monthlyClose)}`}
@@ -16855,17 +16957,24 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const hasGoalAllocations = plans.some(p => p.allocation?.length)
     App.openSubScreen(`
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>เปรียบเทียบแผนเป้าหมาย</h2></div>
-      <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('จัดสรรเป้าหมาย', 'เทียบหลายวิธีแบ่งเงิน', false, { icon:'⚖️', tone:'primary' })}
-        ${hasGoalAllocations ? plans.map((p, i) => `<div class="card card-pad" style="margin-bottom:12px">
-          <div class="finance-card-title"><span class="finance-page-cue">${i === 0 ? '🎯' : i === 1 ? '🛡️' : '⚖️'}</span><span>${esc(p.name)}</span></div>
-          <div style="margin-top:10px">${App._financeSplitBar(p.allocation.map((a, idx) => ({
-            label:a.goalName,
-            value:a.amount,
-            color:['var(--primary)', 'var(--income)', '#0891B2', '#D97706'][idx % 4],
-          })))}</div>
-          <div style="margin-top:8px">${p.allocation.map(a => `${esc(a.goalName)} ${fmt(a.amount)}`).join('<br>')}</div>
-        </div>`).join('') : `<div class="card card-pad">
+      <div class="sub-scroll finance-sub-scroll">
+        ${App._financeScreenIntro('จัดสรรเป้าหมาย', hasGoalAllocations ? 'เห็นภาพว่าเงินควรไปไหนก่อน' : 'เพิ่มเป้าหมายเพื่อเริ่มวางแผน', false, { icon:'⚖️', tone:'primary' })}
+        ${hasGoalAllocations ? `
+          ${App._financeGoalBoard(plans)}
+          <div class="finance-compare-grid">
+            ${plans.map((p, i) => `<div class="card card-pad finance-decision-card">
+              <div class="finance-card-title"><span class="finance-page-cue">${i === 0 ? '🎯' : i === 1 ? '🛡️' : '⚖️'}</span><span>${esc(p.name)}</span></div>
+              <div style="margin-top:10px">${App._financeSplitBar(p.allocation.map((a, idx) => ({
+                label:a.goalName,
+                value:a.amount,
+                color:['var(--primary)', 'var(--income)', '#0891B2', '#D97706'][idx % 4],
+              })))}</div>
+              <div class="finance-goal-mini-list">
+                ${p.allocation.slice(0, 4).map(a => `<span><b>${esc(a.goalName)}</b>${fmt(a.amount)}</span>`).join('')}
+              </div>
+            </div>`).join('')}
+          </div>
+        ` : `<div class="card card-pad">
           ${App._financeEmptyVisual('🎯', 'ยังไม่มีเป้าหมายให้จัดสรร', 'เพิ่มเป้าหมายก่อน แล้วระบบจะเทียบแผนให้')}
           <button class="btn btn-primary" style="margin-top:12px" onclick="App.openGoalsScreen()">เพิ่มเป้าหมาย</button>
         </div>`}
@@ -16927,10 +17036,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         </div>
         ${mode === 'decision' ? App._financeDecisionBoard(decision) : mode === 'try' ? `
           <div class="card card-pad">
-            <div class="finance-chip-wrap finance-mb-md">
-              <button class="chip" onclick="App.applyScenarioPreset('save')">ออมเพิ่ม 5,000</button>
-              <button class="chip" onclick="App.applyScenarioPreset('income')">รายรับเพิ่ม 10,000</button>
-              <button class="chip" onclick="App.applyScenarioPreset('purchase')">ซื้อของ 30,000</button>
+            <div class="finance-preset-grid finance-mb-md">
+              <button onclick="App.applyScenarioPreset('save')"><span>💰</span><b>ออมเพิ่ม</b><small>5,000</small></button>
+              <button onclick="App.applyScenarioPreset('income')"><span>📈</span><b>รายรับเพิ่ม</b><small>10,000</small></button>
+              <button onclick="App.applyScenarioPreset('purchase')"><span>🛒</span><b>ซื้อก้อนใหญ่</b><small>30,000</small></button>
             </div>
             <div class="finance-form-stack">
               <div class="form-group"><label class="form-label">รายรับเพิ่ม/ลด</label><input id="scenario-income" class="form-input" type="number" value="0" oninput="App.renderScenarioPreview()"></div>
@@ -16988,20 +17097,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ระบบช่วยคุณ</h2></div>
       <div class="sub-scroll finance-sub-scroll">
         ${App._financeScreenIntro('ปรับผู้ช่วยให้เข้ากับคุณ', `ตอนนี้คุณเป็น${esc(guide.archetype.label)}`, false, { icon:'🧭', tone:'primary' })}
-        <div class="card card-pad finance-mb-md">
-          <div class="finance-section-title">ภาพรวมที่ระบบเห็น</div>
-          ${[
-            ['เงินสำรอง', guide.scorecard.resilience, 'var(--income)'],
-            ['วินัยใช้จ่าย', guide.scorecard.discipline, 'var(--primary)'],
-            ['พร้อมทำเป้าหมาย', guide.scorecard.goalReadiness, '#0891B2'],
-          ].map(([label, value, color]) => `<div style="margin:10px 0">
-            <div class="finance-muted-row" style="font-size:12px;margin-bottom:5px"><b>${esc(label)}</b><span>${Math.round(value)}/100</span></div>
-            ${App._financeMeter(value, 100, color)}
-          </div>`).join('')}
-          ${App._financeExplainPanel(profileTrace, 'ทำไมได้โปรไฟล์นี้')}
-          ${topRecommendation ? App._financeExplainPanel(topRecommendation.explanation, 'ทำไมระบบเลือกโฟกัสนี้') : ''}
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+        ${App._financeBehaviorBoard(ctx, guide, learning)}
+        <div class="finance-mini-grid">
           ${App._financeMiniStat('เงินสำรอง', Math.round(guide.scorecard.resilience))}
           ${App._financeMiniStat('วินัยใช้จ่าย', Math.round(guide.scorecard.discipline))}
           ${App._financeMiniStat('เป้าหมาย', Math.round(guide.scorecard.goalReadiness))}
@@ -17130,7 +17227,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>แผนชีวิตระยะยาว</h2></div>
       <div class="sub-scroll finance-sub-scroll">
         ${App._financeScreenIntro('แปลงแผนใหญ่เป็นเงินออม', summary.feasible ? 'แผนรวมยังไหว' : `ยังขาด ${fmt(summary.gap)} ต่อเดือน`, false, { icon:'🗺️', tone: summary.feasible ? 'good' : 'warn' })}
-        <div class="card card-pad finance-mb-md">
+        <div class="card card-pad finance-visual-card finance-mb-md">
           ${App._financeRing(Math.min(summary.requiredMonthlyTotal, planCapacityMax), planCapacityMax, 'แผนรวม', `ต้องออม ${fmt(summary.requiredMonthlyTotal)} / เดือน · ทำได้ ${fmt(summary.availableMonthly)}`, summary.feasible ? 'var(--income)' : 'var(--expense)')}
           <div style="height:12px"></div>
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
@@ -17139,7 +17236,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
               <div style="font-size:22px;font-weight:700">${fmt(summary.requiredMonthlyTotal)}</div>
               <div style="font-size:12px;color:var(--muted)">กำลังออมได้ ${fmt(summary.availableMonthly)}</div>
             </div>
-            <span class="chip">${summary.feasible ? 'ทำได้' : 'ต้องจัดลำดับใหม่'}</span>
+            ${App._financePill(summary.feasible ? 'ทำได้' : 'ต้องจัดลำดับใหม่', summary.feasible ? 'good' : 'warn')}
           </div>
           <div style="margin-top:12px">${App._financeMeter(summary.requiredMonthlyTotal, planCapacityMax, summary.feasible ? 'var(--income)' : 'var(--expense)')}</div>
           ${summary.plans.length ? `<div class="finance-life-lanes" style="margin-top:14px">
@@ -17152,11 +17249,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         </div>
         <div class="card card-pad finance-mb-md">
           <div class="finance-section-title">เพิ่มแผนใหม่</div>
-          <div class="finance-chip-wrap finance-mb-md">
-            <button class="chip" onclick="App.prefillLifePlan('บ้านหลังแรก','home')">🏠 บ้าน</button>
-            <button class="chip" onclick="App.prefillLifePlan('รถคันใหม่','car')">🚗 รถ</button>
-            <button class="chip" onclick="App.prefillLifePlan('ทุนการศึกษา','education')">🎓 การศึกษา</button>
-            <button class="chip" onclick="App.prefillLifePlan('เกษียณ','retirement')">🌿 เกษียณ</button>
+          <div class="finance-template-grid finance-mb-md">
+            <button onclick="App.prefillLifePlan('บ้านหลังแรก','home')"><span>🏠</span><b>บ้าน</b></button>
+            <button onclick="App.prefillLifePlan('รถคันใหม่','car')"><span>🚗</span><b>รถ</b></button>
+            <button onclick="App.prefillLifePlan('ทุนการศึกษา','education')"><span>🎓</span><b>เรียน</b></button>
+            <button onclick="App.prefillLifePlan('เกษียณ','retirement')"><span>🌿</span><b>เกษียณ</b></button>
           </div>
           <div class="finance-form-stack">
             <div class="form-group"><input id="life-title" class="form-input" placeholder="เช่น บ้านหลังแรก"></div>
@@ -17172,7 +17269,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           ${summary.plans.length ? summary.plans.map(p => `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
             <div class="finance-muted-row">
               <div class="finance-card-title"><span class="finance-page-cue">${App._financeLifeIcon(p.type)}</span><b>${esc(p.title)}</b></div>
-              <button class="chip" onclick="App.deleteLifePlan('${esc(p.id)}')">ลบ</button>
+              <button class="finance-icon-action" onclick="App.deleteLifePlan('${esc(p.id)}')" aria-label="ลบแผน">ลบ</button>
             </div>
             <div style="margin-top:8px">${App._financeMeter(p.currentAmount, Math.max(1, p.targetAmount), 'var(--primary)')}</div>
             <div style="font-size:12px;color:var(--muted);margin-top:4px">เหลือ ${fmt(p.remaining)} · ต้องออม ${p.requiredMonthly===null?'N/A':fmt(p.requiredMonthly)+'/เดือน'}</div>
@@ -17250,10 +17347,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="sub-scroll" style="padding:16px 16px 40px">
         ${App._financeScreenIntro('ลองก่อนตัดสินใจ', 'ดูผลต่อเงินสิ้นเดือนและความเสี่ยง', false, { icon:'🧪', tone:'primary' })}
         <div class="card card-pad">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-            <button class="chip" onclick="App.applyScenarioPreset('save')">ออมเพิ่ม 5,000</button>
-            <button class="chip" onclick="App.applyScenarioPreset('income')">รายรับเพิ่ม 10,000</button>
-            <button class="chip" onclick="App.applyScenarioPreset('purchase')">ซื้อของ 30,000</button>
+          <div class="finance-preset-grid finance-mb-md">
+            <button onclick="App.applyScenarioPreset('save')"><span>💰</span><b>ออมเพิ่ม</b><small>5,000</small></button>
+            <button onclick="App.applyScenarioPreset('income')"><span>📈</span><b>รายรับเพิ่ม</b><small>10,000</small></button>
+            <button onclick="App.applyScenarioPreset('purchase')"><span>🛒</span><b>ซื้อก้อนใหญ่</b><small>30,000</small></button>
           </div>
           <div class="form-group"><label class="form-label">รายรับเปลี่ยนแปลง</label><input id="scenario-income" class="form-input" type="number" value="0" oninput="App.renderScenarioPreview()"></div>
           <div class="form-group"><label class="form-label">รายจ่ายเปลี่ยนแปลง</label><input id="scenario-expense" class="form-input" type="number" value="0" oninput="App.renderScenarioPreview()"></div>

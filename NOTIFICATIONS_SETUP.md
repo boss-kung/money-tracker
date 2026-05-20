@@ -81,10 +81,16 @@ Each rule can set:
   - daily time
   - weekly days/time
   - one-time date/time
-  - no transaction today
-  - upcoming bill due
-  - credit card due
-  - stale backup
+  - no transaction today at a chosen time
+  - weekday-only time
+  - monthly day/time
+  - no transaction streak at a chosen time
+  - budget threshold at a chosen time
+  - recurring due today at a chosen time
+  - upcoming bill due at a chosen time
+  - credit card due at a chosen time
+  - privilege expiry at a chosen time
+  - stale backup at a chosen time
 - Action route:
   - dashboard
   - add transaction
@@ -98,3 +104,20 @@ Each rule can set:
 - Action button label.
 
 Rules are saved locally and synced to Supabase when Firebase/Supabase config is complete. Supabase calls `send-custom-notification-rules` every 15 minutes.
+
+Future rule ideas that fit the current snapshot/Supabase model:
+
+- Spending spike: notify when today's spending is above the user's daily average or above a configurable amount.
+- Category inactivity: notify when a selected category has no transaction for X days, useful for savings or habit goals.
+- Wallet low balance: notify when a selected wallet drops below a configured amount.
+- Goal progress: notify when a goal reaches X% funded, is behind schedule, or needs a recurring contribution.
+- Subscription renewal: notify X days before recurring subscriptions or annual fees.
+- Credit utilization: notify when a credit card reaches X% of its limit before the statement closes.
+
+Useful extra config:
+
+- Quiet hours and allowed weekdays per rule.
+- Max sends per day/week and cooldown after a rule fires.
+- Per-rule amount visibility override.
+- Category, wallet, merchant, or payment-channel filters.
+- Snooze duration and repeat-until-resolved behavior.

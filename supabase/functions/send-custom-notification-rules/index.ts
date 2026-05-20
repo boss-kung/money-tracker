@@ -87,16 +87,19 @@ function shouldSend(rule: RuleRow, snapshot: SnapshotRow | undefined, now = bang
     return Number(snapshot?.today_tx_count || 0) === 0 ? todayDedupe : ''
   }
   if (rule.trigger_type === 'upcoming_bill_due') {
+    if (!isInCurrentWindow(time, now.minutes)) return ''
     const daysBefore = Number(config.daysBefore ?? 1)
     const hasMatch = (snapshot?.upcoming_bills || []).some(item => Number(item.daysLeft) === daysBefore)
     return hasMatch ? `custom-rule:${rule.rule_id}:bill:${now.date}:${daysBefore}` : ''
   }
   if (rule.trigger_type === 'credit_card_due') {
+    if (!isInCurrentWindow(time, now.minutes)) return ''
     const daysBefore = Number(config.daysBefore ?? 1)
     const hasMatch = (snapshot?.credit_due || []).some(item => Number(item.daysLeft) === daysBefore)
     return hasMatch ? `custom-rule:${rule.rule_id}:credit:${now.date}:${daysBefore}` : ''
   }
   if (rule.trigger_type === 'backup_stale') {
+    if (!isInCurrentWindow(time, now.minutes)) return ''
     const staleDays = Math.max(1, Number(config.staleDays || 30))
     return daysSince(snapshot?.last_exported_at || null, now.date) >= staleDays
       ? `custom-rule:${rule.rule_id}:backup:${now.date}:${staleDays}`
@@ -133,6 +136,7 @@ function shouldSend(rule: RuleRow, snapshot: SnapshotRow | undefined, now = bang
       : ''
   }
   if (rule.trigger_type === 'privilege_expiry') {
+    if (!isInCurrentWindow(time, now.minutes)) return ''
     const daysBefore = Number(config.daysBefore ?? 3)
     const hasMatch = (snapshot?.privileges_expiring || []).some(p => Number(p.daysLeft) === daysBefore)
     return hasMatch ? `custom-rule:${rule.rule_id}:priv:${now.date}:${daysBefore}` : ''
