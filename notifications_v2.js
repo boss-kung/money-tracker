@@ -46,6 +46,28 @@
     }[triggerType] || 'dashboard'
   }
 
+  function validTriggerType(triggerType) {
+    return [
+      'daily_time',
+      'weekly_time',
+      'one_time',
+      'no_transaction_today',
+      'upcoming_bill_due',
+      'credit_card_due',
+      'backup_stale',
+      'monthly_time',
+      'weekday_only_time',
+      'no_tx_streak',
+      'budget_over',
+      'recurring_due_today',
+      'privilege_expiry',
+    ].includes(triggerType) ? triggerType : ''
+  }
+
+  function isSpecificNotificationTrigger(triggerType) {
+    return Boolean(defaultRouteForTrigger(triggerType) && defaultRouteForTrigger(triggerType) !== 'dashboard')
+  }
+
   function triggerDisplayName(triggerType) {
     return {
       daily_time: 'ทุกวัน',
@@ -428,11 +450,52 @@
     return [...(root?.querySelectorAll?.('input[name="nr-weekday"]:checked') || [])].map(input => input.value)
   }
 
+  function setNotificationRuleFormState(rule) {
+    const screen = document.getElementById('sub-screen')
+    if (!screen || !rule) return
+    screen.dataset.notificationRuleId = rule.id || ''
+    screen.dataset.notificationTriggerType = rule.triggerType || 'daily_time'
+    screen.dataset.notificationRoute = rule.route || defaultRouteForTrigger(rule.triggerType)
+  }
+
+  function resolveFormTriggerType(root, ruleId, existing) {
+    const domTrigger = validTriggerType(formFieldValue(root, 'nr-trigger', ''))
+    const datasetTrigger = validTriggerType(root?.dataset?.notificationTriggerType || '')
+    const draftTrigger = ruleId && S.notificationRuleDraft?.id === ruleId
+      ? validTriggerType(S.notificationRuleDraft?.triggerType || '')
+      : ''
+    const existingTrigger = validTriggerType(existing?.triggerType || '')
+    if (isSpecificNotificationTrigger(domTrigger)) return domTrigger
+    if (isSpecificNotificationTrigger(datasetTrigger)) return datasetTrigger
+    if (isSpecificNotificationTrigger(draftTrigger)) return draftTrigger
+    return domTrigger || datasetTrigger || draftTrigger || existingTrigger || 'daily_time'
+  }
+
+  function resolveFormRoute(root, triggerType, existing) {
+    const domRoute = formFieldValue(root, 'nr-route', '')
+    const datasetRoute = root?.dataset?.notificationRoute || ''
+    const draftRoute = S.notificationRuleDraft?.route || ''
+    let route = domRoute || datasetRoute || draftRoute || existing?.route || defaultRouteForTrigger(triggerType)
+    if (shouldUseTriggerDefaultRoute(route, triggerType)) route = defaultRouteForTrigger(triggerType)
+    return route || 'dashboard'
+  }
+
   async function syncCustomRules() {
     if (!isConfigured()) return false
+    const rules = getCustomRules()
+    try {
+      S.settings.notifications.lastRuleSyncPayload = rules.map(rule => ({
+        id: rule.id,
+        title: rule.title,
+        triggerType: rule.triggerType,
+        route: rule.route,
+        time: rule.triggerConfig?.time || '',
+      }))
+      localStorage.setItem('mt_notification_last_rule_sync_payload', JSON.stringify(S.settings.notifications.lastRuleSyncPayload))
+    } catch (_) {}
     const data = await callFunction('sync-notification-rules', {
       installId: getInstallId(),
-      rules: getCustomRules(),
+      rules,
       appVersion: window.MT_APP_VERSION || '',
     })
     try {
@@ -776,20 +839,22 @@
           ${existing ? `<button class="btn btn-outline mt-8" onclick="App.deleteNotificationRule('${esc(rule.id)}')">ลบกฎนี้</button>` : ''}
         </div>
       </div>`, { animate })
+    setNotificationRuleFormState(rule)
   }
 
   App.changeNotificationRuleTrigger = function(ruleId, triggerType) {
     const root = notificationRuleFormRoot()
-    const previousTriggerType = S.notificationRuleDraft?.triggerType || 'daily_time'
+    const nextTriggerType = validTriggerType(triggerType) || 'daily_time'
+    const previousTriggerType = S.notificationRuleDraft?.triggerType || root?.dataset?.notificationTriggerType || 'daily_time'
     const currentRoute = formFieldValue(root, 'nr-route', S.notificationRuleDraft?.route || 'dashboard')
     const current = normalizeCustomRule({
       ...(S.notificationRuleDraft || {}),
       id: ruleId,
       title: formFieldValue(root, 'nr-title', S.notificationRuleDraft?.title || ''),
       body: formFieldValue(root, 'nr-body', S.notificationRuleDraft?.body || ''),
-      route: shouldUseTriggerDefaultRoute(currentRoute, previousTriggerType) ? defaultRouteForTrigger(triggerType) : currentRoute,
+      route: shouldUseTriggerDefaultRoute(currentRoute, previousTriggerType) ? defaultRouteForTrigger(nextTriggerType) : currentRoute,
       actionLabel: formFieldValue(root, 'nr-action-label', S.notificationRuleDraft?.actionLabel || 'เปิดดู'),
-      triggerType,
+      triggerType: nextTriggerType,
       triggerConfig: {
         ...(S.notificationRuleDraft?.triggerConfig || {}),
         time: formFieldValue(root, 'nr-time', S.notificationRuleDraft?.triggerConfig?.time || '09:00'),
@@ -803,7 +868,8 @@
       },
     })
     S.notificationRuleDraft = current
-    App.openNotificationRuleForm(ruleId, triggerType, false)
+    setNotificationRuleFormState(current)
+    App.openNotificationRuleForm(ruleId, nextTriggerType, false)
   }
 
   App.saveNotificationRule = function(ruleId) {
@@ -811,11 +877,11 @@
     const prefs = ensureSettings()
     const rules = getCustomRules()
     const existing = rules.find(rule => rule.id === ruleId)
-    const triggerType = formFieldValue(root, 'nr-trigger', 'daily_time')
+    const triggerType = resolveFormTriggerType(root, ruleId, existing)
     const weekdays = selectedRuleWeekdays(root)
     const title = formFieldValue(root, 'nr-title', '')
     const body = formFieldValue(root, 'nr-body', '')
-    const route = formFieldValue(root, 'nr-route', defaultRouteForTrigger(triggerType))
+    const route = resolveFormRoute(root, triggerType, existing)
     const suggestedTrigger = suggestedSpecificTriggerFromText(title, body)
     const timeOnlyTriggers = ['daily_time', 'weekly_time', 'monthly_time', 'weekday_only_time', 'one_time']
     if (suggestedTrigger && timeOnlyTriggers.includes(triggerType) && ['dashboard', 'more'].includes(route)) {
