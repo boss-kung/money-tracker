@@ -29,6 +29,7 @@
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Bangkok',
       customRules: [],
       seededDefaultRuleV1: false,
+      routedByTriggerV1: false,
     }
   }
 
@@ -47,7 +48,16 @@
 
   function shouldUseTriggerDefaultRoute(route, triggerType = '') {
     if (!route) return true
+    if (route === 'dashboard' || route === 'more') return defaultRouteForTrigger(triggerType) !== 'dashboard'
     return route === defaultRouteForTrigger(triggerType)
+  }
+
+  function applyTriggerDefaultRoute(rule = {}) {
+    const normalized = normalizeCustomRule(rule)
+    const route = defaultRouteForTrigger(normalized.triggerType)
+    return route !== 'dashboard' && shouldUseTriggerDefaultRoute(normalized.route, normalized.triggerType)
+      ? { ...normalized, route }
+      : normalized
   }
 
   function defaultDailyExpenseRule() {
@@ -73,6 +83,17 @@
         S.settings.notifications.customRules = [defaultDailyExpenseRule()]
       }
       S.settings.notifications.seededDefaultRuleV1 = true
+      try { persist() } catch (_) {}
+    }
+    if (!S.settings.notifications.routedByTriggerV1) {
+      let changed = false
+      S.settings.notifications.customRules = S.settings.notifications.customRules.map(rule => {
+        const normalized = applyTriggerDefaultRoute(rule)
+        const routeChanged = String(rule?.route || '') !== normalized.route
+        if (routeChanged) changed = true
+        return routeChanged ? { ...normalized, updatedAt: new Date().toISOString() } : normalized
+      })
+      S.settings.notifications.routedByTriggerV1 = true
       try { persist() } catch (_) {}
     }
     return S.settings.notifications
@@ -323,7 +344,7 @@
 
   function getCustomRules() {
     const prefs = ensureSettings()
-    prefs.customRules = (prefs.customRules || []).map(normalizeCustomRule)
+    prefs.customRules = (prefs.customRules || []).map(applyTriggerDefaultRoute)
     return prefs.customRules
   }
 
