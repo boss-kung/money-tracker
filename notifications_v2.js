@@ -65,6 +65,14 @@
     return route === defaultRouteForTrigger(triggerType)
   }
 
+  function applyDefaultNotificationRuleRoute(rule = {}) {
+    const normalized = normalizeCustomRule(rule)
+    const route = defaultRouteForRule(normalized)
+    return route !== 'dashboard' && shouldUseTriggerDefaultRoute(normalized.route, normalized.triggerType)
+      ? { ...normalized, route }
+      : normalized
+  }
+
   function defaultDailyExpenseRule() {
     return normalizeCustomRule({
       id: 'default_daily_expense_2030',
@@ -93,9 +101,9 @@
     if (!S.settings.notifications.routedDefaultRuleV2) {
       let changed = false
       S.settings.notifications.customRules = S.settings.notifications.customRules.map(rule => {
-        const normalized = normalizeCustomRule(rule)
+        const normalized = applyDefaultNotificationRuleRoute(rule)
         const route = defaultRouteForRule(normalized)
-        if (route !== 'dashboard' && shouldUseTriggerDefaultRoute(normalized.route, normalized.triggerType)) {
+        if (normalized.route === route && String(rule?.route || 'dashboard') !== route) {
           changed = true
           return { ...normalized, route, updatedAt: new Date().toISOString() }
         }
@@ -353,7 +361,7 @@
 
   function getCustomRules() {
     const prefs = ensureSettings()
-    prefs.customRules = (prefs.customRules || []).map(normalizeCustomRule)
+    prefs.customRules = (prefs.customRules || []).map(applyDefaultNotificationRuleRoute)
     return prefs.customRules
   }
 
@@ -398,9 +406,10 @@
 
   async function syncCustomRules() {
     if (!isConfigured()) return false
+    const rules = getCustomRules().map(applyDefaultNotificationRuleRoute)
     await callFunction('sync-notification-rules', {
       installId: getInstallId(),
-      rules: getCustomRules(),
+      rules,
       appVersion: window.MT_APP_VERSION || '',
     })
     return true
@@ -774,13 +783,16 @@
     const existing = rules.find(rule => rule.id === ruleId)
     const triggerType = document.getElementById('nr-trigger')?.value || 'daily_time'
     const weekdays = [...document.querySelectorAll('input[name="nr-weekday"]:checked')].map(input => input.value)
-    const rule = normalizeCustomRule({
+    const title = document.getElementById('nr-title')?.value || ''
+    const body = document.getElementById('nr-body')?.value || ''
+    const selectedRoute = document.getElementById('nr-route')?.value || 'dashboard'
+    const rule = applyDefaultNotificationRuleRoute({
       ...(existing || {}),
       id: ruleId,
       enabled: existing?.enabled !== false,
-      title: document.getElementById('nr-title')?.value || '',
-      body: document.getElementById('nr-body')?.value || '',
-      route: document.getElementById('nr-route')?.value || 'dashboard',
+      title,
+      body,
+      route: selectedRoute,
       actionLabel: document.getElementById('nr-action-label')?.value || 'เปิดดู',
       triggerType,
       triggerConfig: {
