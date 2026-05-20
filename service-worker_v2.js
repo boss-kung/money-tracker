@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.05.20-r32'
+const APP_VERSION = '2026.05.20-r36'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 
@@ -8,6 +8,7 @@ const STATIC_ASSETS = [
   './style_v2.css',
   './app_v2.js',
   './storage_v2.js',
+  './app_lock.js',
   './calculations.js',
   './sample-data_v2.js',
   './ai_insights.js',

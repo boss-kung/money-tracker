@@ -8672,3 +8672,155 @@ details summary::marker {
     transition-duration: .001ms !important;
   }
 }
+
+/* App Lock: PWA privacy shield */
+#mt-app-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: none;
+  place-items: center;
+  padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, .78), rgba(15, 23, 42, .92)),
+    color-mix(in srgb, var(--primary) 18%, #0f172a);
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+}
+#mt-app-lock.open { display: grid; }
+.mt-app-lock-open #app {
+  filter: blur(12px);
+  transform: scale(.992);
+  pointer-events: none;
+  user-select: none;
+}
+#mt-app-lock.privacy-only .mt-lock-panel {
+  transform: scale(.96);
+  opacity: .94;
+}
+.mt-lock-panel {
+  width: min(100%, 390px);
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 22px;
+  padding: 24px;
+  color: #fff;
+  background: rgba(15, 23, 42, .62);
+  box-shadow: 0 28px 80px rgba(0,0,0,.36);
+}
+.mt-lock-brand {
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255,255,255,.74);
+  margin-bottom: 10px;
+}
+.mt-lock-panel h1 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+.mt-lock-panel p {
+  margin: 8px 0 18px;
+  color: rgba(255,255,255,.72);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.mt-lock-error {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #fecaca;
+  background: rgba(220, 38, 38, .18);
+  font-size: 13px;
+  font-weight: 700;
+}
+.mt-lock-dots {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 20px 0;
+}
+.mt-lock-dots span {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.42);
+  background: transparent;
+}
+.mt-lock-dots span.filled {
+  border-color: #fff;
+  background: #fff;
+}
+.mt-lock-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.mt-lock-keypad button {
+  min-height: 56px;
+  border: 0;
+  border-radius: 16px;
+  color: #fff;
+  background: rgba(255,255,255,.13);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 800;
+}
+.mt-lock-keypad button:active {
+  transform: scale(.97);
+  background: rgba(255,255,255,.22);
+}
+.mt-lock-keypad button.ghost {
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255,255,255,.78);
+}
+.mt-lock-form {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.mt-lock-form label {
+  color: rgba(255,255,255,.78);
+  font-size: 13px;
+  font-weight: 800;
+}
+.mt-lock-form .form-input {
+  color: var(--text);
+  background: var(--card);
+}
+.mt-lock-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.mt-lock-actions.stacked {
+  display: grid;
+}
+.mt-lock-actions .btn {
+  min-height: 46px;
+}
+.mt-lock-actions .danger {
+  color: var(--expense);
+}
+.mt-lock-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(255,255,255,.12);
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+.mt-lock-setting-row strong,
+.mt-lock-setting-row span {
+  display: block;
+}
+.mt-lock-setting-row strong {
+  font-size: 14px;
+}
+.mt-lock-setting-row span {
+  margin-top: 3px;
+  color: rgba(255,255,255,.68);
+  font-size: 12px;
+}

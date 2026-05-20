@@ -8,10 +8,6 @@
   const INSTALL_KEY = 'mt_notification_install_id'
   const PUSH_SUB_KEY = 'mt_notification_push_sub'
   const LAST_SYNC_KEY = 'mt_notification_last_snapshot_sync'
-  const RULE_SAVE_DEBUG_KEY = 'mt_notification_last_rule_save_debug'
-  const RULE_SYNC_PAYLOAD_KEY = 'mt_notification_last_rule_sync_payload'
-  const RULE_SYNC_RESPONSE_KEY = 'mt_notification_last_rule_sync_response'
-  const EXPECTED_RULE_SYNC_FUNCTION_VERSION = 'sync-notification-rules-2026.05.20-r32'
   const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch]))
 
   function notify(message, type = 'info') {
@@ -454,66 +450,6 @@
     return [...(root?.querySelectorAll?.('input[name="nr-weekday"]:checked') || [])].map(input => input.value)
   }
 
-  function compactRuleDebug(rule = {}) {
-    return {
-      id: rule.id || rule.rule_id || '',
-      title: rule.title || '',
-      triggerType: rule.triggerType || rule.trigger_type || '',
-      route: rule.route || '',
-      time: rule.triggerConfig?.time || rule.trigger_config?.time || '',
-      threshold: rule.triggerConfig?.threshold ?? rule.trigger_config?.threshold ?? '',
-    }
-  }
-
-  function rememberNotificationDebug(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)) } catch (_) {}
-    return value
-  }
-
-  function ruleSyncFunctionStatus(response = {}) {
-    const hasDebugShape = Array.isArray(response.received) && Array.isArray(response.routes)
-    const version = String(response.functionVersion || '')
-    return {
-      expected: EXPECTED_RULE_SYNC_FUNCTION_VERSION,
-      actual: version || 'missing',
-      hasDebugShape,
-      ok: hasDebugShape && version === EXPECTED_RULE_SYNC_FUNCTION_VERSION,
-      reason: !hasDebugShape
-        ? 'Edge Function response lacks received/routes, so Supabase is still running an older sync-notification-rules deployment.'
-        : version !== EXPECTED_RULE_SYNC_FUNCTION_VERSION
-          ? 'Edge Function response version does not match this app build.'
-          : 'Edge Function version matches this app build.',
-    }
-  }
-
-  function currentFormDebug(root, ruleId, existing, resolved = {}) {
-    const trigger = root?.querySelector?.('#nr-trigger')
-    const route = root?.querySelector?.('#nr-route')
-    return {
-      at: new Date().toISOString(),
-      appVersion: window.MT_APP_VERSION || '',
-      ruleId,
-      dom: {
-        triggerCount: root?.querySelectorAll?.('#nr-trigger')?.length ?? 0,
-        routeCount: root?.querySelectorAll?.('#nr-route')?.length ?? 0,
-        triggerValue: trigger?.value || '',
-        triggerSelectedIndex: trigger?.selectedIndex ?? null,
-        triggerSelectedText: trigger?.selectedOptions?.[0]?.textContent?.trim?.() || '',
-        routeValue: route?.value || '',
-        routeSelectedIndex: route?.selectedIndex ?? null,
-        routeSelectedText: route?.selectedOptions?.[0]?.textContent?.trim?.() || '',
-      },
-      dataset: {
-        triggerType: root?.dataset?.notificationTriggerType || '',
-        route: root?.dataset?.notificationRoute || '',
-        ruleId: root?.dataset?.notificationRuleId || '',
-      },
-      draft: compactRuleDebug(S.notificationRuleDraft || {}),
-      existing: compactRuleDebug(existing || {}),
-      resolved,
-    }
-  }
-
   function setNotificationRuleFormState(rule) {
     const screen = document.getElementById('sub-screen')
     if (!screen || !rule) return
@@ -547,37 +483,11 @@
   async function syncCustomRules() {
     if (!isConfigured()) return false
     const rules = getCustomRules()
-    try {
-      S.settings.notifications.lastRuleSyncPayload = rules.map(rule => ({
-        id: rule.id,
-        title: rule.title,
-        triggerType: rule.triggerType,
-        route: rule.route,
-        time: rule.triggerConfig?.time || '',
-      }))
-      rememberNotificationDebug(RULE_SYNC_PAYLOAD_KEY, {
-        at: new Date().toISOString(),
-        appVersion: window.MT_APP_VERSION || '',
-        installId: getInstallId(),
-        rules: S.settings.notifications.lastRuleSyncPayload,
-      })
-    } catch (_) {}
-    const data = await callFunction('sync-notification-rules', {
+    return callFunction('sync-notification-rules', {
       installId: getInstallId(),
       rules,
       appVersion: window.MT_APP_VERSION || '',
     })
-    try {
-      S.settings.notifications.lastRuleSyncRoutes = data.routes || []
-      rememberNotificationDebug(RULE_SYNC_RESPONSE_KEY, {
-        at: new Date().toISOString(),
-        appVersion: window.MT_APP_VERSION || '',
-        functionStatus: ruleSyncFunctionStatus(data),
-        response: data,
-      })
-      console.table?.(data.routes || [])
-    } catch (_) {}
-    return data
   }
 
   function routeLabel(route) {
@@ -730,37 +640,6 @@
       </div>`
   }
 
-  function readNotificationDebugKey(key) {
-    try { return JSON.parse(localStorage.getItem(key) || 'null') } catch (_) { return null }
-  }
-
-  async function buildNotificationDiagnostics() {
-    const cacheKeys = await caches?.keys?.().catch(() => []) || []
-    const registration = await navigator.serviceWorker?.getRegistration?.().catch(() => null)
-    const prefs = ensureSettings()
-    const lastSyncResponse = readNotificationDebugKey(RULE_SYNC_RESPONSE_KEY)
-    return {
-      at: new Date().toISOString(),
-      appVersion: window.MT_APP_VERSION || '',
-      location: location.href,
-      installId: getInstallId(),
-      notificationConfigured: isConfigured(),
-      serviceWorker: {
-        controller: navigator.serviceWorker?.controller?.scriptURL || '',
-        active: registration?.active?.scriptURL || '',
-        waiting: registration?.waiting?.scriptURL || '',
-        installing: registration?.installing?.scriptURL || '',
-      },
-      cacheKeys,
-      localRules: getCustomRules().map(compactRuleDebug),
-      rawCustomRules: (prefs.customRules || []).map(compactRuleDebug),
-      lastSaveDebug: readNotificationDebugKey(RULE_SAVE_DEBUG_KEY),
-      lastSyncPayload: readNotificationDebugKey(RULE_SYNC_PAYLOAD_KEY),
-      lastSyncResponse,
-      edgeFunctionStatus: ruleSyncFunctionStatus(lastSyncResponse?.response || {}),
-    }
-  }
-
   const previousRenderMore = App.renderMore?.bind(App)
   App.renderMore = function() {
     previousRenderMore?.()
@@ -814,7 +693,6 @@
         <div class="card card-pad" style="margin-bottom:12px;display:flex;gap:8px">
           <button class="btn btn-secondary btn-sm" onclick="App.syncAllNotificationData()" style="width:auto">ซิงค์การแจ้งเตือน</button>
           <button class="btn btn-secondary btn-sm" onclick="App.testLocalNotification()" style="width:auto">ทดสอบในเครื่อง</button>
-          <button class="btn btn-secondary btn-sm" onclick="App.openNotificationRuleDiagnostics()" style="width:auto">วิเคราะห์ Sync</button>
         </div>
         <div class="card"><div style="padding:0 16px">${rows || App._emptyState?.('🔔','ยังไม่มีกฎแจ้งเตือน','สร้างกฎเพื่อกำหนดข้อความ เงื่อนไข และปลายทางเอง') || ''}</div></div>
       </div>`, { animate })
@@ -991,14 +869,6 @@
     const route = resolveFormRoute(root, triggerType, existing)
     const suggestedTrigger = suggestedSpecificTriggerFromText(title, body)
     const timeOnlyTriggers = ['daily_time', 'weekly_time', 'monthly_time', 'weekday_only_time', 'one_time']
-    const saveDebug = currentFormDebug(root, ruleId, existing, {
-      triggerType,
-      route,
-      title,
-      body,
-      suggestedTrigger,
-    })
-    rememberNotificationDebug(RULE_SAVE_DEBUG_KEY, { ...saveDebug, stage: 'before_validation' })
     if (suggestedTrigger && timeOnlyTriggers.includes(triggerType) && ['dashboard', 'more'].includes(route)) {
       return notify(`กฎนี้ดูเหมือน “${triggerDisplayName(suggestedTrigger)}” แต่ Trigger ยังเป็น “${triggerDisplayName(triggerType)}” กรุณาเปลี่ยน Trigger หรือเลือกหน้าเปิดเองก่อนบันทึก`, 'warn')
     }
@@ -1025,11 +895,6 @@
       updatedAt: new Date().toISOString(),
     })
     if (!rule.title) return notify('กรุณากรอกหัวข้อการแจ้งเตือน', 'error')
-    rememberNotificationDebug(RULE_SAVE_DEBUG_KEY, {
-      ...saveDebug,
-      stage: 'saved_local_rule',
-      savedRule: compactRuleDebug(rule),
-    })
     const idx = rules.findIndex(item => item.id === rule.id)
     if (idx >= 0) rules[idx] = rule
     else rules.unshift(rule)
@@ -1037,27 +902,8 @@
     persist()
     S.notificationRuleDraft = null
     syncCustomRules().catch(() => {})
-    notify(`บันทึกกฎแจ้งเตือนแล้ว (${rule.triggerType}:${rule.route})`, 'success')
+    notify('บันทึกกฎแจ้งเตือนแล้ว', 'success')
     App.openCustomNotificationRulesScreen()
-  }
-
-  App.openNotificationRuleDiagnostics = async function() {
-    const diagnostics = await buildNotificationDiagnostics()
-    App.openSubScreen(`
-      <div class="sub-header">
-        <button class="btn-icon" onclick="App.openCustomNotificationRulesScreen()">←</button>
-        <h2>วิเคราะห์ Sync</h2>
-        <button class="btn btn-secondary btn-sm" onclick="App.syncAllNotificationData()" style="width:auto">Sync ใหม่</button>
-      </div>
-      <div class="sub-scroll">
-        <div class="card card-pad" style="margin-bottom:12px">
-          <div class="list-item-name">อ่านจากบนลงล่าง</div>
-          <div class="list-item-sub">ถ้า savedRule เป็น budget_over:budgets แต่ syncResponse เป็น daily_time:dashboard แปลว่าพังฝั่ง Edge/Supabase หรือ deploy function ยังไม่อัปเดต ถ้า savedRule เป็น daily_time:dashboard แปลว่าพังตอนอ่าน/บันทึกฟอร์ม</div>
-        </div>
-        <div class="card card-pad">
-          <pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;line-height:1.5;margin:0">${esc(JSON.stringify(diagnostics, null, 2))}</pre>
-        </div>
-      </div>`, { animate: true })
   }
 
   App.toggleNotificationRule = function(ruleId) {
@@ -1094,18 +940,7 @@
       syncSnapshot({ force: true }),
       syncCustomRules(),
     ])
-      .then(([, rulesResult]) => {
-        const routes = Array.isArray(rulesResult?.routes) ? rulesResult.routes : []
-        const functionStatus = ruleSyncFunctionStatus(rulesResult || {})
-        if (!functionStatus.ok) {
-          notify(`ซิงค์แล้ว แต่ Edge Function ยังไม่ใช่เวอร์ชันล่าสุด: ${functionStatus.actual}`, 'warn')
-          return
-        }
-        const routeSummary = routes.length
-          ? ` · ${routes.map(row => `${row.triggerType}:${row.route}`).join(', ')}`
-          : ''
-        notify(`ซิงค์การแจ้งเตือนแล้ว${routeSummary}`, 'success')
-      })
+      .then(() => notify('ซิงค์การแจ้งเตือนแล้ว', 'success'))
       .catch(err => notify(err.message || 'ซิงค์ไม่สำเร็จ', 'error'))
   }
 

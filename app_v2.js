@@ -877,7 +877,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.20-r32'
+const APP_VERSION = '2026.05.20-r36'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -952,8 +952,14 @@ let S = {
   deleteConfirm: false,
 }
 
+let MT_STORAGE_HYDRATED = false
+
 // ── Persist ──────────────────────────────────────────────────
 function persist() {
+  if (!MT_STORAGE_HYDRATED) {
+    console.warn('[Money Tracker] persist skipped before storage hydration')
+    return false
+  }
   try { App._beforePersistV50?.() } catch (_) {}
   try { App._beforePersistV40?.() } catch (_) {}
   try { App.ensurePrivilegesState?.() } catch (_) {}
@@ -1633,6 +1639,7 @@ function init() {
   S.rewardLedger       = data.rewardLedger       || []
   S.netWorthSnapshots  = data.netWorthSnapshots  || []
   S.investmentSnapshots = data.investmentSnapshots || []
+  MT_STORAGE_HYDRATED = true
 
   S.settings ||= {}
   S.settings.storageMeta ||= {}
@@ -1734,7 +1741,11 @@ function init() {
   setupConnectivityWatch()
 }
 
-init()
+if (window.MTAppLock && typeof window.MTAppLock.start === 'function') {
+  window.MTAppLock.start(init)
+} else {
+  init()
+}
 
 /* ============================================================
    Shared UI + Form Foundations
@@ -19743,6 +19754,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const lastSaved = meta.lastSavedAt ? new Date(meta.lastSavedAt).toLocaleString('th-TH') : 'ยังไม่บันทึก'
     const lastExport = meta.lastExportedAt ? new Date(meta.lastExportedAt).toLocaleString('th-TH') : 'ยังไม่เคย Export'
     const ACCENTS = ['#2563EB', '#7C3AED', '#DC2626', '#059669', '#D97706', '#0891B2', '#BE185D', '#374151']
+    const lockStatus = window.MTAppLock?.status?.() || { supported: false, enabled: false, lockOnBackground: true }
 
     function row ({ icon, label, desc = '', value = '', badge = '', onclick = '', danger = false, toggle = '' }) {
       const sideValue = value || badge
@@ -19826,6 +19838,17 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <input type="file" id="import-file-v5b" accept=".json" style="display:none" onchange="App.importData(this)">
         ${row({ icon: '🧯', label: 'กู้คืน Backup ก่อน Import', onclick: 'App.restorePreImportBackup?.()' })}
         <div class="settings-row"><div class="s-icon">💾</div><div class="s-label">สถานะข้อมูล<br><div class="s-value" style="font-weight:400;text-align:left !important">บันทึกเมื่อ: ${esc(lastSaved)}<br>Export ข้อมูล: ${esc(lastExport)}</div></div></div>
+      </div>
+      <div class="sec-title">ความปลอดภัย</div>
+      <div class="card card-pad">
+        ${row({
+          icon: '🔒',
+          label: 'App Lock',
+          desc: lockStatus.supported ? 'ล็อกก่อนเข้าแอปและตอนกลับเข้า PWA' : 'ต้องใช้ HTTPS/PWA ที่รองรับ Web Crypto',
+          value: lockStatus.enabled ? 'เปิดอยู่' : 'ปิดอยู่',
+          onclick: 'MTAppLock.openSettings()'
+        })}
+        ${lockStatus.enabled ? row({ icon: '🛡️', label: 'ล็อกแอปตอนนี้', desc: 'ปิดบังข้อมูลทันที', onclick: 'MTAppLock.lockNow()' }) : ''}
       </div>
       <div class="sec-title">การแสดงผล</div>
       <div class="card card-pad">
