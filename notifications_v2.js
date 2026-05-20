@@ -389,12 +389,16 @@
 
   async function syncCustomRules() {
     if (!isConfigured()) return false
-    await callFunction('sync-notification-rules', {
+    const data = await callFunction('sync-notification-rules', {
       installId: getInstallId(),
       rules: getCustomRules(),
       appVersion: window.MT_APP_VERSION || '',
     })
-    return true
+    try {
+      S.settings.notifications.lastRuleSyncRoutes = data.routes || []
+      console.table?.(data.routes || [])
+    } catch (_) {}
+    return data
   }
 
   function routeLabel(route) {
@@ -833,7 +837,13 @@
       syncSnapshot({ force: true }),
       syncCustomRules(),
     ])
-      .then(() => notify('ซิงค์การแจ้งเตือนแล้ว', 'success'))
+      .then(([, rulesResult]) => {
+        const routes = Array.isArray(rulesResult?.routes) ? rulesResult.routes : []
+        const routeSummary = routes.length
+          ? ` · ${routes.map(row => `${row.triggerType}:${row.route}`).join(', ')}`
+          : ''
+        notify(`ซิงค์การแจ้งเตือนแล้ว${routeSummary}`, 'success')
+      })
       .catch(err => notify(err.message || 'ซิงค์ไม่สำเร็จ', 'error'))
   }
 

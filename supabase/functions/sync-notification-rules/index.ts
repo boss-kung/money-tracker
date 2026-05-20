@@ -61,6 +61,12 @@ function defaultRouteForTrigger(triggerType: string) {
   return routes[triggerType] || 'dashboard'
 }
 
+function shouldUseTriggerDefaultRoute(route: string, triggerType: string) {
+  if (!route) return true
+  if (route === 'dashboard' || route === 'more') return defaultRouteForTrigger(triggerType) !== 'dashboard'
+  return false
+}
+
 function normalizeRule(rule: CustomRule, installId: string, appVersion = '') {
   const id = cleanText(rule.id, 80) || crypto.randomUUID()
   const title = cleanText(rule.title, 120)
@@ -71,6 +77,9 @@ function normalizeRule(rule: CustomRule, installId: string, appVersion = '') {
   const route = VALID_ROUTES.has(String(rule.route || ''))
     ? String(rule.route)
     : defaultRouteForTrigger(triggerType)
+  const resolvedRoute = shouldUseTriggerDefaultRoute(route, triggerType)
+    ? defaultRouteForTrigger(triggerType)
+    : route
 
   return {
     install_id: installId,
@@ -78,7 +87,7 @@ function normalizeRule(rule: CustomRule, installId: string, appVersion = '') {
     enabled: rule.enabled !== false,
     title,
     body: cleanText(rule.body, 240),
-    route,
+    route: resolvedRoute,
     action_label: cleanText(rule.actionLabel, 40) || 'เปิดแอป',
     trigger_type: triggerType,
     trigger_config: rule.triggerConfig && typeof rule.triggerConfig === 'object' ? rule.triggerConfig : {},
@@ -98,9 +107,9 @@ Deno.serve(async req => {
     if (!installId) return jsonResponse({ error: 'installId is required' }, 400)
 
     const rules = Array.isArray(body.rules) ? body.rules : []
-    const rows = rules
+    const rows: Array<NonNullable<ReturnType<typeof normalizeRule>>> = rules
       .map((rule: CustomRule) => normalizeRule(rule, installId, cleanText(body.appVersion, 80)))
-      .filter(Boolean)
+      .filter((row: ReturnType<typeof normalizeRule>): row is NonNullable<ReturnType<typeof normalizeRule>> => Boolean(row))
 
     const supabase = adminClient()
     const { error: deleteError } = await supabase
@@ -116,7 +125,16 @@ Deno.serve(async req => {
       if (error) throw error
     }
 
-    return jsonResponse({ ok: true, synced: rows.length })
+    return jsonResponse({
+      ok: true,
+      synced: rows.length,
+      routes: rows.map(row => ({
+        ruleId: row?.rule_id,
+        title: row?.title,
+        triggerType: row?.trigger_type,
+        route: row?.route,
+      })),
+    })
   } catch (error) {
     return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, 500)
   }
