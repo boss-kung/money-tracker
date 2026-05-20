@@ -30,6 +30,7 @@
       customRules: [],
       seededDefaultRuleV1: false,
       routedDefaultRuleV1: false,
+      routedDefaultRuleV2: false,
     }
   }
 
@@ -44,6 +45,18 @@
       backup_stale: 'more',
       no_tx_streak: 'addTx',
     }[triggerType] || 'dashboard'
+  }
+
+  function defaultRouteForRule(rule = {}) {
+    const triggerRoute = defaultRouteForTrigger(rule.triggerType)
+    if (triggerRoute !== 'dashboard') return triggerRoute
+    const text = `${rule.title || ''} ${rule.body || ''}`.toLowerCase()
+    if (/งบ|budget/.test(text)) return 'budgets'
+    if (/สิทธิ|privilege|voucher|คูปอง/.test(text)) return 'privileges'
+    if (/บัตรเครดิต|credit/.test(text)) return 'creditCards'
+    if (/บิล|รอจ่าย|bill|due/.test(text)) return 'upcomingBills'
+    if (/ประจำ|recurring/.test(text)) return 'recurring'
+    return 'dashboard'
   }
 
   function shouldUseTriggerDefaultRoute(route, triggerType = '') {
@@ -77,11 +90,11 @@
       S.settings.notifications.seededDefaultRuleV1 = true
       try { persist() } catch (_) {}
     }
-    if (!S.settings.notifications.routedDefaultRuleV1) {
+    if (!S.settings.notifications.routedDefaultRuleV2) {
       let changed = false
       S.settings.notifications.customRules = S.settings.notifications.customRules.map(rule => {
         const normalized = normalizeCustomRule(rule)
-        const route = defaultRouteForTrigger(normalized.triggerType)
+        const route = defaultRouteForRule(normalized)
         if (route !== 'dashboard' && shouldUseTriggerDefaultRoute(normalized.route, normalized.triggerType)) {
           changed = true
           return { ...normalized, route, updatedAt: new Date().toISOString() }
@@ -89,6 +102,7 @@
         return normalized
       })
       S.settings.notifications.routedDefaultRuleV1 = true
+      S.settings.notifications.routedDefaultRuleV2 = true
       try { persist() } catch (_) {}
     }
     return S.settings.notifications
