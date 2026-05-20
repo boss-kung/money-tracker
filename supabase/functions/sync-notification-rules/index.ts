@@ -61,24 +61,6 @@ function defaultRouteForTrigger(triggerType: string) {
   return routes[triggerType] || 'dashboard'
 }
 
-function defaultRouteForRule(rule: CustomRule, triggerType: string) {
-  const triggerRoute = defaultRouteForTrigger(triggerType)
-  if (triggerRoute !== 'dashboard') return triggerRoute
-  const text = `${rule.title || ''} ${rule.body || ''}`.toLowerCase()
-  if (/งบ|budget/.test(text)) return 'budgets'
-  if (/สิทธิ|privilege|voucher|คูปอง/.test(text)) return 'privileges'
-  if (/บัตรเครดิต|credit/.test(text)) return 'creditCards'
-  if (/บิล|รอจ่าย|bill|due/.test(text)) return 'upcomingBills'
-  if (/ประจำ|recurring/.test(text)) return 'recurring'
-  return 'dashboard'
-}
-
-function shouldUseDefaultRoute(route: string, triggerType: string) {
-  if (!route) return true
-  if (route === 'dashboard' || route === 'more') return true
-  return route === defaultRouteForTrigger(triggerType)
-}
-
 function normalizeRule(rule: CustomRule, installId: string, appVersion = '') {
   const id = cleanText(rule.id, 80) || crypto.randomUUID()
   const title = cleanText(rule.title, 120)
@@ -88,10 +70,7 @@ function normalizeRule(rule: CustomRule, installId: string, appVersion = '') {
     : 'daily_time'
   const route = VALID_ROUTES.has(String(rule.route || ''))
     ? String(rule.route)
-    : 'dashboard'
-  const resolvedRoute = shouldUseDefaultRoute(route, triggerType)
-    ? defaultRouteForRule(rule, triggerType)
-    : route
+    : defaultRouteForTrigger(triggerType)
 
   return {
     install_id: installId,
@@ -99,7 +78,7 @@ function normalizeRule(rule: CustomRule, installId: string, appVersion = '') {
     enabled: rule.enabled !== false,
     title,
     body: cleanText(rule.body, 240),
-    route: VALID_ROUTES.has(resolvedRoute) ? resolvedRoute : 'dashboard',
+    route,
     action_label: cleanText(rule.actionLabel, 40) || 'เปิดแอป',
     trigger_type: triggerType,
     trigger_config: rule.triggerConfig && typeof rule.triggerConfig === 'object' ? rule.triggerConfig : {},

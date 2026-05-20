@@ -29,8 +29,6 @@
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Bangkok',
       customRules: [],
       seededDefaultRuleV1: false,
-      routedDefaultRuleV1: false,
-      routedDefaultRuleV2: false,
     }
   }
 
@@ -47,30 +45,9 @@
     }[triggerType] || 'dashboard'
   }
 
-  function defaultRouteForRule(rule = {}) {
-    const triggerRoute = defaultRouteForTrigger(rule.triggerType)
-    if (triggerRoute !== 'dashboard') return triggerRoute
-    const text = `${rule.title || ''} ${rule.body || ''}`.toLowerCase()
-    if (/งบ|budget/.test(text)) return 'budgets'
-    if (/สิทธิ|privilege|voucher|คูปอง/.test(text)) return 'privileges'
-    if (/บัตรเครดิต|credit/.test(text)) return 'creditCards'
-    if (/บิล|รอจ่าย|bill|due/.test(text)) return 'upcomingBills'
-    if (/ประจำ|recurring/.test(text)) return 'recurring'
-    return 'dashboard'
-  }
-
   function shouldUseTriggerDefaultRoute(route, triggerType = '') {
     if (!route) return true
-    if (route === 'dashboard' || route === 'more') return true
     return route === defaultRouteForTrigger(triggerType)
-  }
-
-  function applyDefaultNotificationRuleRoute(rule = {}) {
-    const normalized = normalizeCustomRule(rule)
-    const route = defaultRouteForRule(normalized)
-    return route !== 'dashboard' && shouldUseTriggerDefaultRoute(normalized.route, normalized.triggerType)
-      ? { ...normalized, route }
-      : normalized
   }
 
   function defaultDailyExpenseRule() {
@@ -96,21 +73,6 @@
         S.settings.notifications.customRules = [defaultDailyExpenseRule()]
       }
       S.settings.notifications.seededDefaultRuleV1 = true
-      try { persist() } catch (_) {}
-    }
-    if (!S.settings.notifications.routedDefaultRuleV2) {
-      let changed = false
-      S.settings.notifications.customRules = S.settings.notifications.customRules.map(rule => {
-        const normalized = applyDefaultNotificationRuleRoute(rule)
-        const route = defaultRouteForRule(normalized)
-        if (normalized.route === route && String(rule?.route || 'dashboard') !== route) {
-          changed = true
-          return { ...normalized, route, updatedAt: new Date().toISOString() }
-        }
-        return normalized
-      })
-      S.settings.notifications.routedDefaultRuleV1 = true
-      S.settings.notifications.routedDefaultRuleV2 = true
       try { persist() } catch (_) {}
     }
     return S.settings.notifications
@@ -361,7 +323,7 @@
 
   function getCustomRules() {
     const prefs = ensureSettings()
-    prefs.customRules = (prefs.customRules || []).map(applyDefaultNotificationRuleRoute)
+    prefs.customRules = (prefs.customRules || []).map(normalizeCustomRule)
     return prefs.customRules
   }
 
@@ -406,10 +368,9 @@
 
   async function syncCustomRules() {
     if (!isConfigured()) return false
-    const rules = getCustomRules().map(applyDefaultNotificationRuleRoute)
     await callFunction('sync-notification-rules', {
       installId: getInstallId(),
-      rules,
+      rules: getCustomRules(),
       appVersion: window.MT_APP_VERSION || '',
     })
     return true
@@ -783,16 +744,13 @@
     const existing = rules.find(rule => rule.id === ruleId)
     const triggerType = document.getElementById('nr-trigger')?.value || 'daily_time'
     const weekdays = [...document.querySelectorAll('input[name="nr-weekday"]:checked')].map(input => input.value)
-    const title = document.getElementById('nr-title')?.value || ''
-    const body = document.getElementById('nr-body')?.value || ''
-    const selectedRoute = document.getElementById('nr-route')?.value || 'dashboard'
-    const rule = applyDefaultNotificationRuleRoute({
+    const rule = normalizeCustomRule({
       ...(existing || {}),
       id: ruleId,
       enabled: existing?.enabled !== false,
-      title,
-      body,
-      route: selectedRoute,
+      title: document.getElementById('nr-title')?.value || '',
+      body: document.getElementById('nr-body')?.value || '',
+      route: document.getElementById('nr-route')?.value || defaultRouteForTrigger(triggerType),
       actionLabel: document.getElementById('nr-action-label')?.value || 'เปิดดู',
       triggerType,
       triggerConfig: {
