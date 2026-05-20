@@ -17,6 +17,9 @@
   let unlocked = false
   let enteredPin = ''
   let mode = 'idle'
+  let overlayCloseTimer = null
+  let biometricAutoInFlight = false
+  let biometricAutoLastAt = 0
 
   function now() { return Date.now() }
   function esc(value) {
@@ -133,10 +136,23 @@
   }
   function setOverlay(open, privacyOnly = false) {
     const overlay = ensureOverlay()
-    overlay.classList.toggle('open', !!open)
-    overlay.classList.toggle('privacy-only', !!privacyOnly)
-    document.documentElement.classList.toggle('mt-app-lock-open', !!open)
-    document.body.classList.toggle('mt-app-lock-open', !!open)
+    clearTimeout(overlayCloseTimer)
+    if (open) {
+      overlay.classList.remove('unlocking')
+      overlay.classList.add('open', 'locking')
+      overlay.classList.toggle('privacy-only', !!privacyOnly)
+      document.documentElement.classList.add('mt-app-lock-open')
+      document.body.classList.add('mt-app-lock-open')
+      setTimeout(() => overlay.classList.remove('locking'), 280)
+      return
+    }
+    overlay.classList.remove('locking', 'privacy-only')
+    overlay.classList.add('unlocking')
+    overlayCloseTimer = setTimeout(() => {
+      overlay.classList.remove('open', 'unlocking')
+      document.documentElement.classList.remove('mt-app-lock-open')
+      document.body.classList.remove('mt-app-lock-open')
+    }, 260)
   }
   function keypadHtml() {
     const config = readConfig()
@@ -150,19 +166,21 @@
         <button type="button" class="ghost" onpointerdown="MTAppLock.backspaceFromPointer(event)">ลบ</button>
       </div>`
   }
-  function renderUnlock(message = '') {
+  function renderUnlock(message = '', opts = {}) {
     mode = 'unlock'
     enteredPin = ''
     const config = readConfig()
     const lockedUntil = Number(config?.lockedUntil || 0)
     const waitSec = Math.ceil(Math.max(0, lockedUntil - now()) / 1000)
+    const canUseBiometric = !!(config?.biometric?.enabled && config?.biometric?.credentialId && hasWebAuthn())
     const panel = ensureOverlay().querySelector('.mt-lock-panel')
     panel.innerHTML = `<div class="mt-lock-brand">Money Tracker</div>
-      <h1>ปลดล็อกแอป</h1>
-      <p>${waitSec > 0 ? `ลองใหม่ได้อีก ${waitSec} วินาที` : 'ใส่รหัสเพื่อดูข้อมูลการเงินของคุณ'}</p>
+      <h1>ล็อกอยู่</h1>
+      <p>${waitSec > 0 ? `รอ ${waitSec} วินาที` : (canUseBiometric ? 'กำลังยืนยันตัวตน' : 'ใส่รหัสเพื่อเข้าแอป')}</p>
       ${message ? `<div class="mt-lock-error">${esc(message)}</div>` : ''}
       ${keypadHtml()}`
     setOverlay(true, false)
+    if (opts.auto !== false) queueAutoBiometric(config)
   }
   function renderSetup() {
     mode = 'setup'
@@ -313,6 +331,18 @@
     if (bytesToBase64(credential.rawId) !== bio.credentialId) throw new Error('biometric credential ไม่ตรงกับอุปกรณ์นี้')
     return true
   }
+  function queueAutoBiometric(config) {
+    const bio = config?.biometric || {}
+    if (!bio.enabled || !bio.credentialId || bio.auto === false) return
+    if (!hasWebAuthn() || document.visibilityState !== 'visible') return
+    if (biometricAutoInFlight || (now() - biometricAutoLastAt) < 1600) return
+    biometricAutoInFlight = true
+    biometricAutoLastAt = now()
+    setTimeout(() => {
+      window.MTAppLock?.unlockWithBiometric?.({ auto: true })
+        .finally(() => { biometricAutoInFlight = false })
+    }, 280)
+  }
   function lockForPrivacy() {
     const config = readConfig()
     if (!config?.enabled || config.lockOnBackground === false) return
@@ -426,7 +456,10 @@
         }
         return unlockSuccess(nextConfig, 'biometric')
       } catch (err) {
-        renderUnlock(err?.name === 'NotAllowedError' ? 'ยกเลิก biometric แล้ว ใช้ PIN ได้เสมอ' : (err?.message || 'ใช้ biometric ไม่สำเร็จ'))
+        const message = err?.name === 'NotAllowedError'
+          ? 'ใช้รหัสแทนได้'
+          : (err?.message || 'ใช้ biometric ไม่สำเร็จ')
+        renderUnlock(message, { auto: false })
         return false
       }
     },

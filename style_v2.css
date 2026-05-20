@@ -8688,6 +8688,13 @@ details summary::marker {
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
 }
 #mt-app-lock.open { display: grid; }
+#mt-app-lock.locking {
+  animation: mt-lock-backdrop-in .22s ease-out both;
+}
+#mt-app-lock.unlocking {
+  display: grid;
+  animation: mt-lock-backdrop-out .24s ease-in both;
+}
 .mt-app-lock-open #app {
   filter: blur(12px);
   transform: scale(.992);
@@ -8704,8 +8711,13 @@ details summary::marker {
   border-radius: 22px;
   padding: 24px;
   color: #fff;
+  text-align: center;
   background: rgba(15, 23, 42, .62);
   box-shadow: 0 28px 80px rgba(0,0,0,.36);
+  animation: mt-lock-panel-in .26s cubic-bezier(.2,.8,.2,1) both;
+}
+#mt-app-lock.unlocking .mt-lock-panel {
+  animation: mt-lock-panel-out .2s ease-in both;
 }
 .mt-lock-brand {
   font-size: 13px;
@@ -8797,6 +8809,7 @@ details summary::marker {
   display: grid;
   gap: 8px;
   margin: 16px 0;
+  text-align: left;
 }
 .mt-lock-form label {
   color: rgba(255,255,255,.78);
@@ -8822,6 +8835,7 @@ details summary::marker {
   color: var(--expense);
 }
 .mt-lock-setting-row {
+  text-align: left;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -8841,4 +8855,33 @@ details summary::marker {
   margin-top: 3px;
   color: rgba(255,255,255,.68);
   font-size: 12px;
+}
+
+@keyframes mt-lock-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes mt-lock-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes mt-lock-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes mt-lock-panel-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(.97);
+  }
 }
