@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.05.20-r23'
+const APP_VERSION = '2026.05.20-r24'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 
@@ -115,8 +115,11 @@ function routeHash(route = '') {
     reports: '#reports',
     more: '#more',
     upcomingBills: '#more?open=upcomingBills',
-    creditCards: '#wallets',
+    creditCards: '#wallets?open=creditCards',
     goals: '#more?open=goals',
+    recurring: '#more?open=recurring',
+    budgets: '#more?open=budgets',
+    privileges: '#more?open=privileges',
     open: '#dashboard',
   }
   return map[route] || '#dashboard'

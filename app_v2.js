@@ -1531,6 +1531,9 @@ function setupServiceWorkerUpdates() {
       more: 'more',
       upcomingBills: 'more',
       goals: 'more',
+      recurring: 'more',
+      budgets: 'more',
+      privileges: 'more',
       open: 'dashboard',
     }
     const page = pageMap[route] || 'dashboard'
@@ -1539,7 +1542,11 @@ function setupServiceWorkerUpdates() {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (route === 'upcomingBills') App.openUpcomingBillsScreen?.()
       else if (route === 'goals') App.openGoalsScreen?.()
+      else if (route === 'recurring') App.openRecurringScreen?.()
+      else if (route === 'budgets') App.openBudgetScreen?.()
+      else if (route === 'privileges') App.openPrivilegesScreen?.()
       else if (route === 'addTx') App.openAddTx?.()
+      else if (route === 'creditCards') App._scrollToWalletSection?.('wallet-anchor-credits')
     }))
   })
 
@@ -1715,7 +1722,11 @@ function init() {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (_initOpen === 'upcomingBills') App.openUpcomingBillsScreen?.()
       else if (_initOpen === 'goals') App.openGoalsScreen?.()
+      else if (_initOpen === 'recurring') App.openRecurringScreen?.()
+      else if (_initOpen === 'budgets') App.openBudgetScreen?.()
+      else if (_initOpen === 'privileges') App.openPrivilegesScreen?.()
       else if (_initOpen === 'addTx') App.openAddTx?.()
+      else if (_initOpen === 'creditCards') App._scrollToWalletSection?.('wallet-anchor-credits')
     }))
   }
 
