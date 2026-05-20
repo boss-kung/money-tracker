@@ -8751,12 +8751,30 @@ details summary::marker {
   border-color: #fff;
   background: #fff;
 }
+.mt-lock-biometric-btn {
+  width: 100%;
+  min-height: 46px;
+  margin: 0 0 14px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 14px;
+  color: #fff;
+  background: rgba(255,255,255,.12);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+}
+.mt-lock-biometric-btn:active {
+  transform: scale(.98);
+  background: rgba(255,255,255,.2);
+}
 .mt-lock-keypad {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 .mt-lock-keypad button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   min-height: 56px;
   border: 0;
   border-radius: 16px;

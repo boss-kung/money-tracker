@@ -33,6 +33,7 @@
   if (!shouldLockZoom) return
 
   function cancelZoomEvent(event){
+    if (event.target?.closest?.('#mt-app-lock')) return false
     if (event.cancelable !== false) event.preventDefault()
     event.stopPropagation?.()
     event.stopImmediatePropagation?.()
@@ -877,7 +878,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.20-r36'
+const APP_VERSION = '2026.05.20-r38'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================

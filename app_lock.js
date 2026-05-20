@@ -42,6 +42,28 @@
     for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i)
     return out
   }
+  function randomBytes(length = 32) {
+    const bytes = new Uint8Array(length)
+    crypto.getRandomValues(bytes)
+    return bytes
+  }
+  function hasWebAuthn() {
+    return !!(
+      window.isSecureContext &&
+      window.PublicKeyCredential &&
+      navigator.credentials?.create &&
+      navigator.credentials?.get
+    )
+  }
+  async function hasPlatformAuthenticator() {
+    if (!hasWebAuthn()) return false
+    try {
+      if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') return true
+      return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+    } catch (_) {
+      return false
+    }
+  }
   function randomSalt() {
     const bytes = new Uint8Array(16)
     crypto.getRandomValues(bytes)
@@ -82,6 +104,7 @@
       lockTimeoutMs: 0,
       failureCount: 0,
       lockedUntil: 0,
+      biometric: { enabled: false },
       ...config,
       updatedAt: new Date().toISOString(),
     }))
@@ -93,6 +116,8 @@
       enabled: !!config?.enabled,
       lockOnBackground: config?.lockOnBackground !== false,
       lockTimeoutMs: Number(config?.lockTimeoutMs || 0),
+      biometricSupported: hasWebAuthn(),
+      biometricEnabled: !!(config?.biometric?.enabled && config?.biometric?.credentialId),
       locked: !!config?.enabled && !unlocked,
     }
   }
@@ -114,12 +139,15 @@
     document.body.classList.toggle('mt-app-lock-open', !!open)
   }
   function keypadHtml() {
+    const config = readConfig()
+    const canUseBiometric = !!(config?.biometric?.enabled && config?.biometric?.credentialId && hasWebAuthn())
     return `<div class="mt-lock-dots" aria-hidden="true">${Array.from({ length: MIN_PIN_LENGTH }).map((_, i) => `<span class="${enteredPin.length > i ? 'filled' : ''}"></span>`).join('')}</div>
+      ${canUseBiometric ? `<button class="mt-lock-biometric-btn" type="button" onclick="MTAppLock.unlockWithBiometric()">ใช้ Face ID / Touch ID</button>` : ''}
       <div class="mt-lock-keypad">
-        ${[1,2,3,4,5,6,7,8,9].map(n => `<button type="button" onclick="MTAppLock.press('${n}')">${n}</button>`).join('')}
-        <button type="button" class="ghost" onclick="MTAppLock.cancel()">ยกเลิก</button>
-        <button type="button" onclick="MTAppLock.press('0')">0</button>
-        <button type="button" class="ghost" onclick="MTAppLock.backspace()">ลบ</button>
+        ${[1,2,3,4,5,6,7,8,9].map(n => `<button type="button" onpointerdown="MTAppLock.pressFromPointer(event,'${n}')">${n}</button>`).join('')}
+        <button type="button" class="ghost" onpointerdown="MTAppLock.cancelFromPointer(event)">ยกเลิก</button>
+        <button type="button" onpointerdown="MTAppLock.pressFromPointer(event,'0')">0</button>
+        <button type="button" class="ghost" onpointerdown="MTAppLock.backspaceFromPointer(event)">ลบ</button>
       </div>`
   }
   function renderUnlock(message = '') {
@@ -158,6 +186,8 @@
   function renderSettings() {
     const config = readConfig()
     const enabled = !!config?.enabled
+    const biometricEnabled = !!(config?.biometric?.enabled && config?.biometric?.credentialId)
+    const biometricSupported = hasWebAuthn()
     const panel = ensureOverlay().querySelector('.mt-lock-panel')
     panel.innerHTML = `<div class="mt-lock-brand">ความปลอดภัย</div>
       <h1>App Lock</h1>
@@ -166,6 +196,10 @@
         <div><strong>ล็อกเมื่อออกจากแอป</strong><span>เหมาะกับ PWA และ app switcher</span></div>
         <button class="toggle${config?.lockOnBackground !== false ? ' on' : ''}" type="button" onclick="MTAppLock.toggleBackgroundLock()"></button>
       </div>
+      ${enabled ? `<div class="mt-lock-setting-row">
+        <div><strong>Face ID / Touch ID</strong><span>${biometricSupported ? (biometricEnabled ? 'ใช้ปลดล็อกแทนการกด PIN บนอุปกรณ์นี้' : 'PIN ยังเป็นทางสำรองเสมอ') : 'ต้องเปิดผ่าน HTTPS หรือ PWA ที่รองรับ WebAuthn'}</span></div>
+        <button class="toggle${biometricEnabled ? ' on' : ''}" type="button" ${biometricSupported ? 'onclick="MTAppLock.toggleBiometric()"' : 'disabled'}></button>
+      </div>` : ''}
       <div class="mt-lock-actions stacked">
         ${enabled ? `<button class="btn btn-primary" type="button" onclick="MTAppLock.lockNow()">ล็อกตอนนี้</button>
           <button class="btn btn-secondary" type="button" onclick="MTAppLock.changePin()">เปลี่ยนรหัส</button>
@@ -183,6 +217,25 @@
       .map((_, i) => `<span class="${enteredPin.length > i ? 'filled' : ''}"></span>`)
       .join('')
   }
+  function unlockSuccess(config, method = 'pin') {
+    unlocked = true
+    enteredPin = ''
+    writeConfig({
+      ...config,
+      failureCount: 0,
+      lockedUntil: 0,
+      lastUnlockedAt: new Date().toISOString(),
+      lastUnlockMethod: method,
+    })
+    try { sessionStorage.setItem(SESSION_KEY, String(now())) } catch (_) {}
+    setOverlay(false)
+    try { if (typeof App !== 'undefined') App.renderMore?.() } catch (_) {}
+    if (!appStarted && typeof bootCallback === 'function') {
+      appStarted = true
+      bootCallback()
+    }
+    return true
+  }
   async function verifyEnteredPin() {
     const config = readConfig()
     if (!config?.enabled) return true
@@ -194,16 +247,7 @@
     try {
       const hash = await deriveHash(enteredPin, config.salt, config.iterations)
       if (safeEqual(hash, config.hash)) {
-        unlocked = true
-        enteredPin = ''
-        writeConfig({ ...config, failureCount: 0, lockedUntil: 0, lastUnlockedAt: new Date().toISOString() })
-        try { sessionStorage.setItem(SESSION_KEY, String(now())) } catch (_) {}
-        setOverlay(false)
-        if (!appStarted && typeof bootCallback === 'function') {
-          appStarted = true
-          bootCallback()
-        }
-        return true
+        return unlockSuccess(config, 'pin')
       }
     } catch (err) {
       renderUnlock(err?.message || 'ตรวจสอบรหัสไม่สำเร็จ')
@@ -214,6 +258,60 @@
     writeConfig({ ...config, failureCount: failures, lockedUntil: delay ? now() + delay : 0 })
     renderUnlock(delay ? `ใส่ผิด ${failures} ครั้ง กรุณารอสักครู่` : 'รหัสไม่ถูกต้อง')
     return false
+  }
+  async function createBiometricCredential(config) {
+    if (!config?.enabled) throw new Error('กรุณาเปิด App Lock ด้วย PIN ก่อน')
+    if (!await hasPlatformAuthenticator()) throw new Error('อุปกรณ์หรือเบราว์เซอร์นี้ยังไม่พร้อมใช้ biometric')
+    const userId = randomBytes(16)
+    const credential = await navigator.credentials.create({
+      publicKey: {
+        challenge: randomBytes(32),
+        rp: { name: 'Money Tracker' },
+        user: {
+          id: userId,
+          name: 'money-tracker-local-user',
+          displayName: 'Money Tracker',
+        },
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 },
+          { type: 'public-key', alg: -257 },
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          residentKey: 'preferred',
+          userVerification: 'required',
+        },
+        timeout: 60000,
+        attestation: 'none',
+      },
+    })
+    if (!credential?.rawId) throw new Error('สร้าง biometric credential ไม่สำเร็จ')
+    return {
+      enabled: true,
+      credentialId: bytesToBase64(credential.rawId),
+      userId: bytesToBase64(userId),
+      createdAt: new Date().toISOString(),
+      lastUsedAt: '',
+    }
+  }
+  async function verifyBiometricCredential(config) {
+    const bio = config?.biometric || {}
+    if (!bio.enabled || !bio.credentialId) throw new Error('ยังไม่ได้เปิด biometric')
+    if (!await hasPlatformAuthenticator()) throw new Error('อุปกรณ์หรือเบราว์เซอร์นี้ยังไม่พร้อมใช้ biometric')
+    const credential = await navigator.credentials.get({
+      publicKey: {
+        challenge: randomBytes(32),
+        allowCredentials: [{
+          type: 'public-key',
+          id: base64ToBytes(bio.credentialId),
+        }],
+        userVerification: 'required',
+        timeout: 60000,
+      },
+    })
+    if (!credential?.rawId) throw new Error('ยืนยัน biometric ไม่สำเร็จ')
+    if (bytesToBase64(credential.rawId) !== bio.credentialId) throw new Error('biometric credential ไม่ตรงกับอุปกรณ์นี้')
+    return true
   }
   function lockForPrivacy() {
     const config = readConfig()
@@ -293,6 +391,60 @@
       } catch (err) {
         notify(err?.message || 'เปิด App Lock ไม่สำเร็จ', 'error')
       }
+    },
+    async toggleBiometric() {
+      const config = readConfig()
+      if (!config?.enabled) return notify('กรุณาเปิด App Lock ด้วย PIN ก่อน', 'warn')
+      const enabled = !!(config.biometric?.enabled && config.biometric?.credentialId)
+      if (enabled) {
+        writeConfig({ ...config, biometric: { enabled: false, disabledAt: new Date().toISOString() } })
+        notify('ปิด Face ID / Touch ID แล้ว', 'success')
+        renderSettings()
+        try { if (typeof App !== 'undefined') App.renderMore?.() } catch (_) {}
+        return
+      }
+      try {
+        const biometric = await createBiometricCredential(config)
+        writeConfig({ ...config, biometric })
+        notify('เปิด Face ID / Touch ID แล้ว', 'success')
+        renderSettings()
+        try { if (typeof App !== 'undefined') App.renderMore?.() } catch (_) {}
+      } catch (err) {
+        notify(err?.message || 'เปิด biometric ไม่สำเร็จ', 'error')
+      }
+    },
+    async unlockWithBiometric() {
+      const config = readConfig()
+      try {
+        await verifyBiometricCredential(config)
+        const nextConfig = {
+          ...config,
+          biometric: {
+            ...(config?.biometric || {}),
+            lastUsedAt: new Date().toISOString(),
+          },
+        }
+        return unlockSuccess(nextConfig, 'biometric')
+      } catch (err) {
+        renderUnlock(err?.name === 'NotAllowedError' ? 'ยกเลิก biometric แล้ว ใช้ PIN ได้เสมอ' : (err?.message || 'ใช้ biometric ไม่สำเร็จ'))
+        return false
+      }
+    },
+    _consumeFastTap(event) {
+      event?.preventDefault?.()
+      event?.stopPropagation?.()
+    },
+    pressFromPointer(event, value) {
+      MTAppLock._consumeFastTap(event)
+      MTAppLock.press(value)
+    },
+    backspaceFromPointer(event) {
+      MTAppLock._consumeFastTap(event)
+      MTAppLock.backspace()
+    },
+    cancelFromPointer(event) {
+      MTAppLock._consumeFastTap(event)
+      MTAppLock.cancel()
     },
     press(value) {
       if (!readConfig()?.enabled) return
