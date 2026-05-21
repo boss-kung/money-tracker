@@ -2,6 +2,10 @@
   'use strict'
 
   if (!window.MT_DEMO_MODE || typeof App === 'undefined' || typeof S === 'undefined') return
+  if (!window.MT_DEMO_STORAGE_DISABLED) {
+    document.body.innerHTML = '<main style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:520px;margin:48px auto;padding:20px;line-height:1.55"><h1>Demo storage ถูกบล็อก</h1><p>Browser นี้ไม่ยอมแยก storage สำหรับ demo จึงหยุดโหลดเพื่อป้องกันข้อมูลจริง</p><p><a href="../rescue.html">เปิดหน้า Rescue</a> · <a href="../index.html">กลับแอปจริง</a></p></main>'
+    return
+  }
 
   const esc = App._esc || (s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))

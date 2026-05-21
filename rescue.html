@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Money Tracker Rescue</title>
+  <style>
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:#f8fafc; color:#0f172a; }
+    main { max-width:720px; margin:0 auto; padding:24px 16px 48px; }
+    h1 { font-size:24px; margin:0 0 8px; }
+    p { color:#475569; line-height:1.55; }
+    .card { background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:14px 0; box-shadow:0 8px 20px rgba(15,23,42,.06); }
+    button { border:0; border-radius:10px; padding:12px 14px; font-weight:800; background:#2563eb; color:white; width:100%; margin-top:10px; }
+    button.secondary { background:#e2e8f0; color:#0f172a; }
+    button.danger { background:#dc2626; }
+    code, pre { background:#f1f5f9; border-radius:8px; }
+    pre { white-space:pre-wrap; padding:12px; overflow:auto; font-size:12px; }
+    .ok { color:#059669; font-weight:800; }
+    .warn { color:#b45309; font-weight:800; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Money Tracker Rescue</h1>
+  <p>หน้านี้ช่วยตรวจ backup ใน browser storage และกู้ข้อมูลจริงกลับมา หากข้อมูล demo เผลอเขียนทับ key ของแอปจริง</p>
+  <div class="card">
+    <h2>สถานะตอนนี้</h2>
+    <pre id="status">กำลังตรวจ...</pre>
+    <button onclick="scan()">ตรวจอีกครั้ง</button>
+  </div>
+  <div class="card">
+    <h2>กู้คืน</h2>
+    <div id="restore-options"></div>
+  </div>
+  <div class="card">
+    <h2>เปิดแอป</h2>
+    <button class="secondary" onclick="location.href='index.html'">กลับแอปจริง</button>
+    <button class="secondary" onclick="location.href='demo/index.html'">เปิด Demo แบบแก้แล้ว</button>
+  </div>
+</main>
+<script>
+const APP_KEYS = [
+  'mt_transactions','mt_wallets','mt_categories','mt_budgets','mt_settings','mt_recurring',
+  'mt_upcoming_bills','mt_merchants','mt_cc_benefits','mt_cc_benefit_rules','mt_income_budgets',
+  'mt_market_prices','mt_reward_ledger','mt_net_worth_snapshots','mt_investment_snapshots',
+  'mt_credit_limit_groups','mt_reward_accounts','mt_crypto_assets','mt_crypto_holdings',
+  'mt_crypto_transactions','mt_crypto_sync_meta','mt_goals','mt_privileges',
+  'mt_credit_card_promo_searches','mt_credit_card_promotions','mt_split_bills','mt_split_people',
+  'mt_split_bill_draft','mt_migrations'
+]
+const FIELD_MAP = {
+  transactions:'mt_transactions', wallets:'mt_wallets', categories:'mt_categories', budgets:'mt_budgets',
+  settings:'mt_settings', recurring:'mt_recurring', upcomingBills:'mt_upcoming_bills', merchants:'mt_merchants',
+  ccBenefits:'mt_cc_benefits', ccBenefitRules:'mt_cc_benefit_rules', incomeBudgets:'mt_income_budgets',
+  marketPrices:'mt_market_prices', rewardLedger:'mt_reward_ledger', netWorthSnapshots:'mt_net_worth_snapshots',
+  investmentSnapshots:'mt_investment_snapshots', creditLimitGroups:'mt_credit_limit_groups',
+  rewardAccounts:'mt_reward_accounts', cryptoAssets:'mt_crypto_assets', cryptoHoldings:'mt_crypto_holdings',
+  cryptoTransactions:'mt_crypto_transactions', cryptoSyncMeta:'mt_crypto_sync_meta', goals:'mt_goals',
+  privileges:'mt_privileges', creditCardPromoSearches:'mt_credit_card_promo_searches',
+  creditCardPromotions:'mt_credit_card_promotions', splitBills:'mt_split_bills', splitPeople:'mt_split_people',
+  splitBillDraft:'mt_split_bill_draft', migrations:'mt_migrations'
+}
+function readJSON(key, fallback = null) {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : fallback
+  } catch (_) { return fallback }
+}
+function looksDemo() {
+  const wallets = readJSON('mt_wallets', [])
+  const txs = readJSON('mt_transactions', [])
+  const names = Array.isArray(wallets) ? wallets.map(w => w && w.id + ' ' + w.name).join(' ') : ''
+  return /demo_|SCB Main|KTC Cashback/.test(names) || (Array.isArray(txs) && txs.some(t => String(t?.id || '').startsWith('demo_') || String(t?.walletId || '').startsWith('demo_')))
+}
+function summarizePayload(payload) {
+  return {
+    exportedAt: payload?.exportedAt || payload?.createdAt || '',
+    appVersion: payload?.appVersion || '',
+    wallets: Array.isArray(payload?.wallets) ? payload.wallets.length : 0,
+    transactions: Array.isArray(payload?.transactions) ? payload.transactions.length : 0,
+    firstWallets: Array.isArray(payload?.wallets) ? payload.wallets.slice(0, 4).map(w => w?.name).join(', ') : '',
+  }
+}
+function candidates() {
+  const rows = []
+  const localRows = readJSON('mt_local_backup_snapshots', [])
+  if (Array.isArray(localRows)) {
+    localRows.forEach((row, index) => {
+      if (row?.payload) rows.push({ id:`local-${index}`, label:`Local backup: ${row.reason || 'backup'}`, payload:row.payload, summary:summarizePayload(row.payload) })
+    })
+  }
+  const preImport = readJSON('mt_pre_import_backup')
+  if (preImport) rows.push({ id:'pre-import', label:'Backup ก่อน Import ล่าสุด', payload:preImport, summary:summarizePayload(preImport) })
+  const preMigration = readJSON('mt_pre_migration_backup')
+  if (preMigration?.transactions || preMigration?.wallets) {
+    rows.push({
+      id:'pre-migration',
+      label:'Backup ก่อน migration (มีเฉพาะ transactions/wallets)',
+      payload:{ transactions:preMigration.transactions || [], wallets:preMigration.wallets || [] },
+      summary:summarizePayload(preMigration),
+      partial:true,
+    })
+  }
+  return rows
+}
+function restore(candidateId) {
+  const row = candidates().find(c => c.id === candidateId)
+  if (!row) return alert('ไม่พบ backup นี้')
+  if (!confirm(`กู้คืน "${row.label}" ?`)) return
+  localStorage.setItem(`mt_rescue_overwritten_${Date.now()}`, JSON.stringify(Object.fromEntries(APP_KEYS.map(k => [k, localStorage.getItem(k)]))))
+  if (row.partial) {
+    if (row.payload.transactions) localStorage.setItem('mt_transactions', JSON.stringify(row.payload.transactions))
+    if (row.payload.wallets) localStorage.setItem('mt_wallets', JSON.stringify(row.payload.wallets))
+  } else {
+    Object.entries(FIELD_MAP).forEach(([field, key]) => {
+      if (row.payload[field] !== undefined) localStorage.setItem(key, JSON.stringify(row.payload[field]))
+    })
+  }
+  localStorage.setItem('mt_rescue_restored_at', new Date().toISOString())
+  alert('กู้คืนแล้ว กำลังกลับแอปจริง')
+  location.href = 'index.html'
+}
+function scan() {
+  const wallets = readJSON('mt_wallets', [])
+  const txs = readJSON('mt_transactions', [])
+  const info = {
+    currentLooksLikeDemo: looksDemo(),
+    currentWallets: Array.isArray(wallets) ? wallets.map(w => w?.name).slice(0, 8) : [],
+    currentTransactions: Array.isArray(txs) ? txs.length : 0,
+    backupCandidates: candidates().map(c => ({ id:c.id, label:c.label, ...c.summary, partial:!!c.partial })),
+  }
+  document.getElementById('status').textContent = JSON.stringify(info, null, 2)
+  const options = candidates()
+  document.getElementById('restore-options').innerHTML = options.length
+    ? options.map(c => `<div class="card"><strong>${c.label}</strong><p>${c.summary.transactions} transactions · ${c.summary.wallets} wallets<br>${c.summary.firstWallets || ''}</p><button onclick="restore('${c.id}')">กู้คืนชุดนี้</button></div>`).join('')
+    : '<p class="warn">ยังไม่พบ backup อัตโนมัติใน localStorage ถ้าคุณเคย export JSON ไว้ ให้กลับไปใช้เมนูนำเข้าไฟล์ backup ในแอปจริง</p>'
+}
+scan()
+</script>
+</body>
+</html>
