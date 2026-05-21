@@ -19764,6 +19764,35 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     window.location.href = target.href
   }
 
+  App.openRescue = function () {
+    window.location.href = new URL('rescue.html', location.href).href
+  }
+
+  App._looksLikeDemoData = function () {
+    try {
+      const walletText = (S.wallets || []).map(w => `${w?.id || ''} ${w?.name || ''}`).join(' ')
+      return /demo_|SCB Main|KTC Cashback/.test(walletText)
+        || (S.transactions || []).some(t => String(t?.id || '').startsWith('demo_') || String(t?.walletId || '').startsWith('demo_'))
+    } catch (_) {
+      return false
+    }
+  }
+
+  App._showRescueBannerIfNeeded = function () {
+    if (window.MT_DEMO_MODE || !App._looksLikeDemoData?.()) return
+    if (document.getElementById('mt-rescue-banner')) return
+    const banner = document.createElement('div')
+    banner.id = 'mt-rescue-banner'
+    banner.style.cssText = 'position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 10px);z-index:9999;background:#fff7ed;color:#7c2d12;border:1px solid #fed7aa;border-radius:14px;padding:12px;box-shadow:0 12px 28px rgba(15,23,42,.18);font-size:13px;line-height:1.35'
+    banner.innerHTML = `<div style="font-weight:800;margin-bottom:4px">พบข้อมูล Demo ในแอปจริง</div>
+      <div>กด Rescue เพื่อกู้ข้อมูลจาก backup ในเครื่อง</div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button onclick="App.openRescue()" style="flex:1;border:0;border-radius:10px;background:#dc2626;color:white;font-weight:800;padding:10px">เปิด Rescue</button>
+        <button onclick="document.getElementById('mt-rescue-banner')?.remove()" style="border:0;border-radius:10px;background:#fed7aa;color:#7c2d12;font-weight:800;padding:10px 12px">ปิด</button>
+      </div>`
+    document.body.appendChild(banner)
+  }
+
   App._tapDemoEntry = function () {
     demoEntryTapCount += 1
     clearTimeout(demoEntryTapTimer)
@@ -19890,6 +19919,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>
       <div class="sec-title">ข้อมูล</div>
       <div class="card card-pad">
+        ${App._looksLikeDemoData?.() ? row({ icon: '🧯', label: 'Rescue / กู้ข้อมูลจริง', desc: 'ใช้เมื่อข้อมูล Demo ปนเข้าแอปจริง', value: 'ฉุกเฉิน', danger: true, onclick: 'App.openRescue()' }) : ''}
         ${row({ icon: '📤', label: 'ส่งออกข้อมูล (JSON)', onclick: 'App.exportData()' })}
         ${row({ icon: '📊', label: 'ส่งออก CSV', onclick: 'App.exportCSV()' })}
         ${row({ icon: '📥', label: 'นำเข้าข้อมูล (JSON)', value: 'Preview ก่อนนำเข้า', onclick: "document.getElementById('import-file-v5b').click()" })}
@@ -20145,6 +20175,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
   try { if (S.page === 'more') App.renderMore() } catch (_) {}
   try { if (S.page === 'dashboard') App.renderDashboard() } catch (_) {}
+  setTimeout(() => App._showRescueBannerIfNeeded?.(), 600)
 })()
 
 // ── Sheet swipe-to-dismiss ──────────────────────────────────────────────────
