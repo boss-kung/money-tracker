@@ -5329,20 +5329,26 @@ App._positionMerchantDropdown = function() {
   if (!inp || !dd || dd.classList.contains('hidden')) return
 
   const gap = 4
-  const viewportHeight = window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 0
+  const vv = window.visualViewport
+  const viewportTop = vv?.offsetTop || 0
+  const viewportHeight = vv?.height || window.innerHeight || document.documentElement.clientHeight || 0
+  const viewportBottom = viewportTop + viewportHeight
   const rect = inp.getBoundingClientRect()
   const desiredHeight = Math.min(dd.scrollHeight || 220, 220)
-  const aboveSpace = Math.max(0, rect.top - gap)
-  const belowSpace = Math.max(0, viewportHeight - rect.bottom - gap)
+  const aboveSpace = Math.max(0, rect.top - viewportTop - gap)
+  const belowSpace = Math.max(0, viewportBottom - rect.bottom - gap)
   const usableMinimum = Math.min(desiredHeight, 96)
   const placeAbove = aboveSpace >= usableMinimum || (aboveSpace > belowSpace && belowSpace < usableMinimum)
   const availableSpace = placeAbove ? aboveSpace : belowSpace
   const maxHeight = Math.max(72, Math.min(220, availableSpace))
+  const naturalTop = placeAbove ? rect.top - gap - maxHeight : rect.bottom + gap
+  const minTop = viewportTop + gap
+  const maxTop = Math.max(minTop, viewportBottom - gap - maxHeight)
 
   dd.classList.toggle('above', placeAbove)
   dd.classList.toggle('below', !placeAbove)
   dd.style.maxHeight = maxHeight + 'px'
-  dd.style.top = (placeAbove ? rect.top - gap - maxHeight : rect.bottom + gap) + 'px'
+  dd.style.top = Math.min(Math.max(naturalTop, minTop), maxTop) + 'px'
   dd.style.left = rect.left + 'px'
   dd.style.width = rect.width + 'px'
 }
