@@ -5311,6 +5311,10 @@ function ensureMerchantWrap(inp) {
 App._hideMerchantDropdown = function(applySuggestion = false) {
   const inp = document.getElementById('tx-merchant')
   document.getElementById('mt-merchant-dropdown')?.classList.add('hidden')
+  if (App._merchantDropdownPositionFrame) {
+    cancelAnimationFrame(App._merchantDropdownPositionFrame)
+    App._merchantDropdownPositionFrame = null
+  }
 
   if (applySuggestion && inp) {
     const typed = String(inp.value || '').trim()
@@ -5324,10 +5328,37 @@ App._positionMerchantDropdown = function() {
   const dd = document.getElementById('mt-merchant-dropdown')
   if (!inp || !dd || dd.classList.contains('hidden')) return
 
+  const gap = 4
+  const viewportHeight = window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 0
   const rect = inp.getBoundingClientRect()
-  dd.style.top = (rect.bottom + 4) + 'px'
+  const desiredHeight = Math.min(dd.scrollHeight || 220, 220)
+  const aboveSpace = Math.max(0, rect.top - gap)
+  const belowSpace = Math.max(0, viewportHeight - rect.bottom - gap)
+  const usableMinimum = Math.min(desiredHeight, 96)
+  const placeAbove = aboveSpace >= usableMinimum || (aboveSpace > belowSpace && belowSpace < usableMinimum)
+  const availableSpace = placeAbove ? aboveSpace : belowSpace
+  const maxHeight = Math.max(72, Math.min(220, availableSpace))
+
+  dd.classList.toggle('above', placeAbove)
+  dd.classList.toggle('below', !placeAbove)
+  dd.style.maxHeight = maxHeight + 'px'
+  dd.style.top = (placeAbove ? rect.top - gap - maxHeight : rect.bottom + gap) + 'px'
   dd.style.left = rect.left + 'px'
   dd.style.width = rect.width + 'px'
+}
+
+App._syncMerchantDropdownPosition = function() {
+  if (App._merchantDropdownPositionFrame) return
+  const tick = () => {
+    const dd = document.getElementById('mt-merchant-dropdown')
+    if (!dd || dd.classList.contains('hidden')) {
+      App._merchantDropdownPositionFrame = null
+      return
+    }
+    App._positionMerchantDropdown?.()
+    App._merchantDropdownPositionFrame = requestAnimationFrame(tick)
+  }
+  App._merchantDropdownPositionFrame = requestAnimationFrame(tick)
 }
 
 ;(function _bindMerchantDropdownPositioning() {
@@ -5452,6 +5483,7 @@ App._showMerchantDropdown = function(q = '') {
   dd.classList.toggle('hidden', !hasItems)
   if (hasItems) {
     App._positionMerchantDropdown()
+    App._syncMerchantDropdownPosition?.()
     requestAnimationFrame(() => App._positionMerchantDropdown())
   }
 }

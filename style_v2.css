@@ -3000,12 +3000,13 @@ body {
   border-radius: 16px;
   box-shadow: var(--shadow-md);
   z-index: 9999;
-  max-height: 220px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   touch-action: pan-y;
 }
+#mt-merchant-dropdown.above { transform-origin: bottom center; }
+#mt-merchant-dropdown.below { transform-origin: top center; }
 #mt-merchant-dropdown.hidden { display: none; }
 .mt-merchant-item {
   display: flex;
