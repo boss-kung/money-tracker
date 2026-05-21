@@ -471,6 +471,31 @@ select.form-input  { appearance: none; cursor: pointer; }
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: 12px center;
 }
+.search-field-wrap {
+  position: relative;
+  width: 100%;
+}
+.search-field-wrap .search-input,
+.search-field-wrap .more-search-input {
+  padding-right: 38px;
+}
+.search-clear-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.search-clear-btn[hidden] {
+  display: none;
+}
 
 /* Mobile refinement pass */
 .tx-action-grid {
@@ -2857,6 +2882,9 @@ label.color-swatch {
 }
 .more-search-input {
   width: 100%;
+}
+.more-search-wrap {
+  margin-bottom: 10px;
 }
 
 #more-content .sec-title {

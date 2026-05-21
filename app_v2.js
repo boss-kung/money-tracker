@@ -1444,6 +1444,11 @@ Object.assign(Calc, {
 
 Object.assign(App, {
   _ensureV2State() { S.recurring ||= []; S.upcomingBills ||= []; S.merchants ||= []; S.ccBenefits ||= {}; S.incomeBudgets ||= []; S.marketPrices ||= {}; S.privileges ||= [] },
+  _syncSearchClear(input) {
+    const wrap = input?.closest?.('.search-field-wrap, .tx-compact-search')
+    const clear = wrap?.querySelector?.('.search-clear-btn, .mt-search-clear')
+    if (clear) clear.hidden = !String(input?.value || '')
+  },
 
   toggleRecurring(id) { const r = S.recurring.find(x => x.id === id); if (r) r.paused = !r.paused; persist(); App.openRecurringScreen() },
 
@@ -1457,7 +1462,7 @@ Object.assign(App, {
       document.querySelectorAll('#sub-screen .segmented-tab').forEach(btn => btn.classList.toggle('active', btn.textContent.trim() === (type === 'expense' ? 'รายจ่าย' : 'รายรับ')))
       return
     }
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="segmented-tabs segmented-tabs-2"><button class="segmented-tab ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="segmented-tab ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${q}" oninput="App.openCategoryScreen('${type}', this.value)"><div class="card mt-12"><div id="cat-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="segmented-tabs segmented-tabs-2"><button class="segmented-tab ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="segmented-tab ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><div class="search-field-wrap"><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${esc(q)}" oninput="App._syncSearchClear(this); App.openCategoryScreen('${type}', this.value)"><button type="button" class="search-clear-btn" aria-label="ล้างการค้นหา"${q ? '' : ' hidden'} onclick="const input=this.parentElement.querySelector('input'); input.value=''; App._syncSearchClear(input); App.openCategoryScreen('${type}', ''); input.focus()">×</button></div><div class="card mt-12"><div id="cat-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
   },
   saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { App._showFieldError('cat-name', 'กรุณากรอกชื่อหมวดหมู่'); return } const _cErr = _fieldTooLong(label, FIELD_MAX.label, 'ชื่อหมวดหมู่'); if (_cErr) { App._showFieldError('cat-name', _cErr); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); document.getElementById('category-form-overlay')?.remove(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
 
@@ -1468,7 +1473,7 @@ Object.assign(App, {
     const listHtml = list.map(m => `<div class="list-item"><div class="list-item-icon" style="background:${m.color}33">${m.emoji || '🏪'}</div><div class="list-item-info"><div class="list-item-name">${m.name}</div><div class="list-item-sub">ใช้จ่าย ${usage[m.name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${m.id}')">✏️</button><button class="icon-btn icon-btn-danger" onclick="App.deleteMerchant('${m.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')
     const existingList = document.getElementById('merchant-list-items')
     if (existingList && document.getElementById('sub-screen')?.classList.contains('open')) { existingList.innerHTML = listHtml; return }
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${q}" oninput="App.openMerchantScreen(this.value)"><div class="card mt-12"><div id="merchant-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="search-field-wrap"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${esc(q)}" oninput="App._syncSearchClear(this); App.openMerchantScreen(this.value)"><button type="button" class="search-clear-btn" aria-label="ล้างการค้นหา"${q ? '' : ' hidden'} onclick="const input=this.parentElement.querySelector('input'); input.value=''; App._syncSearchClear(input); App.openMerchantScreen(''); input.focus()">×</button></div><div class="card mt-12"><div id="merchant-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
   },
   saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { App._showFieldError('mer-name', 'กรุณากรอกชื่อร้านค้า'); return } const _merErr = _fieldTooLong(data.name, FIELD_MAX.name, 'ชื่อร้านค้า'); if (_merErr) { App._showFieldError('mer-name', _merErr); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); document.getElementById('merchant-form-overlay')?.remove(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
   _registerMerchantFromTx(tx) {
@@ -11080,7 +11085,10 @@ App._pickMerchant = function(name, opts = {}) {
         <div id="crypto-preset-section" style="${customMode ? 'display:none' : ''}">
           <div class="form-group">
             <label class="form-label">ค้นหาเหรียญ</label>
-            <input class="form-input search-input" id="crypto-search-query" placeholder="พิมพ์ชื่อเหรียญ เช่น BTC, ETH" value="${esc(S.cryptoForm.query || '')}" oninput="App._queueCryptoSearch()">
+            <div class="search-field-wrap">
+              <input class="form-input search-input" id="crypto-search-query" placeholder="พิมพ์ชื่อเหรียญ เช่น BTC, ETH" value="${esc(S.cryptoForm.query || '')}" oninput="App._syncSearchClear(this); App._queueCryptoSearch()">
+              <button type="button" class="search-clear-btn" aria-label="ล้างการค้นหา"${S.cryptoForm.query ? '' : ' hidden'} onclick="const input=this.parentElement.querySelector('input'); input.value=''; App._syncSearchClear(input); App._queueCryptoSearch(true); input.focus()">×</button>
+            </div>
           </div>
           <div id="crypto-selected-asset"></div>
           <div id="crypto-search-results" class="crypto-search-results"></div>
@@ -14816,9 +14824,26 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   App.openPrivilegesScreen = function(filter = S.privilegesFilter || 'active', query = S.privilegeSearch || '', animate = true) {
     ensurePrivilegesState()
-    S.privilegesFilter = PRIVILEGE_FILTERS.some(([key]) => key === filter) ? filter : 'active'
-    S.privilegeSearch = String(query || '')
+    const nextFilter = PRIVILEGE_FILTERS.some(([key]) => key === filter) ? filter : 'active'
+    const nextQuery = String(query || '')
+    const existingList = document.getElementById('privilege-list-items')
+    const canRefreshListOnly = animate === false
+      && nextFilter === S.privilegesFilter
+      && existingList
+      && document.getElementById('sub-screen')?.classList.contains('open')
+    S.privilegesFilter = nextFilter
+    S.privilegeSearch = nextQuery
     const rows = getPrivilegeRows(S.privilegesFilter, S.privilegeSearch)
+    const listHtml = rows.length ? rows.map(privilege => App._renderPrivilegeCard(privilege)).join('') : App._emptyState?.(
+      S.privileges?.length ? '🔎' : '🎟️',
+      S.privileges?.length ? 'ไม่พบสิทธิ์ที่ตรงกัน' : 'ยังไม่มีสิทธิพิเศษ',
+      S.privileges?.length ? 'ลองเปลี่ยนตัวกรองหรือคำค้นหา' : 'แตะ เพิ่ม เพื่อบันทึกโค้ดส่วนลดหรือสิทธิ์ที่อยากเตือนตัวเอง'
+    ) || ''
+    if (canRefreshListOnly) {
+      existingList.innerHTML = listHtml
+      App._syncSearchClear(document.getElementById('privilege-search'))
+      return
+    }
     const summary = getPrivilegesSummary()
     const chips = PRIVILEGE_FILTERS.map(([key, label]) => `<button class="chip${S.privilegesFilter === key ? ' active' : ''}" onclick="App.openPrivilegesScreen('${key}', document.getElementById('privilege-search')?.value || '', false)">${label}</button>`).join('')
     const html = `
@@ -14839,15 +14864,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div class="chips privilege-filter-row">${chips}</div>
         ${S.privilegesFilter === 'expired' && rows.length ? `<div style="padding:0 0 8px;text-align:right"><button class="btn btn-outline btn-sm" style="color:var(--expense);border-color:var(--expense)" onclick="App.archiveExpiredPrivileges()">เก็บถาวรทั้งหมด (${rows.length})</button></div>` : ''}
         <div class="privilege-search-wrap">
-          <input class="form-input search-input" id="privilege-search" placeholder="ค้นหาชื่อ Platform ร้านค้า โค้ด หรือโน้ต" value="${esc(S.privilegeSearch || '')}" oninput="App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}', this.value)">
+          <div class="search-field-wrap">
+            <input class="form-input search-input" id="privilege-search" placeholder="ค้นหาชื่อ Platform ร้านค้า โค้ด หรือโน้ต" value="${esc(S.privilegeSearch || '')}" oninput="App._syncSearchClear(this); App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}', this.value, false)">
+            <button type="button" class="search-clear-btn" aria-label="ล้างการค้นหา"${S.privilegeSearch ? '' : ' hidden'} onclick="const input=this.parentElement.querySelector('input'); input.value=''; App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}', '', false); App._syncSearchClear(input); input.focus()">×</button>
+          </div>
         </div>
-        <div class="privilege-list">
-          ${rows.length ? rows.map(privilege => App._renderPrivilegeCard(privilege)).join('') : App._emptyState?.(
-            S.privileges?.length ? '🔎' : '🎟️',
-            S.privileges?.length ? 'ไม่พบสิทธิ์ที่ตรงกัน' : 'ยังไม่มีสิทธิพิเศษ',
-            S.privileges?.length ? 'ลองเปลี่ยนตัวกรองหรือคำค้นหา' : 'แตะ เพิ่ม เพื่อบันทึกโค้ดส่วนลดหรือสิทธิ์ที่อยากเตือนตัวเอง'
-          ) || ''}
-        </div>
+        <div class="privilege-list" id="privilege-list-items">${listHtml}</div>
       </div>`
     App.openSubScreen(html, { animate })
   }
@@ -19960,7 +19982,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     content.innerHTML = `<div style="padding:0px 16px 30px 16px">
       <div class="more-sticky-header">
         <div style="font-size:20px;font-weight:800;padding:12px 0 8px">เพิ่มเติม</div>
-        <input class="form-input more-search-input" id="more-search" placeholder="🔍 ค้นหาฟีเจอร์..." autocomplete="off" oninput="App._filterMoreContent(this.value)" style="padding:10px 14px;font-size:14px;margin-bottom:10px">
+        <div class="search-field-wrap more-search-wrap">
+          <input class="form-input more-search-input" id="more-search" placeholder="🔍 ค้นหาฟีเจอร์..." autocomplete="off" oninput="App._syncSearchClear(this); App._filterMoreContent(this.value)" style="padding:10px 38px 10px 14px;font-size:14px">
+          <button type="button" class="search-clear-btn" aria-label="ล้างการค้นหา" hidden onclick="const input=this.parentElement.querySelector('input'); input.value=''; App._syncSearchClear(input); App._filterMoreContent(''); input.focus()">×</button>
+        </div>
       </div>
       <div class="more-tab-strip">
         <button class="more-tab-btn${activeTab === 'plan' ? ' active' : ''}" data-tab="plan" onclick="App._setMoreTab('plan')">วางแผน</button>
