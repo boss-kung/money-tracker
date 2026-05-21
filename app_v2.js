@@ -19756,6 +19756,22 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   const esc = App._esc || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt : v => '฿' + Number(v).toLocaleString('en-US'))(Number(n) || 0)
+  let demoEntryTapCount = 0
+  let demoEntryTapTimer = null
+
+  App.openDemoApp = function () {
+    const target = new URL(window.MT_DEMO_MODE ? 'index.html' : 'demo/index.html', location.href)
+    window.location.href = target.href
+  }
+
+  App._tapDemoEntry = function () {
+    demoEntryTapCount += 1
+    clearTimeout(demoEntryTapTimer)
+    demoEntryTapTimer = setTimeout(() => { demoEntryTapCount = 0 }, 3000)
+    if (demoEntryTapCount < 5) return
+    demoEntryTapCount = 0
+    App.openDemoApp()
+  }
 
   // ── 1. Transactions header: move summary cards to after month chips (non-sticky) ──
   const _prevRT = App.renderTransactions?.bind(App)
@@ -19908,7 +19924,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div style="text-align:center;padding:32px 0 8px">
         <div style="font-size:40px">💰</div>
         <div style="font-size:16px;font-weight:700;margin-top:8px">Money Tracker</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(window.MT_APP_VERSION || (typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''))}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px" onclick="App._tapDemoEntry?.()" title="เวอร์ชัน">${esc(window.MT_APP_VERSION || (typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''))}</div>
       </div>`
 
     content.innerHTML = `<div style="padding:0px 16px 30px 16px">

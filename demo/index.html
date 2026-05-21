@@ -30,19 +30,10 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Financial Tracker">
-  <meta name="description" content="ศูนย์รวมการเงินส่วนตัวของคุณ ติดตามรายรับรายจ่าย จัดการกระเป๋าเงิน และวิเคราะห์การใช้จ่ายในที่เดียว">
-  <title>Financial Tracker 💰</title>
-  <script>
-    ;(() => {
-      try {
-        if (new URLSearchParams(location.search).get('demo') === '1') {
-          location.replace('./demo/index.html')
-        }
-      } catch (_) {}
-    })()
-  </script>
-  <link rel="stylesheet" href="style_v2.css?v=2026.05.20-r40">
+  <meta name="apple-mobile-web-app-title" content="Money Tracker Demo">
+  <meta name="description" content="Money Tracker demo app with mock financial data">
+  <title>Money Tracker Demo</title>
+  <link rel="stylesheet" href="../style_v2.css?v=2026.05.20-r40">
   <style>
     /* Active tab dot indicator */
     .nav-btn.active::after {
@@ -65,10 +56,26 @@
     #page-transactions .page-header {
       padding-bottom: 8px;
     }
+
+    .demo-mode-ribbon {
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 8px);
+      right: 12px;
+      z-index: 60;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(37, 99, 235, .94);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, .18);
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
 <div id="app">
+  <div class="demo-mode-ribbon">DEMO</div>
 
   <!-- Toast (aria-live so screen readers announce new messages) -->
   <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
@@ -227,14 +234,15 @@
 
 </div><!-- #app -->
 
-<script src="sample-data_v2.js?v=2026.05.11-r1"></script>
-<script src="thai_bank_holidays.js?v=2026.05.15-r1"></script>
-<script src="storage_v2.js?v=2026.05.18-r2"></script>
-<script src="calculations.js?v=2026.05.11-r1"></script>
-<script src="ai_insights.js?v=2026.05.11-r2"></script>
-<script src="finance_intelligence.js?v=2026.05.19-r4"></script>
-<script src="ask_my_money_core.js?v=2026.05.18-r1"></script>
-<script src="notification_config.js?v=2026.05.14-notifications1"></script>
+<script src="demo_bootstrap.js?v=2026.05.21-demo1"></script>
+<script src="sample-data_demo.js?v=2026.05.21-demo1"></script>
+<script src="../thai_bank_holidays.js?v=2026.05.15-r1"></script>
+<script src="../storage_v2.js?v=2026.05.18-r2"></script>
+<script src="../calculations.js?v=2026.05.11-r1"></script>
+<script src="../ai_insights.js?v=2026.05.11-r2"></script>
+<script src="../finance_intelligence.js?v=2026.05.19-r4"></script>
+<script src="../ask_my_money_core.js?v=2026.05.18-r1"></script>
+<script src="../notification_config.js?v=2026.05.14-notifications1"></script>
 <script>
   // Optional but recommended for reliable Thai gold-price sync.
   // Paste your Google Apps Script Web App URL here after deploying the Gold Traders proxy.
@@ -248,14 +256,15 @@
   if (location.protocol !== 'file:') {
     const manifestLink = document.createElement('link')
     manifestLink.rel = 'manifest'
-    manifestLink.href = 'manifest.json'
+    manifestLink.href = '../manifest.json'
     document.head.appendChild(manifestLink)
   }
 </script>
-<script src="app_lock.js?v=2026.05.20-r40"></script>
-<script src="app_v2.js?v=2026.05.20-r40"></script>
-<script src="split_bill.js?v=2026.05.15-r1"></script>
-<script src="quick_capture.js?v=2026.05.18-r13"></script>
-<script src="notifications_v2.js?v=2026.05.20-r33"></script>
+<script src="../app_lock.js?v=2026.05.20-r40"></script>
+<script src="../app_v2.js?v=2026.05.20-r40"></script>
+<script src="../split_bill.js?v=2026.05.15-r1"></script>
+<script src="../quick_capture.js?v=2026.05.18-r13"></script>
+<script src="../notifications_v2.js?v=2026.05.20-r33"></script>
+<script src="demo_overrides.js?v=2026.05.21-demo1"></script>
 </body>
 </html>
