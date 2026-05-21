@@ -5230,10 +5230,12 @@ function ensureMerchantWrap(inp) {
   if (!inp) return null
 
   const parent = inp.parentNode
+  let wrap = parent
   if (parent?.classList?.contains('tx-merchant-input-wrap')) {
     parent.classList.add('mt-merchant-wrap')
+    wrap = parent
   } else if (!parent?.classList?.contains('mt-merchant-wrap')) {
-    const wrap = document.createElement('div')
+    wrap = document.createElement('div')
     wrap.className = 'mt-merchant-wrap'
     parent.insertBefore(wrap, inp)
     wrap.appendChild(inp)
@@ -5244,7 +5246,6 @@ function ensureMerchantWrap(inp) {
     dd = document.createElement('div')
     dd.id = 'mt-merchant-dropdown'
     dd.className = 'hidden'
-    document.body.appendChild(dd)
 
     let startX = 0
     let startY = 0
@@ -5305,6 +5306,8 @@ function ensureMerchantWrap(inp) {
     dd.addEventListener('pointerleave', handleMove)
   }
 
+  if (wrap && dd.parentNode !== wrap) wrap.appendChild(dd)
+
   return dd
 }
 
@@ -5341,16 +5344,16 @@ App._positionMerchantDropdown = function() {
   const placeAbove = aboveSpace >= usableMinimum || (aboveSpace > belowSpace && belowSpace < usableMinimum)
   const availableSpace = placeAbove ? aboveSpace : belowSpace
   const maxHeight = Math.max(72, Math.min(220, availableSpace))
-  const naturalTop = placeAbove ? rect.top - gap - maxHeight : rect.bottom + gap
-  const minTop = viewportTop + gap
-  const maxTop = Math.max(minTop, viewportBottom - gap - maxHeight)
 
   dd.classList.toggle('above', placeAbove)
   dd.classList.toggle('below', !placeAbove)
   dd.style.maxHeight = maxHeight + 'px'
-  dd.style.top = Math.min(Math.max(naturalTop, minTop), maxTop) + 'px'
-  dd.style.left = rect.left + 'px'
-  dd.style.width = rect.width + 'px'
+  dd.style.setProperty('--mt-merchant-gap', gap + 'px')
+  dd.style.top = placeAbove ? 'auto' : 'calc(100% + var(--mt-merchant-gap))'
+  dd.style.bottom = placeAbove ? 'calc(100% + var(--mt-merchant-gap))' : 'auto'
+  dd.style.left = '0'
+  dd.style.right = '0'
+  dd.style.width = 'auto'
 }
 
 App._syncMerchantDropdownPosition = function() {

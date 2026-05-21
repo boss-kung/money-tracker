@@ -2994,7 +2994,7 @@ body {
 /* ── Merchant custom dropdown ─────────────────────────────── */
 .mt-merchant-wrap { position: relative; }
 #mt-merchant-dropdown {
-  position: fixed;
+  position: absolute;
   background: var(--surface);
   border: 1.5px solid color-mix(in srgb, var(--border) 84%, var(--primary) 16%);
   border-radius: 16px;
