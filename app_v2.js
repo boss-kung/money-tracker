@@ -6240,7 +6240,13 @@ App._pickMerchant = function(name, opts = {}) {
   function channelMatchesAny(ruleChannels = [], txChannel = '') {
     const channels = Array.isArray(ruleChannels) ? ruleChannels.filter(Boolean) : []
     if (!channels.length) return true
-    return channels.some(value => channelMatches(value, txChannel))
+    return channels.some(value => {
+      if (typeof App._channelMatches === 'function') return App._channelMatches(value, txChannel)
+      const left = String(value || '').trim().toLowerCase()
+      const right = String(txChannel || '').trim().toLowerCase()
+      if (!left || left === 'any') return true
+      return left === right
+    })
   }
 
   function formatTrackChannelLabel(channels = []) {
@@ -12779,6 +12785,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (ruleOpt && ruleOpt[0] === 'online' && ONLINE_CHANNEL_ALIASES.has(txOpt?.[0] || txValue)) return true
     return false
   }
+  App._channelMatches = channelMatches
 
   function normalizeTrackChannels(trigger = {}, rule = {}) {
     const legacyChannel = trigger.trackChannel || rule.unlockCondition?.channel || ''
