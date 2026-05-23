@@ -8411,7 +8411,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (typeof App._isPostedTx === 'function') {
           try { if (!App._isPostedTx(tx)) return false } catch (_) {}
         }
-        const d = String(tx.date || '')
+        const d = resolveBenefitTxDate(tx)
         return d >= cycle.start && d <= cycle.end
       })
       .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
@@ -12604,6 +12604,15 @@ App._pickMerchant = function(name, opts = {}) {
     return inferred[0] || ''
   }
 
+  function resolveBenefitTxDate(tx = {}) {
+    const raw = String(tx?.date || '').trim()
+    if (!raw) return ''
+    const isoDate = raw.match(/^(\d{4}-\d{2}-\d{2})/)
+    if (isoDate?.[1]) return isoDate[1]
+    const parsed = parseDateToISO(raw)
+    return parsed || raw.slice(0, 10)
+  }
+
   const ONLINE_CHANNEL_ALIASES = new Set(['online', 'truemoney', 'line_pay', 'shopeepay', 'rabbit_line_pay', 'qr_payment'])
   function channelMatches(ruleChannel = '', txChannel = '') {
     const ruleValue = normalizeCompareText(ruleChannel)
@@ -12706,7 +12715,7 @@ App._pickMerchant = function(name, opts = {}) {
     const categoryId = String(txDraft.categoryId || '').trim()
     const merchant = normalizeCompareText(txDraft.merchant || '')
     const channel = normalizeCompareText(String(txDraft.channel || '').trim() || resolveBenefitTxChannel(txDraft))
-    const date = String(txDraft.date || today())
+    const date = resolveBenefitTxDate(txDraft) || today()
     const categoryMatch = !categories.length || categories.some(value => categoryConditionMatches(value, categoryId))
     const merchantMatch = !merchants.length || merchants.some(v => merchantTextsMatch(v, merchant))
     const excludedMatch = excludedMerchants.length > 0 && !!merchant
@@ -13136,7 +13145,7 @@ App._pickMerchant = function(name, opts = {}) {
           if (String(tx.id || '') === String(excludeTxId || '')) return false
           if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return false
           if (typeof App._isPostedTx === 'function' && !App._isPostedTx(tx)) return false
-          const d = String(tx.date || '')
+          const d = resolveBenefitTxDate(tx)
           return d >= cycleStart && d <= cycleEnd
         })
         .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
@@ -13260,7 +13269,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (String(tx.id || '') === String(excludeTxId || '')) return
         if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return
         if (typeof App._isPostedTx === 'function' && !App._isPostedTx(tx)) return
-        const date = String(tx.date || '')
+        const date = resolveBenefitTxDate(tx)
         if (date < cycleStart || date > cycleEnd) return
         const txCh = resolveBenefitTxChannel(tx)
         const isSameMerchant = !!normalizedTxMerchant && merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
@@ -13323,7 +13332,7 @@ App._pickMerchant = function(name, opts = {}) {
       .filter(tx => {
         if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return false
         if (typeof App._isPostedTx === 'function' && !App._isPostedTx(tx)) return false
-        const date = String(tx.date || '')
+        const date = resolveBenefitTxDate(tx)
         return date >= cycleStart && date <= cycleEnd
       })
       .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
