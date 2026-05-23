@@ -1048,23 +1048,12 @@ html.dark .mt-alert-row-name { color: var(--text); }
   line-height: 1.35;
   margin-top: 2px;
 }
-.shared-expense-toggle {
+.shared-expense-head .toggle {
   flex: 0 0 auto;
-  min-width: 54px;
-  min-height: 34px;
-  border: 1.5px solid var(--border);
-  border-radius: 999px;
-  background: var(--elevated);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
 }
-.shared-expense-toggle.active {
-  border-color: var(--income);
-  background: var(--income-soft);
-  color: var(--income);
+.shared-expense-head .toggle:disabled {
+  opacity: .5;
 }
-.shared-expense-toggle:disabled { opacity: .5; }
 .shared-expense-grid {
   display: grid;
   grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);

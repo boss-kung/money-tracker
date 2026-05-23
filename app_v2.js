@@ -20714,7 +20714,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             <div class="shared-expense-title">จ่ายแทน / หารกับเพื่อน</div>
             <div class="shared-expense-sub">${enabled ? `นับเข้างบ ${money(shared.myShare)} จากยอดจ่ายจริง ${money(gross)}` : 'ใช้เมื่อเราจ่ายเต็มก่อน แต่ควรนับเข้างบเฉพาะส่วนเรา'}</div>
           </div>
-          <button type="button" class="shared-expense-toggle${enabled ? ' active' : ''}" ${disabled ? 'disabled' : ''} onclick="App.setSharedExpenseEnabled(${enabled ? 'false' : 'true'})">${enabled ? 'เปิด' : 'ปิด'}</button>
+          <button type="button" class="toggle${enabled ? ' on' : ''}" ${disabled ? 'disabled' : ''} onclick="App.setSharedExpenseEnabled(${enabled ? 'false' : 'true'})" aria-label="สลับการจ่ายแทน / หารกับเพื่อน" aria-pressed="${enabled ? 'true' : 'false'}"></button>
         </div>
         ${disabled ? `<div class="form-hint">รายการผ่อนชำระยังไม่รองรับการหารบิลแบบเร็ว</div>` : ''}
         ${enabled ? `
