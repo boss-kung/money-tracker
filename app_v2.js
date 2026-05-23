@@ -8625,6 +8625,79 @@ App._pickMerchant = function(name, opts = {}) {
     }
   }
 
+  App.debugBenefitRule = function(ruleId, cardId, refDate = '') {
+    App.ensureCCBenefitRulesState?.()
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const rule = (S.ccBenefitRules || []).find(r => String(r.id || '') === String(ruleId || ''))
+    if (!rule) {
+      console.warn('[Benefits][debug] rule not found', { ruleId, cardId, refDate })
+      return null
+    }
+    const cycle = App.getCyclePeriodForDate?.(cardId, refDate || todayStr, rule) || { start: todayStr, end: todayStr }
+    const trackChannels = getTriggerTrackChannels(rule.rewardTrigger || {})
+    const rows = (S.transactions || [])
+      .filter(tx => tx.type === 'expense' && String(tx.walletId || '') === String(cardId || ''))
+      .map(tx => {
+        const resolvedDate = resolveBenefitTxDate(tx)
+        const resolvedChannel = resolveBenefitTxChannel(tx)
+        const posted = typeof App._isPostedTx === 'function' ? !!App._isPostedTx(tx) : tx.scheduled !== true
+        const inCycle = !!resolvedDate && resolvedDate >= cycle.start && resolvedDate <= cycle.end
+        const trackContribution = channelMatchesAny(trackChannels, resolvedChannel) ? Number(tx.amount || 0) : 0
+        const explicitIds = Array.isArray(tx.rewardRuleIds) ? tx.rewardRuleIds.map(id => String(id || '')).filter(Boolean) : []
+        const estimateRuleIds = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules.map(row => String(row.ruleId || '')).filter(Boolean) : []
+        const eligibility = (() => {
+          try { return App._getRuleEligibility?.(tx, rule) || getRuleEligibility(tx, rule) } catch (err) { return { matched: false, reasons: [`eligibility error: ${err?.message || err}`] } }
+        })()
+        const txMatchesRule = (() => {
+          try { return App._txShouldCountForRule?.(tx, rule, ruleId) ?? txShouldCountForRule(tx, rule, ruleId) } catch (_) { return false }
+        })()
+        const reasons = []
+        if (!posted) reasons.push('scheduled/not-posted')
+        if (!inCycle) reasons.push(`out-of-cycle (${resolvedDate || 'no-date'})`)
+        if (trackContribution <= 0 && rule.rewardTrigger?.mode === 'cycle_spend_threshold') reasons.push(`track-channel-miss (${resolvedChannel || 'no-channel'})`)
+        if (!txMatchesRule) reasons.push('rule-match-false')
+        if (!eligibility?.matched) reasons.push(...(eligibility?.reasons || ['eligibility-false']))
+        return {
+          txId: String(tx.id || ''),
+          date: String(tx.date || ''),
+          resolvedDate,
+          amount: Number(tx.amount || 0),
+          merchant: String(tx.merchant || ''),
+          note: String(tx.note || ''),
+          channel: String(tx.channel || ''),
+          resolvedChannel,
+          posted,
+          inCycle,
+          trackContribution,
+          txMatchesRule,
+          eligibilityMatched: !!eligibility?.matched,
+          explicitRuleIds: explicitIds.join(','),
+          estimateRuleIds: estimateRuleIds.join(','),
+          reasons: reasons.join(' | '),
+        }
+      })
+      .sort((a, b) => String(a.resolvedDate || '').localeCompare(String(b.resolvedDate || '')) || String(a.txId).localeCompare(String(b.txId)))
+
+    const summary = {
+      ruleId: String(rule.id || ''),
+      ruleName: String(rule.name || ''),
+      cardId: String(cardId || ''),
+      cycleStart: cycle.start,
+      cycleEnd: cycle.end,
+      txCount: rows.length,
+      inCycleCount: rows.filter(row => row.inCycle).length,
+      postedCount: rows.filter(row => row.posted).length,
+      matchedCount: rows.filter(row => row.txMatchesRule).length,
+      trackCount: rows.filter(row => row.trackContribution > 0).length,
+      trackSpend: rows.filter(row => row.inCycle && row.posted).reduce((sum, row) => sum + Number(row.trackContribution || 0), 0),
+    }
+    console.groupCollapsed?.(`[Benefits][debug] ${summary.ruleName} (${summary.cycleStart}..${summary.cycleEnd})`)
+    console.log('summary', summary)
+    try { console.table(rows) } catch (_) { console.log(rows) }
+    console.groupEnd?.()
+    return { summary, rows }
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // Crypto pricing helpers reused by wallet cards
   // ═══════════════════════════════════════════════════════════════════
