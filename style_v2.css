@@ -1110,18 +1110,18 @@ html.dark .mt-alert-row-name { color: var(--text); }
   padding: 10px 12px;
   text-align: left;
 }
-.shared-expense-ghost-link strong {
-  display: block;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-}
-.shared-expense-ghost-link small {
-  display: block;
-  margin-top: 2px;
+.shared-expense-ghost-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
+}
+.shared-expense-ghost-link span[aria-hidden="true"] {
+  flex: 0 0 auto;
+  color: var(--muted);
 }
 .installment-month-grid { display:flex; gap:8px; }
 .installment-month-grid button {
