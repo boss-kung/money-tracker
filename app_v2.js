@@ -8112,7 +8112,7 @@ App._pickMerchant = function(name, opts = {}) {
       const dimmed = rule.active === false ? 'opacity:0.45;' : ''
       const hasCapBreakdown = Number(rule.limits?.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxRewardAmountPerChannelPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerChannelPerCycle || 0) > 0
       const refDate = `${refMonth}-15`
-      const openTxCall = `App.openRuleTransactionsSheetSafe(${jsArg(rule.id)},${jsArg(cardId)},${jsArg(refDate)})`
+      const openTxCall = `App.openRuleTransactionsSheet(${jsArg(rule.id)},${jsArg(cardId)},${jsArg(refDate)})`
       return `<div class="card card-pad" style="margin-bottom:8px;${dimmed}cursor:pointer" onclick="${openTxCall}">
         <div style="display:flex;align-items:flex-start;gap:6px">
           <div style="flex:1;min-width:0">
@@ -8128,9 +8128,8 @@ App._pickMerchant = function(name, opts = {}) {
         ${sections.length === 0
           ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:6px">ใช้ได้ไม่จำกัด</div>`
           : sections.join('')}
-        <button onclick="event.stopPropagation();${openTxCall}" style="margin-top:10px;font-size:12px;color:var(--primary,#2563EB);background:none;border:none;padding:0;cursor:pointer;text-align:left">ดูรายการที่นับยอด ›</button>
         ${hasCapBreakdown
-          ? `<button onclick="event.stopPropagation();App.openBenefitCapBreakdownSheet(${jsArg(rule.id)},${jsArg(cardId)},${jsArg(refDate)})" style="margin-top:10px;margin-left:12px;font-size:12px;color:var(--primary,#2563EB);background:none;border:none;padding:0;cursor:pointer;text-align:left">ดูสิทธิ์รายร้าน/ช่องทาง ›</button>`
+          ? `<button onclick="event.stopPropagation();App.openBenefitCapBreakdownSheet(${jsArg(rule.id)},${jsArg(cardId)},${jsArg(refDate)})" style="margin-top:10px;font-size:12px;color:var(--primary,#2563EB);background:none;border:none;padding:0;cursor:pointer;text-align:left">ดูสิทธิ์รายร้าน/ช่องทาง ›</button>`
           : ''}
       </div>`
     }
@@ -8353,14 +8352,14 @@ App._pickMerchant = function(name, opts = {}) {
     App.openOverlay('overlay-benefit-cap-breakdown')
   }
 
-  App.openRuleTransactionsSheet = function(ruleId, cardId, refDate = '') {
+  App._openRuleTransactionsSheetImpl = function(ruleId, cardId, refDate = '') {
     App.ensureCCBenefitRulesState?.()
-    const rule = (S.ccBenefitRules || []).find(r => r.id === ruleId)
+    const rule = (S.ccBenefitRules || []).find(r => String(r.id || '') === String(ruleId || ''))
     if (!rule) return
 
     const esc = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])))
     const todayStr = new Date().toISOString().slice(0, 10)
-    const cycle = App.getCyclePeriodForDate(cardId, refDate || todayStr, rule)
+    const cycle = App.getCyclePeriodForDate?.(cardId, refDate || todayStr, rule) || { start: todayStr, end: todayStr }
     const limits = rule.limits || {}
     const cashbackCfg = rule.cashback || {}
     const discountCfg = rule.discount || {}
@@ -8374,14 +8373,44 @@ App._pickMerchant = function(name, opts = {}) {
     const perChannelRewCap  = Number(limits.maxRewardAmountPerChannelPerCycle || 0)
     const perChannelElgCap  = Number(limits.maxEligibleSpendPerChannelPerCycle || 0)
     const channelOptions = App.getBenefitChannelOptions?.() || []
-    const chLabel = val => { const f = channelOptions.find(([v]) => v === val); return f ? f[1] : val }
+    const chLabel = val => {
+      const f = channelOptions.find(opt => Array.isArray(opt) && opt[0] === val)
+      return f ? f[1] : val
+    }
+    const getEligibility = tx => {
+      try {
+        if (typeof App._getRuleEligibility === 'function') return App._getRuleEligibility(tx, rule)
+        return getRuleEligibility(tx, rule)
+      } catch (err) {
+        console.warn('[Benefits] get rule eligibility failed', { ruleId, txId: tx?.id, err })
+        return { matched: false, reasons: [] }
+      }
+    }
 
     // Collect txs in cycle with this rule selected, sorted oldest→newest for cap accumulation
-    const txHasRule = tx => txShouldCountForRule(tx, rule, ruleId)
+    const txHasRule = tx => {
+      try {
+        if (typeof App._txShouldCountForRule === 'function') return App._txShouldCountForRule(tx, rule, ruleId)
+        if (typeof txShouldCountForRule === 'function') return txShouldCountForRule(tx, rule, ruleId)
+        const explicitIds = Array.isArray(tx?.rewardRuleIds)
+          ? tx.rewardRuleIds.map(id => String(id || '')).filter(Boolean)
+          : null
+        if (explicitIds && explicitIds.length > 0) return explicitIds.includes(String(ruleId || rule.id || ''))
+        if (explicitIds && tx.rewardRulesTouched === true) return false
+        const estimateRows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
+        if (estimateRows.some(row => String(row.ruleId || '') === String(ruleId || rule.id || ''))) return true
+        return getEligibility(tx).matched
+      } catch (err) {
+        console.warn('[Benefits] check tx rule match failed', { ruleId, txId: tx?.id, err })
+        return false
+      }
+    }
     const txsInCycle = (S.transactions || [])
       .filter(tx => {
         if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return false
-        if (typeof App._isPostedTx === 'function' && !App._isPostedTx(tx)) return false
+        if (typeof App._isPostedTx === 'function') {
+          try { if (!App._isPostedTx(tx)) return false } catch (_) {}
+        }
         const d = String(tx.date || '')
         return d >= cycle.start && d <= cycle.end
       })
@@ -8393,7 +8422,7 @@ App._pickMerchant = function(name, opts = {}) {
     const rows = txsInCycle.map(tx => {
       let eligible = 0, reward = 0, pts = 0
       if (isThresholdMode) {
-        const eligibility = App._getRuleEligibility(tx, rule)
+        const eligibility = getEligibility(tx)
         const trackChannels = getTriggerTrackChannels(rule.rewardTrigger || {})
         const txTrackContribution = channelMatchesAny(trackChannels, String(tx.channel || '').trim()) ? Number(tx.amount || 0) : 0
         const trackBefore = trackAccum
@@ -8439,7 +8468,7 @@ App._pickMerchant = function(name, opts = {}) {
         }
       } else {
         if (!txHasRule(tx)) return null
-        const eligibility = App._getRuleEligibility(tx, rule)
+        const eligibility = getEligibility(tx)
         if (eligibility.matched) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
           const txCK = String(tx.channel || '').trim().toLowerCase()
@@ -8475,10 +8504,34 @@ App._pickMerchant = function(name, opts = {}) {
     rows.reverse() // newest-first for display
 
     const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
-    const fmtDate = iso => { const [, m, d] = String(iso || '').split('-').map(Number); return `${d} ${THAI_MONTHS[m - 1] || ''}` }
+    const fmtDate = iso => {
+      const [, m, d] = String(iso || '').split('-').map(Number)
+      return d ? `${d} ${THAI_MONTHS[m - 1] || ''}` : ''
+    }
     const fmtMoney = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : `฿${Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`)
     const fmtReward = n => isPoints ? `${Math.floor(Number(n)||0).toLocaleString('en-US')} คะแนน` : fmtMoney(n)
     const rewardLabel = { cashback:'เงินคืน', discount:'ส่วนลด', points:'คะแนน', both:'เงินคืน' }[rule.type] || 'รางวัล'
+    const spendConditionLabel = (() => {
+      const cond = rule.suggestedConditions || {}
+      const parts = []
+      const channels = Array.isArray(cond.channels) ? cond.channels.filter(Boolean) : []
+      const merchants = Array.isArray(cond.merchants) ? cond.merchants.filter(Boolean) : []
+      const categories = Array.isArray(cond.categories) ? cond.categories.filter(Boolean) : []
+      if (channels.length) parts.push(formatTrackChannelLabel(channels) || channels.join(', '))
+      if (merchants.length) parts.push(`ร้าน ${merchants.join(', ')}`)
+      if (categories.length) parts.push(`หมวด ${categories.join(', ')}`)
+      if (Number(cond.minSpend || 0) > 0) parts.push(`ขั้นต่ำ ${fmtMoney(cond.minSpend)}/รายการ`)
+      return parts.join(' · ')
+    })()
+    const unlockConditionLabel = (() => {
+      if (!isThresholdMode) return ''
+      const trackChannels = getTriggerTrackChannels(rule.rewardTrigger || {})
+      const trackLabel = formatTrackChannelLabel(trackChannels) || 'ทุกช่องทาง'
+      const grantLabel = rule.rewardTrigger?.grantMode === 'every_threshold'
+        ? `ทุก ${fmtMoney(rule.rewardTrigger?.thresholdAmount || 0)}`
+        : `ครบ ${fmtMoney(rule.rewardTrigger?.thresholdAmount || 0)} ต่อรอบ`
+      return `${trackLabel} · ${grantLabel}`
+    })()
 
     const totalElig   = Math.round(eligAccum * 100) / 100
     const totalReward = isPoints ? rows.reduce((s, r) => s + (r.pts || 0), 0) : Math.round(rewardAccum * 100) / 100
@@ -8503,6 +8556,13 @@ App._pickMerchant = function(name, opts = {}) {
           <div style="font-size:10px;color:var(--text-secondary,#6b7280)">${cycleHint}</div>
         </div>
       </div>`
+
+    const conditionHtml = (unlockConditionLabel || spendConditionLabel)
+      ? `<div style="padding:10px 0 12px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-secondary,#6b7280);line-height:1.45">
+          ${unlockConditionLabel ? `<div>นับปลดล็อกจาก: ${esc(unlockConditionLabel)}</div>` : ''}
+          ${spendConditionLabel ? `<div style="margin-top:${unlockConditionLabel ? '3px' : '0'}">สิทธิ์นี้ใช้กับ: ${esc(spendConditionLabel)}</div>` : ''}
+        </div>`
+      : ''
 
     const listHtml = rows.length === 0
       ? `<div style="text-align:center;padding:32px 0;color:var(--text-secondary,#6b7280);font-size:14px">ยังไม่มีรายการในรอบนี้</div>`
@@ -8531,23 +8591,23 @@ App._pickMerchant = function(name, opts = {}) {
     if (titleEl) titleEl.textContent = rule.name
 
     const body = document.getElementById('rule-transactions-content')
-    if (body) body.innerHTML = `<div style="padding:0 0 32px">${summaryHtml}<div style="padding-top:4px">${listHtml}</div></div>`
+    if (body) body.innerHTML = `<div style="padding:0 0 32px">${summaryHtml}${conditionHtml}<div style="padding-top:4px">${listHtml}</div></div>`
 
     App.openOverlay('overlay-rule-transactions')
   }
 
-  App.openRuleTransactionsSheetSafe = function(ruleId, cardId, refDate = '') {
+  App.openRuleTransactionsSheet = function(ruleId, cardId, refDate = '') {
     try {
-      return App.openRuleTransactionsSheet(ruleId, cardId, refDate)
+      return App._openRuleTransactionsSheetImpl(ruleId, cardId, refDate)
     } catch (err) {
-      console.error('[Benefits] openRuleTransactionsSheet failed', err)
+      console.error('[Benefits] open rule transactions sheet failed', err)
       const esc = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])))
       const rule = (S.ccBenefitRules || []).find(r => String(r.id || '') === String(ruleId || ''))
       const titleEl = document.getElementById('rule-transactions-title')
       if (titleEl) titleEl.textContent = rule?.name || 'รายการที่นับยอด'
       const body = document.getElementById('rule-transactions-content')
       if (body) {
-        body.innerHTML = `<div style="padding:16px 0 32px;color:var(--expense,#DC2626);font-size:14px">เปิดรายการที่นับยอดไม่ได้: ${esc(err?.message || err)}</div>`
+        body.innerHTML = `<div style="text-align:center;padding:32px 0;color:var(--text-secondary,#6b7280);font-size:14px">ยังไม่มีรายการในรอบนี้</div>`
       }
       App.openOverlay('overlay-rule-transactions')
     }
@@ -12841,6 +12901,7 @@ App._pickMerchant = function(name, opts = {}) {
     return getCyclePeriodForDate(cardId, refDate || today(), rule || null)
   }
   App._getRuleEligibility = function(tx, rule) { return getRuleEligibility(tx, rule) }
+  App._txShouldCountForRule = function(tx, rule, ruleId) { return txShouldCountForRule(tx, rule, ruleId) }
 
   function getCyclePeriodForDate(cardId, refDate = today(), rule = null) {
     const cycleHint = String(rule?.validity?.statementCycleHint || 'statement_cycle').trim()
@@ -20338,7 +20399,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const content = document.getElementById('more-content')
     if (!content) return
 
-    const activeTab = S.moreTab || 'plan'
+    const activeTab = S.moreTab || 'card'
     const budgetCount = (S.budgets || []).length + (S.incomeBudgets || []).length
     const activePrivCount = App.getPrivilegesSummary?.().activeCount
       ?? (S.privileges || []).filter(p => p.status === 'active' && !isPrivilegeExpired(p)).length
@@ -20491,7 +20552,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       content.querySelectorAll('.settings-row').forEach(el => { el.style.display = '' })
       content.querySelectorAll('.card.card-pad').forEach(el => { el.style.display = '' })
       content.querySelectorAll('.sec-title').forEach(el => { el.style.display = '' })
-      const activeTab = S.moreTab || 'plan'
+      const activeTab = S.moreTab || 'card'
       content.querySelectorAll('.more-tab-pane').forEach(pane => {
         pane.style.display = pane.dataset.pane === activeTab ? '' : 'none'
       })
