@@ -8657,7 +8657,8 @@ App._pickMerchant = function(name, opts = {}) {
         </div>`
       : ''
 
-    const debugData = App.getBenefitRuleDebugData?.(ruleId, cardId, refDate) || null
+    const showRuleTransactionDebug = false
+    const debugData = showRuleTransactionDebug ? (App.getBenefitRuleDebugData?.(ruleId, cardId, refDate) || null) : null
     const displayedTxIds = new Set(rows.map(row => String(row?.tx?.id || '')).filter(Boolean))
     const excludedRows = (debugData?.rows || []).filter(row =>
       row.inCycle &&
