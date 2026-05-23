@@ -8428,7 +8428,8 @@ App._pickMerchant = function(name, opts = {}) {
       let trackOnly = false
       if (isThresholdMode) {
         const eligibility = getEligibility(tx)
-        trackContribution = channelMatchesAny(trackChannels, String(tx.channel || '').trim()) ? Number(tx.amount || 0) : 0
+        const txChannel = resolveBenefitTxChannel(tx)
+        trackContribution = channelMatchesAny(trackChannels, txChannel) ? Number(tx.amount || 0) : 0
         trackBefore = trackAccum
         trackAfter = Math.round((trackBefore + trackContribution) * 100) / 100
         const triggerAmt = Number(rule.rewardTrigger?.thresholdAmount || 0)
@@ -8443,7 +8444,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (!includedByRule && trackContribution <= 0) return null
         if (eligibility.matched && triggerCount > 0) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
-          const txCK = String(tx.channel || '').trim().toLowerCase()
+          const txCK = resolveBenefitTxChannel(tx).trim().toLowerCase()
           eligible = Math.max(0, Number(tx.amount || 0))
           if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
           if (cycleEligibleCap  > 0) eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - eligAccum))
@@ -8478,7 +8479,7 @@ App._pickMerchant = function(name, opts = {}) {
         const eligibility = getEligibility(tx)
         if (eligibility.matched) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
-          const txCK = String(tx.channel || '').trim().toLowerCase()
+          const txCK = resolveBenefitTxChannel(tx).trim().toLowerCase()
           eligible = Math.max(0, Number(tx.amount || 0))
           if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
           if (cycleEligibleCap  > 0) eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - eligAccum))
@@ -8577,7 +8578,7 @@ App._pickMerchant = function(name, opts = {}) {
       : rows.map(({ tx, eligible, reward, pts, trackContribution, trackBefore, trackAfter, trackOnly }) => {
           const rewardVal = isPoints ? pts : reward
           const label = String(tx.merchant || tx.note || '').trim() || 'ไม่ระบุร้าน'
-          const ch = String(tx.channel || '').trim()
+          const ch = resolveBenefitTxChannel(tx).trim()
           const unlockLine = isThresholdMode && trackContribution > 0
             ? `สะสมปลดล็อก ${fmtMoney(trackContribution)}${trackOnly ? ` · รวม ${fmtMoney(trackAfter)}` : ''}`
             : ''
@@ -12596,6 +12597,13 @@ App._pickMerchant = function(name, opts = {}) {
     return [...new Set(channels)]
   }
 
+  function resolveBenefitTxChannel(tx = {}) {
+    const direct = String(tx?.channel || '').trim()
+    if (direct) return direct
+    const inferred = inferChannelsFromText(`${tx?.merchant || ''} ${tx?.note || ''}`)
+    return inferred[0] || ''
+  }
+
   const ONLINE_CHANNEL_ALIASES = new Set(['online', 'truemoney', 'line_pay', 'shopeepay', 'rabbit_line_pay', 'qr_payment'])
   function channelMatches(ruleChannel = '', txChannel = '') {
     const ruleValue = normalizeCompareText(ruleChannel)
@@ -12697,7 +12705,7 @@ App._pickMerchant = function(name, opts = {}) {
     const amount = Number(txDraft.amount || 0)
     const categoryId = String(txDraft.categoryId || '').trim()
     const merchant = normalizeCompareText(txDraft.merchant || '')
-    const channel = normalizeCompareText(txDraft.channel || '')
+    const channel = normalizeCompareText(String(txDraft.channel || '').trim() || resolveBenefitTxChannel(txDraft))
     const date = String(txDraft.date || today())
     const categoryMatch = !categories.length || categories.some(value => categoryConditionMatches(value, categoryId))
     const merchantMatch = !merchants.length || merchants.some(v => merchantTextsMatch(v, merchant))
@@ -12746,11 +12754,9 @@ App._pickMerchant = function(name, opts = {}) {
   function txShouldCountForRule(tx = {}, rule = {}, ruleId = '') {
     const explicitIds = txExplicitRewardRuleIds(tx)
     if (explicitIds && explicitIds.length > 0) return explicitIds.includes(String(ruleId || rule.id || ''))
-    if (explicitIds && tx.rewardRulesTouched === true) return false
-    if (!rule || (!rule.id && !rule.suggestedConditions && !rule.rewardTrigger)) {
-      const rows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
-      return rows.some(row => String(row.ruleId || '') === String(ruleId || ''))
-    }
+    const rows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
+    if (rows.some(row => String(row.ruleId || '') === String(ruleId || rule.id || ''))) return true
+    if (!rule || (!rule.id && !rule.suggestedConditions && !rule.rewardTrigger)) return false
     return getRuleEligibility(tx, rule).matched
   }
 
@@ -13135,7 +13141,7 @@ App._pickMerchant = function(name, opts = {}) {
         })
         .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
       txsInCycle.forEach(tx => {
-        const txCh = String(tx.channel || '').trim()
+        const txCh = resolveBenefitTxChannel(tx)
         const txTrackContribution = channelMatchesAny(normalizedTrackChannels, txCh) ? Number(tx.amount || 0) : 0
         if (isThresholdMode) {
           const trackBefore = trackChannelSpend
@@ -13256,7 +13262,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (typeof App._isPostedTx === 'function' && !App._isPostedTx(tx)) return
         const date = String(tx.date || '')
         if (date < cycleStart || date > cycleEnd) return
-        const txCh = String(tx.channel || '').trim()
+        const txCh = resolveBenefitTxChannel(tx)
         const isSameMerchant = !!normalizedTxMerchant && merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
         const isSameChannel = !!normalizedTxChannel && txCh.toLowerCase() === normalizedTxChannel
         if (!txHasRule(tx)) return
@@ -13324,13 +13330,13 @@ App._pickMerchant = function(name, opts = {}) {
       .forEach(tx => {
       const eligibility = getRuleEligibility(tx, rule)
       const trackChannels = getTriggerTrackChannels(trigger)
-      const txTrackContribution = channelMatchesAny(trackChannels, String(tx.channel || '').trim()) ? Number(tx.amount || 0) : 0
+      const txTrackContribution = channelMatchesAny(trackChannels, resolveBenefitTxChannel(tx)) ? Number(tx.amount || 0) : 0
       const trackBefore = trackAccum
       trackAccum = Math.round((trackAccum + txTrackContribution) * 100) / 100
       if (!txHasRule(tx)) return
       if (!eligibility.matched) return
       const txMerchantNorm = normalizeCompareText(tx.merchant || '')
-      const txChannelKey   = String(tx.channel || '').trim().toLowerCase()
+      const txChannelKey   = resolveBenefitTxChannel(tx).trim().toLowerCase()
       // Compute eligible amount from current rule config (ignoring cycle caps — those are what we're measuring)
       let eligible = Math.max(0, Number(tx.amount || 0))
       if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
