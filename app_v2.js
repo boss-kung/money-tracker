@@ -8688,11 +8688,19 @@ App._pickMerchant = function(name, opts = {}) {
     }
     const cycle = App.getCyclePeriodForDate?.(cardId, refDate || todayStr, rule) || { start: todayStr, end: todayStr }
     const trackChannels = getTriggerTrackChannels(rule.rewardTrigger || {})
+    const resolveTxDate = tx => {
+      if (typeof App._resolveBenefitTxDate === 'function') return App._resolveBenefitTxDate(tx)
+      return String(tx?.date || '').trim().slice(0, 10)
+    }
+    const resolveTxChannel = tx => {
+      if (typeof App._resolveBenefitTxChannel === 'function') return App._resolveBenefitTxChannel(tx)
+      return String(tx?.channel || '').trim()
+    }
     const rows = (S.transactions || [])
       .filter(tx => tx.type === 'expense' && String(tx.walletId || '') === String(cardId || ''))
       .map(tx => {
-        const resolvedDate = resolveBenefitTxDate(tx)
-        const resolvedChannel = resolveBenefitTxChannel(tx)
+        const resolvedDate = resolveTxDate(tx)
+        const resolvedChannel = resolveTxChannel(tx)
         const posted = typeof App._isPostedTx === 'function' ? !!App._isPostedTx(tx) : tx.scheduled !== true
         const inCycle = !!resolvedDate && resolvedDate >= cycle.start && resolvedDate <= cycle.end
         const trackContribution = channelMatchesAny(trackChannels, resolvedChannel) ? Number(tx.amount || 0) : 0
