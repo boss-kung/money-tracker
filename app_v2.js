@@ -8549,6 +8549,7 @@ App._pickMerchant = function(name, opts = {}) {
     }
     const fmtMoney = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : `฿${Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`)
     const fmtReward = n => isPoints ? `${Math.floor(Number(n)||0).toLocaleString('en-US')} คะแนน` : fmtMoney(n)
+    const jsArg = value => JSON.stringify(String(value ?? '')).replace(/[&<>"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[ch]))
     const rewardLabel = { cashback:'เงินคืน', discount:'ส่วนลด', points:'คะแนน', both:'เงินคืน' }[rule.type] || 'รางวัล'
     const spendConditionLabel = (() => {
       const cond = rule.suggestedConditions || {}
@@ -8574,6 +8575,8 @@ App._pickMerchant = function(name, opts = {}) {
 
     const totalElig   = Math.round(eligAccum * 100) / 100
     const totalReward = isPoints ? rows.reduce((s, r) => s + (r.pts || 0), 0) : Math.round(rewardAccum * 100) / 100
+    const totalTrack  = Math.round(trackAccum * 100) / 100
+    const trackCount  = rows.filter(row => Number(row.trackContribution || 0) > 0).length
 
     const cycleHint = (() => {
       const hint = String(rule?.validity?.statementCycleHint || 'statement_cycle')
@@ -8595,6 +8598,18 @@ App._pickMerchant = function(name, opts = {}) {
           <div style="font-size:10px;color:var(--text-secondary,#6b7280)">${cycleHint}</div>
         </div>
       </div>`
+
+    const trackSummaryHtml = isThresholdMode
+      ? `<div style="padding:10px 0 12px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-end">
+            <div>
+              <div style="font-size:11px;color:var(--text-secondary,#6b7280)">ยอดสะสมปลดล็อก</div>
+              <div style="font-weight:700;font-size:15px">${fmtMoney(totalTrack)} / ${fmtMoney(rule.rewardTrigger?.thresholdAmount || 0)}</div>
+            </div>
+            <div style="font-size:11px;color:var(--text-secondary,#6b7280);text-align:right">${trackCount} รายการที่นับสะสม</div>
+          </div>
+        </div>`
+      : ''
 
     const conditionHtml = (unlockConditionLabel || spendConditionLabel)
       ? `<div style="padding:10px 0 12px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-secondary,#6b7280);line-height:1.45">
@@ -8638,12 +8653,13 @@ App._pickMerchant = function(name, opts = {}) {
           const rewardVal = isPoints ? pts : reward
           const label = String(tx.merchant || tx.note || '').trim() || 'ไม่ระบุร้าน'
           const ch = resolveTxChannel(tx).trim()
+          const openTxCall = `App.openTxDetailFromRuleTransactions(${jsArg(tx.id)})`
           const unlockLine = isThresholdMode && trackContribution > 0
             ? `สะสมปลดล็อก ${fmtMoney(trackContribution)}${trackOnly ? ` · รวม ${fmtMoney(trackAfter)}` : ''}`
             : ''
           const ruleLine = !includedByRule && eligibilityMatched ? 'ตรงเงื่อนไขกฎจากข้อมูลจริง' : ''
           const sub = [ch ? chLabel(ch) : null, tx.note && tx.merchant ? esc(tx.note) : null, unlockLine, ruleLine].filter(Boolean).join(' · ')
-          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border,#1e2a3a)">
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border,#1e2a3a);cursor:pointer" onclick="${openTxCall}">
             <div style="flex-shrink:0;text-align:center;min-width:32px">
               <div style="font-size:12px;font-weight:600">${fmtDate(tx.date)}</div>
             </div>
@@ -8663,7 +8679,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (titleEl) titleEl.textContent = rule.name
 
     const body = document.getElementById('rule-transactions-content')
-    if (body) body.innerHTML = `<div style="padding:0 0 32px">${summaryHtml}${conditionHtml}${debugHtml}<div style="padding-top:4px">${listHtml}</div></div>`
+    if (body) body.innerHTML = `<div style="padding:0 0 32px">${summaryHtml}${trackSummaryHtml}${conditionHtml}${debugHtml}<div style="padding-top:4px">${listHtml}</div></div>`
 
     App.openOverlay('overlay-rule-transactions')
   }
@@ -8683,6 +8699,14 @@ App._pickMerchant = function(name, opts = {}) {
       }
       App.openOverlay('overlay-rule-transactions')
     }
+  }
+
+  App.openTxDetailFromRuleTransactions = function(txId) {
+    if (!txId) return
+    App.closeOverlay?.('overlay-rule-transactions')
+    setTimeout(() => {
+      App.openTxDetail?.(txId)
+    }, 180)
   }
 
   App.getBenefitRuleDebugData = function(ruleId, cardId, refDate = '') {
