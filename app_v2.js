@@ -1521,9 +1521,16 @@ Object.assign(App, {
   toggleRecurring(id) { const r = S.recurring.find(x => x.id === id); if (r) r.paused = !r.paused; persist(); App.openRecurringScreen() },
 
   openCategoryScreen(type='expense', q='') {
+    const esc = App._esc || (s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])))
     S.catManageType = type
     const cats = (S.categories[type] || []).filter(c => !q || c.label.toLowerCase().includes(q.toLowerCase()))
-    const listHtml = cats.map(c => `<div class="list-item"${c.archived ? ' style="opacity:0.55"' : ''}><div class="list-item-icon" style="background:${c.color}33">${c.icon}</div><div class="list-item-info"><div class="list-item-name">${c.label}${c.archived ? ' <span style="font-size:10px;font-weight:600;color:#fff;background:#94a3b8;border-radius:4px;padding:1px 5px;vertical-align:middle">ซ่อนอยู่</span>' : ''}</div><div class="list-item-sub">${c.color}</div></div><div class="recurring-actions">${c.archived ? `<button class="icon-btn" onclick="App.unarchiveCategory('${c.id}')" title="คืนค่า">↩️</button>` : `<button class="icon-btn" onclick="App.openCategoryForm('${c.id}')">✏️</button>`}<button class="icon-btn icon-btn-danger" onclick="App.deleteCategory('${c.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')
+    const listHtml = cats.map(c => {
+      const color = String(c.color || '#64748B')
+      const icon = esc(c.icon || '📦')
+      const label = esc(c.label || 'ไม่มีชื่อหมวด')
+      const catId = esc(c.id || '')
+      return `<div class="list-item"${c.archived ? ' style="opacity:0.55"' : ''}><div class="list-item-icon" style="background:${color}33">${icon}</div><div class="list-item-info"><div class="list-item-name">${label}${c.archived ? ' <span style="font-size:10px;font-weight:600;color:#fff;background:#94a3b8;border-radius:4px;padding:1px 5px;vertical-align:middle">ซ่อนอยู่</span>' : ''}</div><div class="list-item-sub">${esc(color)}</div></div><div class="recurring-actions">${c.archived ? `<button class="icon-btn" onclick="App.unarchiveCategory('${catId}')" title="คืนค่า">↩️</button>` : `<button class="icon-btn" onclick="App.openCategoryForm('${catId}')">✏️</button>`}<button class="icon-btn icon-btn-danger" onclick="App.deleteCategory('${catId}')">🗑</button></div></div>`
+    }).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')
     const existingList = document.getElementById('cat-list-items')
     if (existingList && document.getElementById('sub-screen')?.classList.contains('open')) {
       existingList.innerHTML = listHtml
@@ -1535,10 +1542,17 @@ Object.assign(App, {
   saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { App._showFieldError('cat-name', 'กรุณากรอกชื่อหมวดหมู่'); return } const _cErr = _fieldTooLong(label, FIELD_MAX.label, 'ชื่อหมวดหมู่'); if (_cErr) { App._showFieldError('cat-name', _cErr); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); document.getElementById('category-form-overlay')?.remove(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
 
   openMerchantScreen(q='') {
+    const esc = App._esc || (s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])))
     App._ensureV2State()
-    const usage = Calc.getMerchantUsage(S.transactions)
+    const usage = Calc.getMerchantUsage(S.transactions || [])
     const list = S.merchants.filter(m => !q || m.name.toLowerCase().includes(q.toLowerCase()))
-    const listHtml = list.map(m => `<div class="list-item"><div class="list-item-icon" style="background:${m.color}33">${m.emoji || '🏪'}</div><div class="list-item-info"><div class="list-item-name">${m.name}</div><div class="list-item-sub">ใช้จ่าย ${usage[m.name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${m.id}')">✏️</button><button class="icon-btn icon-btn-danger" onclick="App.deleteMerchant('${m.id}')">🗑</button></div></div>`).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')
+    const listHtml = list.map(m => {
+      const color = String(m.color || '#64748B')
+      const emoji = esc(m.emoji || '🏪')
+      const name = String(m.name || '')
+      const merchantId = esc(m.id || '')
+      return `<div class="list-item"><div class="list-item-icon" style="background:${color}33">${emoji}</div><div class="list-item-info"><div class="list-item-name">${esc(name || 'ไม่มีชื่อร้าน')}</div><div class="list-item-sub">ใช้จ่าย ${usage[name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${merchantId}')">✏️</button><button class="icon-btn icon-btn-danger" onclick="App.deleteMerchant('${merchantId}')">🗑</button></div></div>`
+    }).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')
     const existingList = document.getElementById('merchant-list-items')
     if (existingList && document.getElementById('sub-screen')?.classList.contains('open')) { existingList.innerHTML = listHtml; return }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="search-field-wrap"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${esc(q)}" oninput="App._syncSearchClear(this); App.openMerchantScreen(this.value)"><button type="button" class="search-clear-btn" aria-label="ล้างการค้นหา"${q ? '' : ' hidden'} onclick="const input=this.parentElement.querySelector('input'); input.value=''; App._syncSearchClear(input); App.openMerchantScreen(''); input.focus()">×</button></div><div class="card mt-12"><div id="merchant-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
