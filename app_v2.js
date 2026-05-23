@@ -8419,14 +8419,18 @@ App._pickMerchant = function(name, opts = {}) {
     // Compute per-tx reward on-the-fly applying all caps in date order
     let eligAccum = 0, rewardAccum = 0, trackAccum = 0
     const sheetMerchRewAccum = {}, sheetMerchElgAccum = {}, sheetChRewAccum = {}, sheetChElgAccum = {}
+    const trackChannels = getTriggerTrackChannels(rule.rewardTrigger || {})
     const rows = txsInCycle.map(tx => {
       let eligible = 0, reward = 0, pts = 0
+      let trackContribution = 0
+      let trackBefore = 0
+      let trackAfter = 0
+      let trackOnly = false
       if (isThresholdMode) {
         const eligibility = getEligibility(tx)
-        const trackChannels = getTriggerTrackChannels(rule.rewardTrigger || {})
-        const txTrackContribution = channelMatchesAny(trackChannels, String(tx.channel || '').trim()) ? Number(tx.amount || 0) : 0
-        const trackBefore = trackAccum
-        const trackAfter = Math.round((trackBefore + txTrackContribution) * 100) / 100
+        trackContribution = channelMatchesAny(trackChannels, String(tx.channel || '').trim()) ? Number(tx.amount || 0) : 0
+        trackBefore = trackAccum
+        trackAfter = Math.round((trackBefore + trackContribution) * 100) / 100
         const triggerAmt = Number(rule.rewardTrigger?.thresholdAmount || 0)
         let triggerCount = 0
         if (triggerAmt > 0) {
@@ -8435,7 +8439,8 @@ App._pickMerchant = function(name, opts = {}) {
             : (trackBefore < triggerAmt && trackAfter >= triggerAmt ? 1 : 0)
         }
         trackAccum = trackAfter
-        if (!txHasRule(tx)) return null
+        const includedByRule = txHasRule(tx)
+        if (!includedByRule && trackContribution <= 0) return null
         if (eligibility.matched && triggerCount > 0) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
           const txCK = String(tx.channel || '').trim().toLowerCase()
@@ -8465,6 +8470,8 @@ App._pickMerchant = function(name, opts = {}) {
           }
           if (txMK) { sheetMerchElgAccum[txMK] = (sheetMerchElgAccum[txMK] || 0) + eligible; sheetMerchRewAccum[txMK] = (sheetMerchRewAccum[txMK] || 0) + reward }
           if (txCK) { sheetChElgAccum[txCK]    = (sheetChElgAccum[txCK]    || 0) + eligible; sheetChRewAccum[txCK]    = (sheetChRewAccum[txCK]    || 0) + reward }
+        } else if (!includedByRule && trackContribution > 0) {
+          trackOnly = true
         }
       } else {
         if (!txHasRule(tx)) return null
@@ -8499,7 +8506,8 @@ App._pickMerchant = function(name, opts = {}) {
       }
       eligAccum   += eligible
       rewardAccum += isPoints ? 0 : reward
-      return { tx, eligible, reward, pts }
+      if (isThresholdMode && trackContribution > 0 && eligible <= 0 && reward <= 0 && pts <= 0) trackOnly = true
+      return { tx, eligible, reward, pts, trackContribution, trackBefore, trackAfter, trackOnly }
     }).filter(Boolean)
     rows.reverse() // newest-first for display
 
@@ -8566,11 +8574,14 @@ App._pickMerchant = function(name, opts = {}) {
 
     const listHtml = rows.length === 0
       ? `<div style="text-align:center;padding:32px 0;color:var(--text-secondary,#6b7280);font-size:14px">ยังไม่มีรายการในรอบนี้</div>`
-      : rows.map(({ tx, eligible, reward, pts }) => {
+      : rows.map(({ tx, eligible, reward, pts, trackContribution, trackBefore, trackAfter, trackOnly }) => {
           const rewardVal = isPoints ? pts : reward
           const label = String(tx.merchant || tx.note || '').trim() || 'ไม่ระบุร้าน'
           const ch = String(tx.channel || '').trim()
-          const sub = [ch ? chLabel(ch) : null, tx.note && tx.merchant ? esc(tx.note) : null].filter(Boolean).join(' · ')
+          const unlockLine = isThresholdMode && trackContribution > 0
+            ? `สะสมปลดล็อก ${fmtMoney(trackContribution)}${trackOnly ? ` · รวม ${fmtMoney(trackAfter)}` : ''}`
+            : ''
+          const sub = [ch ? chLabel(ch) : null, tx.note && tx.merchant ? esc(tx.note) : null, unlockLine].filter(Boolean).join(' · ')
           return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border,#1e2a3a)">
             <div style="flex-shrink:0;text-align:center;min-width:32px">
               <div style="font-size:12px;font-weight:600">${fmtDate(tx.date)}</div>
@@ -8581,7 +8592,7 @@ App._pickMerchant = function(name, opts = {}) {
             </div>
             <div style="text-align:right;flex-shrink:0">
               <div style="font-size:13px;font-weight:600">${fmtMoney(tx.amount)}</div>
-              <div style="font-size:11px;color:var(--success,#059669)">+${fmtReward(rewardVal)}</div>
+              <div style="font-size:11px;color:${trackOnly ? 'var(--primary,#2563EB)' : 'var(--success,#059669)'}">${trackOnly ? 'นับสะสมปลดล็อก' : `+${fmtReward(rewardVal)}`}</div>
               ${eligible < Number(tx.amount || 0) - 0.005 ? `<div style="font-size:10px;color:var(--text-secondary,#6b7280)">นับ ${fmtMoney(eligible)}</div>` : ''}
             </div>
           </div>`
