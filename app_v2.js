@@ -1340,7 +1340,7 @@ const App = {
       <label class="settings-row" style="margin:0 0 12px;padding:10px 0;border:0">
         <div class="s-icon">🏷️</div>
         <div class="s-label">มีส่วนลดตอนชำระ</div>
-        <input type="checkbox" id="cc-pay-has-discount" onchange="App.updateCCPayPreview()" style="width:20px;height:20px">
+        <button type="button" id="cc-pay-has-discount" class="toggle" onclick="App.toggleCCPayDiscount()" aria-label="เปิดส่วนลดตอนชำระ" aria-pressed="false"></button>
       </label>
       <div id="cc-pay-discount-fields" style="display:none">
         <div class="form-group">
@@ -1373,7 +1373,7 @@ const App = {
     const cashEl = document.getElementById('cc-pay-cash-amount')
     const preview = document.getElementById('cc-pay-preview')
     const amount = Math.max(0, parsePayNumber(amountEl?.value))
-    const hasDiscount = !!hasDiscountEl?.checked
+    const hasDiscount = !!hasDiscountEl?.classList?.contains('on')
     if (discountFields) discountFields.style.display = hasDiscount ? '' : 'none'
     let discount = hasDiscount ? Math.max(0, parsePayNumber(discountEl?.value)) : 0
     if (discount > amount) discount = amount
@@ -1398,6 +1398,15 @@ const App = {
           ${finalDiscount > 0 ? `<div style="display:flex;justify-content:space-between;gap:12px;color:var(--income)"><span>ประหยัดจากโปร</span><strong>${Calc.fmt(finalDiscount)}</strong></div>` : ''}
         </div>`
     }
+  },
+
+  toggleCCPayDiscount() {
+    const btn = document.getElementById('cc-pay-has-discount')
+    if (!btn) return
+    const on = !btn.classList.contains('on')
+    btn.classList.toggle('on', on)
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false')
+    App.updateCCPayPreview()
   },
 
   // Credit-card detail screen is defined in later credit-card blocks.
@@ -2035,7 +2044,7 @@ App.render();
     if (!tx) return
     S.txMode = 'edit'
     S.editingTxId = id
-    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxDetail()
     App.openOverlay('overlay-add-tx')
@@ -2046,7 +2055,7 @@ App.render();
     if (!tx) return
     S.txMode = 'duplicate'
     S.editingTxId = null
-    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), calcOp:'', calcLeft:'', walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), calcOp:'', calcLeft:'', walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
@@ -2089,12 +2098,18 @@ App.render();
     const ccCashAmount = tx.type === 'cc_payment' ? (App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(tx) : Number(tx.cashAmount || tx.amount || 0)) : 0
     const ccDiscount = tx.type === 'cc_payment' ? Number(tx.discountAmount || 0) : 0
     const headerAmount = tx.type === 'cc_payment' ? ccCashAmount : tx.amount
+    const shared = tx.type === 'expense' && tx.sharedExpense?.enabled ? (App._sharedExpenseFromTx?.(tx) || tx.sharedExpense) : null
+    const sharedSettlement = shared ? (App.getSharedExpenseSettlement?.(tx.id) || null) : null
+    const reimbursementParent = tx.reimbursesSharedExpenseTxId ? (S.transactions || []).find(t => t.id === tx.reimbursesSharedExpenseTxId) : null
+    const reimbursementParentTitle = reimbursementParent ? (reimbursementParent.merchant || reimbursementParent.note || 'บิลร่วม') : ''
     return `<div style="text-align:center;margin-bottom:20px"><div style="font-size:44px;font-weight:800;color:${cssAmountColor(tx.type)};letter-spacing:-.05em;${isScheduledFuture ? 'opacity:.55' : ''}">${signedFmt(headerAmount, tx.type)}</div><div style="font-size:14px;color:var(--muted);margin-top:6px">${esc(Calc.labelDate(tx.date))}</div>${isScheduledFuture ? `<div style="display:inline-block;margin-top:8px;padding:4px 10px;border-radius:999px;background:rgba(100,116,139,.15);color:var(--muted);font-size:12px;font-weight:600">📅 ตามแผน · ยังไม่หักยอดจริง</div>` : ''}</div>
       <div>
         ${isScheduledFuture ? `<div class="detail-row" style="background:rgba(100,116,139,.08);border-radius:8px;padding:8px 12px;margin-bottom:4px"><span class="detail-label" style="color:var(--muted)">สถานะ</span><span class="detail-value" style="color:var(--muted)">ตามแผน — ยังไม่กระทบยอดกระเป๋า</span></div>` : ''}
         ${transferLine ? `<div class="detail-row"><span class="detail-label">รายการโอน</span><span class="detail-value">${esc(transferLine)}</span></div>` : ''}
         ${tx.type === 'cc_payment' ? `<div class="detail-row"><span class="detail-label">ตัดยอดบัตร</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">เงินที่จ่ายจริง</span><span class="detail-value">${fmt(ccCashAmount)}</span></div>` : ''}
         ${ccDiscount > 0 ? `<div class="detail-row"><span class="detail-label">ส่วนลดตอนชำระ</span><span class="detail-value" style="color:var(--income)">${fmt(ccDiscount)}</span></div>` : ''}
+        ${shared ? `<div class="detail-row"><span class="detail-label">จ่ายแทนทั้งหมด</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">นับเข้างบของเรา</span><span class="detail-value">${fmt(shared.myShare || 0)}</span></div><div class="detail-row"><span class="detail-label">รับคืนแล้ว</span><span class="detail-value" style="color:var(--income)">${fmt(sharedSettlement?.received || shared.reimbursedAmount || 0)}</span></div><div class="detail-row"><span class="detail-label">คงเหลือรอรับคืน</span><span class="detail-value" style="color:${(sharedSettlement?.remaining || shared.remainingReimbursableAmount || shared.reimbursableAmount || 0) > 0 ? 'var(--income)' : 'var(--muted)'}">${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0)}</span></div>` : ''}
+        ${reimbursementParent ? `<div class="detail-row"><span class="detail-label">รับคืนจากบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openTxDetail('${esc(reimbursementParent.id)}')">${esc(reimbursementParentTitle)}</button></span></div>` : ''}
         ${cat ? `<div class="detail-row"><span class="detail-label">หมวดหมู่</span><span class="detail-value">${esc(cat.icon)} ${esc(cat.label)}</span></div>` : ''}
         ${wallet ? `<div class="detail-row"><span class="detail-label">กระเป๋าเงิน</span><span class="detail-value">${esc(wallet.icon)} ${esc(wallet.name)}</span></div>` : ''}
         ${toWal && tx.type !== 'transfer' ? `<div class="detail-row"><span class="detail-label">ไปยัง</span><span class="detail-value">${esc(toWal.icon)} ${esc(toWal.name)}</span></div>` : ''}
@@ -2103,6 +2118,7 @@ App.render();
         ${tx.isRecurring ? `<div class="detail-row"><span class="detail-label">รายการประจำ</span><span class="detail-value">เปิดใช้</span></div>` : ''}
         ${tx.isInstallment ? `<div class="detail-row"><span class="detail-label">ผ่อนชำระ</span><span class="detail-value">งวด ${tx.installmentNo || 1}/${tx.installmentMonths || '?'}</span></div>` : ''}
         ${(r.points || r.cashback) ? `<div class="detail-row"><span class="detail-label">สิทธิประโยชน์โดยประมาณ</span><span class="detail-value">${r.points ? '+' + r.points.toLocaleString('en-US') + ' pt' : ''}${r.points && r.cashback ? ' · ' : ''}${r.cashback ? '+' + fmt(r.cashback) : ''}</span></div>` : ''}
+        ${shared && (sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0) > 0 ? `<button class="btn btn-secondary" style="margin:10px 0 4px" onclick="App.openSharedExpenseReimbursement('${esc(tx.id)}')">บันทึกรับคืน ${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount)}</button>` : ''}
         <div class="detail-row"><span class="detail-label">ประเภท</span><span class="detail-value">${esc(App._txTypeLabel(tx.type))}</span></div>
       </div>`
   }
@@ -2369,7 +2385,7 @@ App.render();
   App.openAddTx = function() {
     S.txMode = 'add'
     S.editingTxId = null
-    S.tx = { step:'amount', type:'expense', amount:'0', calcOp:'', calcLeft:'', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', channel:'', note:'', date:txToday(), isRecurring:false, isInstallment:false, installmentMonths:'', rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
+    S.tx = { step:'amount', type:'expense', amount:'0', calcOp:'', calcLeft:'', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', channel:'', note:'', date:txToday(), isRecurring:false, isInstallment:false, installmentMonths:'', sharedExpense:{ enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
   }
@@ -2619,6 +2635,10 @@ App.render();
     if (wallet?.name && !isTransfer) meta.push(wallet.name)
     if (isTransfer) meta.push('โอนเงิน')
     if (tx.type === 'cc_payment' && Number(tx.discountAmount || 0) > 0) meta.push(`ตัดบัตร ${fmt(tx.amount)} · ส่วนลด ${fmt(tx.discountAmount)}`)
+    if (tx.type === 'expense' && tx.sharedExpense?.enabled) {
+      const shared = App._sharedExpenseFromTx?.(tx) || tx.sharedExpense
+      meta.push(`หารบิล · ส่วนเรา ${fmt(shared.myShare || tx.ledgerAmount || 0)}`)
+    }
     if (tx.isRecurring) meta.push('🔁 ประจำ')
     if (tx.isInstallment) meta.push(`ผ่อน ${tx.installmentNo || 1}/${tx.installmentMonths || '?'}`)
     return { cat, wallet, toWallet, title, icon, meta }
@@ -2721,7 +2741,10 @@ App.render();
     const isScheduledFuture = tx.scheduled === true && String(tx.date || '') > todayNow
     const scheduledPill = isScheduledFuture ? `<span class="tx-meta-pill tx-scheduled-pill" style="background:rgba(100,116,139,.15);color:var(--muted)">📅 ตามแผน</span>` : ''
     const amountColor = isScheduledFuture ? 'var(--muted)' : typeColor(tx.type)
-    const notYetNote = isScheduledFuture ? `<div style="font-size:10px;color:var(--muted);text-align:right;margin-top:2px">ยังไม่หัก</div>` : ''
+    const shared = tx.type === 'expense' && tx.sharedExpense?.enabled ? (App._sharedExpenseFromTx?.(tx) || tx.sharedExpense) : null
+    const notYetNote = isScheduledFuture
+      ? `<div style="font-size:10px;color:var(--muted);text-align:right;margin-top:2px">ยังไม่หัก</div>`
+      : (shared ? `<div style="font-size:10px;color:var(--muted);text-align:right;margin-top:2px">งบ ${fmt(shared.myShare || 0)}</div>` : '')
     return `<div class="tx-row tx-row-modern tx-row--${esc(tx.type)}${isScheduledFuture ? ' tx-row--scheduled' : ''}" data-txid="${esc(tx.id)}">
       <div class="tx-icon" style="background:${bg};${isScheduledFuture ? 'opacity:.6' : ''}">${esc(v.icon)}</div>
       <div class="tx-info"><div class="tx-title">${esc(v.title)}</div><div class="tx-sub">${v.meta.map(x => `<span class="tx-meta-pill">${esc(x)}</span>`).join('')}${scheduledPill}</div></div>
@@ -4475,7 +4498,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
       // must not reduce today's real wallet/card balance.
       if (!App._isPostedTx(tx)) return
 
-      const amt = App.getLedgerAmountForTx(tx)
+      const amt = tx.type === 'expense' && typeof App._expectedLedgerAmountForTx === 'function'
+        ? App._expectedLedgerAmountForTx(tx)
+        : App.getLedgerAmountForTx(tx)
       const addCash = (id, value) => { if (id) cash[id] = (cash[id] || 0) + value }
       const addUnits = (id, value) => { if (id) units[id] = (units[id] || 0) + value }
       if (!amt && !Number(tx.unitsDelta || tx.units || 0)) return
@@ -4578,9 +4603,53 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return { points: Number(reward.points || 0), cashback: Math.round(Number(reward.cashback || 0) * 100) / 100, status:'estimated', calculatedAt: localNow(), source:'legacy' }
   }
 
+  function normalizeSharedExpenseDraft(draft = {}) {
+    const amount = round2(Number(draft.amount || 0))
+    const raw = draft.sharedExpense || {}
+    const enabled = draft.type === 'expense' && raw.enabled === true && draft.isInstallment !== true && amount > 0
+    if (!enabled) return { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }
+    const peopleCount = Math.max(2, Math.min(99, Math.round(Number(raw.peopleCount || 2))))
+    const defaultShare = peopleCount > 0 ? round2(amount / peopleCount) : amount
+    const myShareRaw = raw.myShare !== undefined && raw.myShare !== '' ? Number(raw.myShare) : defaultShare
+    const myShare = round2(Math.max(0, Math.min(amount, Number.isFinite(myShareRaw) ? myShareRaw : defaultShare)))
+    return {
+      enabled:true,
+      mode: raw.mode === 'custom' ? 'custom' : 'equal',
+      peopleCount,
+      myShare,
+      reimbursableAmount: round2(Math.max(0, amount - myShare)),
+      status: raw.status === 'settled' || raw.status === 'partial' ? raw.status : 'pending',
+    }
+  }
+
+  App._normalizeSharedExpenseDraft = normalizeSharedExpenseDraft
+  App._sharedExpenseFromTx = function(tx = {}) {
+    const shared = tx.sharedExpense || {}
+    const enabled = tx.type === 'expense' && shared.enabled === true
+    const amount = round2(Number(tx.amount || 0))
+    const myShare = enabled
+      ? round2(Number(shared.myShare ?? tx.ledgerAmount ?? amount))
+      : round2(Number(tx.ledgerAmount ?? amount))
+    const normalized = normalizeSharedExpenseDraft({
+      type: 'expense',
+      amount,
+      sharedExpense: {
+        ...shared,
+        enabled,
+        peopleCount: shared.peopleCount || 2,
+        myShare,
+        mode: shared.mode || 'custom',
+      },
+    })
+    normalized.reimbursedAmount = round2(Number(shared.reimbursedAmount || 0))
+    normalized.remainingReimbursableAmount = round2(Math.max(0, Number(shared.remainingReimbursableAmount ?? normalized.reimbursableAmount) || 0))
+    return normalized
+  }
+
   function cleanTxFromDraft(id) {
     const wallet = walletById(S.tx.walletId)
     const useRewardRules = !!(wallet && wallet.type === 'credit' && S.tx.type === 'expense')
+    const sharedExpense = normalizeSharedExpenseDraft(S.tx)
     const tx = {
       id,
       type: S.tx.type,
@@ -4599,13 +4668,20 @@ Calc.getUsableMoney = function(wallets, state = null) {
       date: S.tx.date || today(),
       isRecurring: !!S.tx.isRecurring,
       isInstallment: !!S.tx.isInstallment,
+      reimbursesSharedExpenseTxId: S.tx.reimbursesSharedExpenseTxId || undefined,
       rewardRuleIds: useRewardRules && Array.isArray(S.tx.rewardRuleIds) ? [...new Set(S.tx.rewardRuleIds.filter(Boolean))] : [],
       rewardIncludePoints: S.tx.rewardIncludePoints !== false,
       rewardIncludeCashback: S.tx.rewardIncludeCashback !== false,
     }
     const reward = App._rewardEstimateForTx(tx)
     if (reward) tx.rewardEstimate = reward
-    if (tx.type === 'expense') tx.ledgerAmount = App.getLedgerAmountForTx(tx)
+    if (tx.type === 'expense' && sharedExpense.enabled) {
+      tx.sharedExpense = sharedExpense
+      tx.ledgerAmount = sharedExpense.myShare
+    } else {
+      tx.sharedExpense = null
+      if (tx.type === 'expense') tx.ledgerAmount = App.getLedgerAmountForTx(tx)
+    }
     return tx
   }
 
@@ -4684,6 +4760,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
       } else {
         S.transactions.unshift(tx)
       }
+      if (!isEdit && tx.type === 'income' && tx.reimbursesSharedExpenseTxId) {
+        App._syncSharedExpenseSettlement?.(tx.reimbursesSharedExpenseTxId)
+      }
       App._registerMerchantFromTx?.(tx)
       App.recalculateWalletBalances({ save:false, recordSnapshot:true })
       persist()
@@ -4746,7 +4825,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const parsePayNumber = value => Number(String(value || '0').replace(/,/g, '')) || 0
     const sourceId = document.getElementById('cc-pay-wallet')?.value
     const amount = parsePayNumber(document.getElementById('cc-pay-amount')?.value)
-    const hasDiscount = !!document.getElementById('cc-pay-has-discount')?.checked
+    const hasDiscount = !!document.getElementById('cc-pay-has-discount')?.classList?.contains('on')
     const rawDiscount = hasDiscount ? parsePayNumber(document.getElementById('cc-pay-discount')?.value) : 0
     const rawCashAmount = hasDiscount ? parsePayNumber(document.getElementById('cc-pay-cash-amount')?.value) : amount
     const discountAmount = Math.max(0, Math.min(amount, rawDiscount))
@@ -5653,20 +5732,58 @@ App._pickMerchant = function(name, opts = {}) {
     const current = S.tx?.[field]
     return current === '' || current === null || typeof current === 'undefined' || sameValue(current, prev)
   }
-  App.getMerchantSuggestion = function(name) {
-    const normalized = String(name || '').trim().toLowerCase()
-    if (!normalized) return null
-    const matches = (S.transactions || [])
-      .filter(t => String(t.merchant || '').trim().toLowerCase() === normalized)
+  function normalizeMerchantSuggestionText(value = '') {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
+  }
+  function compactMerchantSuggestionText(value = '') {
+    return normalizeMerchantSuggestionText(value).replace(/\s+/g, '')
+  }
+  function rankMerchantHistoryForSuggestion(name, type = '') {
+    const normalized = normalizeMerchantSuggestionText(name)
+    const compact = compactMerchantSuggestionText(name)
+    if (!normalized) return []
+    const allMatches = (S.transactions || [])
       .filter(t => ['expense', 'income'].includes(t.type))
+      .filter(t => {
+        const merchant = normalizeMerchantSuggestionText(t.merchant || '')
+        if (!merchant) return false
+        if (merchant === normalized) return true
+        const merchantCompact = compactMerchantSuggestionText(merchant)
+        return compact.length >= 3 && merchantCompact === compact
+      })
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+    if (!type) return allMatches
+    const sameType = allMatches.filter(t => t.type === type)
+    return sameType.length ? sameType : allMatches
+  }
+  function mostLikelyCategoryFromMerchantHistory(matches = []) {
+    const byCategory = new Map()
+    matches.forEach((tx, index) => {
+      const categoryId = String(tx.categoryId || '').trim()
+      if (!categoryId) return
+      const current = byCategory.get(categoryId) || { categoryId, count: 0, latestDate: '', latestIndex: Number.MAX_SAFE_INTEGER }
+      current.count += 1
+      if (String(tx.date || '') > current.latestDate) current.latestDate = String(tx.date || '')
+      current.latestIndex = Math.min(current.latestIndex, index)
+      byCategory.set(categoryId, current)
+    })
+    return [...byCategory.values()]
+      .sort((a, b) => b.count - a.count || String(b.latestDate).localeCompare(String(a.latestDate)) || a.latestIndex - b.latestIndex)[0]?.categoryId || ''
+  }
+  App.getMerchantSuggestion = function(name) {
+    const matches = rankMerchantHistoryForSuggestion(name, S.tx?.type || '')
     if (!matches.length) return null
     const latest = matches[0]
-    const rewardRuleIds = Array.isArray(latest.rewardRuleIds) ? latest.rewardRuleIds.filter(Boolean) : []
+    const categoryId = mostLikelyCategoryFromMerchantHistory(matches)
+    const knownRuleIds = new Set((S.ccBenefitRules || []).map(rule => String(rule.id || '')).filter(Boolean))
+    const activeRuleIds = new Set((S.ccBenefitRules || []).filter(rule => rule.active !== false).map(rule => String(rule.id || '')))
+    const rewardRuleIds = Array.isArray(latest.rewardRuleIds)
+      ? latest.rewardRuleIds.map(id => String(id || '')).filter(id => id && (!knownRuleIds.size || activeRuleIds.has(id)))
+      : []
     return {
       merchant: latest.merchant || name,
       type: latest.type || '',
-      categoryId: latest.categoryId || '',
+      categoryId,
       walletId: latest.walletId || '',
       rewardRuleIds
     }
@@ -8205,10 +8322,15 @@ App._pickMerchant = function(name, opts = {}) {
     const chLabel = val => { const f = channelOptions.find(([v]) => v === val); return f ? f[1] : val }
 
     // Collect txs in cycle with this rule selected, sorted oldest→newest for cap accumulation
+    const txHasRule = tx => {
+      if (Array.isArray(tx?.rewardRuleIds)) return tx.rewardRuleIds.map(String).includes(String(ruleId || ''))
+      const rows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
+      return rows.some(row => String(row.ruleId || '') === String(ruleId || ''))
+    }
     const txsInCycle = (S.transactions || [])
       .filter(tx => {
         if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return false
-        if (!Array.isArray(tx.rewardRuleIds) || !tx.rewardRuleIds.map(String).includes(String(ruleId))) return false
+        if (!txHasRule(tx)) return false
         const d = String(tx.date || '')
         return d >= cycle.start && d <= cycle.end
       })
@@ -8531,7 +8653,10 @@ App._pickMerchant = function(name, opts = {}) {
         String(tx.date || '') > todayStr &&
         (!walletId || tx.walletId === walletId)
       ) {
-        sum += Number(App.getLedgerAmountForTx?.(tx) || tx.amount || 0)
+        const amount = tx.type === 'expense' && typeof App._expectedLedgerAmountForTx === 'function'
+          ? App._expectedLedgerAmountForTx(tx)
+          : (App.getLedgerAmountForTx?.(tx) || tx.amount || 0)
+        sum += Number(amount || 0)
       }
       return sum
     }, 0)
@@ -12689,6 +12814,7 @@ App._pickMerchant = function(name, opts = {}) {
     ensureCCBenefitRulesState()
     const cardId = String(txDraft.walletId || '')
     return App.getCreditCardBenefitRules(cardId)
+      .filter(rule => rule.active !== false)
       .map(rule => {
         const eligibility = getRuleEligibility(txDraft, rule)
         const specificity = (rule.suggestedConditions?.categories?.length || 0)
@@ -12737,7 +12863,7 @@ App._pickMerchant = function(name, opts = {}) {
             channelEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerChannelPerCycle) - Number(usage.eligibleSpendUsedByChannelBefore || 0))
           }
         }
-        const suggested = !!rule.active && eligibility.matched
+        const suggested = eligibility.matched
         const score = (suggested ? 100 : 0) + (rule.isBaseRule ? 15 : 0) + (specificity * 3) + Number(rule.priority || 0)
         return { ...rule, suggested, timeMatch: eligibility.timeMatch, eligibility, suggestionScore: score, trackLocked, trackRemaining, trackChannelLabel, merchantCashbackRemaining, merchantEligibleRemaining, channelCashbackRemaining, channelEligibleRemaining }
       })
@@ -12758,6 +12884,11 @@ App._pickMerchant = function(name, opts = {}) {
     const normalizedTxMerchant = normalizeCompareText(txMerchant || '')
     const normalizedTxChannel = String(txChannel || '').trim().toLowerCase()
     const normalizedTrackChannels = Array.isArray(trackChannels) ? trackChannels : [trackChannels].filter(Boolean)
+    const txHasRule = tx => {
+      if (Array.isArray(tx?.rewardRuleIds)) return tx.rewardRuleIds.map(String).includes(String(ruleId || ''))
+      const rows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
+      return rows.some(row => String(row.ruleId || '') === String(ruleId || ''))
+    }
 
     // When a rule object is provided, recompute eligibility and rewards on-the-fly
     // (in date order with proper caps) to avoid relying on potentially stale stored estimates.
@@ -12787,9 +12918,9 @@ App._pickMerchant = function(name, opts = {}) {
         .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
       txsInCycle.forEach(tx => {
         const txCh = String(tx.channel || '').trim()
-        if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += Number(tx.amount || 0)
         // Only count transactions where the user explicitly applied this rule
-        if (!Array.isArray(tx.rewardRuleIds) || !tx.rewardRuleIds.map(String).includes(String(ruleId || ''))) return
+        if (!txHasRule(tx)) return
+        if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += Number(tx.amount || 0)
         if (isThresholdMode) {
           // Threshold rules: fall back to stored estimate for cashback/points
           const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
@@ -12859,12 +12990,13 @@ App._pickMerchant = function(name, opts = {}) {
         const date = String(tx.date || '')
         if (date < cycleStart || date > cycleEnd) return
         const txCh = String(tx.channel || '').trim()
-        if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += Number(tx.amount || 0)
         const isSameMerchant = !!normalizedTxMerchant && merchantTextsMatch(normalizedTxMerchant, normalizeCompareText(tx.merchant || ''))
         const isSameChannel = !!normalizedTxChannel && txCh.toLowerCase() === normalizedTxChannel
+        if (!txHasRule(tx)) return
         const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
-        rows.forEach(row => {
-          if (String(row.ruleId || '') !== String(ruleId || '')) return
+        const matchingRows = rows.filter(row => String(row.ruleId || '') === String(ruleId || ''))
+        if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += Number(tx.amount || 0)
+        matchingRows.forEach(row => {
           eligibleSpendUsed += Number(row.eligibleAmount || 0)
           cashbackUsed += Number(row.cashback || row.finalCashback || 0)
           discountUsed += Number(row.discount || row.finalDiscount || 0)
@@ -12912,10 +13044,16 @@ App._pickMerchant = function(name, opts = {}) {
     const trigger = rule.rewardTrigger || {}
     const isThresholdMode = trigger.mode === 'cycle_spend_threshold' && Number(trigger.thresholdAmount || 0) > 0
     const ruleChannelKeys = ruleChannels.map(ch => String(ch || '').trim().toLowerCase()).filter(Boolean)
+    const txHasRule = tx => {
+      if (Array.isArray(tx?.rewardRuleIds)) return tx.rewardRuleIds.map(String).includes(String(ruleId || ''))
+      const rows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
+      return rows.some(row => String(row.ruleId || '') === String(ruleId || ''))
+    }
     ;(S.transactions || []).forEach(tx => {
       if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return
       const date = String(tx.date || '')
       if (date < cycleStart || date > cycleEnd) return
+      if (!txHasRule(tx)) return
       const eligibility = getRuleEligibility(tx, rule)
       if (!eligibility.matched) return
       const txMerchantNorm = normalizeCompareText(tx.merchant || '')
@@ -13002,8 +13140,8 @@ App._pickMerchant = function(name, opts = {}) {
 
     const triggerMode = trigger.mode === 'cycle_spend_threshold' && Number(trigger.thresholdAmount || 0) > 0 ? 'cycle_spend_threshold' : 'none'
     const thresholdAmount = Number(trigger.thresholdAmount || 0)
-    // นับยอดจากทุก tx บนบัตรที่ตรงช่องทางสะสม ไม่จำกัดเฉพาะรายการที่เลือกกฎนี้
-    // ถ้าไม่เลือกช่องทาง จะนับทุก tx บนบัตร
+    // นับยอดจาก tx ในรอบบิลที่ผูกกับกฎนี้และตรงช่องทางสะสม
+    // ถ้าไม่เลือกช่องทาง จะนับ tx ที่ผูกกับกฎนี้ทั้งหมดบนบัตร
     const cycleSpendBefore = Math.round(Number(cycleUsage.trackChannelSpendBefore || 0) * 100) / 100
     const currentTxContribution = channelMatchesAny(trackChannels, String(txDraft.channel || '').trim()) ? amount : 0
     const cycleSpendAfter = Math.round((cycleSpendBefore + currentTxContribution) * 100) / 100
@@ -13207,7 +13345,7 @@ App._pickMerchant = function(name, opts = {}) {
     const card = walletById(txDraft.walletId)
     if (!card || card.type !== 'credit' || txDraft.type !== 'expense') return null
     const normalizedIds = [...new Set((selectedRuleIds || []).map(v => String(v || '')).filter(Boolean))]
-    const rules = App.getCreditCardBenefitRules(card.id).filter(rule => normalizedIds.includes(rule.id))
+    const rules = App.getCreditCardBenefitRules(card.id).filter(rule => rule.active !== false && normalizedIds.includes(rule.id))
     const results = []
     const warnings = []
     let cashback = 0
@@ -13330,7 +13468,12 @@ App._pickMerchant = function(name, opts = {}) {
       App._isPostedTx(t)
     )
     const payments = (S.transactions || []).filter(t => t.type === 'cc_payment' && t.toWalletId === cardId && (t.statementId === id || (t.date > endStr && t.date <= dueStr)))
-    const purchaseTotal = purchases.reduce((s, t) => s + Number(App.getLedgerAmountForTx?.(t) || t.amount || 0), 0)
+    const purchaseTotal = purchases.reduce((s, t) => {
+      const amount = typeof App._expectedLedgerAmountForTx === 'function'
+        ? App._expectedLedgerAmountForTx(t)
+        : (App.getLedgerAmountForTx?.(t) || t.amount || 0)
+      return s + Number(amount || 0)
+    }, 0)
     const paidTotal = payments.reduce((s, t) => s + Number(t.amount || 0), 0)
     const balanceDue = Math.max(0, Math.round((purchaseTotal - paidTotal) * 100) / 100)
     const reward = purchases.reduce((sum, tx) => {
@@ -13842,7 +13985,7 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.exportCSV = function() {
     const typeLabel = { expense:'expense', income:'income', transfer:'transfer', cc_payment:'cc_payment' }
-    const headers = ['date','type','amount','wallet','toWallet','category','merchant','note','status','recurringId','installmentGroupId','installmentNo','rewardRuleIds','createdAt']
+    const headers = ['date','type','amount','wallet','toWallet','category','merchant','note','status','budgetAmount','sharedBill','sharedPeople','myShare','reimbursed','reimbursableRemaining','reimbursesSharedExpenseTxId','recurringId','installmentGroupId','installmentNo','rewardRuleIds','createdAt']
     const csvCell = value => `"${String(value ?? '').replace(/"/g, '""')}"`
     const rows = [...(S.transactions || [])]
       .sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
@@ -13855,6 +13998,11 @@ App._pickMerchant = function(name, opts = {}) {
           : Number(t.amount || 0)
         const signedAmount = (t.type === 'expense' || t.type === 'cc_payment') ? -Math.abs(amountForExport) : amountForExport
         const status = App._isPostedTx?.(t) ? 'posted' : 'scheduled'
+        const shared = t.type === 'expense' && t.sharedExpense?.enabled ? (App._sharedExpenseFromTx?.(t) || t.sharedExpense) : null
+        const settlement = shared ? (App.getSharedExpenseSettlement?.(t.id) || null) : null
+        const budgetAmount = t.type === 'expense'
+          ? Number(Calc.getExpenseLedgerAmount?.(t) || t.ledgerAmount || t.amount || 0)
+          : ''
         return [
           t.date || '',
           typeLabel[t.type] || t.type || '',
@@ -13865,6 +14013,13 @@ App._pickMerchant = function(name, opts = {}) {
           t.merchant || '',
           t.note || '',
           status,
+          budgetAmount,
+          shared ? 'yes' : '',
+          shared?.peopleCount || '',
+          shared?.myShare || '',
+          settlement?.received ?? shared?.reimbursedAmount ?? '',
+          settlement?.remaining ?? shared?.remainingReimbursableAmount ?? shared?.reimbursableAmount ?? '',
+          t.reimbursesSharedExpenseTxId || '',
           t.sourceRecurringId || t.recurringId || '',
           t.installmentGroupId || '',
           t.installmentNo || '',
@@ -14075,8 +14230,10 @@ App._pickMerchant = function(name, opts = {}) {
     let needsRerender = false
 
     // Suggest category — only if user has not manually picked one yet
-    if (!S.tx._categoryManuallySet && best.categoryId && !S.tx.categoryId) {
+    if (!S.tx._categoryManuallySet && best.categoryId && (!S.tx.categoryId || String(S.tx.categoryId) === String(S.tx.txSuggestedFields?.categoryId || ''))) {
       S.tx.categoryId = best.categoryId
+      S.tx.txSuggestedFields ||= {}
+      S.tx.txSuggestedFields.categoryId = best.categoryId
       needsRerender = true
     }
 
@@ -15560,15 +15717,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   const _INSIGHT_ACTION_MAP = {
-    "App.showPage('wallets')":                () => App.showPage?.('wallets'),
-    "App.showPage('reports')":                () => App.showPage?.('reports'),
-    "App.showPage('transactions')":           () => App.showPage?.('transactions'),
-    "App.openBudgetScreen()":                 () => App.openBudgetScreen?.(),
-    "App.openGoalsScreen()":                  () => App.openGoalsScreen?.(),
-    "App.openUpcomingBillsScreen()":          () => App.openUpcomingBillsScreen?.(),
-    "App.openUpcomingScreen?.()":             () => App.openUpcomingScreen?.(),
-    "App.openRecurringScreen()":              () => App.openRecurringScreen?.(),
-    "App.openPrivilegesScreen?.('expiring')": () => App.openPrivilegesScreen?.('expiring'),
+    "App.openBudgetScreen()":        () => App.openBudgetScreen?.(),
+    "App.openGoalsScreen()":         () => App.openGoalsScreen?.(),
+    "App.openUpcomingBillsScreen()": () => App.openUpcomingBillsScreen?.(),
+    "App.openUpcomingScreen()":      () => App.openUpcomingScreen?.(),
+    "App.openUpcomingScreen?.()":    () => App.openUpcomingScreen?.(),
+    "App.openRecurringScreen()":     () => App.openRecurringScreen?.(),
   }
 
   App.insightAct = function(id, fn) {
@@ -15576,8 +15730,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (!fn || typeof fn !== 'string') return
     const direct = _INSIGHT_ACTION_MAP[fn]
     if (direct) { direct(); return }
-    const ccMatch = fn.match(/^App\.openCCPayOverlay\?\.\('([a-zA-Z0-9_-]{1,64})'\)$/)
-    if (ccMatch) { App.openCCPayOverlay?.(ccMatch[1]); return }
+    const showPageMatch = fn.match(/^App\.showPage(?:\?\.)?\('([a-zA-Z0-9_-]{1,32})'\)$/)
+    if (showPageMatch) { App.showPage?.(showPageMatch[1]); return }
+    const privilegesMatch = fn.match(/^App\.openPrivilegesScreen(?:\?\.)?\('([a-zA-Z0-9_-]{1,32})'\)$/)
+    if (privilegesMatch) { App.openPrivilegesScreen?.(privilegesMatch[1]); return }
+    const ccPayMatch = fn.match(/^App\.openCCPay(?:Overlay)?(?:\?\.)?\('([a-zA-Z0-9_-]{1,64})'\)$/)
+    if (ccPayMatch) { App.openCCPay?.(ccPayMatch[1]); return }
+    console.warn('[Insight] Unsupported action', fn)
   }
 
   App.insightRate = function(id, rating) {
@@ -15589,6 +15748,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // ── Card HTML builder ─────────────────────────────────────
   function insightCardHtml(ins) {
     const icon = SEV_ICON[ins.severity] || '💡'
+    const isCreditDueToday = ins.type === '03' && Number(ins.evidence?.daysLeft) === 0
+    const titleClass = `ins-title${isCreditDueToday ? ' ins-title-due-today' : ''}`
     const actionHtml = ins.action
       ? `<button class="ins-action-primary" data-ins-fn="${esc(ins.action.fn)}" onclick="App.insightAct('${esc(ins.id)}', this.dataset.insFn)">${esc(ins.action.label)}</button>`
       : ''
@@ -15597,7 +15758,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="ins-card-top">
         <span class="ins-icon">${icon}</span>
         <div class="ins-text">
-          <div class="ins-title">${esc(ins.title)}</div>
+          <div class="${titleClass}">${esc(ins.title)}</div>
           <div class="ins-body">${esc(ins.body)}</div>
         </div>
         <button class="ins-dismiss-btn" onclick="App.insightDismiss('${esc(ins.id)}')" aria-label="ปิด">✕</button>
@@ -15693,7 +15854,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     try {
       if (!S.tx || S.tx.type !== 'expense') return
       const catId  = S.tx.categoryId
-      const amount = Number(S.tx.amount || 0)
+      const grossAmount = Number(S.tx.amount || 0)
+      const shared = App._normalizeSharedExpenseDraft?.(S.tx)
+      const amount = shared?.enabled ? Number(shared.myShare || 0) : grossAmount
       if (!catId || !amount) return
 
       const month = typeof THIS_MONTH !== 'undefined' ? THIS_MONTH
@@ -15719,7 +15882,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       const chip = document.createElement('div')
       chip.className = 'ins-budget-chip'
       chip.style.cssText = `font-size:12px;padding:5px 10px;border-radius:8px;background:color-mix(in srgb,${color} 12%,transparent);color:${color};font-weight:600;margin:0 0 8px`
-      chip.textContent = text
+      chip.textContent = shared?.enabled ? `${text} · จ่ายจริง ฿${Math.round(grossAmount).toLocaleString('en-US')}` : text
 
       const catGroup = box.querySelector('#cat-grid')?.closest('.form-group')
         || box.querySelector('.cat-grid')?.closest('.form-group')
@@ -19708,7 +19871,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const dailySpend = {}
     txs.forEach(t => {
       const dk = String(t.date || '').slice(8, 10)
-      if (dk) dailySpend[dk] = (dailySpend[dk] || 0) + (t.type === 'cc_payment' && App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(t) : Number(t.amount || 0))
+      if (dk) {
+        const spendAmount = t.type === 'expense'
+          ? Number(Calc.getExpenseLedgerAmount?.(t) || t.amount || 0)
+          : (t.type === 'cc_payment' && App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(t) : Number(t.amount || 0))
+        dailySpend[dk] = (dailySpend[dk] || 0) + spendAmount
+      }
     })
 
     const vals       = Object.values(dailySpend)
@@ -19802,7 +19970,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       )
       .sort((a, b) => String(a.id).localeCompare(String(b.id)))
 
-    const expense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0)
+    const expense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(Calc.getExpenseLedgerAmount?.(t) || t.amount || 0), 0)
     const income  = txs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0)
 
     const dateLabel = dateStr === todayStr ? 'วันนี้' : thaiFullDate(dateStr)
@@ -20393,4 +20561,209 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (_sh) _cleanup(_sh)
     _sh = _ov = _st = null
   }, { passive: true })
+})()
+
+/* ============================================================
+   Shared expense quick flow (final hook after all render wrappers)
+   ============================================================ */
+;(function(){
+  'use strict'
+  if (typeof App === 'undefined' || typeof S === 'undefined') return
+
+  const esc = App._esc || (s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
+  const round2 = n => Math.round((Number(n) || 0) * 100) / 100
+  const defaultShared = () => ({ enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' })
+
+  function txAmount() {
+    return round2(Number(String(S.tx?.amount || '0').replace(/,/g, '')) || 0)
+  }
+
+  function normalizeShared() {
+    S.tx ||= {}
+    S.tx.sharedExpense ||= defaultShared()
+    if (typeof App._normalizeSharedExpenseDraft === 'function') {
+      S.tx.sharedExpense = App._normalizeSharedExpenseDraft(S.tx)
+      return S.tx.sharedExpense
+    }
+    const amount = txAmount()
+    const raw = S.tx.sharedExpense || {}
+    if (!raw.enabled || S.tx.type !== 'expense' || S.tx.isInstallment) return defaultShared()
+    const peopleCount = Math.max(2, Math.round(Number(raw.peopleCount || 2)))
+    const myShare = round2(Math.max(0, Math.min(amount, Number(raw.myShare || amount / peopleCount))))
+    return { enabled:true, mode:raw.mode || 'custom', peopleCount, myShare, reimbursableAmount:round2(amount - myShare), status:raw.status || 'pending' }
+  }
+
+  App.setSharedExpenseEnabled = function(enabled) {
+    const amount = txAmount()
+    const peopleCount = Math.max(2, Number(S.tx?.sharedExpense?.peopleCount || 2))
+    const myShare = enabled ? round2(amount / peopleCount) : 0
+    S.tx ||= {}
+    S.tx.sharedExpense = {
+      enabled: !!enabled,
+      mode: 'equal',
+      peopleCount,
+      myShare,
+      reimbursableAmount: enabled ? round2(Math.max(0, amount - myShare)) : 0,
+      status: 'pending',
+    }
+    if (enabled) {
+      S.tx.isInstallment = false
+      S.tx.installmentMonths = ''
+    }
+    App._renderAddTxDetail?.()
+  }
+
+  App.setSharedExpenseField = function(field, value) {
+    S.tx ||= {}
+    S.tx.sharedExpense ||= defaultShared()
+    const amount = txAmount()
+    if (field === 'peopleCount') {
+      S.tx.sharedExpense.peopleCount = Math.max(2, Math.min(99, Math.round(Number(value || 2))))
+      if (S.tx.sharedExpense.mode !== 'custom') S.tx.sharedExpense.myShare = round2(amount / S.tx.sharedExpense.peopleCount)
+    } else if (field === 'myShare') {
+      S.tx.sharedExpense.mode = 'custom'
+      S.tx.sharedExpense.myShare = round2(Math.max(0, Math.min(amount, Number(value || 0))))
+    }
+    S.tx.sharedExpense.reimbursableAmount = round2(Math.max(0, amount - Number(S.tx.sharedExpense.myShare || 0)))
+    App._renderAddTxDetail?.()
+  }
+
+  App.getSharedExpenseReimbursements = function(txId) {
+    return (S.transactions || []).filter(t => t.type === 'income' && t.reimbursesSharedExpenseTxId === txId)
+  }
+
+  App.getSharedExpenseSettlement = function(txId) {
+    const parent = (S.transactions || []).find(t => t.id === txId)
+    if (!parent?.sharedExpense?.enabled) return null
+    const shared = App._sharedExpenseFromTx?.(parent) || parent.sharedExpense
+    const expected = round2(Number(shared.reimbursableAmount || 0))
+    const reimbursements = App.getSharedExpenseReimbursements(txId)
+    const received = round2(reimbursements.reduce((sum, tx) => sum + Number(tx.amount || 0), 0))
+    const remaining = round2(Math.max(0, expected - received))
+    const status = remaining <= 0.005 ? 'settled' : received > 0 ? 'partial' : 'pending'
+    return { expected, received, remaining, status, reimbursements }
+  }
+
+  App._syncSharedExpenseSettlement = function(txId) {
+    const parent = (S.transactions || []).find(t => t.id === txId)
+    if (!parent?.sharedExpense?.enabled) return null
+    const settlement = App.getSharedExpenseSettlement(txId)
+    if (!settlement) return null
+    parent.sharedExpense.reimbursedAmount = settlement.received
+    parent.sharedExpense.remainingReimbursableAmount = settlement.remaining
+    parent.sharedExpense.status = settlement.status
+    return settlement
+  }
+
+  App.openSharedExpenseReimbursement = function(txId) {
+    const sourceTx = (S.transactions || []).find(t => t.id === txId)
+    if (!sourceTx || !sourceTx.sharedExpense?.enabled) return
+    const shared = App._sharedExpenseFromTx?.(sourceTx) || sourceTx.sharedExpense
+    const settlement = App._syncSharedExpenseSettlement(txId) || App.getSharedExpenseSettlement(txId)
+    const amount = round2(Number(settlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0))
+    if (!(amount > 0)) return
+    const incomeCats = (S.categories?.income || []).filter(c => !c.archived)
+    const preferredCat = incomeCats.find(c => /คืน|refund|other/i.test(`${c.id} ${c.label}`)) || incomeCats[0]
+    const walletId = (S.wallets || []).find(w => w.type !== 'credit' && !w.archived)?.id || sourceTx.walletId || ''
+    S.txMode = 'add'
+    S.editingTxId = null
+    S.tx = {
+      step: 'detail',
+      type: 'income',
+      amount: String(amount),
+      calcOp: '',
+      calcLeft: '',
+      walletId,
+      toWalletId: '',
+      categoryId: preferredCat?.id || '',
+      merchant: 'คืนเงินจากเพื่อน',
+      channel: '',
+      note: `รับคืนจาก ${sourceTx.merchant || sourceTx.note || 'บิลร่วม'}${settlement?.received ? ` (รับแล้ว ${money(settlement.received)})` : ''}`,
+      date: (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)),
+      isRecurring: false,
+      isInstallment: false,
+      installmentMonths: '',
+      sharedExpense: defaultShared(),
+      rewardRuleIds: [],
+      txSuggestedFields: {},
+      rewardEstimate: null,
+      rewardIncludePoints: true,
+      rewardIncludeCashback: true,
+      reimbursesSharedExpenseTxId: txId,
+    }
+    App.closeOverlay?.('overlay-tx-detail')
+    App._renderAddTxDetail?.()
+    App.openOverlay?.('overlay-add-tx')
+  }
+
+  function injectSharedExpenseControls() {
+    try {
+      if (!S.tx || S.tx.type !== 'expense') return
+      const box = document.getElementById('add-tx-content')
+      if (!box || box.querySelector('.shared-expense-panel')) return
+      const gross = txAmount()
+      const shared = normalizeShared()
+      const disabled = S.tx.isInstallment === true
+      const enabled = shared.enabled && !disabled
+      const panel = document.createElement('div')
+      panel.className = 'shared-expense-panel'
+      panel.innerHTML = `
+        <div class="shared-expense-head">
+          <div>
+            <div class="shared-expense-title">จ่ายแทน / หารกับเพื่อน</div>
+            <div class="shared-expense-sub">${enabled ? `นับเข้างบ ${money(shared.myShare)} จากยอดจ่ายจริง ${money(gross)}` : 'ใช้เมื่อเราจ่ายเต็มก่อน แต่ควรนับเข้างบเฉพาะส่วนเรา'}</div>
+          </div>
+          <button type="button" class="shared-expense-toggle${enabled ? ' active' : ''}" ${disabled ? 'disabled' : ''} onclick="App.setSharedExpenseEnabled(${enabled ? 'false' : 'true'})">${enabled ? 'เปิด' : 'ปิด'}</button>
+        </div>
+        ${disabled ? `<div class="form-hint">รายการผ่อนชำระยังไม่รองรับการหารบิลแบบเร็ว</div>` : ''}
+        ${enabled ? `
+          <div class="shared-expense-grid">
+            <div><label class="form-label">จำนวนคนทั้งหมด</label><input class="form-input" type="number" min="2" max="99" inputmode="numeric" value="${esc(shared.peopleCount || 2)}" onchange="App.setSharedExpenseField('peopleCount', this.value)"></div>
+            <div><label class="form-label">ส่วนของเรา</label><input class="form-input" type="number" min="0" step="0.01" inputmode="decimal" value="${esc(shared.myShare || '')}" onchange="App.setSharedExpenseField('myShare', this.value)"></div>
+          </div>
+          <div class="shared-expense-preview">
+            <span>หักกระเป๋า <strong>${money(gross)}</strong></span>
+            <span>เข้างบ <strong>${money(shared.myShare || 0)}</strong></span>
+            <span>รอรับคืน <strong>${money(shared.reimbursableAmount || 0)}</strong></span>
+          </div>
+        ` : ''}
+      `
+      const target = box.querySelector('#cat-grid')?.closest('.form-group')
+        || box.querySelector('#tx-channel')?.closest('.form-group')
+        || box.querySelector('.amount-summary-card')
+      target?.insertAdjacentElement('afterend', panel)
+    } catch (err) {
+      console.warn('shared expense controls failed', err)
+    }
+  }
+
+  const prevRenderDetail = App._renderAddTxDetail?.bind(App)
+  App._renderAddTxDetail = function(...args) {
+    prevRenderDetail?.(...args)
+    injectSharedExpenseControls()
+  }
+
+  const prevGoToDetail = App._goToDetail?.bind(App)
+  App._goToDetail = function(...args) {
+    S.tx ||= {}
+    S.tx.sharedExpense ||= defaultShared()
+    return prevGoToDetail?.(...args)
+  }
+
+  const prevSetTxType = App._setTxType?.bind(App)
+  App._setTxType = function(type) {
+    if (type !== 'expense' && S.tx) S.tx.sharedExpense = defaultShared()
+    return prevSetTxType?.(type)
+  }
+
+  const prevToggleTxFlag = App._toggleTxFlag?.bind(App)
+  App._toggleTxFlag = function(key) {
+    const result = prevToggleTxFlag?.(key)
+    if (key === 'isInstallment' && S.tx?.isInstallment && S.tx.sharedExpense?.enabled) {
+      S.tx.sharedExpense = defaultShared()
+      App._renderAddTxDetail?.()
+    }
+    return result
+  }
 })()

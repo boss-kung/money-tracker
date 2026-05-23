@@ -45,6 +45,15 @@ const InsightEngine = (() => {
     } catch (_) { return 'err' }
   }
 
+  function expenseAmount(t) {
+    try {
+      if (typeof Calc !== 'undefined' && typeof Calc.getExpenseLedgerAmount === 'function') {
+        return Number(Calc.getExpenseLedgerAmount(t) || 0)
+      }
+    } catch (_) {}
+    return Number(t?.ledgerAmount ?? t?.amount ?? 0) || 0
+  }
+
   // ── Store CRUD ───────────────────────────────────────────────
   function emptyStore() {
     return { version: VERSION, lastRefreshed: null, payloadHash: '', insights: [], hiddenTypes: [], feedback: [] }
@@ -169,7 +178,7 @@ const InsightEngine = (() => {
           if (!key || key === 'อื่นๆ' || key === 'other' || recurringMerchants.has(key)) return
           if (!merchantCounts[key]) merchantCounts[key] = { name: item.merchant || item.name, count: 0, total: 0 }
           merchantCounts[key].count++
-          merchantCounts[key].total += Number(item.total || 0)
+          merchantCounts[key].total += Number(item.amount || item.total || 0)
         })
       } catch(_) {}
     })
@@ -294,11 +303,12 @@ const InsightEngine = (() => {
         if (amount <= 0) return
         const canPay = Number(payload.usable.liquid || 0) >= amount
         const urgency = Math.max(1, 10 - daysLeft)
+        const dueLabel = daysLeft === 0 ? 'ครบกำหนดวันนี้' : `ครบกำหนดใน ${daysLeft} วัน`
         add('03', card.id + (daysLeft <= 3 ? '-urgent' : '-7d'), {
-          title: `${card.name} ครบกำหนดใน ${daysLeft} วัน`,
+          title: `${card.name} ${dueLabel}`,
           body: `ยอดค้างชำระ ฿${Calc.fmtNum(amount)}${canPay ? ' — เงินพร้อมใช้เพียงพอ' : ' — ควรโอนเงินเตรียมไว้ล่วงหน้า'}`,
           severity: daysLeft <= 3 ? 'critical' : 'warning', urgency, impact: 8,
-          action: { label: 'ชำระบัตร', fn: `App.openCCPayOverlay?.('${card.id}')` },
+          action: { label: 'ชำระบัตร', fn: `App.openCCPay('${card.id}')` },
           evidence: { cardId: card.id, daysLeft, amount, canPay },
         })
       })
@@ -367,14 +377,15 @@ const InsightEngine = (() => {
       const top = (payload.merchantBreakdown || [])[0]
       if (top && payload.monthly.expense > 0) {
         const topKey = (top.merchant || top.name || '').toLowerCase().trim()
-        const pct = (top.total / payload.monthly.expense) * 100
-        if (pct > 35 && top.total > 500 && !payload.recurringMerchants?.has(topKey)) {
+        const topAmount = Number(top.amount || top.total || 0)
+        const pct = (topAmount / payload.monthly.expense) * 100
+        if (pct > 35 && topAmount > 500 && !payload.recurringMerchants?.has(topKey)) {
           add('07', top.merchant || top.name, {
             title: 'รายจ่ายกระจุกตัวสูง',
-            body: `"${top.merchant || top.name}" คิดเป็น ${pct.toFixed(0)}% ของรายจ่ายเดือนนี้ (฿${Math.round(top.total).toLocaleString('en-US')}) — ควร negotiate ราคาหรือกระจายร้านค้า`,
+            body: `"${top.merchant || top.name}" คิดเป็น ${pct.toFixed(0)}% ของรายจ่ายเดือนนี้ (฿${Math.round(topAmount).toLocaleString('en-US')}) — ควร negotiate ราคาหรือกระจายร้านค้า`,
             severity: 'info', urgency: 3, impact: 5,
             action: { label: 'ดูรายงาน', fn: "App.showPage('reports')" },
-            evidence: { merchant: top.merchant || top.name, pct, total: top.total },
+            evidence: { merchant: top.merchant || top.name, pct, total: topAmount },
           })
         }
       }
@@ -432,12 +443,16 @@ const InsightEngine = (() => {
       if (dups.length > 0) {
         const dup = dups[0]
         const t = dup[0]
+        const personalAmount = expenseAmount(t)
+        const sharedHint = t.sharedExpense?.enabled && Math.abs(personalAmount - Number(t.amount || 0)) > 0.01
+          ? ` (นับเข้างบ ฿${Calc.fmtNum(personalAmount)})`
+          : ''
         add('10', `${t.amount}-${t.merchant||''}`, {
           title: 'อาจมีรายการซ้ำกัน',
-          body: `"${t.merchant||'รายการ'}" ฿${Calc.fmtNum(t.amount)} บันทึก ${dup.length} ครั้งวันนี้ — ตรวจสอบว่าไม่ได้บันทึกซ้ำ`,
+          body: `"${t.merchant||'รายการ'}" ฿${Calc.fmtNum(t.amount)}${sharedHint} บันทึก ${dup.length} ครั้งวันนี้ — ตรวจสอบว่าไม่ได้บันทึกซ้ำ`,
           severity: 'warning', urgency: 7, impact: 5,
           action: { label: 'ดูรายการวันนี้', fn: "App.showPage('transactions')" },
-          evidence: { merchant: t.merchant, amount: t.amount, count: dup.length },
+          evidence: { merchant: t.merchant, amount: t.amount, budgetAmount: personalAmount, count: dup.length },
         })
       }
     } catch(_) {}

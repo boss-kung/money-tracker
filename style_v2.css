@@ -1024,6 +1024,76 @@ html.dark .mt-alert-row-name { color: var(--text); }
 }
 .flag-pill.active { color:var(--primary); background:var(--primary-soft); border-color:var(--primary); box-shadow:none; }
 .flag-pill.installment.active { color:var(--purple); background:var(--purple-soft); border-color:var(--purple); }
+.shared-expense-panel {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 0 0 12px;
+}
+.shared-expense-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.shared-expense-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+.shared-expense-sub {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+.shared-expense-toggle {
+  flex: 0 0 auto;
+  min-width: 54px;
+  min-height: 34px;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.shared-expense-toggle.active {
+  border-color: var(--income);
+  background: var(--income-soft);
+  color: var(--income);
+}
+.shared-expense-toggle:disabled { opacity: .5; }
+.shared-expense-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+.shared-expense-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.shared-expense-preview span {
+  min-width: 0;
+  border-radius: 10px;
+  background: var(--elevated);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+  padding: 8px;
+}
+.shared-expense-preview strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
 .installment-month-grid { display:flex; gap:8px; }
 .installment-month-grid button {
   flex:1;
@@ -1049,6 +1119,8 @@ html.dark .mt-alert-row-name { color: var(--text); }
   .mt-wallet-mini-grid { grid-template-columns:1fr; }
   .mt-stat-row { grid-template-columns:1fr; }
   .cat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .shared-expense-grid,
+  .shared-expense-preview { grid-template-columns:1fr; }
 }
 
 /* ============================================================
@@ -5517,6 +5589,13 @@ html.dark .ins-card.severity-positive  { border-color: rgba(52,211,153,.3);  bac
   font-size: 13px;
   font-weight: 700;
   line-height: 1.3;
+}
+.ins-title-due-today {
+  color: var(--expense);
+  font-weight: 800;
+}
+html.dark .ins-title-due-today {
+  color: #FCA5A5;
 }
 .ins-body {
   font-size: 12px;
