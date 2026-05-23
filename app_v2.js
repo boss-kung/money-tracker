@@ -13105,6 +13105,9 @@ App._pickMerchant = function(name, opts = {}) {
   App.getCyclePeriodForDate = function(cardId, refDate, rule) {
     return getCyclePeriodForDate(cardId, refDate || today(), rule || null)
   }
+  App.getOpenCyclePeriodForDate = function(cardId, refDate, rule) {
+    return getOpenCyclePeriodForDate(cardId, refDate || today(), rule || null)
+  }
   App._getRuleEligibility = function(tx, rule) { return getRuleEligibility(tx, rule) }
   App._txShouldCountForRule = function(tx, rule, ruleId) { return txShouldCountForRule(tx, rule, ruleId) }
 
@@ -13119,11 +13122,39 @@ App._pickMerchant = function(name, opts = {}) {
         statementId: '',
       }
     }
-    const st = App.getCardStatement?.(cardId, refDate)
-    if (st?.start && st?.end) return { start: st.start, end: st.end, statementId: st.id || '' }
+    return getOpenCyclePeriodForDate(cardId, refDate, rule)
+  }
+
+  function getOpenCyclePeriodForDate(cardId, refDate = today(), rule = null) {
+    const cycleHint = String(rule?.validity?.statementCycleHint || 'statement_cycle').trim()
+    if (cycleHint === 'calendar_month') {
+      const [year, month] = String(refDate || today()).split('-').map(Number)
+      const lastDay = new Date(year, month, 0).getDate()
+      return {
+        start: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`,
+        end: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+        statementId: '',
+      }
+    }
     const card = walletById(cardId) || {}
-    const period = App.getStatementPeriod?.(card.cycleDay || 25) || { start: refDate, end: refDate }
-    return { start: period.start, end: period.end, statementId: '' }
+    const cycleDay = clampCycleDay(card.cycleDay || 25)
+    const [ry, rm, rd] = String(refDate || today()).split('-').map(Number)
+    const refYear = ry || new Date().getFullYear()
+    const refMonthIndex = (rm || 1) - 1
+    const refDay = rd || 1
+    const currentEndDay = Calc.clampDay(refYear, refMonthIndex, cycleDay)
+    const endBase = refDay > currentEndDay
+      ? new Date(refYear, refMonthIndex + 1, 1)
+      : new Date(refYear, refMonthIndex, 1)
+    const endDay = Calc.clampDay(endBase.getFullYear(), endBase.getMonth(), cycleDay)
+    const end = new Date(endBase.getFullYear(), endBase.getMonth(), endDay)
+    const prevEndBase = new Date(end.getFullYear(), end.getMonth() - 1, 1)
+    const prevEndDay = Calc.clampDay(prevEndBase.getFullYear(), prevEndBase.getMonth(), cycleDay)
+    const start = new Date(prevEndBase.getFullYear(), prevEndBase.getMonth(), prevEndDay + 1)
+    const dateStr = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const startStr = dateStr(start)
+    const endStr = dateStr(end)
+    return { start: startStr, end: endStr, statementId: `${cardId || ''}:${startStr}:${endStr}` }
   }
 
   function rewardTotalForRuleResult(result = {}, rule = {}) {
