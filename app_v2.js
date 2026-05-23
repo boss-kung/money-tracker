@@ -1334,17 +1334,70 @@ const App = {
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">จำนวนเงิน (฿)</label>
-        <input class="form-input" type="number" id="cc-pay-amount" placeholder="0" value="${owed}">
+        <label class="form-label">ยอดที่ต้องการตัดจากบัตร (฿)</label>
+        <input class="form-input" type="text" inputmode="decimal" id="cc-pay-amount" placeholder="0" value="${owed}" oninput="App.updateCCPayPreview()">
       </div>
+      <label class="settings-row" style="margin:0 0 12px;padding:10px 0;border:0">
+        <div class="s-icon">🏷️</div>
+        <div class="s-label">มีส่วนลดตอนชำระ</div>
+        <input type="checkbox" id="cc-pay-has-discount" onchange="App.updateCCPayPreview()" style="width:20px;height:20px">
+      </label>
+      <div id="cc-pay-discount-fields" style="display:none">
+        <div class="form-group">
+          <label class="form-label">ส่วนลด (฿)</label>
+          <input class="form-input" type="text" inputmode="decimal" id="cc-pay-discount" placeholder="0" value="0" oninput="App.updateCCPayPreview()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">เงินที่จ่ายจริง (฿)</label>
+          <input class="form-input" type="text" inputmode="decimal" id="cc-pay-cash-amount" placeholder="0" value="${owed}" oninput="App.updateCCPayPreview('cash')">
+        </div>
+      </div>
+      <div class="amount-summary-card" id="cc-pay-preview" style="margin-bottom:16px"></div>
       <div style="display:flex;gap:8px;margin-bottom:16px">
         ${[owed, Math.min(owed, 1000), Math.min(owed, 500)].filter((v,i,a) => a.indexOf(v)===i && v > 0).map(v =>
-          `<button class="chip" onclick="document.getElementById('cc-pay-amount').value='${v}'">${v===owed?'เต็มจำนวน':Calc.fmt(v)}</button>`
+          `<button class="chip" onclick="document.getElementById('cc-pay-amount').value='${v}';App.updateCCPayPreview()">${v===owed?'เต็มจำนวน':Calc.fmt(v)}</button>`
         ).join('')}
       </div>
       <button class="btn btn-primary" onclick="App.saveCCPay()">ชำระเงิน</button>`
 
+    App.updateCCPayPreview()
     App.openOverlay('overlay-cc-pay')
+  },
+
+  updateCCPayPreview(source = '') {
+    const parsePayNumber = value => Number(String(value || '0').replace(/,/g, '')) || 0
+    const amountEl = document.getElementById('cc-pay-amount')
+    const hasDiscountEl = document.getElementById('cc-pay-has-discount')
+    const discountFields = document.getElementById('cc-pay-discount-fields')
+    const discountEl = document.getElementById('cc-pay-discount')
+    const cashEl = document.getElementById('cc-pay-cash-amount')
+    const preview = document.getElementById('cc-pay-preview')
+    const amount = Math.max(0, parsePayNumber(amountEl?.value))
+    const hasDiscount = !!hasDiscountEl?.checked
+    if (discountFields) discountFields.style.display = hasDiscount ? '' : 'none'
+    let discount = hasDiscount ? Math.max(0, parsePayNumber(discountEl?.value)) : 0
+    if (discount > amount) discount = amount
+    if (discountEl && hasDiscount && Number(discountEl.value || 0) !== discount) discountEl.value = discount
+    if (cashEl) {
+      if (!hasDiscount) cashEl.value = amount || ''
+      else if (source !== 'cash') cashEl.value = Math.max(0, amount - discount)
+      else {
+        const cashAmount = Math.max(0, parsePayNumber(cashEl.value))
+        const nextDiscount = Math.max(0, amount - cashAmount)
+        if (discountEl) discountEl.value = Math.min(amount, nextDiscount)
+      }
+    }
+    const cashAmount = hasDiscount ? Math.max(0, parsePayNumber(cashEl?.value)) : amount
+    const finalDiscount = hasDiscount ? Math.max(0, Math.min(amount, amount - cashAmount)) : 0
+    if (preview) {
+      preview.innerHTML = `
+        <small>สรุปการชำระ</small>
+        <div style="display:grid;gap:6px;margin-top:8px;font-size:13px">
+          <div style="display:flex;justify-content:space-between;gap:12px"><span>บัตรเครดิตลดลง</span><strong>${Calc.fmt(amount)}</strong></div>
+          <div style="display:flex;justify-content:space-between;gap:12px"><span>เงินออกจากกระเป๋า</span><strong>${Calc.fmt(cashAmount)}</strong></div>
+          ${finalDiscount > 0 ? `<div style="display:flex;justify-content:space-between;gap:12px;color:var(--income)"><span>ประหยัดจากโปร</span><strong>${Calc.fmt(finalDiscount)}</strong></div>` : ''}
+        </div>`
+    }
   },
 
   // Credit-card detail screen is defined in later credit-card blocks.
@@ -1357,8 +1410,14 @@ const App = {
     if (!w) return
     if (tx.type === 'income')     w.balance += tx.amount * mult
     if (tx.type === 'expense')    w.balance -= tx.amount * mult
-    if (tx.type === 'transfer' || tx.type === 'cc_payment') {
+    if (tx.type === 'transfer') {
       w.balance -= tx.amount * mult
+      const to = S.wallets.find(x => x.id === tx.toWalletId)
+      if (to) to.balance += tx.amount * mult
+    }
+    if (tx.type === 'cc_payment') {
+      const cashAmount = App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(tx) : Number(tx.amount || 0)
+      w.balance -= cashAmount * mult
       const to = S.wallets.find(x => x.id === tx.toWalletId)
       if (to) to.balance += tx.amount * mult
     }
@@ -2027,10 +2086,15 @@ App.render();
     const transferLine = tx.type === 'transfer' && wallet && toWal ? `${wallet.icon} ${wallet.name} → ${toWal.icon} ${toWal.name}` : ''
     const todayNow = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
     const isScheduledFuture = tx.scheduled === true && String(tx.date || '') > todayNow
-    return `<div style="text-align:center;margin-bottom:20px"><div style="font-size:44px;font-weight:800;color:${cssAmountColor(tx.type)};letter-spacing:-.05em;${isScheduledFuture ? 'opacity:.55' : ''}">${signedFmt(tx.amount, tx.type)}</div><div style="font-size:14px;color:var(--muted);margin-top:6px">${esc(Calc.labelDate(tx.date))}</div>${isScheduledFuture ? `<div style="display:inline-block;margin-top:8px;padding:4px 10px;border-radius:999px;background:rgba(100,116,139,.15);color:var(--muted);font-size:12px;font-weight:600">📅 ตามแผน · ยังไม่หักยอดจริง</div>` : ''}</div>
+    const ccCashAmount = tx.type === 'cc_payment' ? (App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(tx) : Number(tx.cashAmount || tx.amount || 0)) : 0
+    const ccDiscount = tx.type === 'cc_payment' ? Number(tx.discountAmount || 0) : 0
+    const headerAmount = tx.type === 'cc_payment' ? ccCashAmount : tx.amount
+    return `<div style="text-align:center;margin-bottom:20px"><div style="font-size:44px;font-weight:800;color:${cssAmountColor(tx.type)};letter-spacing:-.05em;${isScheduledFuture ? 'opacity:.55' : ''}">${signedFmt(headerAmount, tx.type)}</div><div style="font-size:14px;color:var(--muted);margin-top:6px">${esc(Calc.labelDate(tx.date))}</div>${isScheduledFuture ? `<div style="display:inline-block;margin-top:8px;padding:4px 10px;border-radius:999px;background:rgba(100,116,139,.15);color:var(--muted);font-size:12px;font-weight:600">📅 ตามแผน · ยังไม่หักยอดจริง</div>` : ''}</div>
       <div>
         ${isScheduledFuture ? `<div class="detail-row" style="background:rgba(100,116,139,.08);border-radius:8px;padding:8px 12px;margin-bottom:4px"><span class="detail-label" style="color:var(--muted)">สถานะ</span><span class="detail-value" style="color:var(--muted)">ตามแผน — ยังไม่กระทบยอดกระเป๋า</span></div>` : ''}
         ${transferLine ? `<div class="detail-row"><span class="detail-label">รายการโอน</span><span class="detail-value">${esc(transferLine)}</span></div>` : ''}
+        ${tx.type === 'cc_payment' ? `<div class="detail-row"><span class="detail-label">ตัดยอดบัตร</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">เงินที่จ่ายจริง</span><span class="detail-value">${fmt(ccCashAmount)}</span></div>` : ''}
+        ${ccDiscount > 0 ? `<div class="detail-row"><span class="detail-label">ส่วนลดตอนชำระ</span><span class="detail-value" style="color:var(--income)">${fmt(ccDiscount)}</span></div>` : ''}
         ${cat ? `<div class="detail-row"><span class="detail-label">หมวดหมู่</span><span class="detail-value">${esc(cat.icon)} ${esc(cat.label)}</span></div>` : ''}
         ${wallet ? `<div class="detail-row"><span class="detail-label">กระเป๋าเงิน</span><span class="detail-value">${esc(wallet.icon)} ${esc(wallet.name)}</span></div>` : ''}
         ${toWal && tx.type !== 'transfer' ? `<div class="detail-row"><span class="detail-label">ไปยัง</span><span class="detail-value">${esc(toWal.icon)} ${esc(toWal.name)}</span></div>` : ''}
@@ -2538,7 +2602,8 @@ App.render();
   function signedAmount(tx) {
     if (S.settings?.hideMoney) return '฿*****'
     if (tx.type === 'income') return '+' + fmt(tx.amount)
-    if (tx.type === 'expense' || tx.type === 'cc_payment') return '-' + fmt(tx.amount)
+    if (tx.type === 'expense') return '-' + fmt(tx.amount)
+    if (tx.type === 'cc_payment') return '-' + fmt(App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(tx) : (tx.cashAmount || tx.amount))
     return fmt(tx.amount)
   }
 
@@ -2553,6 +2618,7 @@ App.render();
     if (cat?.label) meta.push(cat.label)
     if (wallet?.name && !isTransfer) meta.push(wallet.name)
     if (isTransfer) meta.push('โอนเงิน')
+    if (tx.type === 'cc_payment' && Number(tx.discountAmount || 0) > 0) meta.push(`ตัดบัตร ${fmt(tx.amount)} · ส่วนลด ${fmt(tx.discountAmount)}`)
     if (tx.isRecurring) meta.push('🔁 ประจำ')
     if (tx.isInstallment) meta.push(`ผ่อน ${tx.installmentNo || 1}/${tx.installmentMonths || '?'}`)
     return { cat, wallet, toWallet, title, icon, meta }
@@ -3458,6 +3524,9 @@ App.render();
         const wallet = S.wallets.find(w => w.id === t.walletId)
         const toWallet = S.wallets.find(w => w.id === t.toWalletId)
         const sign = (t.type === 'expense' || t.type === 'cc_payment') ? -1 : 1
+        const exportAmount = t.type === 'cc_payment'
+          ? (App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(t) : Number(t.cashAmount || t.amount || 0))
+          : Number(t.amount || 0)
         const walletName = t.type === 'transfer'
           ? `${wallet?.name || ''} → ${toWallet?.name || ''}`
           : (wallet?.name || '')
@@ -3466,7 +3535,7 @@ App.render();
           typeLabel[t.type] || t.type,
           cat?.label || '',
           t.merchant || '',
-          (sign * Number(t.amount || 0)).toFixed(2),
+          (sign * exportAmount).toFixed(2),
           walletName,
           t.note || ''
         ].map(v => `"${String(v).replace(/"/g, '""')}"`)
@@ -4089,8 +4158,15 @@ Calc.getUsableMoney = function(wallets, state = null) {
         cash[tx.walletId] = (cash[tx.walletId] || 0) + amt
       else if (tx.type === 'expense')
         cash[tx.walletId] = (cash[tx.walletId] || 0) - amt
-      else if (tx.type === 'transfer' || tx.type === 'cc_payment') {
+      else if (tx.type === 'transfer') {
         cash[tx.walletId] = (cash[tx.walletId] || 0) - amt
+        if (tx.toWalletId)
+          cash[tx.toWalletId] = (cash[tx.toWalletId] || 0) + amt
+      } else if (tx.type === 'cc_payment') {
+        const cashAmount = (typeof App.getCCPaymentCashAmount === 'function')
+          ? App.getCCPaymentCashAmount(tx)
+          : (Number(tx.cashAmount) > 0 ? Number(tx.cashAmount) : amt)
+        cash[tx.walletId] = (cash[tx.walletId] || 0) - cashAmount
         if (tx.toWalletId)
           cash[tx.toWalletId] = (cash[tx.toWalletId] || 0) + amt
       }
@@ -4361,6 +4437,13 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return round2(Math.max(0, baseAmount - discount))
   }
 
+  App.getCCPaymentCashAmount = function(tx) {
+    if (!tx || tx.type !== 'cc_payment') return round2(Number(tx?.amount || 0))
+    const cashAmount = Number(tx.cashAmount)
+    if (Number.isFinite(cashAmount) && cashAmount > 0) return round2(cashAmount)
+    return round2(Number(tx.amount || 0))
+  }
+
   App._expectedLedgerAmountForTx = function(tx) {
     const baseAmount = round2(Number(tx?.amount || 0))
     if (!tx || tx.type !== 'expense') return baseAmount
@@ -4399,7 +4482,11 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
       if (tx.type === 'income') addCash(tx.walletId, amt)
       else if (tx.type === 'expense') addCash(tx.walletId, -amt)
-      else if (tx.type === 'transfer' || tx.type === 'cc_payment') { addCash(tx.walletId, -amt); addCash(tx.toWalletId, amt) }
+      else if (tx.type === 'transfer') { addCash(tx.walletId, -amt); addCash(tx.toWalletId, amt) }
+      else if (tx.type === 'cc_payment') {
+        addCash(tx.walletId, -App.getCCPaymentCashAmount(tx))
+        addCash(tx.toWalletId, amt)
+      }
       else if (tx.type === 'investment_buy') { addCash(tx.cashWalletId || tx.sourceWalletId, -amt); addUnits(tx.walletId, Number(tx.units || 0)) }
       else if (tx.type === 'investment_sell') { addCash(tx.cashWalletId || tx.sourceWalletId, amt); addUnits(tx.walletId, -Math.abs(Number(tx.units || 0))) }
       else if (tx.type === 'investment_adjust') addUnits(tx.walletId, Number(tx.unitsDelta || tx.units || 0))
@@ -4656,18 +4743,32 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App.saveCCPay = function() {
+    const parsePayNumber = value => Number(String(value || '0').replace(/,/g, '')) || 0
     const sourceId = document.getElementById('cc-pay-wallet')?.value
-    const amount = Number(document.getElementById('cc-pay-amount')?.value || 0)
+    const amount = parsePayNumber(document.getElementById('cc-pay-amount')?.value)
+    const hasDiscount = !!document.getElementById('cc-pay-has-discount')?.checked
+    const rawDiscount = hasDiscount ? parsePayNumber(document.getElementById('cc-pay-discount')?.value) : 0
+    const rawCashAmount = hasDiscount ? parsePayNumber(document.getElementById('cc-pay-cash-amount')?.value) : amount
+    const discountAmount = Math.max(0, Math.min(amount, rawDiscount))
+    const cashAmount = hasDiscount ? Math.max(0, rawCashAmount) : amount
     const card = walletById(S.payingCardId)
     const source = walletById(sourceId)
     if (!card || card.type !== 'credit') { toast('ไม่พบบัตรเครดิต', 'error'); return }
     if (!sourceId || !source) { App._showFieldError('cc-pay-wallet', 'กรุณาเลือกกระเป๋าต้นทาง'); return }
     if (!(amount > 0)) { App._showFieldError('cc-pay-amount', 'กรุณาระบุยอดชำระ'); return }
+    if (!(cashAmount > 0)) { App._showFieldError('cc-pay-cash-amount', 'กรุณาระบุเงินที่จ่ายจริง'); return }
+    if (cashAmount > amount + 0.01) { App._showFieldError('cc-pay-cash-amount', 'เงินที่จ่ายจริงต้องไม่เกินยอดที่ตัดจากบัตร'); return }
+    if (hasDiscount && Math.abs((amount - cashAmount) - discountAmount) > 0.01) { App._showFieldError('cc-pay-discount', 'ส่วนลดต้องตรงกับยอดตัดบัตรลบเงินที่จ่ายจริง'); return }
     const owed = Math.abs(Number(card.balance || 0))
-    if (source.type !== 'credit' && Number(source.balance || 0) < amount) { App._showFieldError('cc-pay-amount', 'ยอดเงินในกระเป๋าไม่เพียงพอ'); return }
+    if (source.type !== 'credit' && Number(source.balance || 0) < cashAmount) { App._showFieldError('cc-pay-cash-amount', 'ยอดเงินในกระเป๋าไม่เพียงพอ'); return }
     if (owed > 0 && amount > owed + 0.01) { App._showFieldError('cc-pay-amount', `ค้างชำระอยู่ ${money(owed)} ไม่ควรชำระเกิน`); return }
     const st = App.getCardStatement(card.id)
     const tx = { id:Calc.genId(), type:'cc_payment', amount, walletId:sourceId, toWalletId:card.id, date:today(), note:`ชำระ ${card.name}`, statementId:st?.id }
+    if (hasDiscount && discountAmount > 0) {
+      tx.cashAmount = Math.round(cashAmount * 100) / 100
+      tx.discountAmount = Math.round(discountAmount * 100) / 100
+      tx.discountSource = 'platform'
+    }
     const subScreenCardId = document.querySelector('.cc-detail-screen')?.dataset.cardId || ''
     S.transactions.unshift(tx)
     App.recalculateWalletBalances({ save:false, recordSnapshot:true })
@@ -4679,7 +4780,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (S.page === 'dashboard') App.renderDashboard?.()
     else if (S.page === 'wallets') App.renderWallets?.()
     else App.render()
-    toast(`ชำระ ${money(amount)} สำเร็จ`, 'success')
+    toast(`ชำระ ${money(amount)} สำเร็จ${discountAmount > 0 ? ` · จ่ายจริง ${money(cashAmount)}` : ''}`, 'success')
   }
 
   // ── Installment center + recurring due schedule ─────────────
@@ -8539,7 +8640,8 @@ App._pickMerchant = function(name, opts = {}) {
       if (origTx && origTx.walletId === walletId) {
         if (origTx.type === 'expense') bal += Number(origTx.amount || 0)
         else if (origTx.type === 'income') bal -= Number(origTx.amount || 0)
-        else if (origTx.type === 'transfer' || origTx.type === 'cc_payment') bal += Number(origTx.amount || 0)
+        else if (origTx.type === 'transfer') bal += Number(origTx.amount || 0)
+        else if (origTx.type === 'cc_payment') bal += App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(origTx) : Number(origTx.cashAmount || origTx.amount || 0)
       }
       if (origTx && origTx.toWalletId === walletId) {
         if (origTx.type === 'transfer' || origTx.type === 'cc_payment') bal -= Number(origTx.amount || 0)
@@ -13748,7 +13850,10 @@ App._pickMerchant = function(name, opts = {}) {
         const cat = App._findCat?.(t.categoryId)
         const wallet = walletById(t.walletId)
         const toWallet = walletById(t.toWalletId)
-        const signedAmount = (t.type === 'expense' || t.type === 'cc_payment') ? -Math.abs(Number(t.amount || 0)) : Number(t.amount || 0)
+        const amountForExport = t.type === 'cc_payment'
+          ? (App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(t) : Number(t.cashAmount || t.amount || 0))
+          : Number(t.amount || 0)
+        const signedAmount = (t.type === 'expense' || t.type === 'cc_payment') ? -Math.abs(amountForExport) : amountForExport
         const status = App._isPostedTx?.(t) ? 'posted' : 'scheduled'
         return [
           t.date || '',
@@ -19603,7 +19708,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const dailySpend = {}
     txs.forEach(t => {
       const dk = String(t.date || '').slice(8, 10)
-      if (dk) dailySpend[dk] = (dailySpend[dk] || 0) + Number(t.amount || 0)
+      if (dk) dailySpend[dk] = (dailySpend[dk] || 0) + (t.type === 'cc_payment' && App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(t) : Number(t.amount || 0))
     })
 
     const vals       = Object.values(dailySpend)

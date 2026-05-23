@@ -147,6 +147,13 @@ const Calc = {
     return Number(t.amount || 0)
   },
 
+  getCCPaymentCashAmount(t) {
+    if (!t || t.type !== 'cc_payment') return Number(t?.amount || 0)
+    const cashAmount = Number(t.cashAmount)
+    if (Number.isFinite(cashAmount) && cashAmount > 0) return cashAmount
+    return Number(t.amount || 0)
+  },
+
   getPostedTransactions(transactions) {
     return (transactions || []).filter(t => Calc.isPostedTx(t))
   },
@@ -179,7 +186,7 @@ const Calc = {
       if (t.type === 'income') income += Number(t.amount || 0)
       else if (t.type === 'expense') expense += Calc.getExpenseLedgerAmount(t)
       else if (t.type === 'transfer') transfer += Number(t.amount || 0)
-      else if (t.type === 'cc_payment') ccPayment += Number(t.amount || 0)
+      else if (t.type === 'cc_payment') ccPayment += Calc.getCCPaymentCashAmount(t)
     })
     const netCashflow = income - expense
     const savingsRate = income > 0 ? (netCashflow / income) * 100 : null
