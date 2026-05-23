@@ -64,6 +64,8 @@
       title:       base.title    || '',
       date:        base.date     || todayStr(),
       manualTotal: Number(base.manualTotal) || 0,
+      ownerPersonId: base.ownerPersonId || '',
+      linkedTransactionId: base.linkedTransactionId || '',
       peopleIds:   Array.isArray(base.peopleIds) ? [...base.peopleIds] : [],
       items:       Array.isArray(base.items) ? JSON.parse(JSON.stringify(base.items)) : [],
       pipeline:    Array.isArray(base.pipeline) ? JSON.parse(JSON.stringify(base.pipeline)) : defaultPipeline(),
@@ -206,6 +208,206 @@
   window.SplitBillCalc = { calcResult, runPipeline, itemSubtotal, calcShares }
   window.SbStore = SbStore
 
+  function findTx(id) {
+    if (!id || typeof S === 'undefined') return null
+    return (S.transactions || []).find(t => t.id === id) || null
+  }
+
+  function splitBillOwnerSummary(bill) {
+    const result = calcResult(bill)
+    const ownerId = bill?.ownerPersonId || ''
+    const owner = ownerId ? SbStore.getPerson(ownerId) : null
+    const ownerResult = ownerId ? result.personResults.find(p => p.id === ownerId) || null : null
+    const paidAmount = r2(ownerId ? Number((bill.payments || {})[ownerId] || 0) : 0)
+    const shareAmount = r2(ownerResult?.finalShare || 0)
+    const reimbursableAmount = r2(Math.max(0, paidAmount - shareAmount))
+    return {
+      result,
+      ownerId,
+      owner,
+      ownerName: owner?.name || '',
+      paidAmount,
+      shareAmount,
+      reimbursableAmount,
+    }
+  }
+
+  function splitBillLinkState(bill) {
+    if (!bill) return { status: 'missing_bill', billId: '', billTitle: '', message: 'ไม่พบบิลหารที่เคยเชื่อมไว้' }
+    const summary = splitBillOwnerSummary(bill)
+    const billTitle = bill.title || 'บิลร่วม'
+    const linkedTxId = bill.linkedTransactionId || ''
+    if (!summary.ownerId) {
+      return {
+        status: 'needs_owner',
+        billId: bill.id,
+        billTitle,
+        linkedTxId,
+        expected: summary,
+        message: 'เลือกคนที่เป็นเราเพื่อสร้างรายการจ่าย',
+      }
+    }
+    if (!(summary.paidAmount > 0)) {
+      return {
+        status: 'needs_payment',
+        billId: bill.id,
+        billTitle,
+        linkedTxId,
+        expected: summary,
+        message: 'ระบุยอดที่เราจ่ายก่อน จึงจะสร้างรายการจ่ายได้',
+      }
+    }
+    if (!linkedTxId) {
+      return {
+        status: 'unlinked',
+        billId: bill.id,
+        billTitle,
+        linkedTxId: '',
+        expected: summary,
+        message: 'ยังไม่ได้สร้างรายการจ่ายจากบิลนี้',
+      }
+    }
+    const tx = findTx(linkedTxId)
+    if (!tx) {
+      return {
+        status: 'orphaned',
+        billId: bill.id,
+        billTitle,
+        linkedTxId,
+        expected: summary,
+        message: 'ไม่พบรายการจ่ายที่เคยเชื่อมไว้',
+      }
+    }
+    const diffs = []
+    if (Math.abs(Number(tx.amount || 0) - summary.paidAmount) > 0.005) diffs.push('ยอดที่เราจ่าย')
+    if (Math.abs(Number((tx.ledgerAmount ?? tx.amount) || 0) - summary.shareAmount) > 0.005) diffs.push('ส่วนของเรา')
+    if (String(tx.date || '') !== String(bill.date || '')) diffs.push('วันที่')
+    const txTitle = String(tx.merchant || '').trim()
+    const billTitleText = String(bill.title || '').trim()
+    if (billTitleText && txTitle && txTitle !== billTitleText) diffs.push('ชื่อรายการ')
+    return {
+      status: diffs.length ? 'mismatch' : 'linked',
+      billId: bill.id,
+      billTitle,
+      linkedTxId,
+      tx,
+      expected: summary,
+      diffFields: diffs,
+      message: diffs.length ? `ข้อมูลยังไม่ตรงกัน: ${diffs.join(', ')}` : 'เชื่อมกับรายการจ่ายแล้ว',
+    }
+  }
+
+  function defaultExpenseCategoryId() {
+    const cats = (S?.categories?.expense || []).filter(c => !c.archived)
+    return cats.find(c => /อาหาร|กิน|food|restaurant/i.test(`${c.id} ${c.label}`))?.id || cats[0]?.id || ''
+  }
+
+  function defaultWalletId() {
+    return (S?.wallets || []).find(w => w.type !== 'credit' && !w.archived)?.id
+      || (S?.wallets || []).find(w => !w.archived)?.id
+      || ''
+  }
+
+  App.getSplitBillLinkState = function (billId) {
+    return splitBillLinkState(SbStore.getBill(billId))
+  }
+
+  App.getSplitBillLinkStateByTxId = function (txId) {
+    const tx = findTx(txId)
+    if (!tx?.splitBillId) return null
+    const bill = SbStore.getBill(tx.splitBillId)
+    if (!bill) {
+      return {
+        status: 'missing_bill',
+        billId: tx.splitBillId,
+        billTitle: tx.merchant || 'บิลร่วม',
+        linkedTxId: tx.id,
+        tx,
+        expected: {
+          ownerId: tx.splitBillOwnerPersonId || '',
+          ownerName: '',
+          paidAmount: r2(Number(tx.amount || 0)),
+          shareAmount: r2(Number(tx.ledgerAmount || 0)),
+          reimbursableAmount: r2(Math.max(0, Number(tx.amount || 0) - Number(tx.ledgerAmount || 0))),
+        },
+        message: 'ไม่พบบิลหารที่เคยเชื่อมไว้',
+      }
+    }
+    const state = splitBillLinkState(bill)
+    if (state.linkedTxId && state.linkedTxId !== tx.id) {
+      return {
+        ...state,
+        status: 'mismatch',
+        tx,
+        message: 'บิลนี้กำลังเชื่อมกับรายการจ่ายอื่นอยู่',
+      }
+    }
+    return { ...state, tx }
+  }
+
+  App.linkSplitBillToTransaction = function (billId, txId) {
+    const bill = SbStore.getBill(billId)
+    if (!bill) return false
+    bill.linkedTransactionId = txId
+    bill.updatedAt = nowISO()
+    return SbStore.upsertBill(bill)
+  }
+
+  App.openSplitBillLinkedTxForm = function (billId) {
+    const bill = SbStore.getBill(billId)
+    const state = splitBillLinkState(bill)
+    if (!bill) return notify('ไม่พบบิล', 'error')
+    if (state.status === 'needs_owner' || state.status === 'needs_payment') {
+      notify(state.message, 'info')
+      return App.openSplitBillForm(billId)
+    }
+    const tx = state.linkedTxId ? findTx(state.linkedTxId) : null
+    const expected = state.expected
+    const date = bill.date || todayStr()
+    S.txMode = tx ? 'edit' : 'add'
+    S.editingTxId = tx?.id || null
+    S.tx = {
+      step: 'detail',
+      type: 'expense',
+      amount: String(expected.paidAmount || 0),
+      calcOp: '',
+      calcLeft: '',
+      walletId: tx?.walletId || defaultWalletId(),
+      toWalletId: '',
+      categoryId: tx?.categoryId || defaultExpenseCategoryId(),
+      merchant: bill.title || tx?.merchant || '',
+      channel: tx?.channel || '',
+      note: tx?.note || '',
+      date,
+      isRecurring: false,
+      isInstallment: false,
+      installmentMonths: '',
+      sharedExpense: { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' },
+      splitBillId: bill.id,
+      splitBillOwnerPersonId: expected.ownerId || '',
+      splitBillOwnerShare: expected.shareAmount || 0,
+      splitBillOwnerPaidAmount: expected.paidAmount || 0,
+      rewardRuleIds: Array.isArray(tx?.rewardRuleIds) ? [...new Set(tx.rewardRuleIds.filter(Boolean))] : [],
+      txSuggestedFields: {},
+      rewardEstimate: tx?.rewardEstimate || null,
+      rewardIncludePoints: tx?.rewardIncludePoints !== false,
+      rewardIncludeCashback: tx?.rewardIncludeCashback !== false,
+      recurrenceType: 'monthly',
+      everyDays: 30,
+      durationMonths: '',
+      recurringDayOfMonth: parseInt(String(date).slice(-2), 10) || 1,
+    }
+    App._renderAddTxDetail?.()
+    App.openOverlay?.('overlay-add-tx')
+  }
+
+  App.openSplitBillLinkedTransaction = function (billId) {
+    const state = splitBillLinkState(SbStore.getBill(billId))
+    if (!state.linkedTxId) return App.openSplitBillLinkedTxForm(billId)
+    if (state.status === 'mismatch' || state.status === 'orphaned') return App.openSplitBillLinkedTxForm(billId)
+    App.openTxDetail?.(state.linkedTxId)
+  }
+
   App._fmtNum = function (el) {
     if (!el) return
     const raw    = el.value.replace(/[^0-9.]/g, '')
@@ -345,6 +547,8 @@
     const bill = SbStore.getBill(billId)
     if (!bill) return notify('ไม่พบบิล', 'error')
     const result = calcResult(bill)
+    const linkState = splitBillLinkState(bill)
+    const ownerSummary = linkState.expected || splitBillOwnerSummary(bill)
 
     const personRows = result.personResults.map(p => `
       <div class="detail-row">
@@ -372,6 +576,27 @@
     const warnHtml = result.warnings.map(w =>
       `<div style="background:var(--elevated);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px;color:var(--expense)">⚠️ ${esc(w)}</div>`
     ).join('')
+    const linkTone = linkState.status === 'linked'
+      ? { bg: 'rgba(34,197,94,.10)', color: 'var(--success,#22c55e)' }
+      : linkState.status === 'mismatch'
+        ? { bg: 'rgba(245,158,11,.10)', color: 'var(--warning,#f59e0b)' }
+        : linkState.status === 'needs_owner' || linkState.status === 'needs_payment'
+          ? { bg: 'rgba(100,116,139,.10)', color: 'var(--muted)' }
+          : { bg: 'rgba(239,68,68,.08)', color: 'var(--expense)' }
+    const linkCard = `
+      <div class="card card-pad" style="margin-bottom:12px;background:${linkTone.bg};border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+          <div>
+            <div style="font-size:12px;color:var(--muted)">รายการจ่ายที่เชื่อม</div>
+            <div style="font-weight:700;color:${linkTone.color};margin-top:4px">${esc(linkState.message)}</div>
+            ${ownerSummary.ownerName ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">เรา: ${esc(ownerSummary.ownerName)} · จ่าย ${fmt(ownerSummary.paidAmount)} · ส่วนเรา ${fmt(ownerSummary.shareAmount)}</div>` : ''}
+          </div>
+          ${ownerSummary.reimbursableAmount > 0 ? `<div style="text-align:right;flex-shrink:0"><div style="font-size:12px;color:var(--muted)">เพื่อนค้างเรา</div><div style="font-weight:800;color:var(--income)">${fmt(ownerSummary.reimbursableAmount)}</div></div>` : ''}
+        </div>
+      </div>`
+    const linkButtons = linkState.status === 'linked'
+      ? `<button class="btn btn-primary flex-1" onclick="App.openSplitBillLinkedTransaction('${esc(billId)}')">เปิดรายการจ่าย</button>`
+      : `<button class="btn btn-primary flex-1" onclick="App.openSplitBillLinkedTxForm('${esc(billId)}')">${linkState.status === 'mismatch' ? 'อัปเดตรายการจ่าย' : 'สร้างรายการจ่าย'}</button>`
 
     const copyText = _lineText(bill, result)
 
@@ -392,6 +617,7 @@
         </div>
 
         ${warnHtml}
+        ${linkCard}
 
         <div class="sec-title">สรุปต่อคน</div>
         <div class="card card-pad" style="padding: 0px 10px;">${personRows||'<div style="color:var(--muted)">ยังไม่มีคน</div>'}</div>
@@ -402,6 +628,9 @@
         <textarea id="sb-detail-copy" style="position:absolute;left:-9999px;top:0;opacity:0;width:1px;height:1px">${esc(copyText)}</textarea>
 
         <div style="display:flex;gap:8px;margin-top:16px">
+          ${linkButtons}
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
           <button class="btn btn-secondary flex-1" onclick="App.openSplitBillForm('${esc(billId)}')">✏️ แก้ไข</button>
           <button class="btn btn-secondary flex-1" onclick="App._sbCopy('${esc(billId)}')">⧉ ทำซ้ำ</button>
           <button class="btn btn-secondary flex-1" onclick="App._sbDetailCopyLine()">📋 ข้อความ</button>
@@ -418,7 +647,7 @@
 
   App._sbCopy = function (billId) {
     const bill = SbStore.getBill(billId); if (!bill) return
-    const copy = { ...JSON.parse(JSON.stringify(bill)), id: genId(), title: (bill.title||'บิล') + ' (สำเนา)', date: todayStr(), payments: {}, createdAt: nowISO(), updatedAt: nowISO() }
+    const copy = { ...JSON.parse(JSON.stringify(bill)), id: genId(), linkedTransactionId: '', title: (bill.title||'บิล') + ' (สำเนา)', date: todayStr(), payments: {}, createdAt: nowISO(), updatedAt: nowISO() }
     SbStore.upsertBill(copy)
     notify('ทำสำเนาบิลแล้ว', 'success')
     App.openSplitBillDetail(copy.id)
@@ -434,10 +663,13 @@
   // ══════════════════════════════════════════════════════════════
   //  WIZARD ENTRY
   // ══════════════════════════════════════════════════════════════
-  App.openSplitBillForm = function (billId = '') {
+  App.openSplitBillForm = function (billId = '', opts = {}) {
     const existing = billId ? SbStore.getBill(billId) : null
     if (existing) {
       _draft = newDraft(JSON.parse(JSON.stringify(existing)))
+      _step  = 1
+    } else if (opts?.draftData) {
+      _draft = newDraft(opts.draftData)
       _step  = 1
     } else {
       const saved = _loadDraft()
@@ -486,6 +718,11 @@
   function _sbStep1(opts) {
     const people   = SbStore.loadPeople().filter(p => !p.archived)
     const selected = _draft.peopleIds
+    const ownerOptions = selected.map(id => {
+      const person = SbStore.getPerson(id)
+      if (!person) return ''
+      return `<option value="${esc(id)}"${_draft.ownerPersonId === id ? ' selected' : ''}>${esc(person.name)}</option>`
+    }).join('')
 
     const chips = people.map(p => {
       const on = selected.includes(p.id)
@@ -526,6 +763,13 @@
           <button class="btn btn-secondary" onclick="App._sbQuickAdd()"
             style="width:80px;padding:0 18px;font-size:20px;line-height:1">+ เพิ่ม</button>
         </div>
+        <div class="form-group">
+          <label class="form-label">คนที่เป็นเรา <span style="color:var(--muted);font-weight:400">(ไว้ใช้เชื่อมรายการจ่าย)</span></label>
+          <select class="form-input" id="sb1-owner">
+            <option value="">ยังไม่ระบุ</option>
+            ${ownerOptions}
+          </select>
+        </div>
 
         ${navRow(`ถัดไป: รายการอาหาร → (${selected.length} คน)`, 'App._sbNext1()')}
       </div>`, opts)
@@ -535,9 +779,11 @@
     _draft.title       = document.getElementById('sb1-title')?.value.trim() || 'บิลใหม่'
     _draft.date        = document.getElementById('sb1-date')?.value || todayStr()
     _draft.manualTotal = numVal(document.getElementById('sb1-total'))
+    _draft.ownerPersonId = document.getElementById('sb1-owner')?.value || ''
     const _sbTErr = (window._fieldTooLong || function(){})(  _draft.title, (window.FIELD_MAX || {}).title || 100, 'ชื่อบิล')
     if (_sbTErr) return notify(_sbTErr, 'error')
     if (!_draft.peopleIds.length) return notify('เลือกอย่างน้อย 1 คน', 'error')
+    if (_draft.ownerPersonId && !_draft.peopleIds.includes(_draft.ownerPersonId)) _draft.ownerPersonId = ''
     ;(_draft.items||[]).forEach(item => {
       if (!item.participants?.length) {
         item.participants = _draft.peopleIds.map(id => ({ personId: id, ratio: 1 }))
@@ -550,6 +796,7 @@
     const i = _draft.peopleIds.indexOf(id)
     if (i >= 0) {
       _draft.peopleIds.splice(i, 1)
+      if (_draft.ownerPersonId === id) _draft.ownerPersonId = ''
       ;(_draft.items||[]).forEach(item => {
         item.participants = (item.participants||[]).filter(p => p.personId !== id)
       })
@@ -567,6 +814,7 @@
 
   App._sbClearAllPeople = function () {
     _draft.peopleIds = []
+    _draft.ownerPersonId = ''
     _sbStep1(noAnim)
   }
 

@@ -2058,7 +2058,7 @@ App.render();
     if (!tx) return
     S.txMode = 'edit'
     S.editingTxId = id
-    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:tx.splitBillId || '', splitBillOwnerPersonId:tx.splitBillOwnerPersonId || '', splitBillOwnerShare:Number(tx.ledgerAmount || 0), splitBillOwnerPaidAmount:Number(tx.amount || 0), rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:tx.rewardRulesTouched === true, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxDetail()
     App.openOverlay('overlay-add-tx')
@@ -2069,7 +2069,7 @@ App.render();
     if (!tx) return
     S.txMode = 'duplicate'
     S.editingTxId = null
-    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), calcOp:'', calcLeft:'', walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), calcOp:'', calcLeft:'', walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
@@ -2114,15 +2114,30 @@ App.render();
     const headerAmount = tx.type === 'cc_payment' ? ccCashAmount : tx.amount
     const shared = tx.type === 'expense' && tx.sharedExpense?.enabled ? (App._sharedExpenseFromTx?.(tx) || tx.sharedExpense) : null
     const sharedSettlement = shared ? (App.getSharedExpenseSettlement?.(tx.id) || null) : null
+    const splitBillLink = tx.type === 'expense' && tx.splitBillId && App.getSplitBillLinkStateByTxId ? App.getSplitBillLinkStateByTxId(tx.id) : null
+    const splitBillExpected = splitBillLink?.expected || null
     const reimbursementParent = tx.reimbursesSharedExpenseTxId ? (S.transactions || []).find(t => t.id === tx.reimbursesSharedExpenseTxId) : null
     const reimbursementParentTitle = reimbursementParent ? (reimbursementParent.merchant || reimbursementParent.note || 'บิลร่วม') : ''
+    const splitBillRows = splitBillLink ? [
+      `<div class="detail-row"><span class="detail-label">บิลหารที่เชื่อม</span><span class="detail-value">${esc(splitBillLink.billTitle || 'บิลร่วม')}</span></div>`,
+      splitBillExpected ? `<div class="detail-row"><span class="detail-label">เราจ่ายจริง</span><span class="detail-value">${fmt(splitBillExpected.paidAmount || tx.amount)}</span></div>` : '',
+      splitBillExpected ? `<div class="detail-row"><span class="detail-label">ส่วนของเรา</span><span class="detail-value">${fmt(splitBillExpected.shareAmount || tx.ledgerAmount || 0)}</span></div>` : '',
+      splitBillExpected && Number(splitBillExpected.reimbursableAmount || 0) > 0 ? `<div class="detail-row"><span class="detail-label">เพื่อนค้างเรา</span><span class="detail-value" style="color:var(--income)">${fmt(splitBillExpected.reimbursableAmount)}</span></div>` : '',
+      splitBillLink.status === 'mismatch' ? `<div class="detail-row" style="background:rgba(245,158,11,.10);border-radius:8px;padding:8px 12px;margin:6px 0"><span class="detail-label" style="color:var(--warning,#f59e0b)">สถานะ</span><span class="detail-value" style="color:var(--warning,#f59e0b)">${esc(splitBillLink.message || 'ข้อมูลหารบิลกับรายการจ่ายยังไม่ตรงกัน')}</span></div>` : '',
+      splitBillLink.status === 'missing_bill' ? `<div class="detail-row" style="background:rgba(239,68,68,.08);border-radius:8px;padding:8px 12px;margin:6px 0"><span class="detail-label" style="color:var(--expense)">สถานะ</span><span class="detail-value" style="color:var(--expense)">${esc(splitBillLink.message || 'ไม่พบบิลหารที่เคยเชื่อมไว้')}</span></div>` : '',
+      splitBillLink.billId && splitBillLink.status !== 'missing_bill' ? `<div class="detail-row"><span class="detail-label">เปิดหารบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openSplitBillDetail('${esc(splitBillLink.billId)}')">${splitBillLink.status === 'mismatch' ? 'อัปเดตจากบิล' : 'ดูรายละเอียด'}</button></span></div>` : '',
+    ].filter(Boolean).join('') : ''
+    const quickSharedRows = !splitBillLink && shared
+      ? `<div class="detail-row"><span class="detail-label">จ่ายแทนทั้งหมด</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">นับเข้างบของเรา</span><span class="detail-value">${fmt(shared.myShare || 0)}</span></div><div class="detail-row"><span class="detail-label">รับคืนแล้ว</span><span class="detail-value" style="color:var(--income)">${fmt(sharedSettlement?.received || shared.reimbursedAmount || 0)}</span></div><div class="detail-row"><span class="detail-label">คงเหลือรอรับคืน</span><span class="detail-value" style="color:${(sharedSettlement?.remaining || shared.remainingReimbursableAmount || shared.reimbursableAmount || 0) > 0 ? 'var(--income)' : 'var(--muted)'}">${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0)}</span></div>`
+      : ''
     return `<div style="text-align:center;margin-bottom:20px"><div style="font-size:44px;font-weight:800;color:${cssAmountColor(tx.type)};letter-spacing:-.05em;${isScheduledFuture ? 'opacity:.55' : ''}">${signedFmt(headerAmount, tx.type)}</div><div style="font-size:14px;color:var(--muted);margin-top:6px">${esc(Calc.labelDate(tx.date))}</div>${isScheduledFuture ? `<div style="display:inline-block;margin-top:8px;padding:4px 10px;border-radius:999px;background:rgba(100,116,139,.15);color:var(--muted);font-size:12px;font-weight:600">📅 ตามแผน · ยังไม่หักยอดจริง</div>` : ''}</div>
       <div>
         ${isScheduledFuture ? `<div class="detail-row" style="background:rgba(100,116,139,.08);border-radius:8px;padding:8px 12px;margin-bottom:4px"><span class="detail-label" style="color:var(--muted)">สถานะ</span><span class="detail-value" style="color:var(--muted)">ตามแผน — ยังไม่กระทบยอดกระเป๋า</span></div>` : ''}
         ${transferLine ? `<div class="detail-row"><span class="detail-label">รายการโอน</span><span class="detail-value">${esc(transferLine)}</span></div>` : ''}
         ${tx.type === 'cc_payment' ? `<div class="detail-row"><span class="detail-label">ตัดยอดบัตร</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">เงินที่จ่ายจริง</span><span class="detail-value">${fmt(ccCashAmount)}</span></div>` : ''}
         ${ccDiscount > 0 ? `<div class="detail-row"><span class="detail-label">ส่วนลดตอนชำระ</span><span class="detail-value" style="color:var(--income)">${fmt(ccDiscount)}</span></div>` : ''}
-        ${shared ? `<div class="detail-row"><span class="detail-label">จ่ายแทนทั้งหมด</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">นับเข้างบของเรา</span><span class="detail-value">${fmt(shared.myShare || 0)}</span></div><div class="detail-row"><span class="detail-label">รับคืนแล้ว</span><span class="detail-value" style="color:var(--income)">${fmt(sharedSettlement?.received || shared.reimbursedAmount || 0)}</span></div><div class="detail-row"><span class="detail-label">คงเหลือรอรับคืน</span><span class="detail-value" style="color:${(sharedSettlement?.remaining || shared.remainingReimbursableAmount || shared.reimbursableAmount || 0) > 0 ? 'var(--income)' : 'var(--muted)'}">${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0)}</span></div>` : ''}
+        ${splitBillRows}
+        ${quickSharedRows}
         ${reimbursementParent ? `<div class="detail-row"><span class="detail-label">รับคืนจากบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openTxDetail('${esc(reimbursementParent.id)}')">${esc(reimbursementParentTitle)}</button></span></div>` : ''}
         ${cat ? `<div class="detail-row"><span class="detail-label">หมวดหมู่</span><span class="detail-value">${esc(cat.icon)} ${esc(cat.label)}</span></div>` : ''}
         ${wallet ? `<div class="detail-row"><span class="detail-label">กระเป๋าเงิน</span><span class="detail-value">${esc(wallet.icon)} ${esc(wallet.name)}</span></div>` : ''}
@@ -2132,7 +2147,7 @@ App.render();
         ${tx.isRecurring ? `<div class="detail-row"><span class="detail-label">รายการประจำ</span><span class="detail-value">เปิดใช้</span></div>` : ''}
         ${tx.isInstallment ? `<div class="detail-row"><span class="detail-label">ผ่อนชำระ</span><span class="detail-value">งวด ${tx.installmentNo || 1}/${tx.installmentMonths || '?'}</span></div>` : ''}
         ${(r.points || r.cashback) ? `<div class="detail-row"><span class="detail-label">สิทธิประโยชน์โดยประมาณ</span><span class="detail-value">${r.points ? '+' + r.points.toLocaleString('en-US') + ' pt' : ''}${r.points && r.cashback ? ' · ' : ''}${r.cashback ? '+' + fmt(r.cashback) : ''}</span></div>` : ''}
-        ${shared && (sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0) > 0 ? `<button class="btn btn-secondary" style="margin:10px 0 4px" onclick="App.openSharedExpenseReimbursement('${esc(tx.id)}')">บันทึกรับคืน ${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount)}</button>` : ''}
+        ${!splitBillLink && shared && (sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0) > 0 ? `<button class="btn btn-secondary" style="margin:10px 0 4px" onclick="App.openSharedExpenseReimbursement('${esc(tx.id)}')">บันทึกรับคืน ${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount)}</button>` : ''}
         <div class="detail-row"><span class="detail-label">ประเภท</span><span class="detail-value">${esc(App._txTypeLabel(tx.type))}</span></div>
       </div>`
   }
@@ -2399,7 +2414,7 @@ App.render();
   App.openAddTx = function() {
     S.txMode = 'add'
     S.editingTxId = null
-    S.tx = { step:'amount', type:'expense', amount:'0', calcOp:'', calcLeft:'', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', channel:'', note:'', date:txToday(), isRecurring:false, isInstallment:false, installmentMonths:'', sharedExpense:{ enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, rewardRuleIds:[], txSuggestedFields:{}, rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
+    S.tx = { step:'amount', type:'expense', amount:'0', calcOp:'', calcLeft:'', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', channel:'', note:'', date:txToday(), isRecurring:false, isInstallment:false, installmentMonths:'', sharedExpense:{ enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
   }
@@ -2649,7 +2664,9 @@ App.render();
     if (wallet?.name && !isTransfer) meta.push(wallet.name)
     if (isTransfer) meta.push('โอนเงิน')
     if (tx.type === 'cc_payment' && Number(tx.discountAmount || 0) > 0) meta.push(`ตัดบัตร ${fmt(tx.amount)} · ส่วนลด ${fmt(tx.discountAmount)}`)
-    if (tx.type === 'expense' && tx.sharedExpense?.enabled) {
+    if (tx.type === 'expense' && tx.splitBillId) {
+      meta.push('หารบิลเชื่อมแล้ว')
+    } else if (tx.type === 'expense' && tx.sharedExpense?.enabled) {
       const shared = App._sharedExpenseFromTx?.(tx) || tx.sharedExpense
       meta.push(`หารบิล · ส่วนเรา ${fmt(shared.myShare || tx.ledgerAmount || 0)}`)
     }
@@ -2931,6 +2948,10 @@ App.render();
               const _draftTx = { id:S.editingTxId || '', type:'expense', amount:_amt, walletId:S.tx.walletId, categoryId:S.tx.categoryId, merchant:S.tx.merchant, note:S.tx.note, date:S.tx.date || _today, channel:S.tx.channel || '' }
               const _rules = App.getSuggestedBenefitRules?.(_draftTx) || []
               S.tx.rewardRuleIds = Array.isArray(S.tx.rewardRuleIds) ? S.tx.rewardRuleIds : []
+              if (S.tx.rewardRulesTouched !== true && App.getOptimalBenefitSelection) {
+                const _optimal = App.getOptimalBenefitSelection(_draftTx)
+                if (_optimal?.selectedRuleIds?.length) S.tx.rewardRuleIds = [...new Set(_optimal.selectedRuleIds.filter(Boolean))]
+              }
               const _estimate = App.calculateSelectedRewardEstimate?.(_draftTx, S.tx.rewardRuleIds) || { cashback:0, points:0, rules:[], warnings:[] }
               S.tx.rewardEstimate = _estimate
               const _selectedRules = _rules.filter(rule => S.tx.rewardRuleIds.includes(rule.id))
@@ -4623,12 +4644,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const enabled = draft.type === 'expense' && raw.enabled === true && draft.isInstallment !== true && amount > 0
     if (!enabled) return { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }
     const peopleCount = Math.max(2, Math.min(99, Math.round(Number(raw.peopleCount || 2))))
-    const defaultShare = peopleCount > 0 ? round2(amount / peopleCount) : amount
-    const myShareRaw = raw.myShare !== undefined && raw.myShare !== '' ? Number(raw.myShare) : defaultShare
-    const myShare = round2(Math.max(0, Math.min(amount, Number.isFinite(myShareRaw) ? myShareRaw : defaultShare)))
+    const myShare = peopleCount > 0 ? round2(amount / peopleCount) : amount
     return {
       enabled:true,
-      mode: raw.mode === 'custom' ? 'custom' : 'equal',
+      mode: 'equal',
       peopleCount,
       myShare,
       reimbursableAmount: round2(Math.max(0, amount - myShare)),
@@ -4652,7 +4671,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         enabled,
         peopleCount: shared.peopleCount || 2,
         myShare,
-        mode: shared.mode || 'custom',
+        mode: 'equal',
       },
     })
     normalized.reimbursedAmount = round2(Number(shared.reimbursedAmount || 0))
@@ -4664,6 +4683,22 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const wallet = walletById(S.tx.walletId)
     const useRewardRules = !!(wallet && wallet.type === 'credit' && S.tx.type === 'expense')
     const sharedExpense = normalizeSharedExpenseDraft(S.tx)
+    let rewardRuleIds = useRewardRules && Array.isArray(S.tx.rewardRuleIds) ? [...new Set(S.tx.rewardRuleIds.filter(Boolean))] : []
+    if (useRewardRules && S.tx.rewardRulesTouched !== true && App.getOptimalBenefitSelection) {
+      const rewardDraft = {
+        id,
+        type: 'expense',
+        amount: Number(S.tx.amount || 0),
+        walletId: S.tx.walletId,
+        categoryId: S.tx.categoryId || '',
+        merchant: S.tx.merchant || '',
+        note: S.tx.note || '',
+        date: S.tx.date || today(),
+        channel: S.tx.channel || '',
+      }
+      const optimal = App.getOptimalBenefitSelection(rewardDraft)
+      if (optimal?.selectedRuleIds?.length) rewardRuleIds = [...new Set(optimal.selectedRuleIds.filter(Boolean))]
+    }
     const tx = {
       id,
       type: S.tx.type,
@@ -4683,13 +4718,19 @@ Calc.getUsableMoney = function(wallets, state = null) {
       isRecurring: !!S.tx.isRecurring,
       isInstallment: !!S.tx.isInstallment,
       reimbursesSharedExpenseTxId: S.tx.reimbursesSharedExpenseTxId || undefined,
-      rewardRuleIds: useRewardRules && Array.isArray(S.tx.rewardRuleIds) ? [...new Set(S.tx.rewardRuleIds.filter(Boolean))] : [],
+      splitBillId: S.tx.type === 'expense' ? (S.tx.splitBillId || undefined) : undefined,
+      splitBillOwnerPersonId: S.tx.type === 'expense' ? (S.tx.splitBillOwnerPersonId || undefined) : undefined,
+      rewardRuleIds,
+      rewardRulesTouched: useRewardRules ? S.tx.rewardRulesTouched === true : undefined,
       rewardIncludePoints: S.tx.rewardIncludePoints !== false,
       rewardIncludeCashback: S.tx.rewardIncludeCashback !== false,
     }
     const reward = App._rewardEstimateForTx(tx)
     if (reward) tx.rewardEstimate = reward
-    if (tx.type === 'expense' && sharedExpense.enabled) {
+    if (tx.type === 'expense' && tx.splitBillId) {
+      tx.sharedExpense = null
+      tx.ledgerAmount = round2(Math.max(0, Number(S.tx.splitBillOwnerShare ?? tx.amount) || 0))
+    } else if (tx.type === 'expense' && sharedExpense.enabled) {
       tx.sharedExpense = sharedExpense
       tx.ledgerAmount = sharedExpense.myShare
     } else {
@@ -4776,6 +4817,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
       }
       if (!isEdit && tx.type === 'income' && tx.reimbursesSharedExpenseTxId) {
         App._syncSharedExpenseSettlement?.(tx.reimbursesSharedExpenseTxId)
+      }
+      if (tx.type === 'expense' && tx.splitBillId) {
+        App.linkSplitBillToTransaction?.(tx.splitBillId, tx.id)
       }
       App._registerMerchantFromTx?.(tx)
       App.recalculateWalletBalances({ save:false, recordSnapshot:true })
@@ -7894,13 +7938,17 @@ App._pickMerchant = function(name, opts = {}) {
     notify(`นำเข้าสิทธิประโยชน์แล้ว · เพิ่ม ${created} · อัปเดต ${updated}`, 'success')
   }
 
-  App.toggleCCBenefitRule = function(ruleId) {
+  App.toggleCCBenefitRule = function(ruleId, returnTo = '', refMonth = '', filter = '', showAll = undefined) {
     App.ensureCCBenefitRulesState?.()
     const rule = (S.ccBenefitRules || []).find(row => row.id === ruleId)
     if (!rule) return
     rule.active = !rule.active
     persist()
-    App.openCCBenefitScreen(rule.cardId)
+    if (returnTo === 'overview') {
+      App.openCCBenefitOverviewScreen(refMonth || S._ccOverviewMonth, filter || S._ccOverviewFilter || 'all', '', showAll === undefined ? S._ccOverviewShowAll : showAll)
+    } else {
+      App.openCCBenefitScreen(rule.cardId)
+    }
   }
 
   App.deleteCCBenefitRule = function(ruleId) {
@@ -8061,8 +8109,11 @@ App._pickMerchant = function(name, opts = {}) {
             <div style="font-weight:600;font-size:14px;line-height:1.3">${esc(rule.name)}${rule.active === false ? '<span style="font-size:11px;color:var(--text-secondary,#6b7280)"> · ปิด</span>' : ''}</div>
             <div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:1px">${typeLabel}${rule.isBaseRule ? ' · พื้นฐาน' : ''}${cycleLabel ? ` · ${esc(cycleLabel)}` : ''}</div>
           </div>
-          <button class="btn-icon" style="font-size:15px;flex-shrink:0;width:30px;height:30px"
-            onclick="event.stopPropagation();App._ccBenefitRuleFormReturn='overview';App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">✏️</button>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            <button class="btn-icon" style="font-size:15px;width:30px;height:30px"
+              onclick="event.stopPropagation();App._ccBenefitRuleFormReturn='overview';App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')" aria-label="แก้ไขกฎ">✏️</button>
+            <button class="toggle${rule.active !== false ? ' on' : ''}" onclick="event.stopPropagation();App.toggleCCBenefitRule('${esc(rule.id)}','overview','${esc(refMonth)}','${esc(filter)}',${sa})" aria-label="${rule.active !== false ? 'ปิดใช้งานกฎ' : 'เปิดใช้งานกฎ'}" aria-pressed="${rule.active !== false ? 'true' : 'false'}"></button>
+          </div>
         </div>
         ${sections.length === 0
           ? `<div style="font-size:12px;color:var(--text-secondary,#6b7280);margin-top:6px">ใช้ได้ไม่จำกัด</div>`
@@ -8315,11 +8366,7 @@ App._pickMerchant = function(name, opts = {}) {
     const chLabel = val => { const f = channelOptions.find(([v]) => v === val); return f ? f[1] : val }
 
     // Collect txs in cycle with this rule selected, sorted oldest→newest for cap accumulation
-    const txHasRule = tx => {
-      if (Array.isArray(tx?.rewardRuleIds)) return tx.rewardRuleIds.map(String).includes(String(ruleId || ''))
-      const rows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
-      return rows.some(row => String(row.ruleId || '') === String(ruleId || ''))
-    }
+    const txHasRule = tx => txShouldCountForRule(tx, rule, ruleId)
     const txsInCycle = (S.transactions || [])
       .filter(tx => {
         if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return false
@@ -12409,6 +12456,21 @@ App._pickMerchant = function(name, opts = {}) {
       .map(cat => cat.id)
   }
 
+  function categoryConditionMatches(ruleCategory = '', txCategoryId = '') {
+    const ruleValue = normalizeCompareText(ruleCategory)
+    const txValue = normalizeCompareText(txCategoryId)
+    if (!ruleValue) return false
+    if (ruleValue === txValue) return true
+    const txCat = (S.categories?.expense || []).find(cat => String(cat.id || '') === String(txCategoryId || ''))
+    const txLabel = normalizeCompareText(txCat?.label || '')
+    if (txLabel && ruleValue === txLabel) return true
+    const ruleCat = (S.categories?.expense || []).find(cat =>
+      normalizeCompareText(cat?.id || '') === ruleValue ||
+      normalizeCompareText(cat?.label || '') === ruleValue
+    )
+    return !!ruleCat && String(ruleCat.id || '') === String(txCategoryId || '')
+  }
+
   function inferMerchantNamesFromText(text = '') {
     const hay = normalizeCompareText(text)
     if (!hay) return []
@@ -12440,7 +12502,16 @@ App._pickMerchant = function(name, opts = {}) {
     if (!ruleValue || ruleValue === 'any') return true
     if (!txValue) return false
     if (ruleValue === txValue) return true
+    const opts = App.getBenefitChannelOptions?.() || []
+    const ruleOpt = opts.find(([value, label]) =>
+      normalizeCompareText(value) === ruleValue || normalizeCompareText(label) === ruleValue
+    )
+    const txOpt = opts.find(([value, label]) =>
+      normalizeCompareText(value) === txValue || normalizeCompareText(label) === txValue
+    )
+    if (ruleOpt && txOpt && String(ruleOpt[0]) === String(txOpt[0])) return true
     if (ruleValue === 'online' && ONLINE_CHANNEL_ALIASES.has(txValue)) return true
+    if (ruleOpt && ruleOpt[0] === 'online' && ONLINE_CHANNEL_ALIASES.has(txOpt?.[0] || txValue)) return true
     return false
   }
 
@@ -12527,7 +12598,7 @@ App._pickMerchant = function(name, opts = {}) {
     const merchant = normalizeCompareText(txDraft.merchant || '')
     const channel = normalizeCompareText(txDraft.channel || '')
     const date = String(txDraft.date || today())
-    const categoryMatch = !categories.length || categories.includes(categoryId)
+    const categoryMatch = !categories.length || categories.some(value => categoryConditionMatches(value, categoryId))
     const merchantMatch = !merchants.length || merchants.some(v => merchantTextsMatch(v, merchant))
     const excludedMatch = excludedMerchants.length > 0 && !!merchant
       && excludedMerchants.some(v => merchantTextsMatch(v, merchant))
@@ -12563,6 +12634,23 @@ App._pickMerchant = function(name, opts = {}) {
       minSpendMatch,
       timeMatch,
     }
+  }
+
+  function txExplicitRewardRuleIds(tx = {}) {
+    return Array.isArray(tx?.rewardRuleIds)
+      ? tx.rewardRuleIds.map(id => String(id || '')).filter(Boolean)
+      : null
+  }
+
+  function txShouldCountForRule(tx = {}, rule = {}, ruleId = '') {
+    const explicitIds = txExplicitRewardRuleIds(tx)
+    if (explicitIds && explicitIds.length > 0) return explicitIds.includes(String(ruleId || rule.id || ''))
+    if (explicitIds && tx.rewardRulesTouched === true) return false
+    if (!rule || (!rule.id && !rule.suggestedConditions && !rule.rewardTrigger)) {
+      const rows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
+      return rows.some(row => String(row.ruleId || '') === String(ruleId || ''))
+    }
+    return getRuleEligibility(tx, rule).matched
   }
 
   function normalizeBenefitRule(rule = {}, cardId = '') {
@@ -12861,7 +12949,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (trig.mode === 'cycle_spend_threshold' && Number(trig.thresholdAmount || 0) > 0) {
           const trackChannels = getTriggerTrackChannels(trig)
           const cycle = getCyclePeriodForDate(cardId, txDraft.date || today(), rule)
-          const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', trackChannels)
+          const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', trackChannels, '', '', rule)
           const spent = Number(usage.trackChannelSpendBefore || 0)
           trackLocked = trig.grantMode !== 'every_threshold' && spent >= Number(trig.thresholdAmount)
             ? false  // once_per_cycle ที่ปลดไปแล้ว ก็ถือว่าไม่ locked
@@ -12915,11 +13003,7 @@ App._pickMerchant = function(name, opts = {}) {
     const normalizedTxMerchant = normalizeCompareText(txMerchant || '')
     const normalizedTxChannel = String(txChannel || '').trim().toLowerCase()
     const normalizedTrackChannels = Array.isArray(trackChannels) ? trackChannels : [trackChannels].filter(Boolean)
-    const txHasRule = tx => {
-      if (Array.isArray(tx?.rewardRuleIds)) return tx.rewardRuleIds.map(String).includes(String(ruleId || ''))
-      const rows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
-      return rows.some(row => String(row.ruleId || '') === String(ruleId || ''))
-    }
+    const txHasRule = tx => txShouldCountForRule(tx, rule, ruleId)
 
     // When a rule object is provided, recompute eligibility and rewards on-the-fly
     // (in date order with proper caps) to avoid relying on potentially stale stored estimates.
@@ -13120,11 +13204,7 @@ App._pickMerchant = function(name, opts = {}) {
     const trigger = rule.rewardTrigger || {}
     const isThresholdMode = trigger.mode === 'cycle_spend_threshold' && Number(trigger.thresholdAmount || 0) > 0
     const ruleChannelKeys = ruleChannels.map(ch => String(ch || '').trim().toLowerCase()).filter(Boolean)
-    const txHasRule = tx => {
-      if (Array.isArray(tx?.rewardRuleIds)) return tx.rewardRuleIds.map(String).includes(String(ruleId || ''))
-      const rows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
-      return rows.some(row => String(row.ruleId || '') === String(ruleId || ''))
-    }
+    const txHasRule = tx => txShouldCountForRule(tx, rule, ruleId)
     let trackAccum = 0
     ;(S.transactions || [])
       .filter(tx => {
@@ -13484,6 +13564,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (selected.has(ruleId)) selected.delete(ruleId)
     else selected.add(ruleId)
     S.tx.rewardRuleIds = [...selected]
+    S.tx.rewardRulesTouched = true
     const draft = {
       id: S.editingTxId || '',
       type: S.tx.type || 'expense',
@@ -20354,12 +20435,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         </div>
       </div>
       <div class="more-tab-strip">
-        <button class="more-tab-btn${activeTab === 'plan' ? ' active' : ''}" data-tab="plan" onclick="App._setMoreTab('plan')">วางแผน</button>
         <button class="more-tab-btn${activeTab === 'card' ? ' active' : ''}" data-tab="card" onclick="App._setMoreTab('card')">บัตร</button>
+        <button class="more-tab-btn${activeTab === 'plan' ? ' active' : ''}" data-tab="plan" onclick="App._setMoreTab('plan')">วางแผน</button>
         <button class="more-tab-btn${activeTab === 'settings' ? ' active' : ''}" data-tab="settings" onclick="App._setMoreTab('settings')">ตั้งค่า</button>
       </div>
-      ${pane('plan', activeTab === 'plan', planHtml)}
       ${pane('card', activeTab === 'card', cardHtml)}
+      ${pane('plan', activeTab === 'plan', planHtml)}
       ${pane('settings', activeTab === 'settings', settingsHtml)}
     </div>`
   }
@@ -20683,8 +20764,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const raw = S.tx.sharedExpense || {}
     if (!raw.enabled || S.tx.type !== 'expense' || S.tx.isInstallment) return defaultShared()
     const peopleCount = Math.max(2, Math.round(Number(raw.peopleCount || 2)))
-    const myShare = round2(Math.max(0, Math.min(amount, Number(raw.myShare || amount / peopleCount))))
-    return { enabled:true, mode:raw.mode || 'custom', peopleCount, myShare, reimbursableAmount:round2(amount - myShare), status:raw.status || 'pending' }
+    const myShare = round2(amount / peopleCount)
+    return { enabled:true, mode:'equal', peopleCount, myShare, reimbursableAmount:round2(amount - myShare), status:raw.status || 'pending' }
   }
 
   App.setSharedExpenseEnabled = function(enabled) {
@@ -20713,13 +20794,24 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const amount = txAmount()
     if (field === 'peopleCount') {
       S.tx.sharedExpense.peopleCount = Math.max(2, Math.min(99, Math.round(Number(value || 2))))
-      if (S.tx.sharedExpense.mode !== 'custom') S.tx.sharedExpense.myShare = round2(amount / S.tx.sharedExpense.peopleCount)
-    } else if (field === 'myShare') {
-      S.tx.sharedExpense.mode = 'custom'
-      S.tx.sharedExpense.myShare = round2(Math.max(0, Math.min(amount, Number(value || 0))))
     }
+    S.tx.sharedExpense.mode = 'equal'
+    S.tx.sharedExpense.myShare = round2(amount / S.tx.sharedExpense.peopleCount)
     S.tx.sharedExpense.reimbursableAmount = round2(Math.max(0, amount - Number(S.tx.sharedExpense.myShare || 0)))
     App._renderAddTxDetail?.()
+  }
+
+  App.openSplitBillFromAddTx = function() {
+    S.tx ||= {}
+    const amount = txAmount()
+    const draft = {
+      title: String(S.tx.merchant || S.tx.note || '').trim() || 'บิลใหม่',
+      date: S.tx.date || (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)),
+      manualTotal: amount,
+      linkedTransactionId: '',
+      ownerPersonId: '',
+    }
+    App.openSplitBillForm?.('', { draftData: draft, source: 'add_tx' })
   }
 
   App.getSharedExpenseReimbursements = function(txId) {
@@ -20795,6 +20887,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       if (!S.tx || S.tx.type !== 'expense') return
       const box = document.getElementById('add-tx-content')
       if (!box || box.querySelector('.shared-expense-panel')) return
+      if (S.tx.splitBillId) return
       const gross = txAmount()
       const shared = normalizeShared()
       const disabled = S.tx.isInstallment === true
@@ -20813,7 +20906,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         ${enabled ? `
           <div class="shared-expense-grid">
             <div><label class="form-label">จำนวนคนทั้งหมด</label><input class="form-input" type="number" min="2" max="99" inputmode="numeric" value="${esc(shared.peopleCount || 2)}" onchange="App.setSharedExpenseField('peopleCount', this.value)"></div>
-            <div><label class="form-label">ส่วนของเรา</label><input class="form-input" type="number" min="0" step="0.01" inputmode="decimal" value="${esc(shared.myShare || '')}" onchange="App.setSharedExpenseField('myShare', this.value)"></div>
+            <div><label class="form-label">ส่วนของเรา</label><div class="shared-expense-readonly">${money(shared.myShare || 0)}</div></div>
           </div>
           <div class="shared-expense-preview">
             <span>หักกระเป๋า <strong>${money(gross)}</strong></span>
@@ -20821,6 +20914,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             <span>รอรับคืน <strong>${money(shared.reimbursableAmount || 0)}</strong></span>
           </div>
         ` : ''}
+        <button type="button" class="shared-expense-ghost-link" onclick="App.openSplitBillFromAddTx()">
+          <span>
+            <strong>ถ้าต้องการหารบิลแบบจริงจัง</strong>
+            <small>ไปที่เมนูหารบิล แล้วค่อยสร้างรายการจ่ายที่เชื่อมกัน</small>
+          </span>
+          <span aria-hidden="true">→</span>
+        </button>
       `
       const target = box.querySelector('#cat-grid')?.closest('.form-group')
         || box.querySelector('#tx-channel')?.closest('.form-group')
@@ -20846,7 +20946,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   const prevSetTxType = App._setTxType?.bind(App)
   App._setTxType = function(type) {
-    if (type !== 'expense' && S.tx) S.tx.sharedExpense = defaultShared()
+    if (type !== 'expense' && S.tx) {
+      S.tx.sharedExpense = defaultShared()
+      S.tx.splitBillId = ''
+      S.tx.splitBillOwnerPersonId = ''
+      S.tx.splitBillOwnerShare = 0
+      S.tx.splitBillOwnerPaidAmount = 0
+    }
     return prevSetTxType?.(type)
   }
 

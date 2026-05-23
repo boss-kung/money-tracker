@@ -1060,6 +1060,19 @@ html.dark .mt-alert-row-name { color: var(--text); }
   gap: 10px;
   margin-top: 12px;
 }
+.shared-expense-readonly {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--elevated);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 .shared-expense-preview {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1082,6 +1095,33 @@ html.dark .mt-alert-row-name { color: var(--text); }
   font-weight: 800;
   margin-top: 2px;
   font-variant-numeric: tabular-nums;
+}
+.shared-expense-ghost-link {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  text-align: left;
+}
+.shared-expense-ghost-link strong {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+.shared-expense-ghost-link small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 .installment-month-grid { display:flex; gap:8px; }
 .installment-month-grid button {
