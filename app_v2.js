@@ -7995,7 +7995,8 @@ App._pickMerchant = function(name, opts = {}) {
   App.openCCBenefitOverviewScreen = function (refMonth, filter, _direction, showAll) {
     App.ensureCCBenefitRulesState?.()
     const todayStr = (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
-    if (!refMonth) refMonth = S._ccOverviewMonth || todayStr.slice(0, 7)
+    const todayMonth = todayStr.slice(0, 7)
+    if (!refMonth) refMonth = todayMonth
     S._ccOverviewMonth = refMonth
     if (filter === undefined) filter = S._ccOverviewFilter || 'all'
     S._ccOverviewFilter = filter
@@ -8011,7 +8012,7 @@ App._pickMerchant = function(name, opts = {}) {
     const nextD = new Date(year, month, 1)
     const prevStr = `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, '0')}`
     const nextStr = `${nextD.getFullYear()}-${String(nextD.getMonth() + 1).padStart(2, '0')}`
-    const todayMonth = todayStr.slice(0, 7)
+    const overviewRefDate = refMonth === todayMonth ? todayStr : `${refMonth}-15`
 
     const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
     const monthLabel = `${THAI_MONTHS[month - 1]} ${year + 543}`
@@ -8019,7 +8020,7 @@ App._pickMerchant = function(name, opts = {}) {
     function getCyclePeriod(cardId, rule) {
       const hint = String(rule?.validity?.statementCycleHint || 'statement_cycle')
       if (hint === 'calendar_month') return { start: calStart, end: calEnd }
-      return App.getCyclePeriodForDate?.(cardId, `${refMonth}-15`, rule) || { start: calStart, end: calEnd }
+      return App.getCyclePeriodForDate?.(cardId, overviewRefDate, rule) || { start: calStart, end: calEnd }
     }
 
     function fmtNum(n, isPoints) {
@@ -8130,7 +8131,7 @@ App._pickMerchant = function(name, opts = {}) {
 
       const dimmed = rule.active === false ? 'opacity:0.45;' : ''
       const hasCapBreakdown = Number(rule.limits?.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerMerchantPerCycle || 0) > 0 || Number(rule.limits?.maxRewardAmountPerChannelPerCycle || 0) > 0 || Number(rule.limits?.maxEligibleSpendPerChannelPerCycle || 0) > 0
-      const refDate = `${refMonth}-15`
+      const refDate = overviewRefDate
       const openTxCall = `App.openRuleTransactionsSheet(${jsArg(rule.id)},${jsArg(cardId)},${jsArg(refDate)})`
       return `<div class="card card-pad" style="margin-bottom:8px;${dimmed}cursor:pointer" onclick="${openTxCall}">
         <div style="display:flex;align-items:flex-start;gap:6px">
