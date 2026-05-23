@@ -4704,9 +4704,27 @@ html.dark .v64-rec-tab.active {
 .reward-rule-result.locked .reward-rule-toggle {
   opacity: .45;
 }
+.reward-rule-result.disabled,
+.reward-rule-result:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--muted) 36%, var(--line));
+  background: color-mix(in srgb, var(--muted) 8%, var(--card));
+  filter: grayscale(.55);
+}
+.reward-rule-result.disabled .reward-rule-toggle,
+.reward-rule-result:disabled .reward-rule-toggle {
+  opacity: .3;
+}
 .reward-rule-result:hover {
   border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
   background: color-mix(in srgb, var(--card) 78%, var(--bg));
+}
+.reward-rule-result.disabled:hover,
+.reward-rule-result:disabled:hover {
+  border-color: color-mix(in srgb, var(--muted) 36%, var(--line));
+  background: color-mix(in srgb, var(--muted) 8%, var(--card));
 }
 .reward-rule-result:active {
   transform: scale(.995);

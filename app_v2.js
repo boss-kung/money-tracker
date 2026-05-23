@@ -2952,15 +2952,21 @@ App.render();
                 const _optimal = App.getOptimalBenefitSelection(_draftTx)
                 if (_optimal?.selectedRuleIds?.length) S.tx.rewardRuleIds = [...new Set(_optimal.selectedRuleIds.filter(Boolean))]
               }
+              const _disabledRuleIds = new Set(_rules.filter(rule => rule.fullyUsed).map(rule => rule.id))
+              if (_disabledRuleIds.size) {
+                S.tx.rewardRuleIds = S.tx.rewardRuleIds.filter(id => !_disabledRuleIds.has(id))
+              }
               const _estimate = App.calculateSelectedRewardEstimate?.(_draftTx, S.tx.rewardRuleIds) || { cashback:0, points:0, rules:[], warnings:[] }
               S.tx.rewardEstimate = _estimate
               const _selectedRules = _rules.filter(rule => S.tx.rewardRuleIds.includes(rule.id))
               const _selectedNames = _selectedRules.map(rule => rule.name)
               const _rows = _rules.map(rule => {
                 const _selected = S.tx.rewardRuleIds.includes(rule.id)
+                const _disabled = !!rule.fullyUsed
                 const _typeText = rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : 'ส่วนลดทันที'
-                const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.trackLocked ? '🔒 ยังไม่ถึงยอด' : '', rule.allowStacking ? '' : 'อาจไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
+                const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.fullyUsedReason || '', rule.trackLocked ? '🔒 ยังไม่ถึงยอด' : '', rule.allowStacking ? '' : 'อาจไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
                 const _trackHint = rule.trackLocked ? `<span class="list-item-sub" style="color:var(--expense)">สะสมผ่าน${esc(rule.trackChannelLabel)}อีก ${esc(fmt(rule.trackRemaining))} ในรอบนี้เพื่อปลดล็อก</span>` : ''
+                const _disabledHint = _disabled ? `<span class="list-item-sub" style="color:var(--muted)">สิทธิ์นี้ครบแล้ว จึงเลือกไม่ได้</span>` : ''
                 const _merchantHint = rule.merchantCashbackRemaining != null
                   ? (rule.merchantCashbackRemaining <= 0
                     ? `<span class="list-item-sub" style="color:var(--expense)">ร้านนี้ครบแล้ว</span>`
@@ -2975,12 +2981,13 @@ App.render();
                   : (rule.channelEligibleRemaining != null && rule.channelEligibleRemaining <= 0
                     ? `<span class="list-item-sub" style="color:var(--expense)">ยอดช่องทางนี้เต็มแล้ว</span>`
                     : '')
-                return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}${rule.trackLocked ? ' locked' : ''}" onclick="App._toggleTxRewardRule('${esc(rule.id)}')" aria-pressed="${_selected ? 'true' : 'false'}">
+                return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}${rule.trackLocked ? ' locked' : ''}${_disabled ? ' disabled' : ''}" ${_disabled ? 'disabled aria-disabled="true"' : `onclick="App._toggleTxRewardRule('${esc(rule.id)}')"`} aria-pressed="${_selected ? 'true' : 'false'}">
                   <span class="csr-main">
                     <span>
                       <span class="list-item-name">${esc(rule.name)}</span>
                       <span class="list-item-sub">${esc(_meta)}</span>
                       ${rule.description ? `<span class="list-item-sub">${esc(rule.description)}</span>` : ''}
+                      ${_disabledHint}
                       ${_trackHint}
                       ${_merchantHint}
                       ${_channelHint}
@@ -4684,8 +4691,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const useRewardRules = !!(wallet && wallet.type === 'credit' && S.tx.type === 'expense')
     const sharedExpense = normalizeSharedExpenseDraft(S.tx)
     let rewardRuleIds = useRewardRules && Array.isArray(S.tx.rewardRuleIds) ? [...new Set(S.tx.rewardRuleIds.filter(Boolean))] : []
-    if (useRewardRules && S.tx.rewardRulesTouched !== true && App.getOptimalBenefitSelection) {
-      const rewardDraft = {
+    const rewardDraft = useRewardRules
+      ? {
         id,
         type: 'expense',
         amount: Number(S.tx.amount || 0),
@@ -4696,8 +4703,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
         date: S.tx.date || today(),
         channel: S.tx.channel || '',
       }
+      : null
+    if (useRewardRules && S.tx.rewardRulesTouched !== true && App.getOptimalBenefitSelection) {
       const optimal = App.getOptimalBenefitSelection(rewardDraft)
       if (optimal?.selectedRuleIds?.length) rewardRuleIds = [...new Set(optimal.selectedRuleIds.filter(Boolean))]
+    }
+    if (useRewardRules && rewardDraft) {
+      const disabledIds = new Set((App.getSuggestedBenefitRules?.(rewardDraft) || []).filter(rule => rule.fullyUsed).map(rule => rule.id))
+      if (disabledIds.size) rewardRuleIds = rewardRuleIds.filter(id => !disabledIds.has(id))
     }
     const tx = {
       id,
@@ -8396,7 +8409,6 @@ App._pickMerchant = function(name, opts = {}) {
           ? tx.rewardRuleIds.map(id => String(id || '')).filter(Boolean)
           : null
         if (explicitIds && explicitIds.length > 0) return explicitIds.includes(String(ruleId || rule.id || ''))
-        if (explicitIds && tx.rewardRulesTouched === true) return false
         const estimateRows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
         if (estimateRows.some(row => String(row.ruleId || '') === String(ruleId || rule.id || ''))) return true
         return getEligibility(tx).matched
@@ -8426,8 +8438,10 @@ App._pickMerchant = function(name, opts = {}) {
       let trackBefore = 0
       let trackAfter = 0
       let trackOnly = false
+      let includedByRule = false
+      let eligibility = { matched: false, reasons: [] }
       if (isThresholdMode) {
-        const eligibility = getEligibility(tx)
+        eligibility = getEligibility(tx)
         const txChannel = resolveBenefitTxChannel(tx)
         trackContribution = channelMatchesAny(trackChannels, txChannel) ? Number(tx.amount || 0) : 0
         trackBefore = trackAccum
@@ -8440,8 +8454,9 @@ App._pickMerchant = function(name, opts = {}) {
             : (trackBefore < triggerAmt && trackAfter >= triggerAmt ? 1 : 0)
         }
         trackAccum = trackAfter
-        const includedByRule = txHasRule(tx)
-        if (!includedByRule && trackContribution <= 0) return null
+        includedByRule = txHasRule(tx)
+        const relevantToRule = includedByRule || eligibility.matched || trackContribution > 0
+        if (!relevantToRule) return null
         if (eligibility.matched && triggerCount > 0) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
           const txCK = resolveBenefitTxChannel(tx).trim().toLowerCase()
@@ -8475,8 +8490,9 @@ App._pickMerchant = function(name, opts = {}) {
           trackOnly = true
         }
       } else {
-        if (!txHasRule(tx)) return null
-        const eligibility = getEligibility(tx)
+        includedByRule = txHasRule(tx)
+        eligibility = getEligibility(tx)
+        if (!includedByRule && !eligibility.matched) return null
         if (eligibility.matched) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
           const txCK = resolveBenefitTxChannel(tx).trim().toLowerCase()
@@ -8508,7 +8524,7 @@ App._pickMerchant = function(name, opts = {}) {
       eligAccum   += eligible
       rewardAccum += isPoints ? 0 : reward
       if (isThresholdMode && trackContribution > 0 && eligible <= 0 && reward <= 0 && pts <= 0) trackOnly = true
-      return { tx, eligible, reward, pts, trackContribution, trackBefore, trackAfter, trackOnly }
+      return { tx, eligible, reward, pts, trackContribution, trackBefore, trackAfter, trackOnly, includedByRule, eligibilityMatched: !!eligibility.matched }
     }).filter(Boolean)
     rows.reverse() // newest-first for display
 
@@ -8573,16 +8589,46 @@ App._pickMerchant = function(name, opts = {}) {
         </div>`
       : ''
 
+    const debugData = App.getBenefitRuleDebugData?.(ruleId, cardId, refDate) || null
+    const displayedTxIds = new Set(rows.map(row => String(row?.tx?.id || '')).filter(Boolean))
+    const excludedRows = (debugData?.rows || []).filter(row =>
+      row.inCycle &&
+      row.posted &&
+      !displayedTxIds.has(String(row.txId || ''))
+    )
+    const debugHtml = debugData
+      ? `<details style="margin-top:12px;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:rgba(148,163,184,.08)">
+          <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text-primary)">วิเคราะห์รายการที่ยังไม่ถูกนับ${excludedRows.length ? ` (${excludedRows.length})` : ''}</summary>
+          <div style="padding-top:10px;font-size:11px;color:var(--text-secondary,#6b7280);line-height:1.45">
+            <div>รอบที่กำลังตรวจ: ${esc(debugData.summary.cycleStart)} ถึง ${esc(debugData.summary.cycleEnd)}</div>
+            <div>รายการในรอบบิล: ${debugData.summary.inCycleCount} · posted: ${debugData.summary.postedCount} · track channel: ${debugData.summary.trackCount}</div>
+            ${excludedRows.length
+              ? `<div style="margin-top:8px;display:grid;gap:8px">
+                  ${excludedRows.map(row => `<div style="padding-top:8px;border-top:1px solid var(--border)">
+                    <div style="display:flex;justify-content:space-between;gap:10px">
+                      <strong style="font-size:12px;color:var(--text-primary)">${esc(row.merchant || row.note || 'ไม่ระบุรายการ')}</strong>
+                      <span>${fmtMoney(row.amount)}</span>
+                    </div>
+                    <div>${esc(row.resolvedDate || row.date || '-')} · ${esc(row.resolvedChannel || row.channel || 'ไม่ระบุช่องทาง')}</div>
+                    <div style="margin-top:2px;color:var(--expense,#DC2626)">${esc(row.reasons || 'ไม่มีเหตุผล')}</div>
+                  </div>`).join('')}
+                </div>`
+              : `<div style="margin-top:8px;color:var(--success,#059669)">ไม่พบรายการในรอบบิลที่ถูกตัดออกจาก sheet</div>`}
+          </div>
+        </details>`
+      : ''
+
     const listHtml = rows.length === 0
       ? `<div style="text-align:center;padding:32px 0;color:var(--text-secondary,#6b7280);font-size:14px">ยังไม่มีรายการในรอบนี้</div>`
-      : rows.map(({ tx, eligible, reward, pts, trackContribution, trackBefore, trackAfter, trackOnly }) => {
+      : rows.map(({ tx, eligible, reward, pts, trackContribution, trackBefore, trackAfter, trackOnly, includedByRule, eligibilityMatched }) => {
           const rewardVal = isPoints ? pts : reward
           const label = String(tx.merchant || tx.note || '').trim() || 'ไม่ระบุร้าน'
           const ch = resolveBenefitTxChannel(tx).trim()
           const unlockLine = isThresholdMode && trackContribution > 0
             ? `สะสมปลดล็อก ${fmtMoney(trackContribution)}${trackOnly ? ` · รวม ${fmtMoney(trackAfter)}` : ''}`
             : ''
-          const sub = [ch ? chLabel(ch) : null, tx.note && tx.merchant ? esc(tx.note) : null, unlockLine].filter(Boolean).join(' · ')
+          const ruleLine = !includedByRule && eligibilityMatched ? 'ตรงเงื่อนไขกฎจากข้อมูลจริง' : ''
+          const sub = [ch ? chLabel(ch) : null, tx.note && tx.merchant ? esc(tx.note) : null, unlockLine, ruleLine].filter(Boolean).join(' · ')
           return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border,#1e2a3a)">
             <div style="flex-shrink:0;text-align:center;min-width:32px">
               <div style="font-size:12px;font-weight:600">${fmtDate(tx.date)}</div>
@@ -8603,7 +8649,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (titleEl) titleEl.textContent = rule.name
 
     const body = document.getElementById('rule-transactions-content')
-    if (body) body.innerHTML = `<div style="padding:0 0 32px">${summaryHtml}${conditionHtml}<div style="padding-top:4px">${listHtml}</div></div>`
+    if (body) body.innerHTML = `<div style="padding:0 0 32px">${summaryHtml}${conditionHtml}${debugHtml}<div style="padding-top:4px">${listHtml}</div></div>`
 
     App.openOverlay('overlay-rule-transactions')
   }
@@ -8625,12 +8671,11 @@ App._pickMerchant = function(name, opts = {}) {
     }
   }
 
-  App.debugBenefitRule = function(ruleId, cardId, refDate = '') {
+  App.getBenefitRuleDebugData = function(ruleId, cardId, refDate = '') {
     App.ensureCCBenefitRulesState?.()
     const todayStr = new Date().toISOString().slice(0, 10)
     const rule = (S.ccBenefitRules || []).find(r => String(r.id || '') === String(ruleId || ''))
     if (!rule) {
-      console.warn('[Benefits][debug] rule not found', { ruleId, cardId, refDate })
       return null
     }
     const cycle = App.getCyclePeriodForDate?.(cardId, refDate || todayStr, rule) || { start: todayStr, end: todayStr }
@@ -8691,11 +8736,21 @@ App._pickMerchant = function(name, opts = {}) {
       trackCount: rows.filter(row => row.trackContribution > 0).length,
       trackSpend: rows.filter(row => row.inCycle && row.posted).reduce((sum, row) => sum + Number(row.trackContribution || 0), 0),
     }
+    return { summary, rows }
+  }
+
+  App.debugBenefitRule = function(ruleId, cardId, refDate = '') {
+    const data = App.getBenefitRuleDebugData(ruleId, cardId, refDate)
+    if (!data) {
+      console.warn('[Benefits][debug] rule not found', { ruleId, cardId, refDate })
+      return null
+    }
+    const { summary, rows } = data
     console.groupCollapsed?.(`[Benefits][debug] ${summary.ruleName} (${summary.cycleStart}..${summary.cycleEnd})`)
     console.log('summary', summary)
     try { console.table(rows) } catch (_) { console.log(rows) }
     console.groupEnd?.()
-    return { summary, rows }
+    return data
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -12587,8 +12642,9 @@ App._pickMerchant = function(name, opts = {}) {
     if (!leftVariants.length || !rightVariants.length) return false
     return leftVariants.some(lv => rightVariants.some(rv => {
       if (lv === rv) return true
-      if (lv.length >= 4 && rv.includes(lv)) return true
-      if (rv.length >= 4 && lv.includes(rv)) return true
+      const lvCompact = lv.replace(/\s+/g, '')
+      const rvCompact = rv.replace(/\s+/g, '')
+      if (lvCompact === rvCompact) return true
       return false
     }))
   }
@@ -12797,7 +12853,7 @@ App._pickMerchant = function(name, opts = {}) {
     // treat channel conditions as satisfied (channel = "not yet chosen") so channel-specific
     // rules still appear in estimates. Actual saving always has a concrete channel value.
     const channelMatch = !channels.length
-      || (txDraft._forSuggestion && !channel)
+      || (txDraft._forSuggestion && !channel && merchants.length === 0)
       || channels.some(value => channelMatches(value, channel))
     // When both merchants AND channels are specified, either one matching is enough (OR logic)
     // When only one is specified, the other defaults to "match all" (standard AND behavior)
@@ -13119,6 +13175,46 @@ App._pickMerchant = function(name, opts = {}) {
       .sort((a, b) => Number(b.active) - Number(a.active) || Number(b.priority || 0) - Number(a.priority || 0) || String(a.name || '').localeCompare(String(b.name || '')))
   }
 
+  function rewardUsedForRuleType(rule = {}, usage = {}) {
+    if (rule.type === 'points') return Number(usage.pointsUsedBefore || 0)
+    if (rule.type === 'discount') return Number(usage.discountUsedBefore || 0)
+    return Number(usage.cashbackUsedBefore || 0)
+  }
+
+  function getFullyUsedReasonForRule(rule = {}, txDraft = {}, eligibility = {}, cycleUsage = {}) {
+    if (!eligibility.matched) return ''
+    const limits = rule.limits || {}
+    const cycleLabel = String(rule?.validity?.statementCycleHint || 'statement_cycle') === 'calendar_month' ? 'เดือนนี้' : 'รอบบิลนี้'
+    const trig = rule.rewardTrigger || {}
+    if (
+      trig.mode === 'cycle_spend_threshold' &&
+      trig.grantMode !== 'every_threshold' &&
+      Number(trig.thresholdAmount || 0) > 0 &&
+      Number(cycleUsage.triggerCountUsedBefore || 0) > 0
+    ) {
+      return `สิทธิ์ยอดสะสมครบแล้ว${cycleLabel}`
+    }
+    if (Number(limits.maxRewardAmountPerCycle || 0) > 0 && rewardUsedForRuleType(rule, cycleUsage) >= Number(limits.maxRewardAmountPerCycle || 0)) {
+      return `สิทธิประโยชน์ครบแล้ว${cycleLabel}`
+    }
+    if (Number(limits.maxEligibleSpendPerCycle || 0) > 0 && Number(cycleUsage.eligibleSpendUsedBefore || 0) >= Number(limits.maxEligibleSpendPerCycle || 0)) {
+      return `ยอดใช้จ่ายครบแล้ว${cycleLabel}`
+    }
+    if (eligibility.merchantMatch && Number(limits.maxRewardAmountPerMerchantPerCycle || 0) > 0 && Number(cycleUsage.cashbackUsedByMerchantBefore || 0) >= Number(limits.maxRewardAmountPerMerchantPerCycle || 0)) {
+      return 'ร้านนี้ครบแล้ว'
+    }
+    if (eligibility.merchantMatch && Number(limits.maxEligibleSpendPerMerchantPerCycle || 0) > 0 && Number(cycleUsage.eligibleSpendUsedByMerchantBefore || 0) >= Number(limits.maxEligibleSpendPerMerchantPerCycle || 0)) {
+      return 'ยอดร้านนี้เต็มแล้ว'
+    }
+    if (txDraft.channel && eligibility.channelMatch && Number(limits.maxRewardAmountPerChannelPerCycle || 0) > 0 && Number(cycleUsage.cashbackUsedByChannelBefore || 0) >= Number(limits.maxRewardAmountPerChannelPerCycle || 0)) {
+      return 'ช่องทางนี้ครบแล้ว'
+    }
+    if (txDraft.channel && eligibility.channelMatch && Number(limits.maxEligibleSpendPerChannelPerCycle || 0) > 0 && Number(cycleUsage.eligibleSpendUsedByChannelBefore || 0) >= Number(limits.maxEligibleSpendPerChannelPerCycle || 0)) {
+      return 'ยอดช่องทางนี้เต็มแล้ว'
+    }
+    return ''
+  }
+
   App.getSuggestedBenefitRules = function(txDraft = {}) {
     ensureCCBenefitRulesState()
     const cardId = String(txDraft.walletId || '')
@@ -13154,27 +13250,29 @@ App._pickMerchant = function(name, opts = {}) {
         const ruleLimits = rule.limits || {}
         const hasMerchantCap = Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle || 0) > 0
         const hasChannelCap = Number(ruleLimits.maxRewardAmountPerChannelPerCycle || 0) > 0 || Number(ruleLimits.maxEligibleSpendPerChannelPerCycle || 0) > 0
+        const cycleForRule = getCyclePeriodForDate(cardId, txDraft.date || today(), rule)
+        const cycleUsage = App.getRuleCycleUsage(rule.id, cardId, cycleForRule.start, cycleForRule.end, txDraft.id || '', getTriggerTrackChannels(rule.rewardTrigger || {}), txDraft.merchant || '', txDraft.channel || '', rule)
         if (eligibility.matched && (hasMerchantCap || hasChannelCap)) {
-          const cycle = getCyclePeriodForDate(cardId, txDraft.date || today(), rule)
-          const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', [], txDraft.merchant || '', txDraft.channel || '', rule)
           // Only show merchant cap hint when the merchant field itself matched (not just channel)
           if (eligibility.merchantMatch && Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0) {
-            merchantCashbackRemaining = Math.max(0, Number(ruleLimits.maxRewardAmountPerMerchantPerCycle) - Number(usage.cashbackUsedByMerchantBefore || 0))
+            merchantCashbackRemaining = Math.max(0, Number(ruleLimits.maxRewardAmountPerMerchantPerCycle) - Number(cycleUsage.cashbackUsedByMerchantBefore || 0))
           }
           if (eligibility.merchantMatch && Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle || 0) > 0) {
-            merchantEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle) - Number(usage.eligibleSpendUsedByMerchantBefore || 0))
+            merchantEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle) - Number(cycleUsage.eligibleSpendUsedByMerchantBefore || 0))
           }
           // Only show channel cap hint when a channel is selected and the channel field matched
           if (txDraft.channel && eligibility.channelMatch && Number(ruleLimits.maxRewardAmountPerChannelPerCycle || 0) > 0) {
-            channelCashbackRemaining = Math.max(0, Number(ruleLimits.maxRewardAmountPerChannelPerCycle) - Number(usage.cashbackUsedByChannelBefore || 0))
+            channelCashbackRemaining = Math.max(0, Number(ruleLimits.maxRewardAmountPerChannelPerCycle) - Number(cycleUsage.cashbackUsedByChannelBefore || 0))
           }
           if (txDraft.channel && eligibility.channelMatch && Number(ruleLimits.maxEligibleSpendPerChannelPerCycle || 0) > 0) {
-            channelEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerChannelPerCycle) - Number(usage.eligibleSpendUsedByChannelBefore || 0))
+            channelEligibleRemaining = Math.max(0, Number(ruleLimits.maxEligibleSpendPerChannelPerCycle) - Number(cycleUsage.eligibleSpendUsedByChannelBefore || 0))
           }
         }
-        const suggested = eligibility.matched
+        const fullyUsedReason = getFullyUsedReasonForRule(rule, txDraft, eligibility, cycleUsage)
+        const fullyUsed = !!fullyUsedReason
+        const suggested = eligibility.matched && !fullyUsed
         const score = (suggested ? 100 : 0) + (rule.isBaseRule ? 15 : 0) + (specificity * 3) + Number(rule.priority || 0)
-        return { ...rule, suggested, timeMatch: eligibility.timeMatch, eligibility, suggestionScore: score, trackLocked, trackRemaining, trackChannelLabel, merchantCashbackRemaining, merchantEligibleRemaining, channelCashbackRemaining, channelEligibleRemaining }
+        return { ...rule, suggested, timeMatch: eligibility.timeMatch, eligibility, suggestionScore: score, trackLocked, trackRemaining, trackChannelLabel, merchantCashbackRemaining, merchantEligibleRemaining, channelCashbackRemaining, channelEligibleRemaining, fullyUsed, fullyUsedReason }
       })
       .sort((a, b) => Number(b.suggested) - Number(a.suggested) || Number(b.suggestionScore || 0) - Number(a.suggestionScore || 0) || String(a.name || '').localeCompare(String(b.name || '')))
   }
@@ -13756,12 +13854,7 @@ App._pickMerchant = function(name, opts = {}) {
 
   App._toggleTxRewardRule = function(ruleId) {
     S.tx ||= {}
-    const selected = new Set(Array.isArray(S.tx.rewardRuleIds) ? S.tx.rewardRuleIds : [])
-    if (selected.has(ruleId)) selected.delete(ruleId)
-    else selected.add(ruleId)
-    S.tx.rewardRuleIds = [...selected]
-    S.tx.rewardRulesTouched = true
-    const draft = {
+    const draftForRule = {
       id: S.editingTxId || '',
       type: S.tx.type || 'expense',
       amount: Number(S.tx.amount || 0),
@@ -13772,9 +13865,21 @@ App._pickMerchant = function(name, opts = {}) {
       date: S.tx.date || today(),
       channel: S.tx.channel || '',
     }
+    const ruleState = (App.getSuggestedBenefitRules?.(draftForRule) || []).find(rule => String(rule.id || '') === String(ruleId || ''))
+    if (ruleState?.fullyUsed) {
+      notify(ruleState.fullyUsedReason || 'สิทธิ์นี้ครบแล้ว', 'warn')
+      S.tx.rewardRuleIds = (S.tx.rewardRuleIds || []).filter(id => String(id || '') !== String(ruleId || ''))
+      App._renderAddTxDetail?.()
+      return
+    }
+    const selected = new Set(Array.isArray(S.tx.rewardRuleIds) ? S.tx.rewardRuleIds : [])
+    if (selected.has(ruleId)) selected.delete(ruleId)
+    else selected.add(ruleId)
+    S.tx.rewardRuleIds = [...selected]
+    S.tx.rewardRulesTouched = true
     const _scrollEl = document.querySelector('.add-detail-scroll')
     const _scrollTop = _scrollEl ? _scrollEl.scrollTop : 0
-    S.tx.rewardEstimate = App.calculateSelectedRewardEstimate?.(draft, S.tx.rewardRuleIds) || null
+    S.tx.rewardEstimate = App.calculateSelectedRewardEstimate?.(draftForRule, S.tx.rewardRuleIds) || null
     App._renderAddTxDetail?.()
     requestAnimationFrame(() => {
       const el = document.querySelector('.add-detail-scroll')
