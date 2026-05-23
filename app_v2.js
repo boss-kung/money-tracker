@@ -8390,6 +8390,14 @@ App._pickMerchant = function(name, opts = {}) {
       const f = channelOptions.find(opt => Array.isArray(opt) && opt[0] === val)
       return f ? f[1] : val
     }
+    const resolveTxChannel = tx => {
+      if (typeof App._resolveBenefitTxChannel === 'function') return App._resolveBenefitTxChannel(tx)
+      return String(tx?.channel || '').trim()
+    }
+    const resolveTxDate = tx => {
+      if (typeof App._resolveBenefitTxDate === 'function') return App._resolveBenefitTxDate(tx)
+      return String(tx?.date || '').trim().slice(0, 10)
+    }
     const getEligibility = tx => {
       try {
         if (typeof App._getRuleEligibility === 'function') return App._getRuleEligibility(tx, rule)
@@ -8423,7 +8431,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (typeof App._isPostedTx === 'function') {
           try { if (!App._isPostedTx(tx)) return false } catch (_) {}
         }
-        const d = resolveBenefitTxDate(tx)
+        const d = resolveTxDate(tx)
         return d >= cycle.start && d <= cycle.end
       })
       .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
@@ -8442,7 +8450,7 @@ App._pickMerchant = function(name, opts = {}) {
       let eligibility = { matched: false, reasons: [] }
       if (isThresholdMode) {
         eligibility = getEligibility(tx)
-        const txChannel = resolveBenefitTxChannel(tx)
+        const txChannel = resolveTxChannel(tx)
         trackContribution = channelMatchesAny(trackChannels, txChannel) ? Number(tx.amount || 0) : 0
         trackBefore = trackAccum
         trackAfter = Math.round((trackBefore + trackContribution) * 100) / 100
@@ -8459,7 +8467,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (!relevantToRule) return null
         if (eligibility.matched && triggerCount > 0) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
-          const txCK = resolveBenefitTxChannel(tx).trim().toLowerCase()
+          const txCK = resolveTxChannel(tx).trim().toLowerCase()
           eligible = Math.max(0, Number(tx.amount || 0))
           if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
           if (cycleEligibleCap  > 0) eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - eligAccum))
@@ -8495,7 +8503,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (!includedByRule && !eligibility.matched) return null
         if (eligibility.matched) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
-          const txCK = resolveBenefitTxChannel(tx).trim().toLowerCase()
+          const txCK = resolveTxChannel(tx).trim().toLowerCase()
           eligible = Math.max(0, Number(tx.amount || 0))
           if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
           if (cycleEligibleCap  > 0) eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - eligAccum))
@@ -8623,7 +8631,7 @@ App._pickMerchant = function(name, opts = {}) {
       : rows.map(({ tx, eligible, reward, pts, trackContribution, trackBefore, trackAfter, trackOnly, includedByRule, eligibilityMatched }) => {
           const rewardVal = isPoints ? pts : reward
           const label = String(tx.merchant || tx.note || '').trim() || 'ไม่ระบุร้าน'
-          const ch = resolveBenefitTxChannel(tx).trim()
+          const ch = resolveTxChannel(tx).trim()
           const unlockLine = isThresholdMode && trackContribution > 0
             ? `สะสมปลดล็อก ${fmtMoney(trackContribution)}${trackOnly ? ` · รวม ${fmtMoney(trackAfter)}` : ''}`
             : ''
@@ -12732,6 +12740,7 @@ App._pickMerchant = function(name, opts = {}) {
     const inferred = inferChannelsFromText(`${tx?.merchant || ''} ${tx?.note || ''}`)
     return inferred[0] || ''
   }
+  App._resolveBenefitTxChannel = resolveBenefitTxChannel
 
   function resolveBenefitTxDate(tx = {}) {
     const raw = String(tx?.date || '').trim()
@@ -12741,6 +12750,7 @@ App._pickMerchant = function(name, opts = {}) {
     const parsed = parseDateToISO(raw)
     return parsed || raw.slice(0, 10)
   }
+  App._resolveBenefitTxDate = resolveBenefitTxDate
 
   const ONLINE_CHANNEL_ALIASES = new Set(['online', 'truemoney', 'line_pay', 'shopeepay', 'rabbit_line_pay', 'qr_payment'])
   function channelMatches(ruleChannel = '', txChannel = '') {
