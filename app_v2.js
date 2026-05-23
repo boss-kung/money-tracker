@@ -2058,7 +2058,7 @@ App.render();
     if (!tx) return
     S.txMode = 'edit'
     S.editingTxId = id
-    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:tx.splitBillId || '', splitBillOwnerPersonId:tx.splitBillOwnerPersonId || '', splitBillOwnerShare:Number(tx.ledgerAmount || 0), splitBillOwnerPaidAmount:Number(tx.amount || 0), rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:tx.rewardRulesTouched === true, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || TODAY, benefitDateOverride:tx.benefitDateOverride || '', isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:tx.splitBillId || '', splitBillOwnerPersonId:tx.splitBillOwnerPersonId || '', splitBillOwnerShare:Number(tx.ledgerAmount || 0), splitBillOwnerPaidAmount:Number(tx.amount || 0), rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:tx.rewardRulesTouched === true, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxDetail()
     App.openOverlay('overlay-add-tx')
@@ -2069,7 +2069,7 @@ App.render();
     if (!tx) return
     S.txMode = 'duplicate'
     S.editingTxId = null
-    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), calcOp:'', calcLeft:'', walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:TODAY, isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), calcOp:'', calcLeft:'', walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:TODAY, benefitDateOverride:'', isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
@@ -2130,9 +2130,14 @@ App.render();
     const quickSharedRows = !splitBillLink && shared
       ? `<div class="detail-row"><span class="detail-label">จ่ายแทนทั้งหมด</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">นับเข้างบของเรา</span><span class="detail-value">${fmt(shared.myShare || 0)}</span></div><div class="detail-row"><span class="detail-label">รับคืนแล้ว</span><span class="detail-value" style="color:var(--income)">${fmt(sharedSettlement?.received || shared.reimbursedAmount || 0)}</span></div><div class="detail-row"><span class="detail-label">คงเหลือรอรับคืน</span><span class="detail-value" style="color:${(sharedSettlement?.remaining || shared.remainingReimbursableAmount || shared.reimbursableAmount || 0) > 0 ? 'var(--income)' : 'var(--muted)'}">${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0)}</span></div>`
       : ''
+    const benefitDate = typeof App._resolveBenefitTxDate === 'function' ? App._resolveBenefitTxDate(tx) : String(tx.benefitDateOverride || tx.date || '').slice(0, 10)
+    const benefitDateRow = tx.type === 'expense' && tx.benefitDateOverride && benefitDate && benefitDate !== String(tx.date || '').slice(0, 10)
+      ? `<div class="detail-row"><span class="detail-label">วันที่นับสิทธิ์</span><span class="detail-value">${esc(Calc.labelDate(benefitDate))}</span></div>`
+      : ''
     return `<div style="text-align:center;margin-bottom:20px"><div style="font-size:44px;font-weight:800;color:${cssAmountColor(tx.type)};letter-spacing:-.05em;${isScheduledFuture ? 'opacity:.55' : ''}">${signedFmt(headerAmount, tx.type)}</div><div style="font-size:14px;color:var(--muted);margin-top:6px">${esc(Calc.labelDate(tx.date))}</div>${isScheduledFuture ? `<div style="display:inline-block;margin-top:8px;padding:4px 10px;border-radius:999px;background:rgba(100,116,139,.15);color:var(--muted);font-size:12px;font-weight:600">📅 ตามแผน · ยังไม่หักยอดจริง</div>` : ''}</div>
       <div>
         ${isScheduledFuture ? `<div class="detail-row" style="background:rgba(100,116,139,.08);border-radius:8px;padding:8px 12px;margin-bottom:4px"><span class="detail-label" style="color:var(--muted)">สถานะ</span><span class="detail-value" style="color:var(--muted)">ตามแผน — ยังไม่กระทบยอดกระเป๋า</span></div>` : ''}
+        ${benefitDateRow}
         ${transferLine ? `<div class="detail-row"><span class="detail-label">รายการโอน</span><span class="detail-value">${esc(transferLine)}</span></div>` : ''}
         ${tx.type === 'cc_payment' ? `<div class="detail-row"><span class="detail-label">ตัดยอดบัตร</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">เงินที่จ่ายจริง</span><span class="detail-value">${fmt(ccCashAmount)}</span></div>` : ''}
         ${ccDiscount > 0 ? `<div class="detail-row"><span class="detail-label">ส่วนลดตอนชำระ</span><span class="detail-value" style="color:var(--income)">${fmt(ccDiscount)}</span></div>` : ''}
@@ -2414,7 +2419,7 @@ App.render();
   App.openAddTx = function() {
     S.txMode = 'add'
     S.editingTxId = null
-    S.tx = { step:'amount', type:'expense', amount:'0', calcOp:'', calcLeft:'', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', channel:'', note:'', date:txToday(), isRecurring:false, isInstallment:false, installmentMonths:'', sharedExpense:{ enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
+    S.tx = { step:'amount', type:'expense', amount:'0', calcOp:'', calcLeft:'', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', channel:'', note:'', date:txToday(), benefitDateOverride:'', isRecurring:false, isInstallment:false, installmentMonths:'', sharedExpense:{ enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
   }
@@ -2945,7 +2950,7 @@ App.render();
               if (!_card || _card.type !== 'credit') return ''
               const _amt = Number(S.tx.amount || 0); if (!_amt) return ''
               const _today = (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
-              const _draftTx = { id:S.editingTxId || '', type:'expense', amount:_amt, walletId:S.tx.walletId, categoryId:S.tx.categoryId, merchant:S.tx.merchant, note:S.tx.note, date:S.tx.date || _today, channel:S.tx.channel || '' }
+              const _draftTx = { id:S.editingTxId || '', type:'expense', amount:_amt, walletId:S.tx.walletId, categoryId:S.tx.categoryId, merchant:S.tx.merchant, note:S.tx.note, date:S.tx.date || _today, benefitDateOverride:S.tx.benefitDateOverride || '', channel:S.tx.channel || '' }
               const _rules = App.getSuggestedBenefitRules?.(_draftTx) || []
               S.tx.rewardRuleIds = Array.isArray(S.tx.rewardRuleIds) ? S.tx.rewardRuleIds : []
               if (S.tx.rewardRulesTouched !== true && App.getOptimalBenefitSelection) {
@@ -4709,6 +4714,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         merchant: S.tx.merchant || '',
         note: S.tx.note || '',
         date: S.tx.date || today(),
+        benefitDateOverride: S.tx.benefitDateOverride || '',
         channel: S.tx.channel || '',
       }
       : null
@@ -4736,6 +4742,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       channel: S.tx.type === 'expense' ? String(S.tx.channel || '').trim() : '',
       note: S.tx.note || '',
       date: S.tx.date || today(),
+      benefitDateOverride: S.tx.benefitDateOverride || undefined,
       isRecurring: !!S.tx.isRecurring,
       isInstallment: !!S.tx.isInstallment,
       reimbursesSharedExpenseTxId: S.tx.reimbursesSharedExpenseTxId || undefined,
@@ -4805,6 +4812,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
             installmentTotalAmount: total,
             scheduled: addMonths(baseDate, i) > today(),
           })
+          const shiftOption = App.getBenefitCycleShiftOption?.(tx)
+          if (!shiftOption?.available || tx.benefitDateOverride !== shiftOption.nextCycleStart) delete tx.benefitDateOverride
           const reward = App._rewardEstimateForTx(tx)
           if (reward) tx.rewardEstimate = reward
           // cleanTxFromDraft computes ledgerAmount from the original full amount.
@@ -8694,11 +8703,15 @@ App._pickMerchant = function(name, opts = {}) {
           const label = String(tx.merchant || tx.note || '').trim() || 'ไม่ระบุร้าน'
           const ch = resolveTxChannel(tx).trim()
           const openTxCall = `App.openTxDetailFromRuleTransactions(${jsArg(tx.id)})`
+          const benefitDate = resolveTxDate(tx)
+          const benefitDateLine = tx.benefitDateOverride && benefitDate && benefitDate !== String(tx.date || '').slice(0, 10)
+            ? `นับสิทธิ์ ${fmtDate(benefitDate)}`
+            : ''
           const unlockLine = isThresholdMode && trackContribution > 0
             ? `สะสมปลดล็อก ${fmtMoney(trackContribution)}${trackOnly ? ` · รวม ${fmtMoney(trackAfter)}` : ''}`
             : ''
           const ruleLine = pendingReward ? 'รอปลดล็อกสิทธิ์' : (!includedByRule && eligibilityMatched ? 'ตรงเงื่อนไขกฎจากข้อมูลจริง' : '')
-          const sub = [ch ? chLabel(ch) : null, tx.note && tx.merchant ? esc(tx.note) : null, unlockLine, ruleLine].filter(Boolean).join(' · ')
+          const sub = [ch ? chLabel(ch) : null, benefitDateLine, tx.note && tx.merchant ? esc(tx.note) : null, unlockLine, ruleLine].filter(Boolean).join(' · ')
           return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border,#1e2a3a);cursor:pointer" onclick="${openTxCall}">
             <div style="flex-shrink:0;text-align:center;min-width:32px">
               <div style="font-size:12px;font-weight:600">${fmtDate(tx.date)}</div>
@@ -12821,7 +12834,8 @@ App._pickMerchant = function(name, opts = {}) {
   App._resolveBenefitTxChannel = resolveBenefitTxChannel
 
   function resolveBenefitTxDate(tx = {}) {
-    const raw = String(tx?.date || '').trim()
+    const override = String(tx?.benefitDateOverride || '').trim()
+    const raw = override || String(tx?.date || '').trim()
     if (!raw) return ''
     const isoDate = raw.match(/^(\d{4}-\d{2}-\d{2})/)
     if (isoDate?.[1]) return isoDate[1]
@@ -13146,6 +13160,81 @@ App._pickMerchant = function(name, opts = {}) {
   }
   App.getOpenCyclePeriodForDate = function(cardId, refDate, rule) {
     return getOpenCyclePeriodForDate(cardId, refDate || today(), rule || null)
+  }
+  App.getBenefitCycleShiftOption = function(txDraft = {}) {
+    const cardId = String(txDraft.walletId || '')
+    const card = walletById(cardId)
+    const txDate = String(txDraft.date || today()).slice(0, 10)
+    if (!card || card.type !== 'credit' || txDraft.type !== 'expense' || !txDate) return { available: false }
+    const cycle = getOpenCyclePeriodForDate(cardId, txDate, null)
+    const nextCycleStart = shiftDateStr(cycle.end, 1)
+    const windowStart = shiftDateStr(nextCycleStart, -3)
+    const windowEnd = shiftDateStr(nextCycleStart, -1)
+    const nextCycle = getOpenCyclePeriodForDate(cardId, nextCycleStart, null)
+    const available = txDate >= windowStart && txDate <= windowEnd
+    return {
+      available,
+      active: String(txDraft.benefitDateOverride || '') === nextCycleStart,
+      nextCycleStart,
+      nextCycleEnd: nextCycle.end,
+      windowStart,
+      windowEnd,
+      label: `นับสิทธิ์ในรอบ ${thaiDate(nextCycle.start)} - ${thaiDate(nextCycle.end)}`,
+      spendDateLabel: thaiDate(txDate),
+      benefitDateLabel: thaiDate(nextCycleStart),
+    }
+  }
+  App.setBenefitCycleShiftNext = function(enabled) {
+    S.tx ||= {}
+    if (enabled) {
+      const option = App.getBenefitCycleShiftOption?.(S.tx)
+      if (option?.available && option.nextCycleStart) S.tx.benefitDateOverride = option.nextCycleStart
+    } else {
+      delete S.tx.benefitDateOverride
+    }
+    S.tx.rewardEstimate = null
+    App._renderAddTxDetail?.()
+  }
+  function injectBenefitCycleShiftControl() {
+    try {
+      if (!S.tx || S.tx.type !== 'expense') return
+      const option = App.getBenefitCycleShiftOption?.(S.tx)
+      const box = document.getElementById('add-tx-content')
+      if (!box) return
+      box.querySelector('.benefit-cycle-shift-panel')?.remove()
+      if (!option?.available) return
+      const active = String(S.tx.benefitDateOverride || '') === String(option.nextCycleStart || '')
+      const panel = document.createElement('div')
+      panel.className = 'benefit-cycle-shift-panel'
+      panel.innerHTML = `<div class="card card-pad" style="margin:8px 0 12px;padding:12px;border-radius:12px!important">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div style="min-width:0;flex:1">
+            <div style="font-size:13px;font-weight:700">${esc(option.label || 'นับสิทธิ์ในรอบบิลถัดไป')}</div>
+            <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-top:2px">${active ? `ใช้จ่าย ${esc(option.spendDateLabel)} · นับสิทธิ์ ${esc(option.benefitDateLabel)}` : 'ใช้เมื่อรายการใกล้วันตัดรอบและธนาคารอาจโพสต์เข้ารอบถัดไป'}</div>
+          </div>
+          <button type="button" class="toggle${active ? ' on' : ''}" onclick="App.setBenefitCycleShiftNext(${active ? 'false' : 'true'})" aria-label="นับสิทธิ์ในรอบบิลถัดไป" aria-pressed="${active ? 'true' : 'false'}"></button>
+        </div>
+      </div>`
+      const target = box.querySelector('.form-split-row')
+      target?.insertAdjacentElement('afterend', panel)
+    } catch (err) {
+      console.warn('[Benefits] inject cycle shift toggle failed', err)
+    }
+  }
+  const prevBenefitShiftRenderAddTxDetail = App._renderAddTxDetail?.bind(App)
+  App._renderAddTxDetail = function(...args) {
+    prevBenefitShiftRenderAddTxDetail?.(...args)
+    injectBenefitCycleShiftControl()
+  }
+  const prevBenefitShiftTxField = App._txField?.bind(App)
+  App._txField = function(key, value) {
+    prevBenefitShiftTxField?.(key, value)
+    if (S.tx && (key === 'date' || key === 'walletId' || key === 'type')) {
+      const option = App.getBenefitCycleShiftOption?.(S.tx)
+      if (!option?.available || (S.tx.benefitDateOverride && S.tx.benefitDateOverride !== option.nextCycleStart)) {
+        delete S.tx.benefitDateOverride
+      }
+    }
   }
   App._getRuleEligibility = function(tx, rule) { return getRuleEligibility(tx, rule) }
   App._txShouldCountForRule = function(tx, rule, ruleId) { return txShouldCountForRule(tx, rule, ruleId) }
@@ -14077,6 +14166,7 @@ App._pickMerchant = function(name, opts = {}) {
       merchant: S.tx.merchant || '',
       note: S.tx.note || '',
       date: S.tx.date || today(),
+      benefitDateOverride: S.tx.benefitDateOverride || '',
       channel: S.tx.channel || '',
     }
     S.tx.rewardEstimate = App.calculateSelectedRewardEstimate?.(draft, S.tx.rewardRuleIds) || null
@@ -14153,6 +14243,7 @@ App._pickMerchant = function(name, opts = {}) {
       merchant: S.tx.merchant || '',
       note: S.tx.note || '',
       date: S.tx.date || today(),
+      benefitDateOverride: S.tx.benefitDateOverride || '',
       channel: S.tx.channel || '',
     }
     const ruleState = (App.getSuggestedBenefitRules?.(draftForRule) || []).find(rule => String(rule.id || '') === String(ruleId || ''))
@@ -14750,7 +14841,7 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.exportCSV = function() {
     const typeLabel = { expense:'expense', income:'income', transfer:'transfer', cc_payment:'cc_payment' }
-    const headers = ['date','type','amount','wallet','toWallet','category','merchant','note','status','budgetAmount','sharedBill','sharedPeople','myShare','reimbursed','reimbursableRemaining','reimbursesSharedExpenseTxId','recurringId','installmentGroupId','installmentNo','rewardRuleIds','createdAt']
+    const headers = ['date','benefitDateOverride','type','amount','wallet','toWallet','category','merchant','note','status','budgetAmount','sharedBill','sharedPeople','myShare','reimbursed','reimbursableRemaining','reimbursesSharedExpenseTxId','recurringId','installmentGroupId','installmentNo','rewardRuleIds','createdAt']
     const csvCell = value => `"${String(value ?? '').replace(/"/g, '""')}"`
     const rows = [...(S.transactions || [])]
       .sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
@@ -14770,6 +14861,7 @@ App._pickMerchant = function(name, opts = {}) {
           : ''
         return [
           t.date || '',
+          t.benefitDateOverride || '',
           typeLabel[t.type] || t.type || '',
           Number.isFinite(signedAmount) ? signedAmount : 0,
           wallet?.name || '',
@@ -16380,7 +16472,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       id: S.editingTxId || '',
       type: 'expense', amount,
       categoryId: S.tx.categoryId, merchant: S.tx.merchant,
-      note: S.tx.note, date: S.tx.date || today(), channel: S.tx.channel || '',
+      note: S.tx.note, date: S.tx.date || today(), benefitDateOverride: S.tx.benefitDateOverride || '', channel: S.tx.channel || '',
       _forSuggestion: true,
     }
 
