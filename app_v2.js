@@ -3006,6 +3006,7 @@ App.render();
               const _cashbackShown = _pending ? Number(_estimate.potentialCashback || 0) : Number(_estimate.cashback || 0)
               const _discountShown = _pending ? Number(_estimate.potentialDiscount || 0) : Number(_estimate.discount || 0)
               const _pointsShown = _pending ? Number(_estimate.potentialPoints || 0) : Number(_estimate.points || 0)
+              const _confidencePct = Math.round(Number(_estimate.unlockConfidence ?? 1) * 100)
               const _rewardTone = _pending ? 'var(--warning,#D97706)' : 'var(--success,#059669)'
               const _capRows = (_estimate.rules || [])
                 .filter(row => row.capApplied || row.cycleRewardRemainingBefore != null || row.triggerMode === 'cycle_spend_threshold' || row.merchantCashbackRemainingBefore != null || row.merchantEligibleSpendRemainingBefore != null || row.channelCashbackRemainingBefore != null || row.channelEligibleSpendRemainingBefore != null)
@@ -3026,7 +3027,8 @@ App.render();
                   ${_cashbackShown > 0 ? `<div class="list-item-sub" style="color:${_rewardTone}">${_pending ? 'เงินคืนคาดการณ์หลังปลดล็อก' : 'เงินคืนโดยประมาณ'}: ${fmt(_cashbackShown)}</div>` : ''}
                   ${_discountShown > 0 ? `<div class="list-item-sub" style="color:${_rewardTone}">${_pending ? 'ส่วนลดคาดการณ์หลังปลดล็อก' : 'ส่วนลดทันทีโดยประมาณ'}: ${fmt(_discountShown)}</div>` : ''}
                   ${_pointsShown > 0 ? `<div class="list-item-sub" style="color:${_rewardTone}">${_pending ? 'คะแนนคาดการณ์หลังปลดล็อก' : 'คะแนนโดยประมาณ'}: ${Number(_pointsShown).toLocaleString('en-US')} คะแนน</div>` : ''}
-                  ${_pending ? `<div class="list-item-sub" style="color:var(--warning,#D97706)">ยอดนี้ยังไม่ถือว่าได้รับจริงจนกว่าจะสะสมปลดล็อกครบในรอบนี้</div>` : ''}
+                  ${_pending ? `<div class="list-item-sub" style="color:var(--warning,#D97706)">ยอดนี้ยังไม่ถือว่าได้รับจริงจนกว่าจะสะสมปลดล็อกครบในรอบนี้ · น้ำหนักคาดการณ์ ${_confidencePct}%</div>` : ''}
+                  ${_pending && (_estimate.confidenceReasons || []).length ? `<div class="list-item-sub">${esc(_estimate.confidenceReasons[0])}</div>` : ''}
                   ${_selectedNames.length ? '' : `<div class="list-item-sub">ยังไม่ได้เลือกสิทธิประโยชน์</div>`}
                   ${_caps}
                   ${_warnings}
@@ -4658,6 +4660,24 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return { points: Number(reward.points || 0), cashback: Math.round(Number(reward.cashback || 0) * 100) / 100, status:'estimated', calculatedAt: localNow(), source:'legacy' }
   }
 
+  App.refreshTransactionRewardEstimates = function(options = {}) {
+    const save = options?.save === true
+    const txs = Array.isArray(S.transactions) ? S.transactions : []
+    let changed = 0
+    txs.forEach(tx => {
+      const before = tx?.rewardEstimate ? JSON.stringify(tx.rewardEstimate) : ''
+      const next = App._rewardEstimateForTx?.(tx) || null
+      if (next) tx.rewardEstimate = next
+      else if ('rewardEstimate' in tx) delete tx.rewardEstimate
+      const after = tx?.rewardEstimate ? JSON.stringify(tx.rewardEstimate) : ''
+      if (before !== after) changed += 1
+    })
+    if (save) {
+      try { persist() } catch (_) {}
+    }
+    return changed
+  }
+
   function normalizeSharedExpenseDraft(draft = {}) {
     const amount = round2(Number(draft.amount || 0))
     const raw = draft.sharedExpense || {}
@@ -4824,6 +4844,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         }
         S.transactions.unshift(...txs)
         App._registerMerchantFromTx?.(txs[0])
+        App.refreshTransactionRewardEstimates?.()
         App.recalculateWalletBalances({ save:false, recordSnapshot:true })
         persist()
         resetAfterSaveChrome()
@@ -4852,6 +4873,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         App.linkSplitBillToTransaction?.(tx.splitBillId, tx.id)
       }
       App._registerMerchantFromTx?.(tx)
+      App.refreshTransactionRewardEstimates?.()
       App.recalculateWalletBalances({ save:false, recordSnapshot:true })
       persist()
       resetAfterSaveChrome()
@@ -4880,6 +4902,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         createdTx.recurringInstanceKey = instanceKey(createdRec.id, 1, scheduledDate)
         createdTx.isRecurring = true
         updateRecurringNext(createdRec)
+        App.refreshTransactionRewardEstimates?.()
         App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
         persist()
       }
@@ -10752,6 +10775,7 @@ App._pickMerchant = function(name, opts = {}) {
     const { recurring } = infoFromTx(tx)
     if (recurring) updateRecurringNext(recurring)
     S.deleteConfirm = false
+    App.refreshTransactionRewardEstimates?.()
     App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
     try { persist() } catch (_) {}
     if (document.getElementById('overlay-tx-detail')?.classList.contains('open')) App.closeOverlay?.('overlay-tx-detail')
@@ -10919,6 +10943,7 @@ App._pickMerchant = function(name, opts = {}) {
         onConfirm() {
           S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
           S.deleteConfirm = false
+          App.refreshTransactionRewardEstimates?.()
           App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
           try { persist() } catch (_) {}
           App.closeOverlay?.('overlay-tx-detail')
@@ -10930,6 +10955,7 @@ App._pickMerchant = function(name, opts = {}) {
     }
     S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
     S.deleteConfirm = false
+    App.refreshTransactionRewardEstimates?.()
     App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
     try { persist() } catch (_) {}
     App.closeOverlay?.('overlay-tx-detail')
@@ -10949,6 +10975,7 @@ App._pickMerchant = function(name, opts = {}) {
       onConfirm() {
         cleanupRewardReceived(tx)
         S.transactions = (S.transactions || []).filter(t => t.id !== id)
+        App.refreshTransactionRewardEstimates?.()
         App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
         try { persist() } catch (_) {}
         if (backType === 'cc' && backId) App.openCCDetail?.(backId)
@@ -13292,6 +13319,56 @@ App._pickMerchant = function(name, opts = {}) {
     return Number(result.cashback || 0) + Number(result.points || 0) + Number(result.discount || 0)
   }
 
+  const BENEFIT_POINT_RANKING_WEIGHT = 0.001
+
+  function rewardTotalForRanking(result = {}) {
+    return Number(result.cashback || 0) + Number(result.discount || 0) + (Number(result.points || 0) * BENEFIT_POINT_RANKING_WEIGHT)
+  }
+
+  function clamp01(value) {
+    return Math.max(0, Math.min(1, Number(value || 0)))
+  }
+
+  function isoDayDiff(startDate = '', endDate = '') {
+    const start = new Date(`${String(startDate || '').slice(0, 10)}T00:00:00`)
+    const end = new Date(`${String(endDate || '').slice(0, 10)}T00:00:00`)
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return null
+    return Math.round((end.getTime() - start.getTime()) / 86400000)
+  }
+
+  function summarizeUnlockConfidence(row = {}) {
+    const rewardNowValue = rewardTotalForRanking({ cashback: row.cashback, discount: row.discount, points: row.points })
+    const rewardPotentialValue = rewardTotalForRanking({ cashback: row.potentialCashback, discount: row.potentialDiscount, points: row.potentialPoints })
+    if (!row.rewardPending || rewardPotentialValue <= rewardNowValue) {
+      return {
+        unlockConfidence: 1,
+        rewardNowValue,
+        rewardPotentialValue,
+        weightedRewardValue: rewardNowValue,
+        confidenceReason: 'reward available now',
+      }
+    }
+    const threshold = Math.max(0, Number(row.triggerThresholdAmount || 0))
+    const progressAfter = Math.max(0, Number(row.triggerChannelSpendAfter || 0))
+    const lacking = Math.max(0, threshold - progressAfter)
+    const gapScore = threshold > 0 ? clamp01(1 - (lacking / threshold)) : 1
+    const cycleLength = Math.max(1, (isoDayDiff(row.cycleStart, row.cycleEnd) ?? 29) + 1)
+    const daysLeft = Math.max(0, (isoDayDiff(row.effectiveDate || today(), row.cycleEnd) ?? 0) + 1)
+    const timeScore = clamp01(daysLeft / cycleLength)
+    const unlockConfidence = Math.round(((gapScore * 0.7) + (timeScore * 0.3)) * 1000) / 1000
+    const weightedRewardValue = rewardNowValue + ((rewardPotentialValue - rewardNowValue) * unlockConfidence)
+    const confidenceReason = threshold > 0
+      ? `ขาดอีก ${money(lacking)} · เหลือ ${daysLeft}/${cycleLength} วัน`
+      : `เหลือ ${daysLeft}/${cycleLength} วันในรอบ`
+    return {
+      unlockConfidence,
+      rewardNowValue,
+      rewardPotentialValue,
+      weightedRewardValue: Math.round(weightedRewardValue * 1000) / 1000,
+      confidenceReason,
+    }
+  }
+
   function formatBenefitCapValue(ruleType = '', amount = 0) {
     if (ruleType === 'points') return `${Math.floor(Number(amount || 0)).toLocaleString('en-US')} คะแนน`
     return money(Number(amount || 0))
@@ -14094,6 +14171,7 @@ App._pickMerchant = function(name, opts = {}) {
       rewardPending: triggerMode === 'cycle_spend_threshold' && triggerCount <= 0 && rewardTotalForRuleResult({ cashback: potentialCashback, discount: potentialDiscount, points: potentialPoints }, rule) > 0,
       capApplied,
       capReason,
+      effectiveDate: resolveBenefitTxDate(txDraft) || today(),
       cycleEligibleSpendUsedBefore: Math.round(cycleEligibleUsedBefore * 100) / 100,
       cycleEligibleSpendRemainingBefore: limits.maxEligibleSpendPerCycle > 0 ? Math.max(0, Number(limits.maxEligibleSpendPerCycle || 0) - cycleEligibleUsedBefore) : null,
       cycleEligibleSpendAfter: cycleSpendAfter,
@@ -14134,7 +14212,7 @@ App._pickMerchant = function(name, opts = {}) {
       return { selectedRuleIds: [], estimate: { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] }, applicableRules: [], rankingScore: 0 }
     }
     const estimateFor = ids => App.calculateSelectedRewardEstimate?.(txDraft, ids) || { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] }
-    const scoreFor = estimate => Number(estimate.cashback || 0) + Number(estimate.discount || 0) + (Number(estimate.points || 0) * 0.001)
+    const scoreFor = estimate => Number((estimate?.rankingScore ?? rewardTotalForRanking(estimate || {})) || 0)
 
     const candidates = expandRuleSubsets(applicableRules)
       .filter(subset => subset.filter(r => r.allowStacking === false).length <= 1)
@@ -14144,7 +14222,11 @@ App._pickMerchant = function(name, opts = {}) {
       })
     const best = candidates
       .map(candidate => ({ ...candidate, score: scoreFor(candidate.estimate) }))
-      .sort((a, b) => Number(b.score || 0) - Number(a.score || 0) || b.ids.length - a.ids.length)[0]
+      .sort((a, b) =>
+        Number(b.score || 0) - Number(a.score || 0)
+        || Number(b.estimate?.rewardPotentialValue || 0) - Number(a.estimate?.rewardPotentialValue || 0)
+        || b.ids.length - a.ids.length
+      )[0]
     return {
       selectedRuleIds: best?.ids || [],
       estimate: best?.estimate || { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] },
@@ -14187,6 +14269,12 @@ App._pickMerchant = function(name, opts = {}) {
     let potentialCashback = 0
     let potentialDiscount = 0
     let potentialPoints = 0
+    let rankingScore = 0
+    let rewardNowValue = 0
+    let rewardPotentialValue = 0
+    let unlockWeightedDelta = 0
+    let unlockDeltaTotal = 0
+    const confidenceReasons = []
     rules.forEach(rule => {
       const cycle = getCyclePeriodForDate(card.id, txDraft.date || today(), rule)
       const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '', getTriggerTrackChannels(rule.rewardTrigger || {}), txDraft.merchant || '', txDraft.channel || '', rule)
@@ -14194,6 +14282,12 @@ App._pickMerchant = function(name, opts = {}) {
       result.cycleStart = cycle.start
       result.cycleEnd = cycle.end
       result.cycleMode = String(rule?.validity?.statementCycleHint || 'statement_cycle')
+      const confidence = summarizeUnlockConfidence(result)
+      result.unlockConfidence = confidence.unlockConfidence
+      result.weightedRewardValue = confidence.weightedRewardValue
+      result.rewardNowValue = confidence.rewardNowValue
+      result.rewardPotentialValue = confidence.rewardPotentialValue
+      result.confidenceReason = confidence.confidenceReason
       results.push(result)
       cashback += Number(result.cashback || 0)
       discount += Number(result.discount || 0)
@@ -14201,10 +14295,18 @@ App._pickMerchant = function(name, opts = {}) {
       potentialCashback += Number(result.potentialCashback ?? result.cashback ?? 0)
       potentialDiscount += Number(result.potentialDiscount ?? result.discount ?? 0)
       potentialPoints += Number(result.potentialPoints ?? result.points ?? 0)
+      rankingScore += Number(result.weightedRewardValue || 0)
+      rewardNowValue += Number(result.rewardNowValue || 0)
+      rewardPotentialValue += Number(result.rewardPotentialValue || 0)
+      const delta = Math.max(0, Number(result.rewardPotentialValue || 0) - Number(result.rewardNowValue || 0))
+      unlockDeltaTotal += delta
+      unlockWeightedDelta += delta * Number(result.unlockConfidence || 0)
+      if (result.rewardPending && result.confidenceReason) confidenceReasons.push(`${rule.name}: ${result.confidenceReason}`)
       ;(result.warnings || []).forEach(msg => warnings.push(`${rule.name}: ${msg}`))
     })
     const stackingWarnings = getStackingWarnings(rules)
     stackingWarnings.forEach(msg => warnings.push(msg))
+    const aggregatedUnlockConfidence = unlockDeltaTotal > 0 ? (unlockWeightedDelta / unlockDeltaTotal) : 1
     return {
       cashback: Math.round(cashback * 100) / 100,
       discount: Math.round(discount * 100) / 100,
@@ -14212,10 +14314,15 @@ App._pickMerchant = function(name, opts = {}) {
       potentialCashback: Math.round(potentialCashback * 100) / 100,
       potentialDiscount: Math.round(potentialDiscount * 100) / 100,
       potentialPoints: Math.floor(potentialPoints),
+      rewardNowValue: Math.round(rewardNowValue * 1000) / 1000,
+      rewardPotentialValue: Math.round(rewardPotentialValue * 1000) / 1000,
+      rankingScore: Math.round(rankingScore * 1000) / 1000,
+      unlockConfidence: Math.round(aggregatedUnlockConfidence * 1000) / 1000,
       rewardPending: results.some(row => row.rewardPending),
       rules: results,
       warnings,
       stackingWarnings,
+      confidenceReasons,
       calculatedAt: new Date().toISOString(),
       source: 'manual-selected-rules',
     }
@@ -16489,13 +16596,14 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           value: Number(est.cashback||0) + Number(est.discount||0),
           pts: Number(est.points||0),
           score: Number(optimal.rankingScore || 0),
+          potentialValue: Number(est.rewardPotentialValue || 0),
         }
       } catch(e) {
         console.error('[CardPicker]', card?.name, e)
-        return { card, est:{cashback:0,points:0,discount:0}, applicableRules: [], selectedRuleIds: [], value:0, pts:0, score:0 }
+        return { card, est:{cashback:0,points:0,discount:0}, applicableRules: [], selectedRuleIds: [], value:0, pts:0, score:0, potentialValue:0 }
       }
     })
-      .filter(item => item.applicableRules?.length && (item.value > 0 || item.pts > 0))
+      .filter(item => item.applicableRules?.length && (item.value > 0 || item.pts > 0 || item.potentialValue > 0 || item.score > 0))
       .sort((a,b) => Number(b.score || 0) - Number(a.score || 0))
       .slice(0, 3)
 
@@ -16504,15 +16612,20 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const currentId = S.tx.walletId
     const rows = estimates.map((item, idx) => {
       const isSel = item.card.id === currentId
-      const isBest = idx === 0 && (item.value > 0 || item.pts > 0)
+      const isBest = idx === 0 && (item.score > 0 || item.potentialValue > 0)
       const ruleNames = (item.applicableRules || [])
         .filter(rule => (item.selectedRuleIds || []).includes(rule.id))
         .slice(0, 2)
         .map(rule => rule.name)
+      const pending = !!item.est.rewardPending
+      const cashbackShown = pending ? Number(item.est.potentialCashback || 0) : Number(item.est.cashback || 0)
+      const discountShown = pending ? Number(item.est.potentialDiscount || 0) : Number(item.est.discount || 0)
+      const pointsShown = pending ? Number(item.est.potentialPoints || 0) : Number(item.est.points || 0)
       const rewardParts = [
-        item.est.cashback > 0 ? `เงินคืน ฿${Number(item.est.cashback).toFixed(2)}` : '',
-        item.est.discount  > 0 ? `ส่วนลด ฿${Number(item.est.discount).toFixed(2)}`  : '',
-        item.est.points    > 0 ? `${Number(item.est.points).toLocaleString('en-US')} คะแนน` : '',
+        cashbackShown > 0 ? `${pending ? 'ปลดแล้วได้' : 'เงินคืน'} ฿${Number(cashbackShown).toFixed(2)}` : '',
+        discountShown > 0 ? `${pending ? 'ปลดแล้วลด' : 'ส่วนลด'} ฿${Number(discountShown).toFixed(2)}`  : '',
+        pointsShown > 0 ? `${Number(pointsShown).toLocaleString('en-US')} คะแนน` : '',
+        pending ? `มั่นใจ ${Math.round(Number(item.est.unlockConfidence ?? 1) * 100)}%` : '',
       ].filter(Boolean)
       const detailText = [...rewardParts, ...ruleNames].slice(0, 2).join(' · ')
       const rewardHtml = detailText
