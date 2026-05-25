@@ -4948,7 +4948,8 @@ html.dark .crypto-summary-item {
 
 .status-pill.amber,
 .status-pill.info,
-.status-pill.muted {
+.status-pill.muted,
+.status-pill.danger {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -4972,6 +4973,11 @@ html.dark .crypto-summary-item {
 .status-pill.muted {
   background: rgba(100, 116, 139, .12);
   color: var(--muted);
+}
+
+.status-pill.danger {
+  background: rgba(220, 38, 38, .16);
+  color: #b91c1c;
 }
 
 .upcoming-bill-estimated {

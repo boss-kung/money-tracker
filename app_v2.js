@@ -15681,6 +15681,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return diff >= 0 && diff <= 7
   }
 
+  function isPrivilegeExpiringToday(privilege, refDate = todayLocalISO()) {
+    if (!privilege || privilege.status !== 'active' || isPrivilegeExpired(privilege, refDate)) return false
+    return daysUntilDate(privilege.expiryDate, refDate) === 0
+  }
+
   function privilegeTypeIcon(privilege) {
     const platform = String(privilege?.platform || '').trim().toLowerCase()
     if (platform.includes('shopee')) return '🛍️'
@@ -15697,6 +15702,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (privilege.status === 'used') return { key: 'used', label: 'ใช้แล้ว', className: 'status-pill info' }
     if (privilege.status === 'archived') return { key: 'archived', label: 'เก็บถาวร', className: 'status-pill muted' }
     if (isPrivilegeExpired(privilege, refDate)) return { key: 'expired', label: 'หมดอายุ', className: 'status-pill muted' }
+    if (isPrivilegeExpiringToday(privilege, refDate)) return { key: 'expiring_today', label: 'หมดอายุวันนี้', className: 'status-pill danger' }
     if (isPrivilegeExpiringSoon(privilege, refDate)) return { key: 'expiring', label: 'ใกล้หมดอายุ', className: 'status-pill amber' }
     return { key: 'active', label: 'ใช้ได้', className: 'status-pill info' }
   }
@@ -16039,6 +16045,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   App.todayLocalISO = todayLocalISO
   App.daysUntilDate = daysUntilDate
   App.isPrivilegeExpired = isPrivilegeExpired
+  App.isPrivilegeExpiringToday = isPrivilegeExpiringToday
   App.isPrivilegeExpiringSoon = isPrivilegeExpiringSoon
   App.ensurePrivilegesState = ensurePrivilegesState
   App.ensurePrivilegesStorageKey = ensurePrivilegesStorageKey
@@ -16338,7 +16345,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const original = (S.privileges || []).find(row => row.id === privilegeId)
     if (!original) return toast('ไม่พบสิทธิพิเศษ', 'error')
     const now = nowISO()
-    const copy = {
+    S.privilegeDraft = normalizePrivilege({
       ...original,
       id: `priv_${Calc.genId ? Calc.genId() : Date.now()}`,
       status: 'active',
@@ -16347,12 +16354,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       quantity: Math.max(1, Number(original.quantity || 1)),
       createdAt: now,
       updatedAt: now,
-    }
-    S.privileges.unshift(copy)
+    })
     document.getElementById('privilege-detail-overlay')?.remove()
     document.getElementById('privilege-actions-overlay')?.remove()
-    persistPrivilegesAndRefresh(true)
-    toast('ทำสำเนาสิทธิ์แล้ว', 'success')
+    App.openPrivilegeForm('', true)
   }
 
   function injectDashboardPrivilegeAlerts() {
