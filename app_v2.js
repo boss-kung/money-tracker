@@ -15921,22 +15921,30 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     S.privilegeDraft.code = normalizePrivilegeCodes(codes)[0] || ''
   }
 
-  function privilegeCodeInputsHtml(draft, privilegeId) {
+  function privilegeCodeInputsHtml(draft) {
     if (!privilegeSupportsCode(draft.type)) return ''
     const codes = draft.codes?.length ? [...draft.codes] : (draft.code ? [draft.code] : [''])
-    return `<div class="form-group">
+    return `<div class="form-group" id="privilege-code-section">
       <div class="privilege-code-label-row">
         <label class="form-label">โค้ด</label>
-        <button type="button" class="btn btn-secondary btn-sm" style="width:auto" onclick="App.addPrivilegeDraftCode(); App.openPrivilegeForm('${esc(privilegeId)}', true, false)">เพิ่มโค้ด</button>
+        <button type="button" class="btn btn-secondary btn-sm" style="width:auto" onclick="App.addPrivilegeDraftCodeInline()">เพิ่มโค้ด</button>
       </div>
       <div class="privilege-code-inputs">
         ${codes.map((code, index) => `<div class="privilege-code-input-row">
           <input class="form-input" value="${esc(code)}" placeholder="เช่น PAYDAY10" oninput="App.updatePrivilegeDraftCode(${index}, this.value)">
-          ${codes.length > 1 ? `<button type="button" class="btn btn-outline btn-sm privilege-code-remove" onclick="App.removePrivilegeDraftCode(${index}); App.openPrivilegeForm('${esc(privilegeId)}', true, false)">ลบ</button>` : ''}
+          ${codes.length > 1 ? `<button type="button" class="btn btn-outline btn-sm privilege-code-remove" onclick="App.removePrivilegeDraftCodeInline(${index})">ลบ</button>` : ''}
         </div>`).join('')}
       </div>
       <div class="form-hint">เพิ่มได้หลายโค้ด และทุกโค้ดอยู่ในสิทธิพิเศษเดียวกัน</div>
     </div>`
+  }
+
+  function refreshPrivilegeCodeSection() {
+    const section = document.getElementById('privilege-code-section')
+    if (!section || !S.privilegeDraft || !privilegeSupportsCode(S.privilegeDraft.type)) return
+    section.outerHTML = privilegeCodeInputsHtml(S.privilegeDraft)
+    const rows = document.querySelectorAll('#privilege-code-section .privilege-code-input-row input')
+    rows[rows.length - 1]?.focus()
   }
 
   function persistPrivilegesAndRefresh(keepScreen = true) {
@@ -16168,6 +16176,16 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     removePrivilegeDraftCode(index)
   }
 
+  App.addPrivilegeDraftCodeInline = function() {
+    addPrivilegeDraftCode()
+    refreshPrivilegeCodeSection()
+  }
+
+  App.removePrivilegeDraftCodeInline = function(index) {
+    removePrivilegeDraftCode(index)
+    refreshPrivilegeCodeSection()
+  }
+
   App.openPrivilegesScreen = function(filter = S.privilegesFilter || 'active', query = S.privilegeSearch || '', animate = true) {
     ensurePrivilegesState()
     const nextFilter = PRIVILEGE_FILTERS.some(([key]) => key === filter) ? filter : 'active'
@@ -16263,9 +16281,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     S.editingPrivilegeId = privilegeId || ''
     const reuseDraft = preserveDraft && S.privilegeDraft && String(S.privilegeDraft.id || '') === String(existing?.id || S.privilegeDraft.id || '')
       && String(S.editingPrivilegeId || '') === String(privilegeId || '')
+    const previousDraft = reuseDraft ? { ...S.privilegeDraft } : null
     S.privilegeDraft = reuseDraft ? normalizePrivilege(S.privilegeDraft) : privilegeDraftFromExisting(existing)
     if (reuseDraft && privilegeSupportsCode(S.privilegeDraft.type)) {
-      S.privilegeDraft.codes = normalizePrivilegeDraftCodes(S.privilegeDraft.codes, S.privilegeDraft.code)
+      S.privilegeDraft.codes = normalizePrivilegeDraftCodes(previousDraft?.codes, previousDraft?.code)
       S.privilegeDraft.code = normalizePrivilegeCodes(S.privilegeDraft.codes)[0] || ''
     }
     const draft = S.privilegeDraft
@@ -16281,13 +16300,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         </div>
         <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input id="priv-form-title" class="form-input" value="${esc(draft.title)}" placeholder="${esc(template.titlePlaceholder)}" oninput="App._updatePrivilegeDraft('title', this.value)"></div>
         <div class="form-group"><label class="form-label">Platform / Source</label><input class="form-input" value="${esc(draft.platform)}" placeholder="${esc(template.platformPlaceholder)}" oninput="App._updatePrivilegeDraft('platform', this.value)"></div>
-        ${template.showCodeQuick ? privilegeCodeInputsHtml(draft, privilegeId) : ''}
+        ${template.showCodeQuick ? privilegeCodeInputsHtml(draft) : ''}
         ${template.showFreeItemQuick && showFreeItemName ? `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น อเมริกาโน่เย็น" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>` : ''}
         <div class="form-split-row">
           <div><label class="form-label">วันหมดอายุ</label><input id="priv-form-expiry" class="form-input" type="date" value="${esc(draft.expiryDate)}" oninput="App._updatePrivilegeDraft('expiryDate', this.value)"></div>
           <div><label class="form-label">คาดว่าประหยัดได้</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.estimatedSaving)}" oninput="App._updatePrivilegeDraft('estimatedSaving', this.value)"></div>
         </div>
-        ${draft.type === 'discount_code' && !template.showCodeQuick ? privilegeCodeInputsHtml(draft, privilegeId) : ''}
+        ${draft.type === 'discount_code' && !template.showCodeQuick ? privilegeCodeInputsHtml(draft) : ''}
         ${template.showFreeItemQuick || !showFreeItemName ? '' : `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>`}
         <div class="form-group"><label class="form-label">จำนวนสิทธิ์</label><input id="priv-form-qty" class="form-input" type="number" min="${draft.status === 'used' ? 0 : 1}" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
         <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" rows="4" placeholder="เงื่อนไขเพิ่มเติม" oninput="App._updatePrivilegeDraft('note', this.value)">${esc(draft.note)}</textarea></div>
