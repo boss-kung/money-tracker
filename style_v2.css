@@ -5137,6 +5137,30 @@ html.dark .crypto-summary-item {
   margin-top: 6px;
 }
 
+.privilege-code-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.privilege-code-inputs {
+  display: grid;
+  gap: 8px;
+}
+
+.privilege-code-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.privilege-code-remove {
+  width: auto;
+}
+
 .privilege-list {
   display: grid;
   gap: 10px;
@@ -5331,6 +5355,33 @@ html.dark .crypto-summary-item {
   color: var(--text);
   text-align: right;
   line-height: 1.35;
+}
+
+.privilege-detail-row-codes {
+  align-items: flex-start;
+}
+
+.privilege-code-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.privilege-code-chip-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.privilege-code-chip-row strong {
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 9px 10px;
+  overflow-wrap: anywhere;
 }
 
 .privilege-sheet-actions-stack {

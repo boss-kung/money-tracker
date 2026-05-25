@@ -15599,6 +15599,22 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return Number.isFinite(num) ? num : fallback
   }
 
+  function normalizePrivilegeCodes(rawCodes, fallbackCode = '') {
+    const source = Array.isArray(rawCodes) ? rawCodes : [fallbackCode]
+    return source
+      .map(code => String(code || '').trim())
+      .filter(Boolean)
+      .slice(0, 20)
+  }
+
+  function getPrivilegeCodes(privilege) {
+    return normalizePrivilegeCodes(privilege?.codes, privilege?.code)
+  }
+
+  function getPrimaryPrivilegeCode(privilege) {
+    return getPrivilegeCodes(privilege)[0] || ''
+  }
+
   function normalizePrivilege(raw = {}) {
     const now = nowISO()
     const status = ['active', 'used', 'archived'].includes(raw.status) ? raw.status : 'active'
@@ -15636,7 +15652,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       type,
       platform: String(raw.platform || '').trim(),
       merchant: String(raw.merchant || '').trim(),
-      code: String(raw.code || '').trim(),
+      code: getPrimaryPrivilegeCode(raw),
+      codes: getPrivilegeCodes(raw),
       valueType,
       value: Math.max(0, normalizeNumber(raw.value, 0)),
       minSpend: Math.max(0, normalizeNumber(raw.minSpend, 0)),
@@ -15712,7 +15729,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   function privilegeSupportsCopy(privilege) {
-    return privilegeSupportsCode(privilege?.type) && !!String(privilege?.code || '').trim()
+    return privilegeSupportsCode(privilege?.type) && getPrivilegeCodes(privilege).length > 0
   }
 
   function privilegeFreeItemValue(privilege) {
@@ -15765,7 +15782,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       })
       .filter(privilege => {
         if (!q) return true
-        const hay = [privilege.title, privilege.platform, privilege.merchant, privilege.code, privilege.note, privilege.freeItemName]
+        const hay = [privilege.title, privilege.platform, privilege.merchant, privilege.note, privilege.freeItemName, ...getPrivilegeCodes(privilege)]
           .map(value => String(value || '').toLowerCase())
           .join(' ')
         return hay.includes(q)
@@ -15807,6 +15824,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       platform: '',
       merchant: '',
       code: '',
+      codes: [],
       valueType: 'amount',
       value: 0,
       minSpend: 0,
@@ -15828,6 +15846,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   function setPrivilegeDraftField(field, value) {
     ensurePrivilegesState()
     S.privilegeDraft ||= privilegeDraftFromExisting()
+    if (field === 'codes') {
+      const nextCodes = normalizePrivilegeCodes(value)
+      S.privilegeDraft.codes = nextCodes
+      S.privilegeDraft.code = nextCodes[0] || ''
+      return
+    }
     if (['quantity'].includes(field)) {
       const minQty = S.privilegeDraft.status === 'used' ? 0 : 1
       S.privilegeDraft[field] = Math.max(minQty, Math.floor(normalizeNumber(value, minQty) || minQty))
@@ -15844,7 +15868,62 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       } else {
         S.privilegeDraft.valueType = 'amount'
       }
+      if (!privilegeSupportsCode(value)) {
+        S.privilegeDraft.codes = []
+        S.privilegeDraft.code = ''
+      } else {
+        const nextCodes = getPrivilegeCodes(S.privilegeDraft)
+        S.privilegeDraft.codes = nextCodes
+        S.privilegeDraft.code = nextCodes[0] || ''
+      }
     }
+  }
+
+  function setPrivilegeDraftCodeAt(index, value) {
+    ensurePrivilegesState()
+    S.privilegeDraft ||= privilegeDraftFromExisting()
+    const codes = privilegeSupportsCode(S.privilegeDraft.type) ? [...(S.privilegeDraft.codes || (S.privilegeDraft.code ? [S.privilegeDraft.code] : ['']))] : []
+    while (codes.length <= index) codes.push('')
+    codes[index] = String(value || '')
+    S.privilegeDraft.codes = codes
+    S.privilegeDraft.code = normalizePrivilegeCodes(codes)[0] || ''
+  }
+
+  function addPrivilegeDraftCode() {
+    ensurePrivilegesState()
+    S.privilegeDraft ||= privilegeDraftFromExisting()
+    const codes = privilegeSupportsCode(S.privilegeDraft.type) ? [...(S.privilegeDraft.codes || (S.privilegeDraft.code ? [S.privilegeDraft.code] : []))] : []
+    codes.push('')
+    S.privilegeDraft.codes = codes
+    S.privilegeDraft.code = normalizePrivilegeCodes(codes)[0] || ''
+  }
+
+  function removePrivilegeDraftCode(index) {
+    ensurePrivilegesState()
+    S.privilegeDraft ||= privilegeDraftFromExisting()
+    const codes = privilegeSupportsCode(S.privilegeDraft.type) ? [...(S.privilegeDraft.codes || (S.privilegeDraft.code ? [S.privilegeDraft.code] : []))] : []
+    if (index < 0 || index >= codes.length) return
+    codes.splice(index, 1)
+    S.privilegeDraft.codes = codes
+    S.privilegeDraft.code = normalizePrivilegeCodes(codes)[0] || ''
+  }
+
+  function privilegeCodeInputsHtml(draft, privilegeId) {
+    if (!privilegeSupportsCode(draft.type)) return ''
+    const codes = draft.codes?.length ? [...draft.codes] : (draft.code ? [draft.code] : [''])
+    return `<div class="form-group">
+      <div class="privilege-code-label-row">
+        <label class="form-label">โค้ด</label>
+        <button type="button" class="btn btn-secondary btn-sm" style="width:auto" onclick="App.addPrivilegeDraftCode(); App.openPrivilegeForm('${esc(privilegeId)}', true, false)">เพิ่มโค้ด</button>
+      </div>
+      <div class="privilege-code-inputs">
+        ${codes.map((code, index) => `<div class="privilege-code-input-row">
+          <input class="form-input" value="${esc(code)}" placeholder="เช่น PAYDAY10" oninput="App.updatePrivilegeDraftCode(${index}, this.value)">
+          ${codes.length > 1 ? `<button type="button" class="btn btn-outline btn-sm privilege-code-remove" onclick="App.removePrivilegeDraftCode(${index}); App.openPrivilegeForm('${esc(privilegeId)}', true, false)">ลบ</button>` : ''}
+        </div>`).join('')}
+      </div>
+      <div class="form-hint">เพิ่มได้หลายโค้ด และทุกโค้ดอยู่ในสิทธิพิเศษเดียวกัน</div>
+    </div>`
   }
 
   function persistPrivilegesAndRefresh(keepScreen = true) {
@@ -15994,10 +16073,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       ['ประหยัดแล้ว', money(privilege.actualSaving || 0)],
       ['คงเหลือ', `${Number(privilege.quantity || 0).toLocaleString('en-US')} สิทธิ์`],
     ]
+    const codes = getPrivilegeCodes(privilege)
     const rows = [
       ['ประเภท', typeLabel(privilege.type)],
       ['Platform / Source', sourceLabel],
-      privilegeSupportsCode(privilege.type) && privilege.code ? ['โค้ด', privilege.code] : null,
       privilege.type === 'free_item' && privilege.freeItemName ? ['ชื่อของฟรี', privilege.freeItemName] : null,
       expiryLabel ? ['วันหมดอายุ', expiryLabel] : null,
       usedLabel ? ['ใช้ล่าสุด', usedLabel] : null,
@@ -16029,6 +16108,15 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             </div>
           </div>
           <div class="privilege-detail-list">
+            ${privilegeSupportsCode(privilege.type) && codes.length ? `<div class="privilege-detail-row privilege-detail-row-codes">
+              <span>โค้ด</span>
+              <div class="privilege-code-list">
+                ${codes.map((code, index) => `<div class="privilege-code-chip-row">
+                  <strong>${esc(code)}</strong>
+                  <button class="btn btn-secondary btn-sm" onclick="App.copyPrivilegeCode('${esc(privilege.id)}', ${index})">คัดลอก</button>
+                </div>`).join('')}
+              </div>
+            </div>` : ''}
             ${rows.map(([label, value]) => `<div class="privilege-detail-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}
           </div>
           <div class="privilege-sheet-actions-stack" style="margin-top:12px">
@@ -16053,6 +16141,18 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   App._updatePrivilegeDraft = function(field, value) {
     setPrivilegeDraftField(field, value)
+  }
+
+  App.updatePrivilegeDraftCode = function(index, value) {
+    setPrivilegeDraftCodeAt(index, value)
+  }
+
+  App.addPrivilegeDraftCode = function() {
+    addPrivilegeDraftCode()
+  }
+
+  App.removePrivilegeDraftCode = function(index) {
+    removePrivilegeDraftCode(index)
   }
 
   App.openPrivilegesScreen = function(filter = S.privilegesFilter || 'active', query = S.privilegeSearch || '', animate = true) {
@@ -16164,13 +16264,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         </div>
         <div class="form-group"><label class="form-label">ชื่อสิทธิ์</label><input id="priv-form-title" class="form-input" value="${esc(draft.title)}" placeholder="${esc(template.titlePlaceholder)}" oninput="App._updatePrivilegeDraft('title', this.value)"></div>
         <div class="form-group"><label class="form-label">Platform / Source</label><input class="form-input" value="${esc(draft.platform)}" placeholder="${esc(template.platformPlaceholder)}" oninput="App._updatePrivilegeDraft('platform', this.value)"></div>
-        ${template.showCodeQuick ? `<div class="form-group"><label class="form-label">โค้ด</label><input class="form-input" value="${esc(draft.code)}" placeholder="เช่น PAYDAY10" oninput="App._updatePrivilegeDraft('code', this.value)"></div>` : ''}
+        ${template.showCodeQuick ? privilegeCodeInputsHtml(draft, privilegeId) : ''}
         ${template.showFreeItemQuick && showFreeItemName ? `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น อเมริกาโน่เย็น" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>` : ''}
         <div class="form-split-row">
           <div><label class="form-label">วันหมดอายุ</label><input id="priv-form-expiry" class="form-input" type="date" value="${esc(draft.expiryDate)}" oninput="App._updatePrivilegeDraft('expiryDate', this.value)"></div>
           <div><label class="form-label">คาดว่าประหยัดได้</label><input class="form-input" type="number" min="0" step="0.01" value="${esc(draft.estimatedSaving)}" oninput="App._updatePrivilegeDraft('estimatedSaving', this.value)"></div>
         </div>
-        ${draft.type === 'discount_code' && !template.showCodeQuick ? `<div class="form-group"><label class="form-label">โค้ด</label><input class="form-input" value="${esc(draft.code)}" placeholder="ถ้ามี เช่น PAYDAY10" oninput="App._updatePrivilegeDraft('code', this.value)"></div>` : ''}
+        ${draft.type === 'discount_code' && !template.showCodeQuick ? privilegeCodeInputsHtml(draft, privilegeId) : ''}
         ${template.showFreeItemQuick || !showFreeItemName ? '' : `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>`}
         <div class="form-group"><label class="form-label">จำนวนสิทธิ์</label><input id="priv-form-qty" class="form-input" type="number" min="${draft.status === 'used' ? 0 : 1}" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
         <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" rows="4" placeholder="เงื่อนไขเพิ่มเติม" oninput="App._updatePrivilegeDraft('note', this.value)">${esc(draft.note)}</textarea></div>
@@ -16216,6 +16316,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       quantity: S.privilegeDraft?.quantity || 1,
       updatedAt: nowISO(),
     })
+    draft.codes = privilegeSupportsCode(draft.type) ? getPrivilegeCodes(draft) : []
+    draft.code = draft.codes[0] || ''
     if (!draft.title) return App._showFieldError('priv-form-title', 'กรุณากรอกชื่อสิทธิพิเศษ')
     const _pvTErr = _fieldTooLong(draft.title, FIELD_MAX.title, 'ชื่อสิทธิพิเศษ')
     if (_pvTErr) return App._showFieldError('priv-form-title', _pvTErr)
@@ -16273,10 +16375,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     toast(remainingQty === 0 ? 'บันทึกการใช้สิทธิ์แล้ว' : `บันทึกแล้ว เหลือ ${remainingQty.toLocaleString('en-US')} สิทธิ์`, 'success')
   }
 
-  App.copyPrivilegeCode = async function(privilegeId) {
+  App.copyPrivilegeCode = async function(privilegeId, codeIndex = 0) {
     ensurePrivilegesState()
     const privilege = (S.privileges || []).find(row => row.id === privilegeId)
-    const code = String(privilege?.code || '').trim()
+    const code = String(getPrivilegeCodes(privilege)[codeIndex] || '').trim()
     if (!code) return
     let copied = false
     try {
