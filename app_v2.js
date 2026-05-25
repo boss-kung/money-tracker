@@ -3006,7 +3006,6 @@ App.render();
               const _cashbackShown = _pending ? Number(_estimate.potentialCashback || 0) : Number(_estimate.cashback || 0)
               const _discountShown = _pending ? Number(_estimate.potentialDiscount || 0) : Number(_estimate.discount || 0)
               const _pointsShown = _pending ? Number(_estimate.potentialPoints || 0) : Number(_estimate.points || 0)
-              const _confidencePct = Math.round(Number(_estimate.unlockConfidence ?? 1) * 100)
               const _rewardTone = _pending ? 'var(--warning,#D97706)' : 'var(--success,#059669)'
               const _capRows = (_estimate.rules || [])
                 .filter(row => row.capApplied || row.cycleRewardRemainingBefore != null || row.triggerMode === 'cycle_spend_threshold' || row.merchantCashbackRemainingBefore != null || row.merchantEligibleSpendRemainingBefore != null || row.channelCashbackRemainingBefore != null || row.channelEligibleSpendRemainingBefore != null)
@@ -3027,7 +3026,7 @@ App.render();
                   ${_cashbackShown > 0 ? `<div class="list-item-sub" style="color:${_rewardTone}">${_pending ? 'เงินคืนคาดการณ์หลังปลดล็อก' : 'เงินคืนโดยประมาณ'}: ${fmt(_cashbackShown)}</div>` : ''}
                   ${_discountShown > 0 ? `<div class="list-item-sub" style="color:${_rewardTone}">${_pending ? 'ส่วนลดคาดการณ์หลังปลดล็อก' : 'ส่วนลดทันทีโดยประมาณ'}: ${fmt(_discountShown)}</div>` : ''}
                   ${_pointsShown > 0 ? `<div class="list-item-sub" style="color:${_rewardTone}">${_pending ? 'คะแนนคาดการณ์หลังปลดล็อก' : 'คะแนนโดยประมาณ'}: ${Number(_pointsShown).toLocaleString('en-US')} คะแนน</div>` : ''}
-                  ${_pending ? `<div class="list-item-sub" style="color:var(--warning,#D97706)">ยอดนี้ยังไม่ถือว่าได้รับจริงจนกว่าจะสะสมปลดล็อกครบในรอบนี้ · น้ำหนักคาดการณ์ ${_confidencePct}%</div>` : ''}
+                  ${_pending ? `<div class="list-item-sub" style="color:var(--warning,#D97706)">ยอดนี้ยังไม่ถือว่าได้รับจริงจนกว่าจะสะสมปลดล็อกครบในรอบนี้</div>` : ''}
                   ${_pending && (_estimate.confidenceReasons || []).length ? `<div class="list-item-sub">${esc(_estimate.confidenceReasons[0])}</div>` : ''}
                   ${_selectedNames.length ? '' : `<div class="list-item-sub">ยังไม่ได้เลือกสิทธิประโยชน์</div>`}
                   ${_caps}
@@ -13349,14 +13348,21 @@ App._pickMerchant = function(name, opts = {}) {
       }
     }
     const threshold = Math.max(0, Number(row.triggerThresholdAmount || 0))
+    const progressBefore = Math.max(0, Number(row.triggerChannelSpendBefore || 0))
     const progressAfter = Math.max(0, Number(row.triggerChannelSpendAfter || 0))
+    const currentContribution = Math.max(0, progressAfter - progressBefore)
     const lacking = Math.max(0, threshold - progressAfter)
     const gapScore = threshold > 0 ? clamp01(1 - (lacking / threshold)) : 1
     const cycleLength = Math.max(1, (isoDayDiff(row.cycleStart, row.cycleEnd) ?? 29) + 1)
     const daysLeft = Math.max(0, (isoDayDiff(row.effectiveDate || today(), row.cycleEnd) ?? 0) + 1)
     const timeScore = clamp01(daysLeft / cycleLength)
     const unlockConfidence = Math.round(((gapScore * 0.7) + (timeScore * 0.3)) * 1000) / 1000
-    const weightedRewardValue = rewardNowValue + ((rewardPotentialValue - rewardNowValue) * unlockConfidence)
+    const pendingDelta = Math.max(0, rewardPotentialValue - rewardNowValue)
+    // For threshold-locked rewards, only let the current transaction compete with
+    // the portion of the future reward it meaningfully contributes toward unlocking.
+    const attributableRatio = threshold > 0 ? clamp01(currentContribution / threshold) : 1
+    const attributablePendingDelta = pendingDelta * attributableRatio
+    const weightedRewardValue = rewardNowValue + (attributablePendingDelta * unlockConfidence)
     const confidenceReason = threshold > 0
       ? `ขาดอีก ${money(lacking)} · เหลือ ${daysLeft}/${cycleLength} วัน`
       : `เหลือ ${daysLeft}/${cycleLength} วันในรอบ`
@@ -13364,6 +13370,7 @@ App._pickMerchant = function(name, opts = {}) {
       unlockConfidence,
       rewardNowValue,
       rewardPotentialValue,
+      attributablePendingValue: Math.round((rewardNowValue + attributablePendingDelta) * 1000) / 1000,
       weightedRewardValue: Math.round(weightedRewardValue * 1000) / 1000,
       confidenceReason,
     }
@@ -16006,9 +16013,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const privilege = (S.privileges || []).find(row => row.id === privilegeId)
     if (!privilege || privilege.status !== 'active') return
     document.getElementById('privilege-used-overlay')?.remove()
+    const currentQty = Math.max(1, Number(privilege.quantity || 1))
     const defaultSaving = Math.max(0, Number(privilege.estimatedSaving || 0))
     const defaultDate = todayLocalISO()
-    const currentQty = Math.max(1, Number(privilege.quantity || 1))
     const el = document.createElement('div')
     el.id = 'privilege-used-overlay'
     el.className = 'overlay open'
@@ -16027,8 +16034,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             <div class="form-hint">เหลืออยู่ ${currentQty.toLocaleString('en-US')} สิทธิ์</div>
           </div>` : ''}
           <div class="form-group">
-            <label class="form-label">ประหยัดไปเท่าไร</label>
+            <label class="form-label">ประหยัดต่อ 1 สิทธิ์</label>
             <input class="form-input" id="privilege-used-saving" type="number" min="0" step="0.01" value="${esc(defaultSaving)}" inputmode="decimal">
+            <div class="form-hint">${currentQty > 1 ? 'ระบบจะคูณจำนวนสิทธิ์ที่ใช้ให้อัตโนมัติ' : 'บันทึกเป็นยอดประหยัดของสิทธิ์นี้'}</div>
           </div>
           <div class="form-group">
             <label class="form-label">วันที่ใช้</label>
@@ -16396,10 +16404,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const usedQty = currentQty > 1
       ? Math.max(1, Math.floor(normalizeNumber(document.getElementById('privilege-used-qty')?.value, 1) || 1))
       : 1
-    const actualSaving = Math.max(0, normalizeNumber(document.getElementById('privilege-used-saving')?.value, 0))
+    const savingPerUnit = Math.max(0, normalizeNumber(document.getElementById('privilege-used-saving')?.value, 0))
     const usedAt = String(document.getElementById('privilege-used-date')?.value || todayLocalISO())
     if (usedQty > currentQty) return toast('จำนวนสิทธิ์ที่ใช้มากกว่าที่เหลืออยู่', 'error')
     if (!/^\d{4}-\d{2}-\d{2}$/.test(usedAt)) return toast('กรุณาเลือกวันที่ใช้', 'error')
+    const actualSaving = savingPerUnit * usedQty
     const remainingQty = Math.max(0, currentQty - usedQty)
     privilege.quantity = remainingQty
     privilege.status = remainingQty === 0 ? 'used' : 'active'
@@ -16768,7 +16777,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         cashbackShown > 0 ? `${pending ? 'ปลดแล้วได้' : 'เงินคืน'} ฿${Number(cashbackShown).toFixed(2)}` : '',
         discountShown > 0 ? `${pending ? 'ปลดแล้วลด' : 'ส่วนลด'} ฿${Number(discountShown).toFixed(2)}`  : '',
         pointsShown > 0 ? `${Number(pointsShown).toLocaleString('en-US')} คะแนน` : '',
-        pending ? `มั่นใจ ${Math.round(Number(item.est.unlockConfidence ?? 1) * 100)}%` : '',
       ].filter(Boolean)
       const detailText = [...rewardParts, ...ruleNames].slice(0, 2).join(' · ')
       const rewardHtml = detailText
