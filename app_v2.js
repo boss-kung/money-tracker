@@ -15607,6 +15607,16 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       .slice(0, 20)
   }
 
+  function normalizePrivilegeDraftCodes(rawCodes, fallbackCode = '') {
+    if (Array.isArray(rawCodes)) {
+      return rawCodes
+        .map(code => String(code || '').trim())
+        .slice(0, 20)
+    }
+    const code = String(fallbackCode || '').trim()
+    return code ? [code] : []
+  }
+
   function getPrivilegeCodes(privilege) {
     return normalizePrivilegeCodes(privilege?.codes, privilege?.code)
   }
@@ -15775,7 +15785,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         const meta = privilegeStatusMeta(privilege)
         if (filter === 'all') return true
         if (filter === 'active') return privilege.status === 'active' && !isPrivilegeExpired(privilege)
-        if (filter === 'expiring') return meta.key === 'expiring'
+        if (filter === 'expiring') return meta.key === 'expiring' || meta.key === 'expiring_today'
         if (filter === 'expired') return meta.key === 'expired'
         if (filter === 'used') return meta.key === 'used'
         return true
@@ -15802,7 +15812,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   function getPrivilegesSummary() {
     ensurePrivilegesState()
     const activeNow = (S.privileges || []).filter(row => row.status === 'active' && !isPrivilegeExpired(row))
-    const expiring = (S.privileges || []).filter(row => privilegeStatusMeta(row).key === 'expiring')
+    const expiring = (S.privileges || []).filter(row => {
+      const key = privilegeStatusMeta(row).key
+      return key === 'expiring' || key === 'expiring_today'
+    })
     const expired = (S.privileges || []).filter(row => privilegeStatusMeta(row).key === 'expired')
     const used = (S.privileges || []).filter(row => row.status === 'used')
     return {
@@ -16251,6 +16264,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const reuseDraft = preserveDraft && S.privilegeDraft && String(S.privilegeDraft.id || '') === String(existing?.id || S.privilegeDraft.id || '')
       && String(S.editingPrivilegeId || '') === String(privilegeId || '')
     S.privilegeDraft = reuseDraft ? normalizePrivilege(S.privilegeDraft) : privilegeDraftFromExisting(existing)
+    if (reuseDraft && privilegeSupportsCode(S.privilegeDraft.type)) {
+      S.privilegeDraft.codes = normalizePrivilegeDraftCodes(S.privilegeDraft.codes, S.privilegeDraft.code)
+      S.privilegeDraft.code = normalizePrivilegeCodes(S.privilegeDraft.codes)[0] || ''
+    }
     const draft = S.privilegeDraft
     const template = privilegeTemplateMeta(draft.type)
     const showFreeItemName = draft.type === 'free_item'
