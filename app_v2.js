@@ -14406,6 +14406,7 @@ App._pickMerchant = function(name, opts = {}) {
     }
     const estimateFor = ids => App.calculateSelectedRewardEstimate?.(txDraft, ids) || { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] }
     const scoreFor = estimate => Number((estimate?.rankingScore ?? rewardTotalForRanking(estimate || {}, card.id)) || 0)
+    const hasImmediateReward = estimate => Number(estimate?.rewardNowValue ?? rewardTotalForRanking(estimate || {}, card.id)) > 0
 
     const candidates = expandRuleSubsets(applicableRules)
       .filter(subset => subset.filter(r => r.allowStacking === false).length <= 1)
@@ -14413,6 +14414,7 @@ App._pickMerchant = function(name, opts = {}) {
         const ids = subset.map(rule => rule.id)
         return { ids, estimate: estimateFor(ids) }
       })
+      .filter(candidate => hasImmediateReward(candidate.estimate))
     const best = candidates
       .map(candidate => ({ ...candidate, score: scoreFor(candidate.estimate) }))
       .sort((a, b) =>
