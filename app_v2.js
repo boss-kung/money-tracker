@@ -6331,7 +6331,7 @@ App._pickMerchant = function(name, opts = {}) {
     App.ensureCCBenefitRulesState?.()
     const w = walletById(cardId) || {}
     const pointValueCfg = App.getCardPointValueConfig?.(cardId, { useFallback: false })
-    const effectivePointValueCfg = App.getCardPointValueConfig?.(cardId) || { avgPoints: DEFAULT_POINT_VALUE_POINTS, avgBaht: DEFAULT_POINT_VALUE_BAHT, source: 'fallback' }
+    const effectivePointValueCfg = App.getCardPointValueConfig?.(cardId) || { avgPoints: App.DEFAULT_POINT_VALUE_POINTS || 1000, avgBaht: App.DEFAULT_POINT_VALUE_BAHT || 100, source: 'fallback' }
     const f = (id, label, value) => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="1" min="1" max="31" id="${id}" value="${value || ''}" placeholder="1–31"></div>`
     const rules = App.getCreditCardBenefitRules(cardId)
     const _dueMode        = w.dueDateMode === 'fixedDay' ? 'fixedDay' : 'afterCycle'
@@ -6400,10 +6400,10 @@ App._pickMerchant = function(name, opts = {}) {
     </details>`
     const pointValueCard = `<div class="card card-pad" style="margin-bottom:12px">
       <div style="font-size:14px;font-weight:700;margin-bottom:4px">มูลค่าแต้มเฉลี่ย</div>
-      <div class="form-hint" style="margin-bottom:12px">ใช้ช่วยแนะนำว่าบัตรแต้มคุ้มกว่า cashback แค่ไหน ถ้าไม่กรอก ระบบจะใช้ ${DEFAULT_POINT_VALUE_POINTS.toLocaleString('en-US')} แต้ม = ${money(DEFAULT_POINT_VALUE_BAHT)}</div>
+      <div class="form-hint" style="margin-bottom:12px">ใช้ช่วยแนะนำว่าบัตรแต้มคุ้มกว่า cashback แค่ไหน ถ้าไม่กรอก ระบบจะใช้ ${(App.DEFAULT_POINT_VALUE_POINTS || 1000).toLocaleString('en-US')} แต้ม = ${money(App.DEFAULT_POINT_VALUE_BAHT || 100)}</div>
       <div class="benefit-form-grid">
-        <div class="form-group"><label class="form-label">แต้ม</label><input class="form-input" type="number" step="1" min="1" id="ccb-point-value-points" value="${pointValueCfg?.avgPoints || ''}" placeholder="${DEFAULT_POINT_VALUE_POINTS}"></div>
-        <div class="form-group"><label class="form-label">บาท</label><input class="form-input" type="number" step="0.01" min="0.01" id="ccb-point-value-baht" value="${pointValueCfg?.avgBaht || ''}" placeholder="${DEFAULT_POINT_VALUE_BAHT}"></div>
+        <div class="form-group"><label class="form-label">แต้ม</label><input class="form-input" type="number" step="1" min="1" id="ccb-point-value-points" value="${pointValueCfg?.avgPoints || ''}" placeholder="${App.DEFAULT_POINT_VALUE_POINTS || 1000}"></div>
+        <div class="form-group"><label class="form-label">บาท</label><input class="form-input" type="number" step="0.01" min="0.01" id="ccb-point-value-baht" value="${pointValueCfg?.avgBaht || ''}" placeholder="${App.DEFAULT_POINT_VALUE_BAHT || 100}"></div>
       </div>
       <div class="form-hint">ค่าที่ใช้ตอนนี้: ${effectivePointValueCfg.avgPoints.toLocaleString('en-US')} แต้ม = ${money(effectivePointValueCfg.avgBaht)}${effectivePointValueCfg.source === 'fallback' ? ' (ค่าเริ่มต้น)' : ''}</div>
       <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit('${esc(cardId)}')">บันทึกมูลค่าแต้ม</button></div>
@@ -9791,7 +9791,7 @@ App._pickMerchant = function(name, opts = {}) {
       return
     }
     const customPointValue = hasPointValueInput
-      ? normalizePointValueConfig({
+      ? App.normalizePointValueConfig?.({
         avgPoints: rawAvgPoints ? Number(rawAvgPoints) : 0,
         avgBaht: rawAvgBaht ? Number(rawAvgBaht) : 0,
       })
@@ -13368,6 +13368,8 @@ App._pickMerchant = function(name, opts = {}) {
 
   const DEFAULT_POINT_VALUE_POINTS = 1000
   const DEFAULT_POINT_VALUE_BAHT = 100
+  App.DEFAULT_POINT_VALUE_POINTS = DEFAULT_POINT_VALUE_POINTS
+  App.DEFAULT_POINT_VALUE_BAHT = DEFAULT_POINT_VALUE_BAHT
 
   function normalizePointValueConfig(raw = null) {
     const avgPoints = Number(raw?.avgPoints || 0)
@@ -13378,6 +13380,7 @@ App._pickMerchant = function(name, opts = {}) {
       avgBaht: Math.round(avgBaht * 100) / 100,
     }
   }
+  App.normalizePointValueConfig = normalizePointValueConfig
 
   App.getCardPointValueConfig = function(cardId, options = {}) {
     const useFallback = options?.useFallback !== false
