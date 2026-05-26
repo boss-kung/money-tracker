@@ -16936,12 +16936,21 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const debugRuleLine = (rule, estimate, selectedIds = []) => {
       const row = Array.isArray(estimate?.rules) ? estimate.rules[0] : null
       const selected = selectedIds.includes(rule.id)
+      const state = rule.active === false
+        ? 'ปิดอยู่'
+        : rule.suggested
+          ? 'suggested'
+          : rule.fullyUsed
+            ? `ตัด: ${rule.fullyUsedReason || 'สิทธิ์ครบแล้ว'}`
+            : `ไม่เข้า: ${(rule.eligibility?.reasons || []).join('|') || 'suggested=false'}`
       const parts = [
         selected ? 'เลือก' : 'ไม่ได้เลือก',
+        state,
         `score ${debugNum(row?.weightedRewardValue ?? estimate?.rankingScore)}`,
         `now ${debugMoney(row?.rewardNowValue ?? estimate?.rewardNowValue)}`,
         `pot ${debugMoney(row?.rewardPotentialValue ?? estimate?.rewardPotentialValue)}`,
       ]
+      if (rule.trackLocked || Number(rule.trackRemaining || 0) > 0) parts.push(`remain ${debugMoney(rule.trackRemaining)}`)
       if (row?.triggerMode === 'cycle_spend_threshold') {
         parts.push(`track ${debugMoney(row.triggerChannelSpendBefore)}→${debugMoney(row.triggerChannelSpendAfter)}`)
         parts.push(`count ${debugNum(row.triggerCount)}`)
@@ -16963,7 +16972,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         const est = optimal.estimate || { cashback:0, points:0, discount:0 }
         const applicableRules = optimal.applicableRules || []
         const selectedRuleIds = optimal.selectedRuleIds || []
-        const ruleDebug = applicableRules
+        const suggestedRules = App.getSuggestedBenefitRules?.(draft) || []
+        const suggestedById = new Map(suggestedRules.map(rule => [String(rule.id || ''), rule]))
+        const allRules = (App.getCreditCardBenefitRules?.(card.id) || [])
+          .map(rule => suggestedById.get(String(rule.id || '')) || rule)
+        const ruleDebug = allRules
           .map(rule => {
             const single = App.calculateSelectedRewardEstimate?.(draft, [rule.id]) || null
             return debugRuleLine(rule, single, selectedRuleIds)
@@ -16984,14 +16997,15 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         return { card, est:{cashback:0,points:0,discount:0}, applicableRules: [], selectedRuleIds: [], value:0, pts:0, score:0, potentialValue:0 }
       }
     })
+    const rankedEstimates = estimates
       .filter(item => item.applicableRules?.length && (item.value > 0 || item.pts > 0 || item.potentialValue > 0 || item.score > 0))
       .sort((a,b) => Number(b.score || 0) - Number(a.score || 0))
       .slice(0, 10)
 
-    if (!estimates.length) return
+    if (!rankedEstimates.length && !estimates.some(item => item.ruleDebug?.length)) return
 
     const currentId = S.tx.walletId
-    const rows = estimates.map((item, idx) => {
+    const rows = rankedEstimates.map((item, idx) => {
       const isSel = item.card.id === currentId
       const isBest = idx === 0 && (item.score > 0 || item.potentialValue > 0)
       const ruleNames = (item.applicableRules || [])
@@ -17032,10 +17046,20 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         ${debugHtml}
       </button>`
     }).join('')
+    const shownCardIds = new Set(rankedEstimates.map(item => String(item.card.id || '')))
+    const hiddenDebug = estimates
+      .filter(item => !shownCardIds.has(String(item.card.id || '')) && (item.ruleDebug || []).length)
+      .slice(0, 12)
+      .map(item => `<div style="padding:8px 0;border-top:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:3px">${esc(item.card.icon || '💳')} ${esc(item.card.name || '')} · hidden score ${esc(debugNum(item.score))}</div>
+        ${(item.ruleDebug || []).map(line => `<div style="font-size:10px;line-height:1.35;color:var(--muted);white-space:normal;overflow-wrap:anywhere">${esc(line)}</div>`).join('')}
+      </div>`)
+      .join('')
 
     const widget = `<div class="card-picker-widget" style="padding:12px 14px;background:var(--card);border-radius:14px;border:1px solid var(--border);margin-bottom:0">
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">ใช้บัตรไหนดีสุด?</div>
-      <div style="display:flex;flex-direction:row;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin:0 -2px;padding:0 2px 6px">${rows}</div>
+      ${rows ? `<div style="display:flex;flex-direction:row;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin:0 -2px;padding:0 2px 6px">${rows}</div>` : `<div style="font-size:12px;color:var(--muted)">ยังไม่มีบัตรที่ผ่านคะแนนแนะนำ</div>`}
+      ${hiddenDebug ? `<details style="margin-top:8px"><summary style="font-size:11px;font-weight:800;color:var(--muted);cursor:pointer">debug: บัตร/กฎที่ไม่ติดอันดับ</summary><div style="margin-top:6px">${hiddenDebug}</div></details>` : ''}
     </div>`
 
     const walletGroup = box.querySelector('#tx-wallet')?.closest('.form-group')
