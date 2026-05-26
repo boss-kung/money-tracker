@@ -16933,7 +16933,31 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
     const debugMoney = value => `฿${Number(value || 0).toFixed(2)}`
     const debugNum = value => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
-    const debugRuleLine = (rule, estimate, selectedIds = []) => {
+    const ruleChannelCandidates = rules => {
+      if (draftBase.channel) return [draftBase.channel]
+      const channels = []
+      ;(rules || []).forEach(rule => {
+        ;(rule.suggestedConditions?.channels || []).forEach(ch => channels.push(ch))
+        ;(rule.rewardTrigger?.trackChannels || []).forEach(ch => channels.push(ch))
+        if (rule.rewardTrigger?.trackChannel) channels.push(rule.rewardTrigger.trackChannel)
+      })
+      return ['', ...new Set(channels.map(ch => String(ch || '').trim()).filter(Boolean))]
+    }
+    const chooseSuggestionDraft = (card, rules) => {
+      const candidates = ruleChannelCandidates(rules).map(channel => ({ ...draftBase, walletId: card.id, channel }))
+      return candidates
+        .map(draft => {
+          const optimal = App.getOptimalBenefitSelection?.(draft) || { selectedRuleIds: [], estimate: { cashback:0, points:0, discount:0 }, applicableRules: [], rankingScore: 0 }
+          const est = optimal.estimate || { cashback:0, points:0, discount:0 }
+          return { draft, optimal, est, score: Number(optimal.rankingScore || 0), potentialValue: Number(est.rewardPotentialValue || 0) }
+        })
+        .sort((a, b) =>
+          Number(b.score || 0) - Number(a.score || 0)
+          || Number(b.potentialValue || 0) - Number(a.potentialValue || 0)
+          || Number(b.est?.rewardNowValue || 0) - Number(a.est?.rewardNowValue || 0)
+        )[0] || { draft: { ...draftBase, walletId: card.id }, optimal: {}, est: {}, score: 0, potentialValue: 0 }
+    }
+    const debugRuleLine = (rule, estimate, selectedIds = [], draft = {}) => {
       const row = Array.isArray(estimate?.rules) ? estimate.rules[0] : null
       const selected = selectedIds.includes(rule.id)
       const state = rule.active === false
@@ -16950,6 +16974,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         `now ${debugMoney(row?.rewardNowValue ?? estimate?.rewardNowValue)}`,
         `pot ${debugMoney(row?.rewardPotentialValue ?? estimate?.rewardPotentialValue)}`,
       ]
+      parts.push(`txCh ${draft.channel || '-'}`)
+      const trackChannels = row?.triggerTrackChannels || rule.rewardTrigger?.trackChannels || (rule.rewardTrigger?.trackChannel ? [rule.rewardTrigger.trackChannel] : [])
+      if (trackChannels?.length) parts.push(`trackCh ${trackChannels.join(',')}`)
       if (rule.trackLocked || Number(rule.trackRemaining || 0) > 0) parts.push(`remain ${debugMoney(rule.trackRemaining)}`)
       if (row?.triggerMode === 'cycle_spend_threshold') {
         parts.push(`track ${debugMoney(row.triggerChannelSpendBefore)}→${debugMoney(row.triggerChannelSpendAfter)}`)
@@ -16967,19 +16994,21 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
     const estimates = creditCards.map(card => {
       try {
-        const draft = { ...draftBase, walletId: card.id }
-        const optimal = App.getOptimalBenefitSelection?.(draft) || { selectedRuleIds: [], estimate: { cashback:0, points:0, discount:0 }, applicableRules: [], rankingScore: 0 }
-        const est = optimal.estimate || { cashback:0, points:0, discount:0 }
+        const cardRules = App.getCreditCardBenefitRules?.(card.id) || []
+        const chosen = chooseSuggestionDraft(card, cardRules)
+        const draft = chosen.draft
+        const optimal = chosen.optimal || { selectedRuleIds: [], estimate: { cashback:0, points:0, discount:0 }, applicableRules: [], rankingScore: 0 }
+        const est = chosen.est || optimal.estimate || { cashback:0, points:0, discount:0 }
         const applicableRules = optimal.applicableRules || []
         const selectedRuleIds = optimal.selectedRuleIds || []
         const suggestedRules = App.getSuggestedBenefitRules?.(draft) || []
         const suggestedById = new Map(suggestedRules.map(rule => [String(rule.id || ''), rule]))
-        const allRules = (App.getCreditCardBenefitRules?.(card.id) || [])
+        const allRules = cardRules
           .map(rule => suggestedById.get(String(rule.id || '')) || rule)
         const ruleDebug = allRules
           .map(rule => {
             const single = App.calculateSelectedRewardEstimate?.(draft, [rule.id]) || null
-            return debugRuleLine(rule, single, selectedRuleIds)
+            return debugRuleLine(rule, single, selectedRuleIds, draft)
           })
         return {
           card,
@@ -16987,6 +17016,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           applicableRules,
           selectedRuleIds,
           ruleDebug,
+          suggestionChannel: draft.channel || '',
           value: Number(est.cashback||0) + Number(est.discount||0),
           pts: Number(est.points||0),
           score: Number(optimal.rankingScore || 0),
