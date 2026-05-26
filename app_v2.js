@@ -16934,14 +16934,15 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const debugMoney = value => `฿${Number(value || 0).toFixed(2)}`
     const debugNum = value => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
     const ruleChannelCandidates = rules => {
-      if (draftBase.channel) return [draftBase.channel]
       const channels = []
+      if (draftBase.channel) channels.push(draftBase.channel)
       ;(rules || []).forEach(rule => {
         ;(rule.suggestedConditions?.channels || []).forEach(ch => channels.push(ch))
         ;(rule.rewardTrigger?.trackChannels || []).forEach(ch => channels.push(ch))
         if (rule.rewardTrigger?.trackChannel) channels.push(rule.rewardTrigger.trackChannel)
       })
-      return ['', ...new Set(channels.map(ch => String(ch || '').trim()).filter(Boolean))]
+      const raw = draftBase.channel ? channels : ['', ...channels]
+      return [...new Set(raw.map(ch => String(ch || '').trim()).filter((ch, idx) => ch || idx === 0))]
     }
     const chooseSuggestionDraft = (card, rules) => {
       const candidates = ruleChannelCandidates(rules).map(channel => ({ ...draftBase, walletId: card.id, channel }))
