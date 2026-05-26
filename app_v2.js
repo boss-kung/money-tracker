@@ -13546,13 +13546,21 @@ App._pickMerchant = function(name, opts = {}) {
     const unlockConfidence = Math.round(((gapScore * 0.7) + (timeScore * 0.3)) * 1000) / 1000
     const pendingDelta = Math.max(0, rewardPotentialValue - rewardNowValue)
     // For threshold-locked rewards, only let the current transaction compete with
-    // the portion of the remaining unlock gap it meaningfully closes.
+    // the portion of the remaining unlock gap it meaningfully closes. If the
+    // purchase is reward-eligible but does not advance the tracking channel,
+    // give it plan value only when the remaining unlock work is small enough.
+    const unlockPlanLimit = threshold > 0 ? Math.min(threshold * 0.5, 1000) : 0
+    const canUseUnlockPlan = currentContribution <= 0 && remainingBefore > 0 && remainingBefore <= unlockPlanLimit
     const unlockImpact = remainingBefore <= 0 || (threshold > 0 && progressAfter >= threshold)
       ? 1
-      : clamp01(currentContribution / remainingBefore)
+      : currentContribution > 0
+        ? clamp01(currentContribution / remainingBefore)
+        : canUseUnlockPlan
+          ? clamp01(1 - (remainingBefore / threshold))
+          : 0
     const attributableRatio = threshold > 0 ? unlockImpact : 1
     const attributablePendingDelta = pendingDelta * attributableRatio
-    const weightedRewardValue = rewardNowValue + (attributablePendingDelta * unlockConfidence)
+    const weightedRewardValue = rewardNowValue + (canUseUnlockPlan ? attributablePendingDelta : (attributablePendingDelta * unlockConfidence))
     const confidenceReason = threshold > 0
       ? `ขาดอีก ${money(lacking)} · เหลือ ${daysLeft}/${cycleLength} วัน`
       : `เหลือ ${daysLeft}/${cycleLength} วันในรอบ`
@@ -16982,6 +16990,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         parts.push(`track ${debugMoney(row.triggerChannelSpendBefore)}→${debugMoney(row.triggerChannelSpendAfter)}`)
         parts.push(`count ${debugNum(row.triggerCount)}`)
         if (row.rewardPending) parts.push('pending')
+        if (row.rewardPending && Number(row.weightedRewardValue || 0) > 0 && Number(row.triggerCount || 0) <= 0) parts.push('plan')
       }
       if (row) {
         parts.push(`eligible ${debugMoney(row.eligibleAmount)}`)
