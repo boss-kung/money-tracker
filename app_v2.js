@@ -878,7 +878,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.26-r47'
+const APP_VERSION = '2026.05.26-r48'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -10161,10 +10161,7 @@ App._pickMerchant = function(name, opts = {}) {
           <div class="v5-acct-pts">${balance.toLocaleString('en-US')}</div>
           <div style="font-size:11px;color:var(--muted)">คะแนน</div>
         </div>
-        <div style="display:flex;gap:6px;flex-shrink:0">
-          <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm('${esc(acct.id)}')" style="width:auto">ตั้งค่า</button>
-          <button class="btn btn-secondary btn-sm" onclick="App.openAdjustPointsForm('${esc(acct.id)}')" style="width:auto">ปรับคะแนน</button>
-        </div>
+        <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm('${esc(acct.id)}')" style="width:auto;flex-shrink:0">จัดการ</button>
       </div>`
     }).join('') : `<div style="font-size:13px;color:var(--muted);padding:12px 0">ยังไม่มีบัญชีคะแนน <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm()" style="width:auto;margin-left:8px">+ เพิ่มบัญชี</button></div>`
 
@@ -10294,8 +10291,14 @@ App._pickMerchant = function(name, opts = {}) {
     const pointValueCfg = App.normalizePointValueConfig?.(a?.pointsValue || null)
     const fallbackPts = App.DEFAULT_POINT_VALUE_POINTS || 1000
     const fallbackBaht = App.DEFAULT_POINT_VALUE_BAHT || 100
-    App.openDynamicSheet('reward-account-form-overlay', `${a ? 'แก้ไข' : 'เพิ่ม'}บัญชีคะแนน`, `
+    const balance = a ? App.getRewardAccountBalance(a.id) : 0
+    App.openDynamicSheet('reward-account-form-overlay', `${a ? 'จัดการ' : 'เพิ่ม'}บัญชีคะแนน`, `
       <div style="padding:0 16px calc(12px + var(--safe-b))">
+        ${a ? `<div class="card card-pad" style="margin-bottom:12px;text-align:center">
+          <div style="font-size:13px;color:var(--muted)">คะแนนปัจจุบัน</div>
+          <div style="font-size:28px;font-weight:800">${balance.toLocaleString('en-US')}</div>
+          <div style="font-size:12px;color:var(--muted)">${esc(a.name)}</div>
+        </div>` : ''}
         <div class="form-group"><label class="form-label">ชื่อบัญชีคะแนน</label><input class="form-input" id="ra-name" value="${esc(a?.name||'')}" placeholder="เช่น KTC Forever Points"></div>
         <div class="form-group">
           <label class="form-label">ผู้ออกบัตร / ธนาคาร</label>
@@ -10311,6 +10314,12 @@ App._pickMerchant = function(name, opts = {}) {
           </div>
           <div class="form-hint">ใช้กับทุกบัตรที่ผูกบัญชีคะแนนนี้ ถ้าเว้นว่างจะใช้ ${fallbackPts.toLocaleString('en-US')} แต้ม = ${money(fallbackBaht)}</div>
         </div>
+        ${a ? `<div class="form-group">
+          <label class="form-label">ปรับคะแนน (+ เพิ่ม / - ลด)</label>
+          <input class="form-input" type="number" id="ra-adjust-points" placeholder="เช่น 500 หรือ -200">
+          <div class="form-hint">เว้นว่างไว้ถ้าต้องการแก้เฉพาะข้อมูลบัญชีหรือมูลค่าแต้ม</div>
+        </div>
+        <div class="form-group"><label class="form-label">หมายเหตุการปรับคะแนน</label><input class="form-input" id="ra-adjust-note" placeholder="เช่น คะแนนจากโปรโมชั่น, แก้ไขยอดผิด"></div>` : ''}
         ${a ? `<button class="btn btn-outline" style="margin-top:8px" onclick="App.deleteRewardAccount('${esc(a.id)}')">ลบบัญชีคะแนนนี้</button>` : ''}
       </div>`,
       `<button class="btn btn-primary btn-sm" onclick="App.saveRewardAccount('${esc(accountId||'')}')" style="width:auto">บันทึก</button>`)
@@ -10335,6 +10344,14 @@ App._pickMerchant = function(name, opts = {}) {
       notify('มูลค่าแต้มเฉลี่ยต้องมากกว่า 0', 'error')
       return
     }
+    const rawAdjustPoints = id ? String(document.getElementById('ra-adjust-points')?.value || '').trim() : ''
+    const adjustPoints = rawAdjustPoints ? parseInt(rawAdjustPoints, 10) || 0 : 0
+    const adjustNote = document.getElementById('ra-adjust-note')?.value.trim() || 'ปรับคะแนน'
+    if (rawAdjustPoints) {
+      const bal = App.getRewardAccountBalance(id)
+      if (!adjustPoints) { notify('กรุณาระบุจำนวนคะแนนที่ปรับให้ถูกต้อง หรือเว้นว่างไว้', 'error'); return }
+      if (bal + adjustPoints < 0) { notify(`คะแนนหลังปรับจะติดลบ (${(bal+adjustPoints).toLocaleString('en-US')}) กรุณาตรวจสอบ`, 'error'); return }
+    }
     if (id) {
       const idx = (S.rewardAccounts||[]).findIndex(a => a.id === id)
       if (idx >= 0) {
@@ -10342,6 +10359,9 @@ App._pickMerchant = function(name, opts = {}) {
         if (pointsValue) next.pointsValue = pointsValue
         else delete next.pointsValue
         S.rewardAccounts[idx] = next
+        if (rawAdjustPoints) {
+          S.rewardLedger.push({ id:genId(), type:'points_adjustment', accountId:id, cardId:'', statementId:'', points:adjustPoints, amount:0, date:today(), note:adjustNote, createdAt:nowISO() })
+        }
       }
     } else {
       S.rewardAccounts.push({ id:genId(), name, issuer, type:'points', openingBalance:opening, ...(pointsValue ? { pointsValue } : {}), createdAt:nowISO(), updatedAt:nowISO() })
