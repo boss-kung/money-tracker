@@ -16931,17 +16931,49 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       note: S.tx.note, date: S.tx.date || today(), benefitDateOverride: S.tx.benefitDateOverride || '', channel: S.tx.channel || '',
       _forSuggestion: true,
     }
+    const debugMoney = value => `฿${Number(value || 0).toFixed(2)}`
+    const debugNum = value => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
+    const debugRuleLine = (rule, estimate, selectedIds = []) => {
+      const row = Array.isArray(estimate?.rules) ? estimate.rules[0] : null
+      const selected = selectedIds.includes(rule.id)
+      const parts = [
+        selected ? 'เลือก' : 'ไม่ได้เลือก',
+        `score ${debugNum(row?.weightedRewardValue ?? estimate?.rankingScore)}`,
+        `now ${debugMoney(row?.rewardNowValue ?? estimate?.rewardNowValue)}`,
+        `pot ${debugMoney(row?.rewardPotentialValue ?? estimate?.rewardPotentialValue)}`,
+      ]
+      if (row?.triggerMode === 'cycle_spend_threshold') {
+        parts.push(`track ${debugMoney(row.triggerChannelSpendBefore)}→${debugMoney(row.triggerChannelSpendAfter)}`)
+        parts.push(`count ${debugNum(row.triggerCount)}`)
+        if (row.rewardPending) parts.push('pending')
+      }
+      if (row) {
+        parts.push(`eligible ${debugMoney(row.eligibleAmount)}`)
+        if (Number(row.cashback || 0) > 0 || Number(row.potentialCashback || 0) > 0) parts.push(`cb ${debugMoney(row.cashback || 0)}/${debugMoney(row.potentialCashback || 0)}`)
+        if (Number(row.points || 0) > 0 || Number(row.potentialPoints || 0) > 0) parts.push(`pts ${debugNum(row.points || 0)}/${debugNum(row.potentialPoints || 0)}`)
+        if (row.capReason) parts.push(`cap ${row.capReason}`)
+      }
+      return `${rule.name || 'Rule'}: ${parts.join(' · ')}`
+    }
 
     const estimates = creditCards.map(card => {
       try {
         const draft = { ...draftBase, walletId: card.id }
         const optimal = App.getOptimalBenefitSelection?.(draft) || { selectedRuleIds: [], estimate: { cashback:0, points:0, discount:0 }, applicableRules: [], rankingScore: 0 }
         const est = optimal.estimate || { cashback:0, points:0, discount:0 }
+        const applicableRules = optimal.applicableRules || []
+        const selectedRuleIds = optimal.selectedRuleIds || []
+        const ruleDebug = applicableRules
+          .map(rule => {
+            const single = App.calculateSelectedRewardEstimate?.(draft, [rule.id]) || null
+            return debugRuleLine(rule, single, selectedRuleIds)
+          })
         return {
           card,
           est,
-          applicableRules: optimal.applicableRules || [],
-          selectedRuleIds: optimal.selectedRuleIds || [],
+          applicableRules,
+          selectedRuleIds,
+          ruleDebug,
           value: Number(est.cashback||0) + Number(est.discount||0),
           pts: Number(est.points||0),
           score: Number(optimal.rankingScore || 0),
@@ -16954,7 +16986,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     })
       .filter(item => item.applicableRules?.length && (item.value > 0 || item.pts > 0 || item.potentialValue > 0 || item.score > 0))
       .sort((a,b) => Number(b.score || 0) - Number(a.score || 0))
-      .slice(0, 3)
+      .slice(0, 10)
 
     if (!estimates.length) return
 
@@ -16979,6 +17011,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       const rewardHtml = detailText
         ? `<div style="font-size:12px;font-weight:700;color:var(--income);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(detailText)}</div>`
         : `<div style="font-size:11px;color:var(--muted);margin-top:2px">ไม่มีสิทธิพิเศษ</div>`
+      const debugHtml = (item.ruleDebug || []).length
+        ? `<div style="margin-top:8px;padding-top:7px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:3px">
+            <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">debug score ${esc(debugNum(item.score))}</div>
+            ${(item.ruleDebug || []).map(line => `<div style="font-size:10px;line-height:1.35;color:var(--muted);white-space:normal;overflow-wrap:anywhere">${esc(line)}</div>`).join('')}
+          </div>`
+        : ''
       const bestBadge = isBest ? `<span style="font-size:9px;font-weight:700;background:var(--income);color:#fff;padding:2px 6px;border-radius:4px;white-space:nowrap">ดีสุด</span>` : ''
       const selRing = isSel ? `<div style="position:absolute;top:8px;right:8px;width:18px;height:18px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:700">✓</div>` : ''
       return `<button type="button"
@@ -16991,6 +17029,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         </div>
         <div style="font-size:13px;font-weight:${isSel?700:600};padding-right:${isSel?'22px':'0'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.card.name)}</div>
         ${rewardHtml}
+        ${debugHtml}
       </button>`
     }).join('')
 
