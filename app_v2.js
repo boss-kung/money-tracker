@@ -878,7 +878,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.20-r40'
+const APP_VERSION = '2026.05.26-r46'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -9405,6 +9405,10 @@ App._pickMerchant = function(name, opts = {}) {
           })()}
         `, true)}
         ${accordion('wf-cc-reward-acc', 'บัญชีคะแนนสะสม', `
+          ${(() => {
+            const fallbackPts = App.DEFAULT_POINT_VALUE_POINTS || 1000
+            const fallbackBaht = App.DEFAULT_POINT_VALUE_BAHT || 100
+            return `
           <div class="form-group">
             <select class="form-input" id="wf-reward-account-select" onchange="App._onRewardAccountChange()">
               ${acctOpts}
@@ -9413,7 +9417,17 @@ App._pickMerchant = function(name, opts = {}) {
           <div id="wf-new-account-fields" style="display:none">
             <div class="form-group"><label class="form-label">ชื่อบัญชีคะแนน</label><input class="form-input" id="wf-new-account-name" placeholder="เช่น KTC Forever Points"></div>
             <div class="form-group"><label class="form-label">คะแนนเริ่มต้น / ยอดปัจจุบัน</label><input class="form-input" type="number" min="0" id="wf-new-account-opening" value="0" placeholder="0"></div>
+            <div class="form-group">
+              <label class="form-label">มูลค่าแต้มเฉลี่ย</label>
+              <div class="benefit-form-grid">
+                <div><input class="form-input" type="number" step="1" min="1" id="wf-new-account-point-value-points" placeholder="${fallbackPts}"><div class="form-hint">แต้ม</div></div>
+                <div><input class="form-input" type="number" step="0.01" min="0.01" id="wf-new-account-point-value-baht" placeholder="${fallbackBaht}"><div class="form-hint">บาท</div></div>
+              </div>
+              <div class="form-hint">ใช้กับทุกบัตรที่ผูกบัญชีคะแนนนี้ ถ้าเว้นว่างจะใช้ ${fallbackPts.toLocaleString('en-US')} แต้ม = ${money(fallbackBaht)}</div>
+            </div>
           </div>
+            `
+          })()}
         `, false)}
       </div>`
 
@@ -9688,8 +9702,18 @@ App._pickMerchant = function(name, opts = {}) {
       if (rewardAccountId === 'new') {
         const aName    = document.getElementById('wf-new-account-name')?.value.trim()
         const aOpening = parseInt(document.getElementById('wf-new-account-opening')?.value) || 0
+        const rawAvgPoints = String(document.getElementById('wf-new-account-point-value-points')?.value || '').trim()
+        const rawAvgBaht = String(document.getElementById('wf-new-account-point-value-baht')?.value || '').trim()
         if (!aName) { notify('กรุณาระบุชื่อบัญชีคะแนน', 'error'); return }
+        if ((rawAvgPoints && !rawAvgBaht) || (!rawAvgPoints && rawAvgBaht)) {
+          notify('กรุณาระบุทั้งจำนวนแต้มและมูลค่าเงินบาท หรือเว้นว่างทั้งคู่', 'error'); return
+        }
         const newAcct = { id:genId(), name:aName, issuer, type:'points', openingBalance:aOpening, createdAt:nowISO(), updatedAt:nowISO() }
+        if (rawAvgPoints && rawAvgBaht) {
+          const pointValue = App.normalizePointValueConfig?.({ avgPoints: rawAvgPoints, avgBaht: rawAvgBaht }) || null
+          if (!pointValue) { notify('กรุณาระบุมูลค่าแต้มเฉลี่ยให้ถูกต้อง', 'error'); return }
+          newAcct.pointsValue = pointValue
+        }
         S.rewardAccounts.push(newAcct)
         rewardAccountId = newAcct.id
       } else if (rewardAccountId === '') {
