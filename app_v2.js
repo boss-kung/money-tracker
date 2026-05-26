@@ -878,7 +878,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.26-r48'
+const APP_VERSION = '2026.05.26-r49'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -15464,7 +15464,7 @@ App._pickMerchant = function(name, opts = {}) {
         banner.style.cssText = 'text-align:center;padding:24px 16px;margin-bottom:16px'
         banner.innerHTML = `
           <div style="font-size:36px;margin-bottom:8px">👛</div>
-          <div style="font-size:15px;font-weight:700;margin-bottom:6px">เริ่มต้นใช้งาน Money Tracker</div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:6px">เริ่มต้นใช้งาน Financial Tracker</div>
           <div style="font-size:13px;color:var(--muted);margin-bottom:16px">เพิ่มกระเป๋าเงินก่อน แล้วค่อยบันทึกรายการแรก</div>
           <button class="btn btn-primary" onclick="App.showPage('wallets')" style="width:auto;padding:10px 28px">+ เพิ่มกระเป๋าเงิน</button>`
         netCard.insertAdjacentElement('afterend', banner)
@@ -21603,7 +21603,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>
       <div style="text-align:center;padding:32px 0 8px">
         <div style="font-size:40px">💰</div>
-        <div style="font-size:16px;font-weight:700;margin-top:8px">Money Tracker</div>
+        <div style="font-size:16px;font-weight:700;margin-top:8px">Financial Tracker</div>
         <div style="font-size:12px;color:var(--muted);margin-top:4px" onclick="App._tapDemoEntry?.()" title="เวอร์ชัน">${esc(window.MT_APP_VERSION || (typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''))}</div>
       </div>`
 

@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.05.26-r48'
+const APP_VERSION = '2026.05.26-r49'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 
@@ -26,7 +26,7 @@ const STATIC_ASSETS = [
 self.addEventListener('push', event => {
   let payload = {}
   try { payload = event.data?.json() || {} } catch (_) {}
-  const title = payload.title || 'Money Tracker'
+  const title = payload.title || 'Financial Tracker'
   event.waitUntil(
     self.registration.showNotification(title, {
       body: payload.body || '',

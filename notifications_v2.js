@@ -973,7 +973,7 @@
     const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
     if (permission !== 'granted') return notify('ยังไม่ได้อนุญาตการแจ้งเตือน', 'warn')
     const reg = await navigator.serviceWorker.ready
-    await reg.showNotification(rule.title || 'Money Tracker', {
+    await reg.showNotification(rule.title || 'Financial Tracker', {
       body: rule.body || '',
       tag: `mt-custom-test-${rule.id}`,
       data: { type: 'custom_rule', ruleId: rule.id, route: rule.route || 'dashboard' },
@@ -993,7 +993,7 @@
     if (permission !== 'granted') return notify('ยังไม่ได้อนุญาตการแจ้งเตือน', 'warn')
     const reg = await navigator.serviceWorker.ready
     await reg.showNotification('อย่าลืมจดรายจ่ายวันนี้', {
-      body: 'นี่คือ noti ทดสอบจาก Money Tracker',
+      body: 'นี่คือ noti ทดสอบจาก Financial Tracker',
       tag: 'mt-test-notification',
       data: { route: 'addTx' },
       actions: [{ action: 'addTx', title: 'เพิ่มรายจ่าย' }],

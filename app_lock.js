@@ -174,7 +174,7 @@
     const waitSec = Math.ceil(Math.max(0, lockedUntil - now()) / 1000)
     const canUseBiometric = !!(config?.biometric?.enabled && config?.biometric?.credentialId && hasWebAuthn())
     const panel = ensureOverlay().querySelector('.mt-lock-panel')
-    panel.innerHTML = `<div class="mt-lock-brand">Money Tracker</div>
+    panel.innerHTML = `<div class="mt-lock-brand">Financial Tracker</div>
       <div class="mt-lock-icon" aria-label="ล็อกอยู่">
         <div class="mt-lock-shackle"></div>
         <div class="mt-lock-body"><span></span></div>
@@ -188,7 +188,7 @@
   function renderSetup() {
     mode = 'setup'
     const panel = ensureOverlay().querySelector('.mt-lock-panel')
-    panel.innerHTML = `<div class="mt-lock-brand">Money Tracker</div>
+    panel.innerHTML = `<div class="mt-lock-brand">Financial Tracker</div>
       <h1>ตั้งค่า App Lock</h1>
       <p>ตั้งรหัสตัวเลข ${MIN_PIN_LENGTH}-${MAX_PIN_LENGTH} หลักเพื่อป้องกันข้อมูลเมื่อเปิด PWA หรือกลับเข้ามาในแอป</p>
       <div class="mt-lock-form">
@@ -289,11 +289,11 @@
     const credential = await navigator.credentials.create({
       publicKey: {
         challenge: randomBytes(32),
-        rp: { name: 'Money Tracker' },
+        rp: { name: 'Financial Tracker' },
         user: {
           id: userId,
           name: 'money-tracker-local-user',
-          displayName: 'Money Tracker',
+          displayName: 'Financial Tracker',
         },
         pubKeyCredParams: [
           { type: 'public-key', alg: -7 },
@@ -355,7 +355,7 @@
     enteredPin = ''
     try { sessionStorage.removeItem(SESSION_KEY) } catch (_) {}
     const panel = ensureOverlay().querySelector('.mt-lock-panel')
-    panel.innerHTML = `<div class="mt-lock-brand">Money Tracker</div><h1>ข้อมูลถูกปิดไว้</h1><p>กลับเข้าแอปแล้วปลดล็อกเพื่อใช้งานต่อ</p>`
+    panel.innerHTML = `<div class="mt-lock-brand">Financial Tracker</div><h1>ข้อมูลถูกปิดไว้</h1><p>กลับเข้าแอปแล้วปลดล็อกเพื่อใช้งานต่อ</p>`
     setOverlay(true, true)
   }
   function setupLifecyclePrivacy() {
