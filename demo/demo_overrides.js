@@ -152,7 +152,14 @@
       { id: 'demo_rule_online', cardId: 'demo_ktc', active: true, name: 'ออนไลน์เงินคืน 10%', type: 'cashback', description: 'Shopee, Lazada, LINE MAN สูงสุด 300 บาท/เดือน', suggestedConditions: { channels: ['online'], merchants: ['Shopee', 'Lazada', 'LINE MAN'], minSpend: 500 }, cashback: { mode: 'percent', rate: 10 }, limits: { maxRewardAmountPerCycle: 300 }, allowStacking: false },
       { id: 'demo_rule_points', cardId: 'demo_ktc', active: true, name: 'คะแนน x3 ร้านอาหาร', type: 'points', description: 'ใช้จ่ายหมวดอาหารรับคะแนนพิเศษ', suggestedConditions: { categories: ['food'] }, points: { bahtPerPoint: 25, multiplier: 3, multiplierMode: 'total' }, allowStacking: true },
     ]
-    S.ccBenefits = { demo_ktc: { enabled: true, cashback: { percent: 1, maxPerCycle: 500 }, points: { bahtPerPoint: 25, multiplier: 1 } } }
+    S.ccBenefits = {
+      demo_ktc: {
+        enabled: true,
+        pointsValue: { avgPoints: 799, avgBaht: 100 },
+        cashback: { percent: 1, maxPerCycle: 500 },
+        points: { bahtPerPoint: 25, multiplier: 1 },
+      },
+    }
     S.marketPrices = {
       BTC: { thb: 2450000, updatedAt: new Date().toISOString() },
       XAU: { thb: 36200, updatedAt: new Date().toISOString() },

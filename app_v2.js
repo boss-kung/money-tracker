@@ -2151,7 +2151,7 @@ App.render();
         ${tx.note ? `<div class="detail-row"><span class="detail-label">หมายเหตุ</span><span class="detail-value">${esc(tx.note)}</span></div>` : ''}
         ${tx.isRecurring ? `<div class="detail-row"><span class="detail-label">รายการประจำ</span><span class="detail-value">เปิดใช้</span></div>` : ''}
         ${tx.isInstallment ? `<div class="detail-row"><span class="detail-label">ผ่อนชำระ</span><span class="detail-value">งวด ${tx.installmentNo || 1}/${tx.installmentMonths || '?'}</span></div>` : ''}
-        ${(r.points || r.cashback) ? `<div class="detail-row"><span class="detail-label">สิทธิประโยชน์โดยประมาณ</span><span class="detail-value">${r.points ? '+' + r.points.toLocaleString('en-US') + ' pt' : ''}${r.points && r.cashback ? ' · ' : ''}${r.cashback ? '+' + fmt(r.cashback) : ''}</span></div>` : ''}
+        ${(r.points || r.cashback) ? `<div class="detail-row"><span class="detail-label">สิทธิประโยชน์โดยประมาณ</span><span class="detail-value">${r.points ? '+' + esc(App.formatPointsWithEstimatedValue?.(tx.walletId, r.points) || (r.points.toLocaleString('en-US') + ' คะแนน')) : ''}${r.points && r.cashback ? ' · ' : ''}${r.cashback ? '+' + fmt(r.cashback) : ''}</span></div>` : ''}
         ${!splitBillLink && shared && (sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0) > 0 ? `<button class="btn btn-secondary" style="margin:10px 0 4px" onclick="App.openSharedExpenseReimbursement('${esc(tx.id)}')">บันทึกรับคืน ${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount)}</button>` : ''}
         <div class="detail-row"><span class="detail-label">ประเภท</span><span class="detail-value">${esc(App._txTypeLabel(tx.type))}</span></div>
       </div>`
@@ -3025,7 +3025,7 @@ App.render();
                   <div class="list-item-name">สรุปสิทธิประโยชน์</div>
                   ${_cashbackShown > 0 ? `<div class="list-item-sub" style="color:${_rewardTone}">${_pending ? 'เงินคืนคาดการณ์หลังปลดล็อก' : 'เงินคืนโดยประมาณ'}: ${fmt(_cashbackShown)}</div>` : ''}
                   ${_discountShown > 0 ? `<div class="list-item-sub" style="color:${_rewardTone}">${_pending ? 'ส่วนลดคาดการณ์หลังปลดล็อก' : 'ส่วนลดทันทีโดยประมาณ'}: ${fmt(_discountShown)}</div>` : ''}
-                  ${_pointsShown > 0 ? `<div class="list-item-sub" style="color:${_rewardTone}">${_pending ? 'คะแนนคาดการณ์หลังปลดล็อก' : 'คะแนนโดยประมาณ'}: ${Number(_pointsShown).toLocaleString('en-US')} คะแนน</div>` : ''}
+                  ${_pointsShown > 0 ? `<div class="list-item-sub" style="color:${_rewardTone}">${_pending ? 'คะแนนคาดการณ์หลังปลดล็อก' : 'คะแนนโดยประมาณ'}: ${esc(App.formatPointsWithEstimatedValue?.(S.tx.walletId, _pointsShown) || `${Number(_pointsShown).toLocaleString('en-US')} คะแนน`)}</div>` : ''}
                   ${_pending ? `<div class="list-item-sub" style="color:var(--warning,#D97706)">ยอดนี้ยังไม่ถือว่าได้รับจริงจนกว่าจะสะสมปลดล็อกครบในรอบนี้</div>` : ''}
                   ${_pending && (_estimate.confidenceReasons || []).length ? `<div class="list-item-sub">${esc(_estimate.confidenceReasons[0])}</div>` : ''}
                   ${_selectedNames.length ? '' : `<div class="list-item-sub">ยังไม่ได้เลือกสิทธิประโยชน์</div>`}
@@ -4651,12 +4651,20 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (!card || card.type !== 'credit' || tx.type !== 'expense') return null
     if (Array.isArray(tx.rewardRuleIds) && App.calculateSelectedRewardEstimate) {
       const estimate = App.calculateSelectedRewardEstimate(tx, tx.rewardRuleIds)
-      return estimate && (estimate.points || estimate.cashback || estimate.rules?.length) ? estimate : null
+      return estimate && (estimate.points || estimate.cashback || estimate.rules?.length)
+        ? (App.decorateRewardEstimateValues?.(card.id, estimate) || estimate)
+        : null
     }
     const benefit = App._benefit?.(card.id) || S.ccBenefits?.[card.id] || {}
     const reward = Calc.getCardRewards ? Calc.getCardRewards([tx], benefit) : { points:0, cashback:0 }
     if (!reward.points && !reward.cashback) return null
-    return { points: Number(reward.points || 0), cashback: Math.round(Number(reward.cashback || 0) * 100) / 100, status:'estimated', calculatedAt: localNow(), source:'legacy' }
+    return App.decorateRewardEstimateValues?.(card.id, {
+      points: Number(reward.points || 0),
+      cashback: Math.round(Number(reward.cashback || 0) * 100) / 100,
+      status:'estimated',
+      calculatedAt: localNow(),
+      source:'legacy',
+    }) || null
   }
 
   App.refreshTransactionRewardEstimates = function(options = {}) {
@@ -6322,6 +6330,8 @@ App._pickMerchant = function(name, opts = {}) {
   App.openCCBenefitScreen = function(cardId) {
     App.ensureCCBenefitRulesState?.()
     const w = walletById(cardId) || {}
+    const pointValueCfg = App.getCardPointValueConfig?.(cardId, { useFallback: false })
+    const effectivePointValueCfg = App.getCardPointValueConfig?.(cardId) || { avgPoints: DEFAULT_POINT_VALUE_POINTS, avgBaht: DEFAULT_POINT_VALUE_BAHT, source: 'fallback' }
     const f = (id, label, value) => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="1" min="1" max="31" id="${id}" value="${value || ''}" placeholder="1–31"></div>`
     const rules = App.getCreditCardBenefitRules(cardId)
     const _dueMode        = w.dueDateMode === 'fixedDay' ? 'fixedDay' : 'afterCycle'
@@ -6388,6 +6398,16 @@ App._pickMerchant = function(name, opts = {}) {
         <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit('${esc(cardId)}')">บันทึกรอบบัญชี</button></div>
       </div>
     </details>`
+    const pointValueCard = `<div class="card card-pad" style="margin-bottom:12px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:4px">มูลค่าแต้มเฉลี่ย</div>
+      <div class="form-hint" style="margin-bottom:12px">ใช้ช่วยแนะนำว่าบัตรแต้มคุ้มกว่า cashback แค่ไหน ถ้าไม่กรอก ระบบจะใช้ ${DEFAULT_POINT_VALUE_POINTS.toLocaleString('en-US')} แต้ม = ${money(DEFAULT_POINT_VALUE_BAHT)}</div>
+      <div class="benefit-form-grid">
+        <div class="form-group"><label class="form-label">แต้ม</label><input class="form-input" type="number" step="1" min="1" id="ccb-point-value-points" value="${pointValueCfg?.avgPoints || ''}" placeholder="${DEFAULT_POINT_VALUE_POINTS}"></div>
+        <div class="form-group"><label class="form-label">บาท</label><input class="form-input" type="number" step="0.01" min="0.01" id="ccb-point-value-baht" value="${pointValueCfg?.avgBaht || ''}" placeholder="${DEFAULT_POINT_VALUE_BAHT}"></div>
+      </div>
+      <div class="form-hint">ค่าที่ใช้ตอนนี้: ${effectivePointValueCfg.avgPoints.toLocaleString('en-US')} แต้ม = ${money(effectivePointValueCfg.avgBaht)}${effectivePointValueCfg.source === 'fallback' ? ' (ค่าเริ่มต้น)' : ''}</div>
+      <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit('${esc(cardId)}')">บันทึกมูลค่าแต้ม</button></div>
+    </div>`
     const rulesHtml = rules.length
       ? rules.map(rule => `<div class="card card-pad" style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
@@ -6423,6 +6443,7 @@ App._pickMerchant = function(name, opts = {}) {
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${_ccBenefitBack}">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog('${esc(cardId)}')" style="width:auto">วางลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div></div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         ${statementCard}
+        ${pointValueCard}
         <div class="sec-title">กฎของบัตรใบนี้</div>
         ${rulesHtml}
       </div>`)
@@ -9761,10 +9782,33 @@ App._pickMerchant = function(name, opts = {}) {
         delete S.wallets[idx].customHolidays
       }
     }
+    const rawAvgPoints = String(document.getElementById('ccb-point-value-points')?.value || '').trim()
+    const rawAvgBaht = String(document.getElementById('ccb-point-value-baht')?.value || '').trim()
+    const hasPointValueInput = document.getElementById('ccb-point-value-points') || document.getElementById('ccb-point-value-baht')
+    const hasPartialPointValue = !!((rawAvgPoints && !rawAvgBaht) || (!rawAvgPoints && rawAvgBaht))
+    if (hasPartialPointValue) {
+      notify('กรุณากรอกมูลค่าแต้มเฉลี่ยให้ครบทั้งแต้มและบาท หรือเว้นว่างทั้งคู่', 'error')
+      return
+    }
+    const customPointValue = hasPointValueInput
+      ? normalizePointValueConfig({
+        avgPoints: rawAvgPoints ? Number(rawAvgPoints) : 0,
+        avgBaht: rawAvgBaht ? Number(rawAvgBaht) : 0,
+      })
+      : null
+    if (hasPointValueInput && rawAvgPoints && rawAvgBaht && !customPointValue) {
+      notify('มูลค่าแต้มเฉลี่ยต้องมากกว่า 0', 'error')
+      return
+    }
+    const existingBenefit = { ...(S.ccBenefits?.[id] || {}) }
+    if (customPointValue) existingBenefit.pointsValue = customPointValue
+    else if (hasPointValueInput) delete existingBenefit.pointsValue
     if (document.getElementById('ccb-points-enabled') || document.getElementById('ccb-cash-enabled')) {
       S.ccBenefits[id] = {
+        ...existingBenefit,
         enabled: false,
         points: {
+          ...(existingBenefit.points || {}),
           enabled: document.getElementById('ccb-points-enabled')?.classList.contains('on'),
           bahtPerPoint:     v('ccb-bahtPerPoint'),
           multiplier:       v('ccb-multi') || 1,
@@ -9772,6 +9816,7 @@ App._pickMerchant = function(name, opts = {}) {
           maxPerCycle:      v('ccb-maxCyclePoint'),
         },
         cashback: {
+          ...(existingBenefit.cashback || {}),
           enabled: document.getElementById('ccb-cash-enabled')?.classList.contains('on'),
           percent:       v('ccb-cbPercent'),
           minSpend:      v('ccb-cbMin'),
@@ -9781,6 +9826,9 @@ App._pickMerchant = function(name, opts = {}) {
           maxPerCycle:   v('ccb-cbMaxCycle'),
         },
       }
+    } else {
+      if (Object.keys(existingBenefit).length) S.ccBenefits[id] = existingBenefit
+      else if (S.ccBenefits?.[id]) delete S.ccBenefits[id]
     }
     persist(); App.openCCBenefitScreen(id); notify('บันทึกรอบบัญชีแล้ว', 'success')
   }
@@ -13318,10 +13366,73 @@ App._pickMerchant = function(name, opts = {}) {
     return Number(result.cashback || 0) + Number(result.points || 0) + Number(result.discount || 0)
   }
 
-  const BENEFIT_POINT_RANKING_WEIGHT = 0.001
+  const DEFAULT_POINT_VALUE_POINTS = 1000
+  const DEFAULT_POINT_VALUE_BAHT = 100
 
-  function rewardTotalForRanking(result = {}) {
-    return Number(result.cashback || 0) + Number(result.discount || 0) + (Number(result.points || 0) * BENEFIT_POINT_RANKING_WEIGHT)
+  function normalizePointValueConfig(raw = null) {
+    const avgPoints = Number(raw?.avgPoints || 0)
+    const avgBaht = Number(raw?.avgBaht || 0)
+    if (!(avgPoints > 0) || !(avgBaht > 0)) return null
+    return {
+      avgPoints: Math.round(avgPoints * 100) / 100,
+      avgBaht: Math.round(avgBaht * 100) / 100,
+    }
+  }
+
+  App.getCardPointValueConfig = function(cardId, options = {}) {
+    const useFallback = options?.useFallback !== false
+    const benefit = App._benefit?.(cardId) || S.ccBenefits?.[cardId] || {}
+    const custom = normalizePointValueConfig(benefit?.pointsValue || null)
+    if (custom) return { ...custom, source: 'custom' }
+    if (!useFallback) return null
+    return {
+      avgPoints: DEFAULT_POINT_VALUE_POINTS,
+      avgBaht: DEFAULT_POINT_VALUE_BAHT,
+      source: 'fallback',
+    }
+  }
+
+  App.getCardPointValueTHB = function(cardId, options = {}) {
+    const cfg = App.getCardPointValueConfig?.(cardId, options)
+    if (!cfg) return 0
+    return Number(cfg.avgBaht || 0) / Math.max(1, Number(cfg.avgPoints || 0))
+  }
+
+  App.pointsToEstimatedBaht = function(cardId, points = 0, options = {}) {
+    const pointValueTHB = App.getCardPointValueTHB?.(cardId, options) || 0
+    return Math.round(Number(points || 0) * pointValueTHB * 100) / 100
+  }
+
+  App.formatPointsWithEstimatedValue = function(cardId, points = 0, options = {}) {
+    const totalPoints = Math.floor(Number(points || 0))
+    if (!(totalPoints > 0)) return ''
+    const estimatedBaht = App.pointsToEstimatedBaht?.(cardId, totalPoints, options) || 0
+    if (!(estimatedBaht > 0)) return `${totalPoints.toLocaleString('en-US')} คะแนน`
+    return `${totalPoints.toLocaleString('en-US')} คะแนน (~${money(estimatedBaht)} โดยเฉลี่ย)`
+  }
+
+  App.decorateRewardEstimateValues = function(cardId, estimate = null) {
+    if (!estimate) return estimate
+    const rewardNowValue = rewardTotalForRanking({
+      cashback: estimate.cashback,
+      discount: estimate.discount,
+      points: estimate.points,
+    }, cardId)
+    const rewardPotentialValue = rewardTotalForRanking({
+      cashback: estimate.potentialCashback ?? estimate.cashback,
+      discount: estimate.potentialDiscount ?? estimate.discount,
+      points: estimate.potentialPoints ?? estimate.points,
+    }, cardId)
+    return {
+      ...estimate,
+      rewardNowValue: Math.round(rewardNowValue * 100) / 100,
+      rewardPotentialValue: Math.round(rewardPotentialValue * 100) / 100,
+    }
+  }
+
+  function rewardTotalForRanking(result = {}, cardId = '') {
+    const pointValueTHB = App.getCardPointValueTHB?.(cardId) || 0
+    return Number(result.cashback || 0) + Number(result.discount || 0) + (Number(result.points || 0) * pointValueTHB)
   }
 
   function clamp01(value) {
@@ -13335,9 +13446,9 @@ App._pickMerchant = function(name, opts = {}) {
     return Math.round((end.getTime() - start.getTime()) / 86400000)
   }
 
-  function summarizeUnlockConfidence(row = {}) {
-    const rewardNowValue = rewardTotalForRanking({ cashback: row.cashback, discount: row.discount, points: row.points })
-    const rewardPotentialValue = rewardTotalForRanking({ cashback: row.potentialCashback, discount: row.potentialDiscount, points: row.potentialPoints })
+  function summarizeUnlockConfidence(row = {}, cardId = '') {
+    const rewardNowValue = rewardTotalForRanking({ cashback: row.cashback, discount: row.discount, points: row.points }, cardId)
+    const rewardPotentialValue = rewardTotalForRanking({ cashback: row.potentialCashback, discount: row.potentialDiscount, points: row.potentialPoints }, cardId)
     if (!row.rewardPending || rewardPotentialValue <= rewardNowValue) {
       return {
         unlockConfidence: 1,
@@ -14219,7 +14330,7 @@ App._pickMerchant = function(name, opts = {}) {
       return { selectedRuleIds: [], estimate: { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] }, applicableRules: [], rankingScore: 0 }
     }
     const estimateFor = ids => App.calculateSelectedRewardEstimate?.(txDraft, ids) || { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] }
-    const scoreFor = estimate => Number((estimate?.rankingScore ?? rewardTotalForRanking(estimate || {})) || 0)
+    const scoreFor = estimate => Number((estimate?.rankingScore ?? rewardTotalForRanking(estimate || {}, card.id)) || 0)
 
     const candidates = expandRuleSubsets(applicableRules)
       .filter(subset => subset.filter(r => r.allowStacking === false).length <= 1)
@@ -14289,7 +14400,7 @@ App._pickMerchant = function(name, opts = {}) {
       result.cycleStart = cycle.start
       result.cycleEnd = cycle.end
       result.cycleMode = String(rule?.validity?.statementCycleHint || 'statement_cycle')
-      const confidence = summarizeUnlockConfidence(result)
+      const confidence = summarizeUnlockConfidence(result, card.id)
       result.unlockConfidence = confidence.unlockConfidence
       result.weightedRewardValue = confidence.weightedRewardValue
       result.rewardNowValue = confidence.rewardNowValue
@@ -14343,7 +14454,14 @@ App._pickMerchant = function(name, opts = {}) {
     if (tx?.rewardEstimate?.source === 'manual-selected-rules' || Array.isArray(tx?.rewardRuleIds)) return tx.rewardEstimate || { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] }
     const legacy = App._benefit?.(tx.walletId) || S.ccBenefits?.[tx.walletId] || {}
     const reward = Calc.getCardRewards ? Calc.getCardRewards([tx], legacy) : { points: 0, cashback: 0 }
-    return { cashback: Math.round(Number(reward.cashback || 0) * 100) / 100, discount: 0, points: Number(reward.points || 0), rules: [], warnings: [], source: 'legacy' }
+    return App.decorateRewardEstimateValues?.(tx.walletId, {
+      cashback: Math.round(Number(reward.cashback || 0) * 100) / 100,
+      discount: 0,
+      points: Number(reward.points || 0),
+      rules: [],
+      warnings: [],
+      source: 'legacy',
+    }) || { cashback: 0, discount: 0, points: 0, rules: [], warnings: [], source: 'legacy' }
   }
 
   App._toggleTxRewardRule = function(ruleId) {
@@ -16776,7 +16894,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       const rewardParts = [
         cashbackShown > 0 ? `${pending ? 'ปลดแล้วได้' : 'เงินคืน'} ฿${Number(cashbackShown).toFixed(2)}` : '',
         discountShown > 0 ? `${pending ? 'ปลดแล้วลด' : 'ส่วนลด'} ฿${Number(discountShown).toFixed(2)}`  : '',
-        pointsShown > 0 ? `${Number(pointsShown).toLocaleString('en-US')} คะแนน` : '',
+        pointsShown > 0 ? (App.formatPointsWithEstimatedValue?.(item.card.id, pointsShown) || `${Number(pointsShown).toLocaleString('en-US')} คะแนน`) : '',
       ].filter(Boolean)
       const detailText = [...rewardParts, ...ruleNames].slice(0, 2).join(' · ')
       const rewardHtml = detailText

@@ -159,6 +159,10 @@ const DEFAULT_MERCHANTS = [
 const DEFAULT_CC_BENEFITS = {
   w4: {
     enabled: true,
+    pointsValue: {
+      avgPoints: 1000,
+      avgBaht: 100,
+    },
     points: {
       bahtPerPoint: 25,
       pointPerBahtEvery: 0,
