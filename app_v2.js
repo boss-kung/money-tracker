@@ -878,7 +878,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.26-r46'
+const APP_VERSION = '2026.05.26-r47'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -10151,7 +10151,7 @@ App._pickMerchant = function(name, opts = {}) {
       const pointValueCfg = App.normalizePointValueConfig?.(acct.pointsValue || null)
       const pointValueText = pointValueCfg
         ? ` · ${pointValueCfg.avgPoints.toLocaleString('en-US')} แต้ม = ${money(pointValueCfg.avgBaht)}`
-        : ''
+        : ' · ใช้ค่าเริ่มต้น'
       return `<div class="v5-acct-row">
         <div>
           <div class="v5-acct-name">${esc(acct.name)}</div>
@@ -10161,7 +10161,10 @@ App._pickMerchant = function(name, opts = {}) {
           <div class="v5-acct-pts">${balance.toLocaleString('en-US')}</div>
           <div style="font-size:11px;color:var(--muted)">คะแนน</div>
         </div>
-        <button class="icon-btn" onclick="App.openAdjustPointsForm('${esc(acct.id)}')" title="ปรับคะแนน">✏️</button>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm('${esc(acct.id)}')" style="width:auto">ตั้งค่า</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.openAdjustPointsForm('${esc(acct.id)}')" style="width:auto">ปรับคะแนน</button>
+        </div>
       </div>`
     }).join('') : `<div style="font-size:13px;color:var(--muted);padding:12px 0">ยังไม่มีบัญชีคะแนน <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm()" style="width:auto;margin-left:8px">+ เพิ่มบัญชี</button></div>`
 
@@ -10361,12 +10364,20 @@ App._pickMerchant = function(name, opts = {}) {
     const a = (S.rewardAccounts||[]).find(x => x.id === accountId)
     if (!a) return
     const bal = App.getRewardAccountBalance(accountId)
+    const pointValueCfg = App.normalizePointValueConfig?.(a.pointsValue || null)
+    const fallbackPts = App.DEFAULT_POINT_VALUE_POINTS || 1000
+    const fallbackBaht = App.DEFAULT_POINT_VALUE_BAHT || 100
+    const pointValueLabel = pointValueCfg
+      ? `${pointValueCfg.avgPoints.toLocaleString('en-US')} แต้ม = ${money(pointValueCfg.avgBaht)}`
+      : `ใช้ค่าเริ่มต้น ${fallbackPts.toLocaleString('en-US')} แต้ม = ${money(fallbackBaht)}`
     App.openDynamicSheet('adjust-points-form-overlay', 'ปรับคะแนน', `
       <div style="padding:0 16px calc(12px + var(--safe-b))">
         <div class="card card-pad" style="margin-bottom:12px;text-align:center">
           <div style="font-size:13px;color:var(--muted)">คะแนนปัจจุบัน</div>
           <div style="font-size:28px;font-weight:800">${bal.toLocaleString('en-US')}</div>
           <div style="font-size:12px;color:var(--muted)">${esc(a.name)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px">มูลค่าแต้มเฉลี่ย: ${pointValueLabel}</div>
+          <button class="btn btn-secondary btn-sm" onclick="App.closeDynamicSheet('adjust-points-form-overlay'); App.openRewardAccountForm('${esc(accountId)}')" style="width:auto;margin-top:10px">ตั้งค่ามูลค่าแต้ม</button>
         </div>
         <div class="form-group"><label class="form-label">จำนวนคะแนนที่ปรับ (+ เพิ่ม / - ลด)</label><input class="form-input" type="number" id="adj-points" placeholder="เช่น 500 หรือ -200"><div class="form-hint">ใส่ค่าบวกเพื่อเพิ่มคะแนน ใส่ค่าลบเพื่อลดคะแนน</div></div>
         <div class="form-group"><label class="form-label">หมายเหตุ</label><input class="form-input" id="adj-note" placeholder="เช่น คะแนนจากโปรโมชั่น, แก้ไขยอดผิด"></div>
