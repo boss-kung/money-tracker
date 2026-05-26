@@ -141,7 +141,7 @@
       { id: 'demo_limit_ktc', name: 'วงเงินร่วม KTC', issuer: 'KTC', limit: 80000, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     ]
     S.rewardAccounts = [
-      { id: 'demo_reward_ktc', name: 'KTC Forever Points', issuer: 'KTC', type: 'points', openingBalance: 18450, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'demo_reward_ktc', name: 'KTC Forever Points', issuer: 'KTC', type: 'points', openingBalance: 18450, pointsValue: { avgPoints: 799, avgBaht: 100 }, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     ]
     S.rewardLedger = [
       { id: 'demo_reward_1', accountId: 'demo_reward_ktc', type: 'earn', points: 420, title: 'คะแนนจาก Shopee', date: dateInMonth(0, 10), note: '' },
@@ -155,7 +155,6 @@
     S.ccBenefits = {
       demo_ktc: {
         enabled: true,
-        pointsValue: { avgPoints: 799, avgBaht: 100 },
         cashback: { percent: 1, maxPerCycle: 500 },
         points: { bahtPerPoint: 25, multiplier: 1 },
       },

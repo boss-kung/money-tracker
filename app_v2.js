@@ -6330,8 +6330,6 @@ App._pickMerchant = function(name, opts = {}) {
   App.openCCBenefitScreen = function(cardId) {
     App.ensureCCBenefitRulesState?.()
     const w = walletById(cardId) || {}
-    const pointValueCfg = App.getCardPointValueConfig?.(cardId, { useFallback: false })
-    const effectivePointValueCfg = App.getCardPointValueConfig?.(cardId) || { avgPoints: App.DEFAULT_POINT_VALUE_POINTS || 1000, avgBaht: App.DEFAULT_POINT_VALUE_BAHT || 100, source: 'fallback' }
     const f = (id, label, value) => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" type="number" step="1" min="1" max="31" id="${id}" value="${value || ''}" placeholder="1–31"></div>`
     const rules = App.getCreditCardBenefitRules(cardId)
     const _dueMode        = w.dueDateMode === 'fixedDay' ? 'fixedDay' : 'afterCycle'
@@ -6398,16 +6396,6 @@ App._pickMerchant = function(name, opts = {}) {
         <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit('${esc(cardId)}')">บันทึกรอบบัญชี</button></div>
       </div>
     </details>`
-    const pointValueCard = `<div class="card card-pad" style="margin-bottom:12px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:4px">มูลค่าแต้มเฉลี่ย</div>
-      <div class="form-hint" style="margin-bottom:12px">ใช้ช่วยแนะนำว่าบัตรแต้มคุ้มกว่า cashback แค่ไหน ถ้าไม่กรอก ระบบจะใช้ ${(App.DEFAULT_POINT_VALUE_POINTS || 1000).toLocaleString('en-US')} แต้ม = ${money(App.DEFAULT_POINT_VALUE_BAHT || 100)}</div>
-      <div class="benefit-form-grid">
-        <div class="form-group"><label class="form-label">แต้ม</label><input class="form-input" type="number" step="1" min="1" id="ccb-point-value-points" value="${pointValueCfg?.avgPoints || ''}" placeholder="${App.DEFAULT_POINT_VALUE_POINTS || 1000}"></div>
-        <div class="form-group"><label class="form-label">บาท</label><input class="form-input" type="number" step="0.01" min="0.01" id="ccb-point-value-baht" value="${pointValueCfg?.avgBaht || ''}" placeholder="${App.DEFAULT_POINT_VALUE_BAHT || 100}"></div>
-      </div>
-      <div class="form-hint">ค่าที่ใช้ตอนนี้: ${effectivePointValueCfg.avgPoints.toLocaleString('en-US')} แต้ม = ${money(effectivePointValueCfg.avgBaht)}${effectivePointValueCfg.source === 'fallback' ? ' (ค่าเริ่มต้น)' : ''}</div>
-      <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit('${esc(cardId)}')">บันทึกมูลค่าแต้ม</button></div>
-    </div>`
     const rulesHtml = rules.length
       ? rules.map(rule => `<div class="card card-pad" style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
@@ -6443,7 +6431,6 @@ App._pickMerchant = function(name, opts = {}) {
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${_ccBenefitBack}">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog('${esc(cardId)}')" style="width:auto">วางลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div></div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         ${statementCard}
-        ${pointValueCard}
         <div class="sec-title">กฎของบัตรใบนี้</div>
         ${rulesHtml}
       </div>`)
@@ -9070,6 +9057,19 @@ App._pickMerchant = function(name, opts = {}) {
       if (!('creditLimitGroupId' in w)) w.creditLimitGroupId = null
       if (!('rewardAccountId' in w))    w.rewardAccountId   = null
     })
+    ;(S.wallets || []).filter(w => w.type === 'credit' && w.rewardAccountId).forEach(w => {
+      const legacy = S.ccBenefits?.[w.id]?.pointsValue
+      const avgPoints = Number(legacy?.avgPoints || 0)
+      const avgBaht = Number(legacy?.avgBaht || 0)
+      if (!(avgPoints > 0) || !(avgBaht > 0)) return
+      const acct = (S.rewardAccounts || []).find(a => a.id === w.rewardAccountId)
+      if (acct && !acct.pointsValue) {
+        acct.pointsValue = {
+          avgPoints: Math.round(avgPoints * 100) / 100,
+          avgBaht: Math.round(avgBaht * 100) / 100,
+        }
+      }
+    })
   }
   migrateToV5()
 
@@ -9782,27 +9782,7 @@ App._pickMerchant = function(name, opts = {}) {
         delete S.wallets[idx].customHolidays
       }
     }
-    const rawAvgPoints = String(document.getElementById('ccb-point-value-points')?.value || '').trim()
-    const rawAvgBaht = String(document.getElementById('ccb-point-value-baht')?.value || '').trim()
-    const hasPointValueInput = document.getElementById('ccb-point-value-points') || document.getElementById('ccb-point-value-baht')
-    const hasPartialPointValue = !!((rawAvgPoints && !rawAvgBaht) || (!rawAvgPoints && rawAvgBaht))
-    if (hasPartialPointValue) {
-      notify('กรุณากรอกมูลค่าแต้มเฉลี่ยให้ครบทั้งแต้มและบาท หรือเว้นว่างทั้งคู่', 'error')
-      return
-    }
-    const customPointValue = hasPointValueInput
-      ? App.normalizePointValueConfig?.({
-        avgPoints: rawAvgPoints ? Number(rawAvgPoints) : 0,
-        avgBaht: rawAvgBaht ? Number(rawAvgBaht) : 0,
-      })
-      : null
-    if (hasPointValueInput && rawAvgPoints && rawAvgBaht && !customPointValue) {
-      notify('มูลค่าแต้มเฉลี่ยต้องมากกว่า 0', 'error')
-      return
-    }
     const existingBenefit = { ...(S.ccBenefits?.[id] || {}) }
-    if (customPointValue) existingBenefit.pointsValue = customPointValue
-    else if (hasPointValueInput) delete existingBenefit.pointsValue
     if (document.getElementById('ccb-points-enabled') || document.getElementById('ccb-cash-enabled')) {
       S.ccBenefits[id] = {
         ...existingBenefit,
@@ -10144,10 +10124,14 @@ App._pickMerchant = function(name, opts = {}) {
     const acctSummaryHtml = accounts.length ? accounts.map(acct => {
       const balance  = App.getRewardAccountBalance(acct.id)
       const linked   = App.getLinkedCardsForAccount(acct.id)
+      const pointValueCfg = App.normalizePointValueConfig?.(acct.pointsValue || null)
+      const pointValueText = pointValueCfg
+        ? ` · ${pointValueCfg.avgPoints.toLocaleString('en-US')} แต้ม = ${money(pointValueCfg.avgBaht)}`
+        : ''
       return `<div class="v5-acct-row">
         <div>
           <div class="v5-acct-name">${esc(acct.name)}</div>
-          <div class="v5-acct-meta">${esc(acct.issuer||'')}${linked.length ? ` · ${linked.length} บัตร` : ''}</div>
+          <div class="v5-acct-meta">${esc(acct.issuer||'')}${linked.length ? ` · ${linked.length} บัตร` : ''}${pointValueText}</div>
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div class="v5-acct-pts">${balance.toLocaleString('en-US')}</div>
@@ -10280,6 +10264,9 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.openRewardAccountForm = function(accountId) {
     const a = accountId ? (S.rewardAccounts||[]).find(x => x.id === accountId) : null
+    const pointValueCfg = App.normalizePointValueConfig?.(a?.pointsValue || null)
+    const fallbackPts = App.DEFAULT_POINT_VALUE_POINTS || 1000
+    const fallbackBaht = App.DEFAULT_POINT_VALUE_BAHT || 100
     App.openDynamicSheet('reward-account-form-overlay', `${a ? 'แก้ไข' : 'เพิ่ม'}บัญชีคะแนน`, `
       <div style="padding:0 16px calc(12px + var(--safe-b))">
         <div class="form-group"><label class="form-label">ชื่อบัญชีคะแนน</label><input class="form-input" id="ra-name" value="${esc(a?.name||'')}" placeholder="เช่น KTC Forever Points"></div>
@@ -10289,6 +10276,14 @@ App._pickMerchant = function(name, opts = {}) {
           <datalist id="ra-issuer-list">${KNOWN_ISSUERS.map(i=>`<option value="${i}">`).join('')}</datalist>
         </div>
         <div class="form-group"><label class="form-label">คะแนนเริ่มต้น / ยอดคงเหลือปัจจุบัน</label><input class="form-input" type="number" min="0" id="ra-opening" value="${a?.openingBalance||0}"><div class="form-hint">ใส่ยอดคะแนนที่มีอยู่แล้ว ก่อนเริ่มใช้งานระบบนี้</div></div>
+        <div class="form-group">
+          <label class="form-label">มูลค่าแต้มเฉลี่ย</label>
+          <div class="benefit-form-grid">
+            <div><input class="form-input" type="number" step="1" min="1" id="ra-point-value-points" value="${pointValueCfg?.avgPoints || ''}" placeholder="${fallbackPts}"><div class="form-hint">แต้ม</div></div>
+            <div><input class="form-input" type="number" step="0.01" min="0.01" id="ra-point-value-baht" value="${pointValueCfg?.avgBaht || ''}" placeholder="${fallbackBaht}"><div class="form-hint">บาท</div></div>
+          </div>
+          <div class="form-hint">ใช้กับทุกบัตรที่ผูกบัญชีคะแนนนี้ ถ้าเว้นว่างจะใช้ ${fallbackPts.toLocaleString('en-US')} แต้ม = ${money(fallbackBaht)}</div>
+        </div>
         ${a ? `<button class="btn btn-outline" style="margin-top:8px" onclick="App.deleteRewardAccount('${esc(a.id)}')">ลบบัญชีคะแนนนี้</button>` : ''}
       </div>`,
       `<button class="btn btn-primary btn-sm" onclick="App.saveRewardAccount('${esc(accountId||'')}')" style="width:auto">บันทึก</button>`)
@@ -10298,12 +10293,31 @@ App._pickMerchant = function(name, opts = {}) {
     const name    = document.getElementById('ra-name')?.value.trim()
     const issuer  = document.getElementById('ra-issuer')?.value.trim() || ''
     const opening = parseInt(document.getElementById('ra-opening')?.value) || 0
+    const rawAvgPoints = String(document.getElementById('ra-point-value-points')?.value || '').trim()
+    const rawAvgBaht = String(document.getElementById('ra-point-value-baht')?.value || '').trim()
+    const hasPartialPointValue = !!((rawAvgPoints && !rawAvgBaht) || (!rawAvgPoints && rawAvgBaht))
     if (!name) { notify('กรุณากรอกชื่อบัญชีคะแนน', 'error'); return }
+    if (hasPartialPointValue) {
+      notify('กรุณากรอกมูลค่าแต้มเฉลี่ยให้ครบทั้งแต้มและบาท หรือเว้นว่างทั้งคู่', 'error')
+      return
+    }
+    const pointsValue = rawAvgPoints && rawAvgBaht
+      ? App.normalizePointValueConfig?.({ avgPoints: Number(rawAvgPoints), avgBaht: Number(rawAvgBaht) })
+      : null
+    if (rawAvgPoints && rawAvgBaht && !pointsValue) {
+      notify('มูลค่าแต้มเฉลี่ยต้องมากกว่า 0', 'error')
+      return
+    }
     if (id) {
       const idx = (S.rewardAccounts||[]).findIndex(a => a.id === id)
-      if (idx >= 0) { S.rewardAccounts[idx] = { ...S.rewardAccounts[idx], name, issuer, openingBalance:opening, updatedAt:nowISO() } }
+      if (idx >= 0) {
+        const next = { ...S.rewardAccounts[idx], name, issuer, openingBalance:opening, updatedAt:nowISO() }
+        if (pointsValue) next.pointsValue = pointsValue
+        else delete next.pointsValue
+        S.rewardAccounts[idx] = next
+      }
     } else {
-      S.rewardAccounts.push({ id:genId(), name, issuer, type:'points', openingBalance:opening, createdAt:nowISO(), updatedAt:nowISO() })
+      S.rewardAccounts.push({ id:genId(), name, issuer, type:'points', openingBalance:opening, ...(pointsValue ? { pointsValue } : {}), createdAt:nowISO(), updatedAt:nowISO() })
     }
     persist(); App.closeDynamicSheet('reward-account-form-overlay'); App.openRewardLedgerScreen(); notify('บันทึกบัญชีคะแนนแล้ว', 'success')
   }
@@ -13384,9 +13398,12 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.getCardPointValueConfig = function(cardId, options = {}) {
     const useFallback = options?.useFallback !== false
+    const rewardAccount = App.getRewardAccountForCard?.(cardId)
+    const accountValue = normalizePointValueConfig(rewardAccount?.pointsValue || null)
+    if (accountValue) return { ...accountValue, source: 'reward_account', accountId: rewardAccount.id }
     const benefit = App._benefit?.(cardId) || S.ccBenefits?.[cardId] || {}
-    const custom = normalizePointValueConfig(benefit?.pointsValue || null)
-    if (custom) return { ...custom, source: 'custom' }
+    const legacyValue = normalizePointValueConfig(benefit?.pointsValue || null)
+    if (legacyValue) return { ...legacyValue, source: 'legacy_card' }
     if (!useFallback) return null
     return {
       avgPoints: DEFAULT_POINT_VALUE_POINTS,

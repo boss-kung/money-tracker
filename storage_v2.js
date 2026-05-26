@@ -312,7 +312,7 @@ const Storage = {
     data.netWorthSnapshots   = Storage.load(KEYS.netWorthSnapshots)   || []
     data.investmentSnapshots = Storage.load(KEYS.investmentSnapshots) || []
     data.creditLimitGroups   = Storage.load(KEYS.creditLimitGroups)   || []
-    data.rewardAccounts      = Storage.load(KEYS.rewardAccounts)      || []
+    data.rewardAccounts      = Storage.load(KEYS.rewardAccounts)      || JSON.parse(JSON.stringify(typeof DEFAULT_REWARD_ACCOUNTS !== 'undefined' ? DEFAULT_REWARD_ACCOUNTS : []))
     data.cryptoAssets        = Storage.load(KEYS.cryptoAssets)        || JSON.parse(JSON.stringify(typeof DEFAULT_CRYPTO_ASSETS !== 'undefined' ? DEFAULT_CRYPTO_ASSETS : []))
     data.cryptoHoldings      = Storage.load(KEYS.cryptoHoldings)      || JSON.parse(JSON.stringify(typeof DEFAULT_CRYPTO_HOLDINGS !== 'undefined' ? DEFAULT_CRYPTO_HOLDINGS : []))
     data.cryptoTransactions  = Storage.load(KEYS.cryptoTransactions)  || JSON.parse(JSON.stringify(typeof DEFAULT_CRYPTO_TRANSACTIONS !== 'undefined' ? DEFAULT_CRYPTO_TRANSACTIONS : []))

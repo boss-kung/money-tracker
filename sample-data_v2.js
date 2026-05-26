@@ -54,7 +54,7 @@ const DEFAULT_WALLETS = [
   { id: 'w1', name: 'ธ.ไทยพาณิชย์', type: 'bank',    icon: '🏦', color: '#6D28D9', balance: 28500 },
   { id: 'w2', name: 'เงินสด',        type: 'cash',    icon: '💵', color: '#059669', balance: 3200  },
   { id: 'w3', name: 'TrueMoney',      type: 'ewallet', icon: '📱', color: '#F59E0B', balance: 1800  },
-  { id: 'w4', name: 'KTC Cashback',   type: 'credit',  icon: '💳', color: '#DC2626', balance: -12900, limit: 50000, dueDay: 5, cycleDay: 25, dueAfterCycleDays: 10 },
+  { id: 'w4', name: 'KTC Cashback',   type: 'credit',  icon: '💳', color: '#DC2626', balance: -12900, limit: 50000, dueDay: 5, cycleDay: 25, dueAfterCycleDays: 10, rewardAccountId: 'reward_ktc_default' },
   { id: 'w5', name: 'ทองคำ',         type: 'gold',    icon: '🥇', color: '#D97706', balance: 15000, symbol: 'XAU' },
   { id: 'w6', name: 'Bitcoin',       type: 'crypto',  icon: '₿', color: '#F59E0B', balance: 12000, symbol: 'BTC' },
   { id: 'w7', name: 'FCD USD',       type: 'fcd',     icon: '💱', color: '#0891B2', balance: 10000, symbol: 'USD', currency: 'USD' },
@@ -159,10 +159,6 @@ const DEFAULT_MERCHANTS = [
 const DEFAULT_CC_BENEFITS = {
   w4: {
     enabled: true,
-    pointsValue: {
-      avgPoints: 1000,
-      avgBaht: 100,
-    },
     points: {
       bahtPerPoint: 25,
       pointPerBahtEvery: 0,
@@ -180,6 +176,22 @@ const DEFAULT_CC_BENEFITS = {
     },
   },
 }
+
+const DEFAULT_REWARD_ACCOUNTS = [
+  {
+    id: 'reward_ktc_default',
+    name: 'KTC Forever Points',
+    issuer: 'KTC',
+    type: 'points',
+    openingBalance: 0,
+    pointsValue: {
+      avgPoints: 1000,
+      avgBaht: 100,
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+]
 
 const DEFAULT_INCOME_BUDGETS = [
   { categoryId: 'salary', monthlyLimit: 35000 },
