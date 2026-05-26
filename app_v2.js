@@ -13537,6 +13537,7 @@ App._pickMerchant = function(name, opts = {}) {
     const progressBefore = Math.max(0, Number(row.triggerChannelSpendBefore || 0))
     const progressAfter = Math.max(0, Number(row.triggerChannelSpendAfter || 0))
     const currentContribution = Math.max(0, progressAfter - progressBefore)
+    const remainingBefore = Math.max(0, threshold - progressBefore)
     const lacking = Math.max(0, threshold - progressAfter)
     const gapScore = threshold > 0 ? clamp01(1 - (lacking / threshold)) : 1
     const cycleLength = Math.max(1, (isoDayDiff(row.cycleStart, row.cycleEnd) ?? 29) + 1)
@@ -13545,8 +13546,11 @@ App._pickMerchant = function(name, opts = {}) {
     const unlockConfidence = Math.round(((gapScore * 0.7) + (timeScore * 0.3)) * 1000) / 1000
     const pendingDelta = Math.max(0, rewardPotentialValue - rewardNowValue)
     // For threshold-locked rewards, only let the current transaction compete with
-    // the portion of the future reward it meaningfully contributes toward unlocking.
-    const attributableRatio = threshold > 0 ? clamp01(currentContribution / threshold) : 1
+    // the portion of the remaining unlock gap it meaningfully closes.
+    const unlockImpact = remainingBefore <= 0 || (threshold > 0 && progressAfter >= threshold)
+      ? 1
+      : clamp01(currentContribution / remainingBefore)
+    const attributableRatio = threshold > 0 ? unlockImpact : 1
     const attributablePendingDelta = pendingDelta * attributableRatio
     const weightedRewardValue = rewardNowValue + (attributablePendingDelta * unlockConfidence)
     const confidenceReason = threshold > 0
@@ -14406,7 +14410,6 @@ App._pickMerchant = function(name, opts = {}) {
     }
     const estimateFor = ids => App.calculateSelectedRewardEstimate?.(txDraft, ids) || { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] }
     const scoreFor = estimate => Number((estimate?.rankingScore ?? rewardTotalForRanking(estimate || {}, card.id)) || 0)
-    const hasImmediateReward = estimate => Number(estimate?.rewardNowValue ?? rewardTotalForRanking(estimate || {}, card.id)) > 0
 
     const candidates = expandRuleSubsets(applicableRules)
       .filter(subset => subset.filter(r => r.allowStacking === false).length <= 1)
@@ -14414,7 +14417,6 @@ App._pickMerchant = function(name, opts = {}) {
         const ids = subset.map(rule => rule.id)
         return { ids, estimate: estimateFor(ids) }
       })
-      .filter(candidate => hasImmediateReward(candidate.estimate))
     const best = candidates
       .map(candidate => ({ ...candidate, score: scoreFor(candidate.estimate) }))
       .sort((a, b) =>
