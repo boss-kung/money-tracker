@@ -2969,7 +2969,7 @@ App.render();
                 const _selected = S.tx.rewardRuleIds.includes(rule.id)
                 const _disabled = !!rule.fullyUsed
                 const _typeText = rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : 'ส่วนลดทันที'
-                const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.fullyUsedReason || '', rule.trackLocked ? '🔒 ยังไม่ถึงยอด' : '', rule.allowStacking ? '' : 'อาจไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
+                const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.fullyUsedReason || '', rule.trackLocked ? '🔒 ยังไม่ถึงยอด' : '', rule.allowStacking ? '' : 'ใช้สิทธิ์ซ้อนกันไม่ได้'].filter(Boolean).join(' · ')
                 const _trackHint = rule.trackLocked ? `<span class="list-item-sub" style="color:var(--expense)">สะสมผ่าน${esc(rule.trackChannelLabel)}อีก ${esc(fmt(rule.trackRemaining))} ในรอบนี้เพื่อปลดล็อก</span>` : ''
                 const _disabledHint = _disabled ? `<span class="list-item-sub" style="color:var(--muted)">สิทธิ์นี้ครบแล้ว ไม่สามารถเลือกได้</span>` : ''
                 const _merchantHint = rule.merchantCashbackRemaining != null
@@ -13483,7 +13483,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (!(totalPoints > 0)) return ''
     const estimatedBaht = App.pointsToEstimatedBaht?.(cardId, totalPoints, options) || 0
     if (!(estimatedBaht > 0)) return `${totalPoints.toLocaleString('en-US')} คะแนน`
-    return `${totalPoints.toLocaleString('en-US')} คะแนน (~${money(estimatedBaht)} โดยเฉลี่ย)`
+    return `${totalPoints.toLocaleString('en-US')} คะแนน (~${money(estimatedBaht)})`
   }
 
   App.decorateRewardEstimateValues = function(cardId, estimate = null) {
@@ -13602,7 +13602,12 @@ App._pickMerchant = function(name, opts = {}) {
     const remainingBefore = row.cycleRewardRemainingBefore
     const rawValue = Number(row.rawReward || 0)
     const finalValue = Number(row.finalReward || 0)
-    const diffValue = Math.max(0, rawValue - finalValue)
+    const normalizeRewardValue = (type, value) => type === 'points'
+      ? Math.floor(Number(value || 0))
+      : Math.round(Number(value || 0) * 100) / 100
+    const comparableRawValue = normalizeRewardValue(row.type, rawValue)
+    const comparableFinalValue = normalizeRewardValue(row.type, finalValue)
+    const diffValue = Math.max(0, comparableRawValue - comparableFinalValue)
     const cycleLabel = row.cycleMode === 'calendar_month' ? 'เดือนนี้' : 'รอบบิลนี้'
     const parts = []
     if (row.triggerMode === 'cycle_spend_threshold' && Number(row.triggerThresholdAmount || 0) > 0) {
@@ -13611,7 +13616,7 @@ App._pickMerchant = function(name, opts = {}) {
       const after = Number(row.triggerChannelSpendAfter || 0)
       const spendLabel = chLabel ? `สะสมผ่าน${chLabel}` : 'สะสม'
       if (Number(row.triggerCount || 0) > 0) {
-        const grantLabel = row.triggerGrantMode === 'every_threshold' ? `ปลดสิทธิ์ ${Number(row.triggerCount || 0)} ครั้ง` : 'ปลดแล้ว'
+        const grantLabel = row.triggerGrantMode === 'every_threshold' ? `ปลดสิทธิ์ ${Number(row.triggerCount || 0)} ครั้ง` : 'ปลดล็อกสิทธิ์แล้ว'
         parts.push(`${spendLabel} ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel} · ${grantLabel}`)
       } else if (after < threshold) {
         const lacking = threshold - after
@@ -13646,7 +13651,7 @@ App._pickMerchant = function(name, opts = {}) {
       else parts.push(`ยอดช่องทางนี้เหลืออีก ${formatBenefitCapValue('', channelEligibleRem)}`)
     }
     if (diffValue > 0) {
-      parts.push(`ได้สิทธิ์แค่ ${formatBenefitCapValue(row.type, finalValue)} (จาก ${formatBenefitCapValue(row.type, rawValue)})`)
+      parts.push(`ได้สิทธิ์แค่ ${formatBenefitCapValue(row.type, comparableFinalValue)} (จาก ${formatBenefitCapValue(row.type, comparableRawValue)})`)
     }
     return parts.join(' · ')
   }
