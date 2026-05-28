@@ -1529,7 +1529,7 @@ Object.assign(App, {
       const icon = esc(c.icon || '📦')
       const label = esc(c.label || 'ไม่มีชื่อหมวด')
       const catId = esc(c.id || '')
-      return `<div class="list-item"${c.archived ? ' style="opacity:0.55"' : ''}><div class="list-item-icon" style="background:${color}33">${icon}</div><div class="list-item-info"><div class="list-item-name">${label}${c.archived ? ' <span style="font-size:10px;font-weight:600;color:#fff;background:#94a3b8;border-radius:4px;padding:1px 5px;vertical-align:middle">ซ่อนอยู่</span>' : ''}</div><div class="list-item-sub">${esc(color)}</div></div><div class="recurring-actions">${c.archived ? `<button class="icon-btn" onclick="App.unarchiveCategory('${catId}')" title="คืนค่า">↩️</button>` : `<button class="icon-btn" onclick="App.openCategoryForm('${catId}')">✏️</button>`}<button class="icon-btn icon-btn-danger" onclick="App.deleteCategory('${catId}')">🗑</button></div></div>`
+      return `<div class="list-item"${c.archived ? ' style="opacity:0.55"' : ''}><div class="list-item-icon" style="background:${color}66">${icon}</div><div class="list-item-info"><div class="list-item-name">${label}${c.archived ? ' <span style="font-size:10px;font-weight:600;color:#fff;background:#94a3b8;border-radius:4px;padding:1px 5px;vertical-align:middle">ซ่อนอยู่</span>' : ''}</div></div><div class="recurring-actions">${c.archived ? `<button class="icon-btn" onclick="App.unarchiveCategory('${catId}')" title="คืนค่า">↩️</button>` : `<button class="icon-btn" onclick="App.openCategoryForm('${catId}')">✏️</button>`}<button class="icon-btn icon-btn-danger" onclick="App.deleteCategory('${catId}')">🗑</button></div></div>`
     }).join('') || App._emptyState('🏷️','ไม่พบหมวดหมู่','')
     const existingList = document.getElementById('cat-list-items')
     if (existingList && document.getElementById('sub-screen')?.classList.contains('open')) {
@@ -1551,7 +1551,7 @@ Object.assign(App, {
       const emoji = esc(m.emoji || '🏪')
       const name = String(m.name || '')
       const merchantId = esc(m.id || '')
-      return `<div class="list-item"><div class="list-item-icon" style="background:${color}33">${emoji}</div><div class="list-item-info"><div class="list-item-name">${esc(name || 'ไม่มีชื่อร้าน')}</div><div class="list-item-sub">ใช้จ่าย ${usage[name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${merchantId}')">✏️</button><button class="icon-btn icon-btn-danger" onclick="App.deleteMerchant('${merchantId}')">🗑</button></div></div>`
+      return `<div class="list-item"><div class="list-item-icon" style="background:${color}66">${emoji}</div><div class="list-item-info"><div class="list-item-name">${esc(name || 'ไม่มีชื่อร้าน')}</div><div class="list-item-sub">ใช้จ่าย ${usage[name] || 0} ครั้ง</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.openMerchantForm('${merchantId}')">✏️</button><button class="icon-btn icon-btn-danger" onclick="App.deleteMerchant('${merchantId}')">🗑</button></div></div>`
     }).join('') || App._emptyState('🏪','ไม่พบร้านค้า','')
     const existingList = document.getElementById('merchant-list-items')
     if (existingList && document.getElementById('sub-screen')?.classList.contains('open')) { existingList.innerHTML = listHtml; return }
@@ -2770,7 +2770,7 @@ App.render();
 
   App._txRow = function(tx) {
     const v = txVisual(tx)
-    const bg = v.cat?.color ? `${v.cat.color}33` : tx.type === 'transfer' ? 'rgba(37,99,235,.18)' : 'var(--primary-soft)'
+    const bg = v.cat?.color ? `${v.cat.color}66` : 'rgba(37,99,235,.4)'
     // Show a clear "ตามแผน" badge for future-scheduled transactions so the user
     // always knows these rows have NOT yet reduced their real balance.
     const todayNow = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
@@ -13615,7 +13615,7 @@ App._pickMerchant = function(name, opts = {}) {
         parts.push(`${spendLabel} ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel} · ${grantLabel}`)
       } else if (after < threshold) {
         const lacking = threshold - after
-        parts.push(`${spendLabel} ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel} · ยังขาด ${formatBenefitCapValue('', lacking)}`)
+        parts.push(`${spendLabel} ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel} · ยังขาดอีก ${formatBenefitCapValue('', lacking)}`)
       } else {
         parts.push(`ปลดสิทธิ์${cycleLabel}แล้ว`)
       }
@@ -13625,13 +13625,13 @@ App._pickMerchant = function(name, opts = {}) {
     }
     if (remainingBefore != null) {
       if (Number(remainingBefore || 0) <= 0) parts.push(`ครบแล้ว${cycleLabel}`)
-      else parts.push(`เหลือรับ ${formatBenefitCapValue(row.type, remainingBefore)} ${cycleLabel}`)
+      else parts.push(`เหลือสิทธิ์อีก ${formatBenefitCapValue(row.type, remainingBefore)} ใน${cycleLabel}`)
     }
     const merchantCashbackRem = row.merchantCashbackRemainingBefore
     const merchantEligibleRem = row.merchantEligibleSpendRemainingBefore
     if (merchantCashbackRem != null) {
-      if (merchantCashbackRem <= 0) parts.push('ร้านนี้ครบแล้ว')
-      else parts.push(`เหลือในร้านนี้ ${formatBenefitCapValue(row.type, merchantCashbackRem)}`)
+      if (merchantCashbackRem <= 0) parts.push('ร้านนี้รับสิทธิ์ครบแล้ว')
+      else parts.push(`เหลือสิทธิ์จากร้านนี้อีก ${formatBenefitCapValue(row.type, merchantCashbackRem)}`)
     } else if (merchantEligibleRem != null) {
       if (merchantEligibleRem <= 0) parts.push('ยอดร้านนี้เต็มแล้ว')
       else parts.push(`ยอดร้านนี้เหลือ ${formatBenefitCapValue('', merchantEligibleRem)}`)
@@ -13640,13 +13640,13 @@ App._pickMerchant = function(name, opts = {}) {
     const channelEligibleRem = row.channelEligibleSpendRemainingBefore
     if (channelCashbackRem != null) {
       if (channelCashbackRem <= 0) parts.push('ช่องทางนี้ครบแล้ว')
-      else parts.push(`เหลือในช่องทางนี้ ${formatBenefitCapValue(row.type, channelCashbackRem)}`)
+      else parts.push(`เหลือสิทธิ์ในช่องทางนี้ ${formatBenefitCapValue(row.type, channelCashbackRem)}`)
     } else if (channelEligibleRem != null) {
       if (channelEligibleRem <= 0) parts.push('ยอดช่องทางนี้เต็มแล้ว')
       else parts.push(`ยอดช่องทางนี้เหลือ ${formatBenefitCapValue('', channelEligibleRem)}`)
     }
     if (diffValue > 0) {
-      parts.push(`ถูกตัดเหลือ ${formatBenefitCapValue(row.type, finalValue)} (จาก ${formatBenefitCapValue(row.type, rawValue)})`)
+      parts.push(`ได้สิทธิ์แค่ ${formatBenefitCapValue(row.type, finalValue)} (จาก ${formatBenefitCapValue(row.type, rawValue)})`)
     }
     return parts.join(' · ')
   }
@@ -22106,7 +22106,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div class="shared-expense-head">
           <div>
             <div class="shared-expense-title">จ่ายแทน / หารกับเพื่อน</div>
-            <div class="shared-expense-sub">${enabled ? `นับเข้างบ ${money(shared.myShare)} จากยอดจ่ายจริง ${money(gross)}` : 'ใช้เมื่อเราจ่ายเต็มก่อน แต่ควรนับเข้างบเฉพาะส่วนเรา'}</div>
           </div>
           <button type="button" class="toggle${enabled ? ' on' : ''}" ${disabled ? 'disabled' : ''} onclick="App.setSharedExpenseEnabled(${enabled ? 'false' : 'true'})" aria-label="สลับการจ่ายแทน / หารกับเพื่อน" aria-pressed="${enabled ? 'true' : 'false'}"></button>
         </div>
