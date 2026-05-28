@@ -2971,10 +2971,10 @@ App.render();
                 const _typeText = rule.type === 'cashback' ? 'เงินคืน' : rule.type === 'points' ? 'คะแนน' : rule.type === 'both' ? 'เงินคืน + คะแนน' : 'ส่วนลดทันที'
                 const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.fullyUsedReason || '', rule.trackLocked ? '🔒 ยังไม่ถึงยอด' : '', rule.allowStacking ? '' : 'อาจไม่ใช้ร่วมกัน'].filter(Boolean).join(' · ')
                 const _trackHint = rule.trackLocked ? `<span class="list-item-sub" style="color:var(--expense)">สะสมผ่าน${esc(rule.trackChannelLabel)}อีก ${esc(fmt(rule.trackRemaining))} ในรอบนี้เพื่อปลดล็อก</span>` : ''
-                const _disabledHint = _disabled ? `<span class="list-item-sub" style="color:var(--muted)">สิทธิ์นี้ครบแล้ว จึงเลือกไม่ได้</span>` : ''
+                const _disabledHint = _disabled ? `<span class="list-item-sub" style="color:var(--muted)">สิทธิ์นี้ครบแล้ว ไม่สามารถเลือกได้</span>` : ''
                 const _merchantHint = rule.merchantCashbackRemaining != null
                   ? (rule.merchantCashbackRemaining <= 0
-                    ? `<span class="list-item-sub" style="color:var(--expense)">ร้านนี้ครบแล้ว</span>`
+                    ? `<span class="list-item-sub" style="color:var(--expense)">ร้านนี้รับสิทธิ์ครบแล้ว</span>`
                     : `<span class="list-item-sub" style="color:var(--muted)">เหลือในร้านนี้ ${esc(fmt(rule.merchantCashbackRemaining))}</span>`)
                   : (rule.merchantEligibleRemaining != null && rule.merchantEligibleRemaining <= 0
                     ? `<span class="list-item-sub" style="color:var(--expense)">ยอดร้านนี้เต็มแล้ว</span>`
@@ -13625,25 +13625,25 @@ App._pickMerchant = function(name, opts = {}) {
     }
     if (remainingBefore != null) {
       if (Number(remainingBefore || 0) <= 0) parts.push(`ครบแล้ว${cycleLabel}`)
-      else parts.push(`เหลือสิทธิ์อีก ${formatBenefitCapValue(row.type, remainingBefore)} ใน${cycleLabel}`)
+      else parts.push(`เหลือสิทธิ์ทั้งหมดอีก ${formatBenefitCapValue(row.type, remainingBefore)} ใน${cycleLabel}`)
     }
     const merchantCashbackRem = row.merchantCashbackRemainingBefore
     const merchantEligibleRem = row.merchantEligibleSpendRemainingBefore
     if (merchantCashbackRem != null) {
       if (merchantCashbackRem <= 0) parts.push('ร้านนี้รับสิทธิ์ครบแล้ว')
-      else parts.push(`เหลือสิทธิ์จากร้านนี้อีก ${formatBenefitCapValue(row.type, merchantCashbackRem)}`)
+      else parts.push(`จากร้านนี้เหลืออีก ${formatBenefitCapValue(row.type, merchantCashbackRem)}`)
     } else if (merchantEligibleRem != null) {
       if (merchantEligibleRem <= 0) parts.push('ยอดร้านนี้เต็มแล้ว')
-      else parts.push(`ยอดร้านนี้เหลือ ${formatBenefitCapValue('', merchantEligibleRem)}`)
+      else parts.push(`ยอดร้านนี้เหลืออีก ${formatBenefitCapValue('', merchantEligibleRem)}`)
     }
     const channelCashbackRem = row.channelCashbackRemainingBefore
     const channelEligibleRem = row.channelEligibleSpendRemainingBefore
     if (channelCashbackRem != null) {
       if (channelCashbackRem <= 0) parts.push('ช่องทางนี้ครบแล้ว')
-      else parts.push(`เหลือสิทธิ์ในช่องทางนี้ ${formatBenefitCapValue(row.type, channelCashbackRem)}`)
+      else parts.push(`จากช่องทางนี้เหลืออีก ${formatBenefitCapValue(row.type, channelCashbackRem)}`)
     } else if (channelEligibleRem != null) {
       if (channelEligibleRem <= 0) parts.push('ยอดช่องทางนี้เต็มแล้ว')
-      else parts.push(`ยอดช่องทางนี้เหลือ ${formatBenefitCapValue('', channelEligibleRem)}`)
+      else parts.push(`ยอดช่องทางนี้เหลืออีก ${formatBenefitCapValue('', channelEligibleRem)}`)
     }
     if (diffValue > 0) {
       parts.push(`ได้สิทธิ์แค่ ${formatBenefitCapValue(row.type, finalValue)} (จาก ${formatBenefitCapValue(row.type, rawValue)})`)
