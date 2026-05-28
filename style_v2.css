@@ -4776,6 +4776,191 @@ html.dark .v64-rec-tab.active {
 .reward-rule-toggle.on .reward-rule-toggle-knob {
   transform: translateX(18px);
 }
+
+/* ============================================================
+   Transaction detail UX refresh
+   ============================================================ */
+#tx-detail-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.tx-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 16px 12px;
+}
+
+.tx-detail-layout {
+  display: grid;
+  gap: 12px;
+}
+
+.tx-detail-hero {
+  text-align: center;
+  padding: 12px 10px 14px;
+}
+
+.tx-detail-amount {
+  font-size: 42px;
+  line-height: 1.05;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-detail-title {
+  margin-top: 8px;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.tx-detail-meta {
+  margin: 5px auto 0;
+  max-width: 460px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.tx-detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.tx-detail-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tx-detail-badge.success {
+  background: var(--income-soft);
+  color: var(--income);
+}
+
+.tx-detail-badge.purple {
+  background: var(--purple-soft);
+  color: var(--purple);
+}
+
+.tx-detail-badge.muted {
+  background: var(--elevated);
+  color: var(--muted);
+}
+
+.tx-detail-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.tx-detail-section h3 {
+  padding: 12px 14px 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tx-detail-section .detail-row {
+  margin: 0 14px;
+}
+
+.tx-detail-section .detail-row.wrap {
+  align-items: flex-start;
+}
+
+.tx-detail-section .detail-row.wrap .detail-value {
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  max-width: 68%;
+}
+
+.tx-detail-section .detail-row.positive .detail-value {
+  color: var(--income);
+}
+
+.tx-detail-alert {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 10px 14px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--elevated);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tx-detail-alert strong {
+  color: inherit;
+  text-align: right;
+}
+
+.tx-detail-inline-action {
+  margin: 10px 14px 12px !important;
+}
+
+.tx-detail-danger {
+  margin-top: 12px;
+}
+
+.tx-detail-actions {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: .9fr 1.25fr;
+  gap: 8px;
+  padding: 12px 16px calc(10px + var(--safe-b) + var(--app-bottom-gap));
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -10px 24px rgba(15, 23, 42, .08);
+}
+
+.tx-detail-actions .tx-detail-delete {
+  grid-column: 1 / -1;
+  min-height: 38px;
+  color: var(--expense);
+}
+
+@media (min-width: 720px) {
+  #overlay-tx-detail {
+    justify-content: center;
+  }
+
+  #overlay-tx-detail .sheet {
+    max-width: 620px !important;
+    border-radius: 24px 24px 0 0 !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .tx-detail-amount {
+    font-size: 36px;
+  }
+
+  .tx-detail-section .detail-row.wrap .detail-value {
+    max-width: 62%;
+  }
+}
+
 .crypto-empty-state {
   margin-top: 12px;
   display: flex;
@@ -9168,4 +9353,28 @@ details summary::marker {
 @keyframes mt-lock-body-unlock {
   0% { background: rgba(255,255,255,.94); }
   100% { background: #bbf7d0; }
+}
+
+/* Final overrides for the transaction/add layout refresh. Keep these late
+   because older density rules use !important on generic detail rows. */
+#tx-detail-content {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.tx-detail-section .detail-row.wrap .detail-value {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+@media (min-width: 720px) {
+  #overlay-tx-detail {
+    justify-content: center !important;
+  }
+
+  #overlay-tx-detail .sheet {
+    max-width: 620px !important;
+  }
 }

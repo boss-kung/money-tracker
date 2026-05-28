@@ -1104,6 +1104,7 @@ const App = {
     if (!ss) return
     ss.innerHTML = html
     formatNumberInputsIn(ss)
+    App._bindSubBackLongPress(ss)
     // Left-edge swipe-right to go back — attach once per element lifetime
     if (!ss._edgeSwipeReady) {
       ss._edgeSwipeReady = true
@@ -1128,6 +1129,56 @@ const App = {
     ss.classList.remove('open')
     void ss.offsetHeight
     ss.classList.add('open')
+  },
+  _bindSubBackLongPress(ss) {
+    const backBtn = ss?.querySelector('.sub-header .btn-icon')
+    if (!backBtn || backBtn._mtLongBackReady) return
+    backBtn._mtLongBackReady = true
+    backBtn.title = backBtn.title || 'กดค้างเพื่อกลับหน้าหลัก'
+    if (!backBtn.getAttribute('aria-label')) backBtn.setAttribute('aria-label', 'ย้อนกลับ กดค้างเพื่อกลับหน้าหลัก')
+
+    let timer = null
+    let longPressed = false
+    let startX = 0
+    let startY = 0
+
+    const clear = () => {
+      if (timer) clearTimeout(timer)
+      timer = null
+      backBtn.classList.remove('mt-back-holding')
+    }
+
+    backBtn.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      clear()
+      longPressed = false
+      startX = e.clientX
+      startY = e.clientY
+      backBtn.classList.add('mt-back-holding')
+      timer = setTimeout(() => {
+        timer = null
+        longPressed = true
+        backBtn.classList.remove('mt-back-holding')
+        try { navigator.vibrate?.(12) } catch (_) {}
+        App.closeSubScreen()
+      }, 1000)
+    }, { passive: true })
+
+    backBtn.addEventListener('pointermove', e => {
+      if (!timer) return
+      if (Math.abs(e.clientX - startX) > 12 || Math.abs(e.clientY - startY) > 12) clear()
+    }, { passive: true })
+
+    ;['pointerup', 'pointercancel', 'pointerleave'].forEach(type => {
+      backBtn.addEventListener(type, clear, { passive: true })
+    })
+
+    backBtn.addEventListener('click', e => {
+      if (!longPressed) return
+      longPressed = false
+      e.preventDefault()
+      e.stopImmediatePropagation()
+    }, true)
   },
   replaceSubScreen(html) {
     App.openSubScreen(html, { animate:false })
@@ -2134,34 +2185,79 @@ App.render();
     const benefitDateRow = tx.type === 'expense' && tx.benefitDateOverride && benefitDate && benefitDate !== String(tx.date || '').slice(0, 10)
       ? `<div class="detail-row"><span class="detail-label">วันที่นับสิทธิ์</span><span class="detail-value">${esc(Calc.labelDate(benefitDate))}</span></div>`
       : ''
-    return `<div style="text-align:center;margin-bottom:20px"><div style="font-size:44px;font-weight:800;color:${cssAmountColor(tx.type)};letter-spacing:-.05em;${isScheduledFuture ? 'opacity:.55' : ''}">${signedFmt(headerAmount, tx.type)}</div><div style="font-size:14px;color:var(--muted);margin-top:6px">${esc(Calc.labelDate(tx.date))}</div>${isScheduledFuture ? `<div style="display:inline-block;margin-top:8px;padding:4px 10px;border-radius:999px;background:rgba(100,116,139,.15);color:var(--muted);font-size:12px;font-weight:600">📅 ตามแผน · ยังไม่หักยอดจริง</div>` : ''}</div>
-      <div>
-        ${isScheduledFuture ? `<div class="detail-row" style="background:rgba(100,116,139,.08);border-radius:8px;padding:8px 12px;margin-bottom:4px"><span class="detail-label" style="color:var(--muted)">สถานะ</span><span class="detail-value" style="color:var(--muted)">ตามแผน — ยังไม่กระทบยอดกระเป๋า</span></div>` : ''}
-        ${benefitDateRow}
-        ${transferLine ? `<div class="detail-row"><span class="detail-label">รายการโอน</span><span class="detail-value">${esc(transferLine)}</span></div>` : ''}
-        ${tx.type === 'cc_payment' ? `<div class="detail-row"><span class="detail-label">ตัดยอดบัตร</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">เงินที่จ่ายจริง</span><span class="detail-value">${fmt(ccCashAmount)}</span></div>` : ''}
-        ${ccDiscount > 0 ? `<div class="detail-row"><span class="detail-label">ส่วนลดตอนชำระ</span><span class="detail-value" style="color:var(--income)">${fmt(ccDiscount)}</span></div>` : ''}
-        ${splitBillRows}
-        ${quickSharedRows}
-        ${reimbursementParent ? `<div class="detail-row"><span class="detail-label">รับคืนจากบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openTxDetail('${esc(reimbursementParent.id)}')">${esc(reimbursementParentTitle)}</button></span></div>` : ''}
-        ${cat ? `<div class="detail-row"><span class="detail-label">หมวดหมู่</span><span class="detail-value">${esc(cat.icon)} ${esc(cat.label)}</span></div>` : ''}
-        ${wallet ? `<div class="detail-row"><span class="detail-label">กระเป๋าเงิน</span><span class="detail-value">${esc(wallet.icon)} ${esc(wallet.name)}</span></div>` : ''}
-        ${toWal && tx.type !== 'transfer' ? `<div class="detail-row"><span class="detail-label">ไปยัง</span><span class="detail-value">${esc(toWal.icon)} ${esc(toWal.name)}</span></div>` : ''}
-        ${tx.type !== 'transfer' && tx.merchant ? `<div class="detail-row"><span class="detail-label">ร้านค้า / ที่มา</span><span class="detail-value">${esc(tx.merchant)}</span></div>` : ''}
-        ${tx.note ? `<div class="detail-row"><span class="detail-label">หมายเหตุ</span><span class="detail-value">${esc(tx.note)}</span></div>` : ''}
-        ${tx.isRecurring ? `<div class="detail-row"><span class="detail-label">รายการประจำ</span><span class="detail-value">เปิดใช้</span></div>` : ''}
-        ${tx.isInstallment ? `<div class="detail-row"><span class="detail-label">ผ่อนชำระ</span><span class="detail-value">งวด ${tx.installmentNo || 1}/${tx.installmentMonths || '?'}</span></div>` : ''}
-        ${(r.points || r.cashback) ? `<div class="detail-row"><span class="detail-label">สิทธิประโยชน์โดยประมาณ</span><span class="detail-value">${r.points ? '+' + esc(App.formatPointsWithEstimatedValue?.(tx.walletId, r.points) || (r.points.toLocaleString('en-US') + ' คะแนน')) : ''}${r.points && r.cashback ? ' · ' : ''}${r.cashback ? '+' + fmt(r.cashback) : ''}</span></div>` : ''}
-        ${!splitBillLink && shared && (sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0) > 0 ? `<button class="btn btn-secondary" style="margin:10px 0 4px" onclick="App.openSharedExpenseReimbursement('${esc(tx.id)}')">บันทึกรับคืน ${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount)}</button>` : ''}
-        <div class="detail-row"><span class="detail-label">ประเภท</span><span class="detail-value">${esc(App._txTypeLabel(tx.type))}</span></div>
-      </div>`
+    const merchantTitle = tx.type === 'transfer'
+      ? 'โอนเงิน'
+      : tx.type === 'cc_payment'
+        ? 'ชำระบัตรเครดิต'
+        : (tx.merchant || tx.note || cat?.label || App._txTypeLabel(tx.type))
+    const heroMeta = [
+      esc(Calc.labelDate(tx.date)),
+      esc(App._txTypeLabel(tx.type)),
+      cat ? `${esc(cat.icon)} ${esc(cat.label)}` : '',
+      wallet ? `${esc(wallet.icon)} ${esc(wallet.name)}` : '',
+    ].filter(Boolean).join(' · ')
+    const heroBadges = [
+      isScheduledFuture ? '<span class="tx-detail-badge muted">ตามแผน</span>' : '',
+      tx.isRecurring ? '<span class="tx-detail-badge">ประจำ</span>' : '',
+      tx.isInstallment ? `<span class="tx-detail-badge purple">ผ่อน ${esc(tx.installmentNo || 1)}/${esc(tx.installmentMonths || '?')}</span>` : '',
+      shared ? '<span class="tx-detail-badge success">หาร/รับคืน</span>' : '',
+    ].filter(Boolean).join('')
+    const section = (title, rows) => rows.filter(Boolean).length
+      ? `<section class="tx-detail-section"><h3>${esc(title)}</h3>${rows.filter(Boolean).join('')}</section>`
+      : ''
+    const detailRow = (label, value, cls = '') => value
+      ? `<div class="detail-row ${cls}"><span class="detail-label">${esc(label)}</span><span class="detail-value">${value}</span></div>`
+      : ''
+    const rewardValue = (r.points || r.cashback)
+      ? `${r.points ? '+' + esc(App.formatPointsWithEstimatedValue?.(tx.walletId, r.points) || (r.points.toLocaleString('en-US') + ' คะแนน')) : ''}${r.points && r.cashback ? ' · ' : ''}${r.cashback ? '+' + fmt(r.cashback) : ''}`
+      : ''
+    const summaryRows = [
+      isScheduledFuture ? `<div class="tx-detail-alert neutral"><span>ตามแผน</span><strong>ยังไม่กระทบยอดกระเป๋า</strong></div>` : '',
+      benefitDateRow,
+      transferLine ? detailRow('รายการโอน', esc(transferLine), 'wrap') : '',
+      tx.type === 'cc_payment' ? detailRow('ตัดยอดบัตร', fmt(tx.amount)) + detailRow('เงินที่จ่ายจริง', fmt(ccCashAmount)) : '',
+      ccDiscount > 0 ? detailRow('ส่วนลดตอนชำระ', fmt(ccDiscount), 'positive') : '',
+      cat ? detailRow('หมวดหมู่', `${esc(cat.icon)} ${esc(cat.label)}`) : '',
+      wallet ? detailRow(tx.type === 'transfer' ? 'จากบัญชี' : 'กระเป๋าเงิน', `${esc(wallet.icon)} ${esc(wallet.name)}`) : '',
+      toWal ? detailRow(tx.type === 'transfer' ? 'ไปบัญชี' : 'ไปยัง', `${esc(toWal.icon)} ${esc(toWal.name)}`) : '',
+    ]
+    const benefitRows = [
+      tx.isInstallment ? detailRow('ผ่อนชำระ', `งวด ${esc(tx.installmentNo || 1)}/${esc(tx.installmentMonths || '?')}`) : '',
+      rewardValue ? detailRow('สิทธิประโยชน์โดยประมาณ', rewardValue, 'wrap positive') : '',
+      splitBillRows,
+      quickSharedRows,
+      reimbursementParent ? `<div class="detail-row wrap"><span class="detail-label">รับคืนจากบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openTxDetail('${esc(reimbursementParent.id)}')">${esc(reimbursementParentTitle)}</button></span></div>` : '',
+      !splitBillLink && shared && (sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0) > 0 ? `<button class="btn btn-secondary tx-detail-inline-action" onclick="App.openSharedExpenseReimbursement('${esc(tx.id)}')">บันทึกรับคืน ${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount)}</button>` : '',
+    ]
+    const extraRows = [
+      tx.type !== 'transfer' && tx.merchant ? detailRow('ร้านค้า / ที่มา', esc(tx.merchant), 'wrap') : '',
+      tx.note ? detailRow('หมายเหตุ', esc(tx.note), 'wrap') : '',
+      tx.isRecurring ? detailRow('รายการประจำ', 'เปิดใช้') : '',
+      detailRow('ประเภท', esc(App._txTypeLabel(tx.type))),
+    ]
+    return `<div class="tx-detail-layout">
+      <section class="tx-detail-hero ${esc(tx.type)}">
+        <div class="tx-detail-amount" style="color:${cssAmountColor(tx.type)};${isScheduledFuture ? 'opacity:.62' : ''}">${signedFmt(headerAmount, tx.type)}</div>
+        <div class="tx-detail-title">${esc(merchantTitle)}</div>
+        <div class="tx-detail-meta">${heroMeta}</div>
+        ${heroBadges ? `<div class="tx-detail-badges">${heroBadges}</div>` : ''}
+      </section>
+      ${section('สรุป', summaryRows)}
+      ${section('สิทธิประโยชน์และเงื่อนไข', benefitRows)}
+      ${section('รายละเอียดเพิ่มเติม', extraRows)}
+    </div>`
   }
 
   App._renderTxDetail = function() {
     const tx = S.transactions.find(t => t.id === S.selectedTxId)
     const box = document.getElementById('tx-detail-content')
     if (!tx || !box) return
-    box.innerHTML = `${App._txDetailRowsHtml(tx)}<div class="tx-action-grid"><button class="btn btn-secondary" onclick="App.openEditTx('${esc(tx.id)}')">✏️ แก้ไข</button><button class="btn btn-secondary" onclick="App.openDuplicateTx('${esc(tx.id)}')">⧉ ทำซ้ำ</button></div><div style="margin-top:10px">${S.deleteConfirm ? `<button class="btn btn-danger" onclick="App.confirmDeleteTx()">ยืนยันการลบ</button><button class="btn btn-secondary mt-8" onclick="App._cancelDelete()">ยกเลิก</button>` : `<button class="btn btn-outline" onclick="App.deleteTx()">🗑 ลบรายการ</button>`}</div>`
+    box.innerHTML = `<div class="tx-detail-scroll">${App._txDetailRowsHtml(tx)}${S.deleteConfirm ? `<div class="tx-detail-danger"><button class="btn btn-danger" onclick="App.confirmDeleteTx()">ยืนยันการลบ</button><button class="btn btn-secondary mt-8" onclick="App._cancelDelete()">ยกเลิก</button></div>` : ''}</div>
+      <div class="tx-detail-actions">
+        <button class="btn btn-secondary" onclick="App.openDuplicateTx('${esc(tx.id)}')">⧉ ทำซ้ำ</button>
+        <button class="btn btn-primary" onclick="App.openEditTx('${esc(tx.id)}')">✏️ แก้ไขรายการ</button>
+        ${S.deleteConfirm ? '' : `<button class="btn btn-outline tx-detail-delete" onclick="App.deleteTx()">ลบรายการ</button>`}
+      </div>`
   }
 
   App.render()
@@ -2939,8 +3035,8 @@ App.render();
         >
         <button type="button" class="tx-merchant-clear" aria-label="ล้างร้านค้า" onclick="App.clearTxMerchant()">×</button>
       </div>
-      ${S.tx.merchantSuggestionNote ? `<div class="form-hint">${esc(S.tx.merchantSuggestionNote)}</div>` : ''}
-    </div>`}
+	      ${S.tx.merchantSuggestionNote ? `<div class="form-hint">${esc(S.tx.merchantSuggestionNote)}</div>` : ''}
+	    </div>`}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value);App._renderAddTxDetail()"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
           ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? (App._recurringInlineHtml?.() || '') : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
           ${(() => {
@@ -21820,6 +21916,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       display: inline-flex !important;
       align-items: center;
       justify-content: center;
+      -webkit-touch-callout: none;
+      user-select: none;
+    }
+    .sub-header .btn-icon.mt-back-holding {
+      transform: scale(.92);
+      background: var(--primary-soft, rgba(37, 99, 235, .12));
+      color: var(--primary, #2563EB);
     }
     /* More tab strip */
     .more-tab-strip {
@@ -22149,10 +22252,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             <span>รอรับคืน <strong>${money(shared.reimbursableAmount || 0)}</strong></span>
           </div>
         ` : ''}
-        <button type="button" class="shared-expense-ghost-link" onclick="App.openSplitBillFromAddTx()">
-          <span class="shared-expense-ghost-label">หารไม่เท่ากัน ไปที่เมนูหารบิล</span>
-          <span aria-hidden="true">→</span>
-        </button>
       `
       const target = box.querySelector('#cat-grid')?.closest('.form-group')
         || box.querySelector('#tx-channel')?.closest('.form-group')
