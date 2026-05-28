@@ -2965,6 +2965,7 @@ App.render();
               S.tx.rewardEstimate = _estimate
               const _selectedRules = _rules.filter(rule => S.tx.rewardRuleIds.includes(rule.id))
               const _selectedNames = _selectedRules.map(rule => rule.name)
+              const _normBenefitValue = App._normalizeBenefitCompareValue || ((ruleType, value) => ruleType === 'points' ? Math.floor(Number(value || 0)) : Math.round(Number(value || 0) * 100) / 100)
               const _rows = _rules.map(rule => {
                 const _selected = S.tx.rewardRuleIds.includes(rule.id)
                 const _disabled = !!rule.fullyUsed
@@ -2972,18 +2973,22 @@ App.render();
                 const _meta = [_typeText, rule.suggested ? 'แนะนำ' : '', rule.fullyUsedReason || '', rule.trackLocked ? '🔒 ยังไม่ถึงยอด' : '', rule.allowStacking ? '' : 'ใช้สิทธิ์ซ้อนกันไม่ได้'].filter(Boolean).join(' · ')
                 const _trackHint = rule.trackLocked ? `<span class="list-item-sub" style="color:var(--expense)">สะสมผ่าน${esc(rule.trackChannelLabel)}อีก ${esc(fmt(rule.trackRemaining))} ในรอบนี้เพื่อปลดล็อก</span>` : ''
                 const _disabledHint = _disabled ? `<span class="list-item-sub" style="color:var(--muted)">สิทธิ์นี้ครบแล้ว ไม่สามารถเลือกได้</span>` : ''
+                const _merchantCashbackRem = rule.merchantCashbackRemaining != null ? _normBenefitValue(rule.type, rule.merchantCashbackRemaining) : null
+                const _merchantEligibleRem = rule.merchantEligibleRemaining != null ? _normBenefitValue('', rule.merchantEligibleRemaining) : null
+                const _channelCashbackRem = rule.channelCashbackRemaining != null ? _normBenefitValue(rule.type, rule.channelCashbackRemaining) : null
+                const _channelEligibleRem = rule.channelEligibleRemaining != null ? _normBenefitValue('', rule.channelEligibleRemaining) : null
                 const _merchantHint = rule.merchantCashbackRemaining != null
-                  ? (rule.merchantCashbackRemaining <= 0
+                  ? (_merchantCashbackRem <= 0
                     ? `<span class="list-item-sub" style="color:var(--expense)">ร้านนี้รับสิทธิ์ครบแล้ว</span>`
-                    : `<span class="list-item-sub" style="color:var(--muted)">เหลือในร้านนี้ ${esc(fmt(rule.merchantCashbackRemaining))}</span>`)
-                  : (rule.merchantEligibleRemaining != null && rule.merchantEligibleRemaining <= 0
+                    : `<span class="list-item-sub" style="color:var(--muted)">เหลือในร้านนี้ ${esc(fmt(_merchantCashbackRem))}</span>`)
+                  : (rule.merchantEligibleRemaining != null && _merchantEligibleRem <= 0
                     ? `<span class="list-item-sub" style="color:var(--expense)">ยอดร้านนี้เต็มแล้ว</span>`
                     : '')
                 const _channelHint = rule.channelCashbackRemaining != null
-                  ? (rule.channelCashbackRemaining <= 0
+                  ? (_channelCashbackRem <= 0
                     ? `<span class="list-item-sub" style="color:var(--expense)">ช่องทางนี้ครบแล้ว</span>`
-                    : `<span class="list-item-sub" style="color:var(--muted)">เหลือในช่องทางนี้ ${esc(fmt(rule.channelCashbackRemaining))}</span>`)
-                  : (rule.channelEligibleRemaining != null && rule.channelEligibleRemaining <= 0
+                    : `<span class="list-item-sub" style="color:var(--muted)">เหลือในช่องทางนี้ ${esc(fmt(_channelCashbackRem))}</span>`)
+                  : (rule.channelEligibleRemaining != null && _channelEligibleRem <= 0
                     ? `<span class="list-item-sub" style="color:var(--expense)">ยอดช่องทางนี้เต็มแล้ว</span>`
                     : '')
                 return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}${rule.trackLocked ? ' locked' : ''}${_disabled ? ' disabled' : ''}" ${_disabled ? 'disabled aria-disabled="true"' : `onclick="App._toggleTxRewardRule('${esc(rule.id)}')"`} aria-pressed="${_selected ? 'true' : 'false'}">
@@ -13579,6 +13584,17 @@ App._pickMerchant = function(name, opts = {}) {
     return money(Number(amount || 0))
   }
 
+  function normalizeBenefitCompareValue(ruleType = '', value = 0) {
+    return ruleType === 'points'
+      ? Math.floor(Number(value || 0))
+      : Math.round(Number(value || 0) * 100) / 100
+  }
+  App._normalizeBenefitCompareValue = normalizeBenefitCompareValue
+
+  function benefitValueAtOrAboveCap(ruleType = '', value = 0, cap = 0) {
+    return normalizeBenefitCompareValue(ruleType, value) >= normalizeBenefitCompareValue(ruleType, cap)
+  }
+
   function describeBenefitCapReason(capReason = '') {
     const labels = {
       maxEligibleSpendPerTx: 'ยอดใช้จ่ายที่นำมาคิดต่อรายการ',
@@ -13602,11 +13618,8 @@ App._pickMerchant = function(name, opts = {}) {
     const remainingBefore = row.cycleRewardRemainingBefore
     const rawValue = Number(row.rawReward || 0)
     const finalValue = Number(row.finalReward || 0)
-    const normalizeRewardValue = (type, value) => type === 'points'
-      ? Math.floor(Number(value || 0))
-      : Math.round(Number(value || 0) * 100) / 100
-    const comparableRawValue = normalizeRewardValue(row.type, rawValue)
-    const comparableFinalValue = normalizeRewardValue(row.type, finalValue)
+    const comparableRawValue = normalizeBenefitCompareValue(row.type, rawValue)
+    const comparableFinalValue = normalizeBenefitCompareValue(row.type, finalValue)
     const diffValue = Math.max(0, comparableRawValue - comparableFinalValue)
     const cycleLabel = row.cycleMode === 'calendar_month' ? 'เดือนนี้' : 'รอบบิลนี้'
     const parts = []
@@ -13614,41 +13627,49 @@ App._pickMerchant = function(name, opts = {}) {
       const threshold = Number(row.triggerThresholdAmount || 0)
       const chLabel = formatTrackChannelLabel(row.triggerTrackChannels || (row.triggerTrackChannel ? [row.triggerTrackChannel] : []))
       const after = Number(row.triggerChannelSpendAfter || 0)
+      const comparableAfter = normalizeBenefitCompareValue('', after)
+      const comparableThreshold = normalizeBenefitCompareValue('', threshold)
       const spendLabel = chLabel ? `สะสมผ่าน${chLabel}` : 'สะสม'
       if (Number(row.triggerCount || 0) > 0) {
         const grantLabel = row.triggerGrantMode === 'every_threshold' ? `ปลดสิทธิ์ ${Number(row.triggerCount || 0)} ครั้ง` : 'ปลดล็อกสิทธิ์แล้ว'
-        parts.push(`${spendLabel} ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel} · ${grantLabel}`)
-      } else if (after < threshold) {
-        const lacking = threshold - after
-        parts.push(`${spendLabel} ${formatBenefitCapValue('', after)} / ${formatBenefitCapValue('', threshold)} ${cycleLabel} · ยังขาดอีก ${formatBenefitCapValue('', lacking)}`)
+        parts.push(`${spendLabel} ${formatBenefitCapValue('', comparableAfter)} / ${formatBenefitCapValue('', comparableThreshold)} ${cycleLabel} · ${grantLabel}`)
+      } else if (comparableAfter < comparableThreshold) {
+        const lacking = comparableThreshold - comparableAfter
+        parts.push(`${spendLabel} ${formatBenefitCapValue('', comparableAfter)} / ${formatBenefitCapValue('', comparableThreshold)} ${cycleLabel} · ยังขาดอีก ${formatBenefitCapValue('', lacking)}`)
       } else {
         parts.push(`ปลดสิทธิ์${cycleLabel}แล้ว`)
       }
-      if (row.rewardPending && Number(row.potentialReward || 0) > 0) {
-        parts.push(`คาดว่าจะได้รับ ${formatBenefitCapValue(row.type, row.potentialReward)} หลังปลดล็อก`)
+      const comparablePotentialReward = normalizeBenefitCompareValue(row.type, row.potentialReward)
+      if (row.rewardPending && comparablePotentialReward > 0) {
+        parts.push(`คาดว่าจะได้รับ ${formatBenefitCapValue(row.type, comparablePotentialReward)} หลังปลดล็อก`)
       }
     }
     if (remainingBefore != null) {
-      if (Number(remainingBefore || 0) <= 0) parts.push(`ครบแล้ว${cycleLabel}`)
-      else parts.push(`เหลือสิทธิ์ทั้งหมดอีก ${formatBenefitCapValue(row.type, remainingBefore)} ใน${cycleLabel}`)
+      const comparableRemaining = normalizeBenefitCompareValue(row.type, remainingBefore)
+      if (comparableRemaining <= 0) parts.push(`ครบแล้ว${cycleLabel}`)
+      else parts.push(`เหลือสิทธิ์ทั้งหมดอีก ${formatBenefitCapValue(row.type, comparableRemaining)} ใน${cycleLabel}`)
     }
     const merchantCashbackRem = row.merchantCashbackRemainingBefore
     const merchantEligibleRem = row.merchantEligibleSpendRemainingBefore
     if (merchantCashbackRem != null) {
-      if (merchantCashbackRem <= 0) parts.push('ร้านนี้รับสิทธิ์ครบแล้ว')
-      else parts.push(`จากร้านนี้เหลืออีก ${formatBenefitCapValue(row.type, merchantCashbackRem)}`)
+      const comparableMerchantCashbackRem = normalizeBenefitCompareValue(row.type, merchantCashbackRem)
+      if (comparableMerchantCashbackRem <= 0) parts.push('ร้านนี้รับสิทธิ์ครบแล้ว')
+      else parts.push(`จากร้านนี้เหลืออีก ${formatBenefitCapValue(row.type, comparableMerchantCashbackRem)}`)
     } else if (merchantEligibleRem != null) {
-      if (merchantEligibleRem <= 0) parts.push('ยอดร้านนี้เต็มแล้ว')
-      else parts.push(`ยอดร้านนี้เหลืออีก ${formatBenefitCapValue('', merchantEligibleRem)}`)
+      const comparableMerchantEligibleRem = normalizeBenefitCompareValue('', merchantEligibleRem)
+      if (comparableMerchantEligibleRem <= 0) parts.push('ยอดร้านนี้เต็มแล้ว')
+      else parts.push(`ยอดร้านนี้เหลืออีก ${formatBenefitCapValue('', comparableMerchantEligibleRem)}`)
     }
     const channelCashbackRem = row.channelCashbackRemainingBefore
     const channelEligibleRem = row.channelEligibleSpendRemainingBefore
     if (channelCashbackRem != null) {
-      if (channelCashbackRem <= 0) parts.push('ช่องทางนี้ครบแล้ว')
-      else parts.push(`จากช่องทางนี้เหลืออีก ${formatBenefitCapValue(row.type, channelCashbackRem)}`)
+      const comparableChannelCashbackRem = normalizeBenefitCompareValue(row.type, channelCashbackRem)
+      if (comparableChannelCashbackRem <= 0) parts.push('ช่องทางนี้ครบแล้ว')
+      else parts.push(`จากช่องทางนี้เหลืออีก ${formatBenefitCapValue(row.type, comparableChannelCashbackRem)}`)
     } else if (channelEligibleRem != null) {
-      if (channelEligibleRem <= 0) parts.push('ยอดช่องทางนี้เต็มแล้ว')
-      else parts.push(`ยอดช่องทางนี้เหลืออีก ${formatBenefitCapValue('', channelEligibleRem)}`)
+      const comparableChannelEligibleRem = normalizeBenefitCompareValue('', channelEligibleRem)
+      if (comparableChannelEligibleRem <= 0) parts.push('ยอดช่องทางนี้เต็มแล้ว')
+      else parts.push(`ยอดช่องทางนี้เหลืออีก ${formatBenefitCapValue('', comparableChannelEligibleRem)}`)
     }
     if (diffValue > 0) {
       parts.push(`ได้สิทธิ์แค่ ${formatBenefitCapValue(row.type, comparableFinalValue)} (จาก ${formatBenefitCapValue(row.type, comparableRawValue)})`)
@@ -13685,22 +13706,22 @@ App._pickMerchant = function(name, opts = {}) {
     const limits = rule.limits || {}
     const cycleLabel = String(rule?.validity?.statementCycleHint || 'statement_cycle') === 'calendar_month' ? 'เดือนนี้' : 'รอบบิลนี้'
     const trig = rule.rewardTrigger || {}
-    if (Number(limits.maxRewardAmountPerCycle || 0) > 0 && rewardUsedForRuleType(rule, cycleUsage) >= Number(limits.maxRewardAmountPerCycle || 0)) {
+    if (Number(limits.maxRewardAmountPerCycle || 0) > 0 && benefitValueAtOrAboveCap(rule.type, rewardUsedForRuleType(rule, cycleUsage), limits.maxRewardAmountPerCycle)) {
       return `สิทธิประโยชน์ครบแล้ว${cycleLabel}`
     }
-    if (Number(limits.maxEligibleSpendPerCycle || 0) > 0 && Number(cycleUsage.eligibleSpendUsedBefore || 0) >= Number(limits.maxEligibleSpendPerCycle || 0)) {
+    if (Number(limits.maxEligibleSpendPerCycle || 0) > 0 && benefitValueAtOrAboveCap('', cycleUsage.eligibleSpendUsedBefore, limits.maxEligibleSpendPerCycle)) {
       return `ยอดใช้จ่ายครบแล้ว${cycleLabel}`
     }
-    if (eligibility.merchantMatch && Number(limits.maxRewardAmountPerMerchantPerCycle || 0) > 0 && Number(cycleUsage.cashbackUsedByMerchantBefore || 0) >= Number(limits.maxRewardAmountPerMerchantPerCycle || 0)) {
+    if (eligibility.merchantMatch && Number(limits.maxRewardAmountPerMerchantPerCycle || 0) > 0 && benefitValueAtOrAboveCap(rule.type, cycleUsage.cashbackUsedByMerchantBefore, limits.maxRewardAmountPerMerchantPerCycle)) {
       return 'ร้านนี้ครบแล้ว'
     }
-    if (eligibility.merchantMatch && Number(limits.maxEligibleSpendPerMerchantPerCycle || 0) > 0 && Number(cycleUsage.eligibleSpendUsedByMerchantBefore || 0) >= Number(limits.maxEligibleSpendPerMerchantPerCycle || 0)) {
+    if (eligibility.merchantMatch && Number(limits.maxEligibleSpendPerMerchantPerCycle || 0) > 0 && benefitValueAtOrAboveCap('', cycleUsage.eligibleSpendUsedByMerchantBefore, limits.maxEligibleSpendPerMerchantPerCycle)) {
       return 'ยอดร้านนี้เต็มแล้ว'
     }
-    if (txDraft.channel && eligibility.channelMatch && Number(limits.maxRewardAmountPerChannelPerCycle || 0) > 0 && Number(cycleUsage.cashbackUsedByChannelBefore || 0) >= Number(limits.maxRewardAmountPerChannelPerCycle || 0)) {
+    if (txDraft.channel && eligibility.channelMatch && Number(limits.maxRewardAmountPerChannelPerCycle || 0) > 0 && benefitValueAtOrAboveCap(rule.type, cycleUsage.cashbackUsedByChannelBefore, limits.maxRewardAmountPerChannelPerCycle)) {
       return 'ช่องทางนี้ครบแล้ว'
     }
-    if (txDraft.channel && eligibility.channelMatch && Number(limits.maxEligibleSpendPerChannelPerCycle || 0) > 0 && Number(cycleUsage.eligibleSpendUsedByChannelBefore || 0) >= Number(limits.maxEligibleSpendPerChannelPerCycle || 0)) {
+    if (txDraft.channel && eligibility.channelMatch && Number(limits.maxEligibleSpendPerChannelPerCycle || 0) > 0 && benefitValueAtOrAboveCap('', cycleUsage.eligibleSpendUsedByChannelBefore, limits.maxEligibleSpendPerChannelPerCycle)) {
       return 'ยอดช่องทางนี้เต็มแล้ว'
     }
     return ''
@@ -13728,10 +13749,12 @@ App._pickMerchant = function(name, opts = {}) {
           const cycle = getCyclePeriodForDate(cardId, txDraft.date || today(), rule)
           const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', trackChannels, '', '', rule)
           const spent = Number(usage.trackChannelSpendBefore || 0)
-          trackLocked = trig.grantMode !== 'every_threshold' && spent >= Number(trig.thresholdAmount)
+          const comparableSpent = normalizeBenefitCompareValue('', spent)
+          const comparableThreshold = normalizeBenefitCompareValue('', trig.thresholdAmount)
+          trackLocked = trig.grantMode !== 'every_threshold' && comparableSpent >= comparableThreshold
             ? false  // once_per_cycle ที่ปลดไปแล้ว ก็ถือว่าไม่ locked
-            : spent < Number(trig.thresholdAmount)
-          trackRemaining = Math.max(0, Number(trig.thresholdAmount) - spent)
+            : comparableSpent < comparableThreshold
+          trackRemaining = Math.max(0, comparableThreshold - comparableSpent)
           trackChannelLabel = formatTrackChannelLabel(trackChannels) || 'ทุกช่องทาง'
         }
         let merchantCashbackRemaining = null
@@ -14227,7 +14250,7 @@ App._pickMerchant = function(name, opts = {}) {
         triggerCount = cycleSpendAfter >= thresholdAmount ? 1 : 0
       }
       if (triggerCount <= 0) {
-        const remaining = Math.max(0, thresholdAmount - cycleSpendAfter)
+        const remaining = normalizeBenefitCompareValue('', Math.max(0, thresholdAmount - cycleSpendAfter))
         if (remaining > 0) {
           const chLabel = formatTrackChannelLabel(trackChannels)
           warnings.push(chLabel ? `ต้องสะสมผ่าน${chLabel}อีก ${money(remaining)} ในรอบนี้` : `ยอดสะสมยังขาด ${money(remaining)} จึงยังไม่ปลดสิทธิ์`)
