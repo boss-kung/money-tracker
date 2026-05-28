@@ -4785,8 +4785,13 @@ html.dark .v64-rec-tab.active {
   flex-direction: column;
   min-height: 0;
   overflow: hidden !important;
+  padding: 0 !important;
   padding-left: 0 !important;
   padding-right: 0 !important;
+}
+
+#overlay-tx-detail .sheet {
+  padding-bottom: 0 !important;
 }
 
 .tx-detail-scroll {
@@ -4928,7 +4933,7 @@ html.dark .v64-rec-tab.active {
   display: grid;
   grid-template-columns: .9fr 1.25fr;
   gap: 8px;
-  padding: 12px 16px calc(10px + var(--safe-b) + var(--app-bottom-gap));
+  padding: 12px 16px max(10px, var(--safe-b));
   background: color-mix(in srgb, var(--surface) 96%, transparent);
   border-top: 1px solid var(--border);
   box-shadow: 0 -10px 24px rgba(15, 23, 42, .08);
@@ -9362,6 +9367,7 @@ details summary::marker {
   flex-direction: column !important;
   min-height: 0 !important;
   overflow: hidden !important;
+  padding: 0 !important;
 }
 
 .tx-detail-section .detail-row.wrap .detail-value {
