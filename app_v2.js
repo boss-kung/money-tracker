@@ -17155,7 +17155,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </button>`
     }).join('')
 
-    const widget = `<div class="card-picker-widget" style="padding:12px 14px;background:var(--card);border-radius:14px;border:1px solid var(--border);margin-bottom:0">
+    const widget = `<div class="card-picker-widget" style="padding:12px 14px;background:var(--card);border-radius:14px;border:1px solid var(--border);margin-bottom:10px">
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">ใช้บัตรไหนดีสุด?</div>
       ${rows ? `<div style="display:flex;flex-direction:row;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin:0 -2px;padding:0 2px 6px">${rows}</div>` : `<div style="font-size:12px;color:var(--muted)">ยังไม่มีบัตรที่ผ่านคะแนนแนะนำ</div>`}
     </div>`
@@ -22253,7 +22253,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           </div>
         ` : ''}
       `
-      const target = box.querySelector('#cat-grid')?.closest('.form-group')
+      const target = box.querySelector('.ins-budget-chip')
+        || box.querySelector('#cat-grid')?.closest('.form-group')
         || box.querySelector('#tx-channel')?.closest('.form-group')
         || box.querySelector('.amount-summary-card')
       target?.insertAdjacentElement('afterend', panel)
