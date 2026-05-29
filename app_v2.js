@@ -21668,7 +21668,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       income  > 0 ? `<span style="color:var(--income)">รายรับ +${money(income)}</span>`    : '',
     ].filter(Boolean)
     const summaryHtml = parts.length
-      ? `<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:13px;padding-bottom:14px">${parts.join('<span style="color:var(--border)">·</span>')}</div>`
+      ? `<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:13px;padding:0px 16px 10px">${parts.join('<span style="color:var(--border)">·</span>')}</div>`
       : ''
 
     const txHtml = txs.length
