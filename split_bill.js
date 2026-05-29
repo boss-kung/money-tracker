@@ -549,6 +549,9 @@
     const result = calcResult(bill)
     const linkState = splitBillLinkState(bill)
     const ownerSummary = linkState.expected || splitBillOwnerSummary(bill)
+    const receivable = linkState.linkedTxId && typeof App.getSharedReceivableForTx === 'function'
+      ? App.getSharedReceivableForTx(linkState.linkedTxId)
+      : null
 
     const personRows = result.personResults.map(p => `
       <div class="detail-row">
@@ -562,16 +565,36 @@
       </div>`).join('')
 
     const transferRows = result.transfers.length
-      ? result.transfers.map(t=>`
+      ? result.transfers.map(t=>{
+          const settlement = receivable?.transferSettlements?.find(row => row.from === t.from && row.to === t.to) || null
+          const received = r2(settlement?.received || 0)
+          const remaining = settlement ? r2(settlement.remaining || 0) : r2(t.amount || 0)
+          return `
           <div class="detail-row">
-            <div style="display:flex;align-items:center;gap:6px;font-weight:600">
-              <span>${esc(t.fromName)}</span>
-              <span style="color:var(--primary);font-size:18px;line-height:1">→</span>
-              <span>${esc(t.toName)}</span>
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:6px;font-weight:600">
+                <span>${esc(t.fromName)}</span>
+                <span style="color:var(--primary);font-size:18px;line-height:1">→</span>
+                <span>${esc(t.toName)}</span>
+              </div>
+              ${settlement ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">คืนแล้ว ${fmt(received)} · ค้าง ${fmt(remaining)}${settlement.status === 'over_reimbursed' ? ' · รับเกิน' : ''}</div>` : ''}
             </div>
-            <div style="font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
-          </div>`).join('')
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
+              ${linkState.linkedTxId && remaining > 0 ? `<button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openSharedExpenseReimbursement('${esc(linkState.linkedTxId)}',{amount:${remaining},splitBillId:'${esc(bill.id)}',fromSplitPersonId:'${esc(t.from)}',toSplitPersonId:'${esc(t.to)}',sourceName:'${esc(bill.title || 'บิลร่วม')}'})">รับคืน</button>` : ''}
+            </div>
+          </div>`
+        }).join('')
       : `<div style="color:var(--muted);font-size:13px;padding:8px 0">ทุกคนไม่ติดค้างแล้ว 🎉</div>`
+    const unassignedReceived = receivable?.reimbursements
+      ?.filter(t => !t.fromSplitPersonId)
+      .reduce((sum, t) => sum + Number(t.amount || 0), 0) || 0
+    const unassignedRow = unassignedReceived > 0
+      ? `<div class="detail-row" style="background:rgba(100,116,139,.08);border-radius:8px;margin-top:8px">
+          <div style="font-size:12px;color:var(--muted)">รับคืนไม่ระบุคน</div>
+          <div style="font-weight:800;color:var(--income)">${fmt(unassignedReceived)}</div>
+        </div>`
+      : ''
 
     const warnHtml = result.warnings.map(w =>
       `<div style="background:var(--elevated);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px;color:var(--expense)">⚠️ ${esc(w)}</div>`
@@ -591,7 +614,7 @@
             <div style="font-weight:700;color:${linkTone.color};margin-top:4px">${esc(linkState.message)}</div>
             ${ownerSummary.ownerName ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">เรา: ${esc(ownerSummary.ownerName)} · จ่าย ${fmt(ownerSummary.paidAmount)} · ส่วนเรา ${fmt(ownerSummary.shareAmount)}</div>` : ''}
           </div>
-          ${ownerSummary.reimbursableAmount > 0 ? `<div style="text-align:right;flex-shrink:0"><div style="font-size:12px;color:var(--muted)">เพื่อนค้างเรา</div><div style="font-weight:800;color:var(--income)">${fmt(ownerSummary.reimbursableAmount)}</div></div>` : ''}
+            ${ownerSummary.reimbursableAmount > 0 ? `<div style="text-align:right;flex-shrink:0"><div style="font-size:12px;color:var(--muted)">เพื่อนค้างเรา</div><div style="font-weight:800;color:var(--income)">${fmt(receivable?.remaining ?? ownerSummary.reimbursableAmount)}</div>${receivable?.received ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">รับแล้ว ${fmt(receivable.received)}</div>` : ''}</div>` : ''}
         </div>
       </div>`
     const linkButtons = linkState.status === 'linked'
@@ -623,12 +646,13 @@
         <div class="card card-pad" style="padding: 0px 10px;">${personRows||'<div style="color:var(--muted)">ยังไม่มีคน</div>'}</div>
 
         <div class="sec-title">โอนเงิน</div>
-        <div class="card card-pad" style="padding: 0px 10px;">${transferRows}</div>
+        <div class="card card-pad" style="padding: 0px 10px;">${transferRows}${unassignedRow}</div>
 
         <textarea id="sb-detail-copy" style="position:absolute;left:-9999px;top:0;opacity:0;width:1px;height:1px">${esc(copyText)}</textarea>
 
         <div style="display:flex;gap:8px;margin-top:16px">
           ${linkButtons}
+          ${linkState.linkedTxId && receivable?.remaining > 0 ? `<button class="btn btn-secondary flex-1" onclick="App.openSharedExpenseReimbursement('${esc(linkState.linkedTxId)}',{splitBillId:'${esc(bill.id)}',sourceName:'${esc(bill.title || 'บิลร่วม')}'})">รับคืน ${fmt(receivable.remaining)}</button>` : ''}
         </div>
         <div style="display:flex;gap:8px;margin-top:8px">
           <button class="btn btn-secondary flex-1" onclick="App.openSplitBillForm('${esc(billId)}')">✏️ แก้ไข</button>

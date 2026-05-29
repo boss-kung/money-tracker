@@ -148,6 +148,14 @@ const Calc = {
     return Number(t.amount || 0)
   },
 
+  isReimbursementTx(t) {
+    if (!t) return false
+    return !!t.reimbursesSharedExpenseTxId
+      || t.incomeTreatment === 'reimbursement'
+      || t.reimbursementSource === 'quick_shared'
+      || t.reimbursementSource === 'split_bill'
+  },
+
   getCCPaymentCashAmount(t) {
     if (!t || t.type !== 'cc_payment') return Number(t?.amount || 0)
     const cashAmount = Number(t.cashAmount)
@@ -181,22 +189,29 @@ const Calc = {
     const txns = Calc.getMonthlyTransactions(transactions, month)
     let income = 0
     let expense = 0
+    let reimbursementInflow = 0
     let transfer = 0
     let ccPayment = 0
     txns.forEach(t => {
-      if (t.type === 'income') income += Number(t.amount || 0)
+      if (t.type === 'income') {
+        if (Calc.isReimbursementTx(t)) reimbursementInflow += Number(t.amount || 0)
+        else income += Number(t.amount || 0)
+      }
       else if (t.type === 'expense') expense += Calc.getExpenseLedgerAmount(t)
       else if (t.type === 'transfer') transfer += Number(t.amount || 0)
       else if (t.type === 'cc_payment') ccPayment += Calc.getCCPaymentCashAmount(t)
     })
     const netCashflow = income - expense
+    const cashNetCashflow = income + reimbursementInflow - expense
     const savingsRate = income > 0 ? (netCashflow / income) * 100 : null
     return {
       income: Math.round(income * 100) / 100,
       expense: Math.round(expense * 100) / 100,
+      reimbursementInflow: Math.round(reimbursementInflow * 100) / 100,
       transfer: Math.round(transfer * 100) / 100,
       ccPayment: Math.round(ccPayment * 100) / 100,
       netCashflow: Math.round(netCashflow * 100) / 100,
+      cashNetCashflow: Math.round(cashNetCashflow * 100) / 100,
       savingsRate: savingsRate === null ? null : Math.round(savingsRate * 10) / 10,
     }
   },
@@ -208,8 +223,10 @@ const Calc = {
       uncategorizedLabel = 'ไม่ระบุหมวดหมู่',
       uncategorizedIcon = '📦',
       uncategorizedColor = '#94A3B8',
+      includeReimbursements = false,
     } = opts
     const txns = Calc.getMonthlyTransactions(transactions, month, { types: [type] })
+      .filter(t => type !== 'income' || includeReimbursements || !Calc.isReimbursementTx(t))
     const total = txns.reduce((sum, t) => {
       const amount = type === 'expense' ? Calc.getExpenseLedgerAmount(t) : Number(t.amount || 0)
       return sum + amount
@@ -460,3 +477,5 @@ const Calc = {
     return groups
   },
 }
+
+if (typeof module !== 'undefined') module.exports = Calc
