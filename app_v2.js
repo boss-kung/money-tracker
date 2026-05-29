@@ -2873,7 +2873,7 @@ App.render();
     const isScheduledFuture = tx.scheduled === true && String(tx.date || '') > todayNow
     const scheduledPill = isScheduledFuture ? `<span class="tx-meta-pill tx-scheduled-pill" style="background:rgba(100,116,139,.15);color:var(--muted)">📅 ตามแผน</span>` : ''
     const dateLabel = opts.showDate && tx.date ? (Calc.labelDate ? Calc.labelDate(tx.date) : tx.date) : ''
-    const datePill = dateLabel ? `<span class="tx-meta-pill tx-date-pill">📅 ${esc(dateLabel)}</span>` : ''
+    const datePill = dateLabel ? `<span class="tx-meta-pill tx-date-pill">${esc(dateLabel)}</span>` : ''
     const amountColor = isScheduledFuture ? 'var(--muted)' : typeColor(tx.type)
     const shared = tx.type === 'expense' && tx.sharedExpense?.enabled ? (App._sharedExpenseFromTx?.(tx) || tx.sharedExpense) : null
     const notYetNote = isScheduledFuture
