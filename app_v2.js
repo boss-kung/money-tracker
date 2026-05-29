@@ -3825,12 +3825,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
       })
       .filter(Boolean)
       .filter(card => Number(card.due?.daysLeft) >= 0)
-      .sort((a, b) => Number(a.due?.daysLeft || 9999) - Number(b.due?.daysLeft || 9999))
+      .sort((a, b) => Number(a.due?.daysLeft ?? 9999) - Number(b.due?.daysLeft ?? 9999))
     const CREDIT_ALERT_DAYS = 3
-    const minDaysLeft = alertCards.length ? Number(alertCards[0].due.daysLeft || 0) : null
+    const minDaysLeft = alertCards.length ? Number(alertCards[0].due.daysLeft ?? 0) : null
     const shouldShowCreditAlert = minDaysLeft !== null && minDaysLeft >= 0 && minDaysLeft <= CREDIT_ALERT_DAYS
     const nearDueCards = shouldShowCreditAlert
-      ? alertCards.filter(card => Number(card.due?.daysLeft || 0) === minDaysLeft)
+      ? alertCards.filter(card => Number(card.due?.daysLeft ?? 0) === minDaysLeft)
       : []
     const transferTotal = S.transactions
       .filter(t => (t.date || '').startsWith(dm) && t.type === 'transfer' && Calc.isPostedTx(t))
@@ -3918,8 +3918,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
     if (nearDueCards.length) {
       const nearDueTotal = nearDueCards.reduce((sum, card) => sum + Number(card.used || 0), 0)
+      const nearDueDaysLeft = Number(nearDueCards[0].due.daysLeft ?? 0)
+      const nearDueBadge = nearDueDaysLeft === 0 ? 'วันนี้' : `อีก ${nearDueDaysLeft} วัน`
       html += `<div class="mt-alert-card">
-        <div class="mt-alert-title">ครบกำหนดชำระ ${ESC(nearDueCards[0].due.dueStr)} <span class="mt-alert-badges"><em>อีก ${nearDueCards[0].due.daysLeft} วัน</em><span class="mt-alert-badge-total">${S.settings?.hideMoney ? '฿*****' : `รวม ${FMT(nearDueTotal)}`}</span></span></div>
+        <div class="mt-alert-title">ครบกำหนดชำระ ${ESC(nearDueCards[0].due.dueStr)} <span class="mt-alert-badges"><em>${ESC(nearDueBadge)}</em><span class="mt-alert-badge-total">${S.settings?.hideMoney ? '฿*****' : `รวม ${FMT(nearDueTotal)}`}</span></span></div>
         ${nearDueCards.map(card => `
           <div class="mt-alert-row" onclick="App.openCCDetail('${ESC(card.id)}')">
             <div class="mt-alert-row-info">
@@ -9684,7 +9686,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (!next) { previewEl.innerHTML = ''; return }
     const label = (typeof Calc?.labelDate === 'function') ? Calc.labelDate(next) : next
     const days  = (typeof Calc?.daysUntilDate === 'function') ? Calc.daysUntilDate(next) : null
-    const daysSuffix = (Number.isFinite(days) && days >= 0) ? ` · เหลืออีก ${days} วัน` : ''
+    const daysSuffix = (Number.isFinite(days) && days >= 0) ? ` · ${days === 0 ? 'วันนี้' : `เหลืออีก ${days} วัน`}` : ''
     previewEl.innerHTML = `📅 วันชำระรอบถัดไป (โดยประมาณ): <strong>${esc(label)}</strong>${daysSuffix}`
   }
 
@@ -9729,7 +9731,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (!next) { previewEl.innerHTML = ''; return }
     const label = (typeof Calc?.labelDate === 'function') ? Calc.labelDate(next) : next
     const days  = (typeof Calc?.daysUntilDate === 'function') ? Calc.daysUntilDate(next) : null
-    const daysSuffix = (Number.isFinite(days) && days >= 0) ? ` · เหลืออีก ${days} วัน` : ''
+    const daysSuffix = (Number.isFinite(days) && days >= 0) ? ` · ${days === 0 ? 'วันนี้' : `เหลืออีก ${days} วัน`}` : ''
     previewEl.innerHTML = `📅 วันชำระรอบถัดไป (โดยประมาณ): <strong>${esc(label)}</strong>${daysSuffix}`
   }
 
@@ -14823,7 +14825,7 @@ App._pickMerchant = function(name, opts = {}) {
     const heroBreakdown = committedInstallments > 0
       ? `<div style="display:flex;justify-content:space-between;font-size:11px;opacity:.75;margin-top:6px;margin-bottom:2px"><span>ค้างชำระปัจจุบัน ${money(postedOwed)}</span><span>ผ่อนกันวงเงิน ${money(committedInstallments)}</span></div>`
       : ''
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon||'')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button></div></div><div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}"><div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0"><div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${esc(statementText)}</div><div style="font-size:13px;opacity:.72;margin-bottom:4px">วงเงินที่ใช้ทั้งหมด</div><div class="big">${money(owed)}</div>${heroBreakdown}${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}</div>${stHtml}<div class="card card-pad" style="margin-bottom:12px"><div class="cc-detail-header"><div><div style="font-size:14px;font-weight:700">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${thaiDate(period.start)} ถึง ${thaiDate(period.end)}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button></div><div class="reward-grid" style="margin-top:10px"><div class="reward-tile"><span>คะแนน</span><strong>${rewards.points.toLocaleString('en-US')}</strong></div><div class="reward-tile"><span>เงินคืน</span><strong>${money(rewards.cashback)}</strong></div><div class="reward-tile"><span>ส่วนลดทันที</span><strong>${money(rewards.discount || 0)}</strong></div></div>${rewardAcctHtml}${recordBtn}</div>${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : ''}<div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}</div></div>${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}<div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx)).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div></div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon||'')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button></div></div><div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}"><div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0"><div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${esc(statementText)}</div><div style="font-size:13px;opacity:.72;margin-bottom:4px">วงเงินที่ใช้ทั้งหมด</div><div class="big">${money(owed)}</div>${heroBreakdown}${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}</div>${stHtml}<div class="card card-pad" style="margin-bottom:12px"><div class="cc-detail-header"><div><div style="font-size:14px;font-weight:700">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${thaiDate(period.start)} ถึง ${thaiDate(period.end)}</div></div><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button></div><div class="reward-grid" style="margin-top:10px"><div class="reward-tile"><span>คะแนน</span><strong>${rewards.points.toLocaleString('en-US')}</strong></div><div class="reward-tile"><span>เงินคืน</span><strong>${money(rewards.cashback)}</strong></div><div class="reward-tile"><span>ส่วนลดทันที</span><strong>${money(rewards.discount || 0)}</strong></div></div>${rewardAcctHtml}${recordBtn}</div>${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : ''}<div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}</div></div>${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}<div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx, { showDate: true })).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div></div>`)
     setTimeout(() => App._bindTxRows?.('sub-screen'), 0)
   }
 
