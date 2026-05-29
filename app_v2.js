@@ -21680,7 +21680,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
     const body = document.getElementById('tx-detail-content')
     if (!body) return
-    body.innerHTML = summaryHtml + txHtml
+    body.innerHTML = `<div class="tx-detail-scroll">${summaryHtml}${txHtml}</div>`
 
     App.openOverlay('overlay-tx-detail')
     setTimeout(() => App._bindTxRows?.('tx-detail-content'), 0)
