@@ -3816,6 +3816,37 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const cryptoSummary = App.getCryptoPortfolioSummary?.() || { holdings: [], totalValueTHB: 0 }
     const currentNetWorth = Calc.getNetWorth ? Calc.getNetWorth(S.wallets) : { assets: usable.liquid || 0 }
     const dashboardNetWorth = Number(currentNetWorth.assets || 0) - Number(usable.creditDebt || 0)
+    function hasPaymentForCreditDue(card, due) {
+      const dueDate = String(due?.dateStr || '')
+      if (!card?.id || !dueDate || typeof App.getCardStatement !== 'function') return false
+      const hasPaymentInStatementWindow = st => (S.transactions || []).some(t => {
+        if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
+        if (!(Number(t.amount || 0) > 0)) return false
+        if (st?.id && String(t.statementId || '') === String(st.id)) return true
+        const date = String(t.date || '')
+        return !!(st?.end && st?.dueDate && date > String(st.end) && date <= String(st.dueDate))
+      })
+      let cursorRef = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+      const seenStatementIds = new Set()
+      for (let i = 0; i < 3; i++) {
+        const st = App.getCardStatement(card.id, cursorRef)
+        if (!st || !st.id || seenStatementIds.has(st.id)) break
+        seenStatementIds.add(st.id)
+        if (String(st.dueDate || '') === dueDate) {
+          return Number(st.paidTotal || 0) > 0 || hasPaymentInStatementWindow(st)
+        }
+        const prevRef = shiftDateStr(st.start, -1)
+        if (!prevRef || prevRef === cursorRef) break
+        cursorRef = prevRef
+      }
+      const alertWindowStart = shiftDateStr(dueDate, -3)
+      return (S.transactions || []).some(t => {
+        if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
+        if (!(Number(t.amount || 0) > 0)) return false
+        const date = String(t.date || '')
+        return !!(date && alertWindowStart && date >= alertWindowStart && date <= dueDate)
+      })
+    }
     const alertCards = (typeof visibleWallets === 'function' ? visibleWallets() : S.wallets.filter(w => !w.hiddenFromWalletList))
       .filter(w => w.type === 'credit' && Math.abs(Number(w.balance || 0)) > 0)
       .map(w => {
@@ -3825,6 +3856,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       })
       .filter(Boolean)
       .filter(card => Number(card.due?.daysLeft) >= 0)
+      .filter(card => !hasPaymentForCreditDue(card, card.due))
       .sort((a, b) => Number(a.due?.daysLeft ?? 9999) - Number(b.due?.daysLeft ?? 9999))
     const CREDIT_ALERT_DAYS = 3
     const minDaysLeft = alertCards.length ? Number(alertCards[0].due.daysLeft ?? 0) : null
