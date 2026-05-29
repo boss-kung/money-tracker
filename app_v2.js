@@ -2147,7 +2147,7 @@ App.render();
         <div class="chips" style="padding:0 0 12px">${chips}</div>
         ${custom}
         ${App._sectionHeader('รายการในกระเป๋านี้')}
-        <div class="card"><div style="padding:0 16px">${tx.length ? tx.map(t => App._txRow(t)).join('') : App._emptyState('📋','ไม่พบรายการ','ลองเปลี่ยนช่วงเวลา')}</div></div>
+        <div class="card"><div style="padding:0 16px">${tx.length ? tx.map(t => App._txRow(t, { showDate: true })).join('') : App._emptyState('📋','ไม่พบรายการ','ลองเปลี่ยนช่วงเวลา')}</div></div>
       </div>`, { animate })
     setTimeout(() => App._bindTxRows('sub-screen'), 0)
   }
@@ -2864,7 +2864,7 @@ App.render();
     setTimeout(() => document.getElementById('mer-name')?.focus(), 80)
   }
 
-  App._txRow = function(tx) {
+  App._txRow = function(tx, opts = {}) {
     const v = txVisual(tx)
     const bg = v.cat?.color ? `${v.cat.color}66` : 'rgba(37,99,235,.4)'
     // Show a clear "ตามแผน" badge for future-scheduled transactions so the user
@@ -2872,6 +2872,8 @@ App.render();
     const todayNow = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
     const isScheduledFuture = tx.scheduled === true && String(tx.date || '') > todayNow
     const scheduledPill = isScheduledFuture ? `<span class="tx-meta-pill tx-scheduled-pill" style="background:rgba(100,116,139,.15);color:var(--muted)">📅 ตามแผน</span>` : ''
+    const dateLabel = opts.showDate && tx.date ? (Calc.labelDate ? Calc.labelDate(tx.date) : tx.date) : ''
+    const datePill = dateLabel ? `<span class="tx-meta-pill tx-date-pill">📅 ${esc(dateLabel)}</span>` : ''
     const amountColor = isScheduledFuture ? 'var(--muted)' : typeColor(tx.type)
     const shared = tx.type === 'expense' && tx.sharedExpense?.enabled ? (App._sharedExpenseFromTx?.(tx) || tx.sharedExpense) : null
     const notYetNote = isScheduledFuture
@@ -2879,7 +2881,7 @@ App.render();
       : (shared ? `<div style="font-size:10px;color:var(--muted);text-align:right;margin-top:2px">งบ ${fmt(shared.myShare || 0)}</div>` : '')
     return `<div class="tx-row tx-row-modern tx-row--${esc(tx.type)}${isScheduledFuture ? ' tx-row--scheduled' : ''}" data-txid="${esc(tx.id)}">
       <div class="tx-icon" style="background:${bg};${isScheduledFuture ? 'opacity:.6' : ''}">${esc(v.icon)}</div>
-      <div class="tx-info"><div class="tx-title">${esc(v.title)}</div><div class="tx-sub">${v.meta.map(x => `<span class="tx-meta-pill">${esc(x)}</span>`).join('')}${scheduledPill}</div></div>
+      <div class="tx-info"><div class="tx-title">${esc(v.title)}</div><div class="tx-sub">${datePill}${v.meta.map(x => `<span class="tx-meta-pill">${esc(x)}</span>`).join('')}${scheduledPill}</div></div>
       <div class="tx-right"><div class="tx-amount" style="color:${amountColor}">${signedAmount(tx)}</div>${notYetNote}</div>
     </div>`
   }
