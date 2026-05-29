@@ -62,6 +62,45 @@ test('reimbursement increases cash-inflow metadata but not normal income', () =>
   assert.equal(incomeBreakdown.length, 0)
 })
 
+test('legacy monthly stats helper also excludes reimbursements from income', () => {
+  const txs = [
+    {
+      id: 'salary',
+      type: 'income',
+      amount: 50000,
+      categoryId: 'salary',
+      walletId: 'bank',
+      date: '2026-05-01',
+    },
+    {
+      id: 'meal',
+      type: 'expense',
+      amount: 1000,
+      ledgerAmount: 250,
+      categoryId: 'food',
+      walletId: 'cash',
+      date: '2026-05-10',
+    },
+    {
+      id: 'refund',
+      type: 'income',
+      amount: 750,
+      categoryId: 'other_income',
+      walletId: 'cash',
+      date: '2026-05-11',
+      reimbursesSharedExpenseTxId: 'meal',
+    },
+  ]
+
+  const stats = Calc.getMonthlyStats(txs, '2026-05')
+
+  assert.equal(stats.income, 50000)
+  assert.equal(stats.expense, 250)
+  assert.equal(stats.reimbursementInflow, 750)
+  assert.equal(stats.net, 49750)
+  assert.equal(stats.cashNet, 50500)
+})
+
 test('income category breakdown can include reimbursements only when explicitly requested', () => {
   const txs = [
     {

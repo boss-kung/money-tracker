@@ -386,11 +386,14 @@ const Calc = {
     // Only count posted transactions — future-scheduled items (installments, etc.)
     // must not inflate or deflate the reported income/expense for the month.
     const txns = transactions.filter(t => t.date.startsWith(month) && Calc.isPostedTx(t))
-    let income = 0, expense = 0
+    let income = 0, expense = 0, reimbursementInflow = 0
     const byCategory = {}
 
     txns.forEach(t => {
-      if (t.type === 'income')  { income  += t.amount }
+      if (t.type === 'income') {
+        if (Calc.isReimbursementTx(t)) reimbursementInflow += Number(t.amount || 0)
+        else income += Number(t.amount || 0)
+      }
       if (t.type === 'expense') {
         const amount = Calc.getExpenseLedgerAmount(t)
         expense += amount
@@ -399,8 +402,9 @@ const Calc = {
     })
 
     const net         = income - expense
+    const cashNet     = income + reimbursementInflow - expense
     const savingsRate = income > 0 ? Math.max(0, (net / income) * 100) : 0
-    return { income, expense, net, savingsRate, byCategory }
+    return { income, expense, reimbursementInflow, net, cashNet, savingsRate, byCategory }
   },
 
   getBudgetProgress(transactions, budgets, categories, month) {

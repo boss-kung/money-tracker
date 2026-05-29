@@ -2768,6 +2768,7 @@ App.render();
 
   function signedAmount(tx) {
     if (S.settings?.hideMoney) return '฿*****'
+    if (App.isReimbursementTx?.(tx)) return '+' + fmt(tx.amount)
     if (tx.type === 'income') return '+' + fmt(tx.amount)
     if (tx.type === 'expense') return '-' + fmt(tx.amount)
     if (tx.type === 'cc_payment') return '-' + fmt(App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(tx) : (tx.cashAmount || tx.amount))
@@ -2779,10 +2780,16 @@ App.render();
     const wallet = S.wallets.find(w => w.id === tx.walletId)
     const toWallet = S.wallets.find(w => w.id === tx.toWalletId)
     const isTransfer = tx.type === 'transfer'
-    const title = isTransfer ? `${wallet?.name || 'ไม่ระบุ'} → ${toWallet?.name || 'ไม่ระบุ'}` : (tx.merchant || tx.note || cat?.label || 'รายการ')
-    const icon = cat?.icon || (tx.type === 'income' ? '💰' : isTransfer ? '🔁' : tx.type === 'cc_payment' ? '💳' : '💸')
+    const isReimbursement = App.isReimbursementTx?.(tx)
+    const title = isTransfer ? `${wallet?.name || 'ไม่ระบุ'} → ${toWallet?.name || 'ไม่ระบุ'}` : (isReimbursement ? (tx.merchant || 'คืนเงินจากเพื่อน') : (tx.merchant || tx.note || cat?.label || 'รายการ'))
+    const icon = isReimbursement ? '↩️' : (cat?.icon || (tx.type === 'income' ? '💰' : isTransfer ? '🔁' : tx.type === 'cc_payment' ? '💳' : '💸'))
     const meta = []
-    if (cat?.label) meta.push(cat.label)
+    if (isReimbursement) {
+      const parent = tx.reimbursesSharedExpenseTxId ? (S.transactions || []).find(row => row.id === tx.reimbursesSharedExpenseTxId) : null
+      meta.push('เงินคืนจากเพื่อน')
+      if (parent) meta.push(`จาก ${parent.merchant || parent.note || 'บิลร่วม'}`)
+      else if (tx.reimbursesSharedExpenseTxId) meta.push('รายการต้นทางหาย')
+    } else if (cat?.label) meta.push(cat.label)
     if (wallet?.name && !isTransfer) meta.push(wallet.name)
     if (isTransfer) meta.push('โอนเงิน')
     if (tx.type === 'cc_payment' && Number(tx.discountAmount || 0) > 0) meta.push(`ตัดบัตร ${fmt(tx.amount)} · ส่วนลด ${fmt(tx.discountAmount)}`)
@@ -3715,7 +3722,7 @@ App.render();
   }
 
   // ── 2. Export CSV ────────────────────────────────────────────
-  App.exportCSV = function() {
+  App.exportCSVLegacy = function() {
     const typeLabel = { expense: 'รายจ่าย', income: 'รายรับ', transfer: 'โอนเงิน', cc_payment: 'ชำระบัตร' }
     const headers = ['วันที่','ประเภท','หมวดหมู่','ร้านค้า/แหล่งที่มา','จำนวนเงิน','กระเป๋าเงิน','หมายเหตุ']
     const rows = [...S.transactions]
@@ -3825,6 +3832,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const isCurrentMonth = dm === thisMonth
 
     const stats = Calc.getMonthlyStats(S.transactions, dm)
+    const reimbursementInflow = Number(stats.reimbursementInflow || 0)
+    const dashboardCashNet = Number(stats.cashNet ?? stats.net ?? 0)
     const usable = Calc.getUsableMoney
       ? Calc.getUsableMoney(S.wallets, S)
       : Calc.getNetWorth(S.wallets)
@@ -3994,10 +4003,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
           <div class="mt-net-metric"><small>รายรับ</small><strong style="color:#4ADE80;font-weight:600 !important">+${FMT(stats.income)}</strong></div>
           <div class="mt-divider"></div>
           <div class="mt-net-metric"><small>รายจ่าย</small><strong style="color:#F87171;font-weight:600 !important">-${FMT(stats.expense)}</strong></div>
+          ${reimbursementInflow > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>เงินคืนจากเพื่อน</small><strong style="color:#4ADE80;font-weight:600 !important">+${FMT(reimbursementInflow)}</strong></div>` : ''}
           ${transferTotal > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>โอน</small><strong style="font-weight:600 !important">${FMT(transferTotal)}</strong></div>` : ''}
           <div class="mt-divider"></div>
           <div class="mt-net-metric"><small>คงเหลือ</small><strong style="color:${stats.net >= 0 ? '#4ADE80' : '#F87171'};font-weight:600 !important">${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(stats.net))}</strong></div>
         </div>
+        ${reimbursementInflow > 0 ? `<div class="list-item-sub" style="padding:0 14px 12px">คงเหลือด้านบนไม่รวมเงินคืน เพื่อวัดรายรับปกติ · เงินสดสุทธิหลังรวมเงินคืน ${dashboardCashNet < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(dashboardCashNet))}</div>` : ''}
       </div>`
 
     if (nearDueCards.length) {
@@ -15087,6 +15098,7 @@ App._pickMerchant = function(name, opts = {}) {
     App.ensureCryptoState?.()
     App.migrateLegacyCryptoWallets?.()
     App.ensureLedgerBaselines?.(true)
+    App.repairSharedExpenseData?.({ save:false })
     App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
     persist()
     applyTheme?.()
@@ -15445,6 +15457,7 @@ App._pickMerchant = function(name, opts = {}) {
     App.ensurePrivilegesState?.()
     App.ensureCryptoState?.()
     App.ensureLedgerBaselines?.(true)
+    App.repairSharedExpenseData?.({ save:false })
     App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
     persist(); applyTheme?.(); App.render?.()
     return stats
@@ -15564,6 +15577,7 @@ App._pickMerchant = function(name, opts = {}) {
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
     notify('ส่งออก CSV สำเร็จ', 'success')
   }
+  App.exportCSVCanonical = App.exportCSV
 
   App.restorePreImportBackup = function() {
     let backup = null
@@ -18403,7 +18417,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       return ans('📋', 'รายการล่าสุด 5 รายการ',
         recent.map(t => {
           const sign = t.type==='expense'?'-':t.type==='income'?'+':''
-          return `${esc(t.date||'')} <strong>${sign}${fmt(t.amount)}</strong> ${esc(t.merchant||t.note||t.type||'')}`
+          const label = (Calc.isReimbursementTx?.(t) || App.isReimbursementTx?.(t))
+            ? `เงินคืนจากเพื่อน${t.merchant ? ` · ${t.merchant}` : ''}`
+            : (t.merchant||t.note||t.type||'')
+          return `${esc(t.date||'')} <strong>${sign}${fmt(t.amount)}</strong> ${esc(label)}`
         }).join('<br>'))
     }
 
