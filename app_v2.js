@@ -878,7 +878,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.29-r57'
+const APP_VERSION = '2026.05.29-r58'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -17328,6 +17328,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     overlay.setAttribute('aria-label', 'AI Financial Coach')
 
     const primary = insights[0]
+    insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
+
     const monthLabel = Calc.monthLabel?.(S.rptMonth) || S.rptMonth || ''
     const viewLabel = _reportViewLabel(S.rptView)
     const actionHtml = primary.action
@@ -17470,8 +17472,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       return
     }
 
-    insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
-
     const primary = insights[0]
     const icon = SEV_ICON[primary.severity] || '💡'
     const countText = insights.length > 1 ? `+${insights.length - 1}` : ''
@@ -17493,7 +17493,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   function _getReportCoachInsights() {
     let insights = []
-    try { insights = InsightEngine.getTopN(12, 'reports', S) } catch(_) { return [] }
+    try { insights = InsightEngine.getTopN(50, 'reports', S) } catch(_) { return [] }
     return _filterReportInsights(insights)
   }
 
