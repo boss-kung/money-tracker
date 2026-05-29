@@ -5958,11 +5958,151 @@ html.dark .ins-title-due-today {
 }
 
 /* Reports list inside ai-advisor-card */
+.ai-coach-card {
+  padding: 0 !important;
+  overflow: hidden;
+}
+.ai-coach-strip {
+  width: 100%;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 0;
+  background: var(--card);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.ai-coach-icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 11%, transparent);
+  font-size: 15px;
+}
+.ai-coach-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.ai-coach-kicker {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.ai-coach-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.25;
+}
+.ai-coach-copy > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.ai-coach-count {
+  min-width: 26px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+.ai-coach-chevron {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+}
+.reports-coach-sheet {
+  max-height: 82dvh !important;
+}
+.reports-coach-sheet-head {
+  align-items: flex-start !important;
+}
+.reports-coach-meta {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.reports-coach-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.reports-coach-body {
+  display: grid;
+  gap: 12px;
+}
+.reports-coach-primary {
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--card);
+}
+.reports-coach-primary.severity-critical {
+  border-color: #FCA5A5;
+  background: linear-gradient(135deg, rgba(220,38,38,.07), rgba(220,38,38,.02));
+}
+.reports-coach-primary.severity-warning {
+  border-color: #FCD34D;
+  background: linear-gradient(135deg, rgba(245,158,11,.07), rgba(245,158,11,.02));
+}
+.reports-coach-primary.severity-info {
+  border-color: rgba(37,99,235,.25);
+  background: linear-gradient(135deg, rgba(37,99,235,.06), transparent);
+}
+.reports-coach-primary.severity-positive {
+  border-color: #6EE7B7;
+  background: linear-gradient(135deg, rgba(5,150,105,.07), rgba(5,150,105,.02));
+}
+.reports-coach-primary-kicker,
+.reports-coach-section-title {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.reports-coach-primary-title {
+  margin-top: 5px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.32;
+}
+.reports-coach-primary-body {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.48;
+}
+.reports-coach-primary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.reports-coach-section-title {
+  margin-top: 2px;
+}
 .ins-reports-list {
-  margin-top: 10px;
+  margin-top: 0;
 }
 .ins-reports-list .ins-card {
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 /* Typography lock: LINE Seed Sans TH everywhere, max weight 800. */

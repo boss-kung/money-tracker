@@ -878,7 +878,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.29-r53'
+const APP_VERSION = '2026.05.29-r57'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -17315,6 +17315,65 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (btn) btn.textContent = rating === 'helpful' ? '👍' : '👎'
   }
 
+  App.openReportsCoach = function() {
+    const insights = _getReportCoachInsights()
+    if (!insights.length) return
+
+    document.getElementById('overlay-reports-coach')?.remove()
+    const overlay = document.createElement('div')
+    overlay.id = 'overlay-reports-coach'
+    overlay.className = 'overlay reports-coach-overlay'
+    overlay.setAttribute('role', 'dialog')
+    overlay.setAttribute('aria-modal', 'true')
+    overlay.setAttribute('aria-label', 'AI Financial Coach')
+
+    const primary = insights[0]
+    const monthLabel = Calc.monthLabel?.(S.rptMonth) || S.rptMonth || ''
+    const viewLabel = _reportViewLabel(S.rptView)
+    const actionHtml = primary.action
+      ? `<button class="ins-action-primary" data-ins-fn="${esc(primary.action.fn)}" onclick="App.insightAct('${esc(primary.id)}', this.dataset.insFn)">${esc(primary.action.label)}</button>`
+      : ''
+
+    overlay.innerHTML = `
+      <div class="overlay-backdrop" onclick="App.closeReportsCoach()" aria-hidden="true"></div>
+      <div class="sheet reports-coach-sheet">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="sheet-header reports-coach-sheet-head">
+          <div>
+            <h2>AI Financial Coach</h2>
+            <div class="reports-coach-meta">${esc([monthLabel, viewLabel].filter(Boolean).join(' · '))}</div>
+          </div>
+          <div class="reports-coach-head-actions">
+            <button class="btn btn-secondary btn-sm" onclick="InsightEngine.invalidate();App.closeReportsCoach();App.renderReports()" style="width:auto">วิเคราะห์ใหม่</button>
+            <button class="btn-icon" onclick="App.closeReportsCoach()" aria-label="ปิด">✕</button>
+          </div>
+        </div>
+        <div class="sheet-body reports-coach-body">
+          <div class="reports-coach-primary severity-${esc(primary.severity)}">
+            <div class="reports-coach-primary-kicker">คำแนะนำหลัก</div>
+            <div class="reports-coach-primary-title">${esc(primary.title)}</div>
+            <div class="reports-coach-primary-body">${esc(primary.body)}</div>
+            ${actionHtml ? `<div class="reports-coach-primary-actions">${actionHtml}</div>` : ''}
+          </div>
+          ${insights.length > 1 ? `
+            <div class="reports-coach-section-title">คำแนะนำอื่น</div>
+            <div class="ins-reports-list">${insights.slice(1).map(insightCardHtml).join('')}</div>
+          ` : ''}
+        </div>
+      </div>
+    `
+    document.body.appendChild(overlay)
+    requestAnimationFrame(() => overlay.classList.add('open'))
+  }
+
+  App.closeReportsCoach = function() {
+    const overlay = document.getElementById('overlay-reports-coach')
+    if (!overlay) return
+    overlay.classList.add('mt-closing')
+    overlay.classList.remove('open')
+    setTimeout(() => overlay.remove(), 380)
+  }
+
   // ── Card HTML builder ─────────────────────────────────────
   function insightCardHtml(ins) {
     const icon = SEV_ICON[ins.severity] || '💡'
@@ -17381,6 +17440,22 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     _upgradeReportsAI()
   }
 
+  const _prevSetRptView = App.setRptView?.bind(App)
+  App.setRptView = function(v) {
+    App.closeReportsCoach?.()
+    if (_prevSetRptView) return _prevSetRptView(v)
+    S.rptView = v
+    App.renderReports?.()
+  }
+
+  const _prevSetRptMonth = App.setRptMonth?.bind(App)
+  App.setRptMonth = function(m) {
+    App.closeReportsCoach?.()
+    if (_prevSetRptMonth) return _prevSetRptMonth(m)
+    S.rptMonth = m
+    App.renderReports?.()
+  }
+
   function _upgradeReportsAI() {
     const content = document.getElementById('reports-content')
     if (!content) return
@@ -17388,29 +17463,68 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const advisorCard = content.querySelector('.ai-advisor-card')
     if (!advisorCard) return
 
-    // Clear any stale content from previous renders
-    advisorCard.querySelectorAll('.insight-row.ai-insight').forEach(el => el.remove())
-    advisorCard.querySelector('.ins-reports-list')?.remove()
-    advisorCard.querySelector('.ins-reports-empty')?.remove()
-
-    let insights = []
-    try { insights = InsightEngine.getTopN(5, 'reports', S) } catch(_) { return }
-
-    insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
+    const insights = _getReportCoachInsights()
 
     if (!insights.length) {
-      const empty = document.createElement('div')
-      empty.className = 'list-item-sub ins-reports-empty'
-      empty.style.padding = '8px 0 4px'
-      empty.textContent = 'ไม่มีการแจ้งเตือนสำหรับตอนนี้'
-      advisorCard.appendChild(empty)
+      advisorCard.remove()
       return
     }
 
-    const listEl = document.createElement('div')
-    listEl.className = 'ins-reports-list'
-    listEl.innerHTML = insights.map(insightCardHtml).join('')
-    advisorCard.appendChild(listEl)
+    insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
+
+    const primary = insights[0]
+    const icon = SEV_ICON[primary.severity] || '💡'
+    const countText = insights.length > 1 ? `+${insights.length - 1}` : ''
+
+    advisorCard.className = 'card ai-advisor-card ai-coach-card'
+    advisorCard.innerHTML = `
+      <button class="ai-coach-strip" onclick="App.openReportsCoach()" aria-haspopup="dialog">
+        <span class="ai-coach-icon">${icon}</span>
+        <span class="ai-coach-copy">
+          <span class="ai-coach-kicker">AI Coach</span>
+          <strong>${esc(primary.title)}</strong>
+          <span>${esc(primary.body)}</span>
+        </span>
+        ${countText ? `<span class="ai-coach-count">${countText}</span>` : ''}
+        <span class="ai-coach-chevron">⌃</span>
+      </button>
+    `
+  }
+
+  function _getReportCoachInsights() {
+    let insights = []
+    try { insights = InsightEngine.getTopN(12, 'reports', S) } catch(_) { return [] }
+    return _filterReportInsights(insights)
+  }
+
+  function _reportViewLabel(view) {
+    return ({
+      assets: 'สินทรัพย์',
+      expense: 'ใช้จ่าย',
+      income: 'รายรับ',
+      cashflow: 'กระแสเงินสด',
+      credit: 'บัตร/หนี้',
+      budget: 'งบประมาณ',
+      trend: 'แนวโน้ม',
+      calendar: 'ปฏิทิน',
+    })[view || 'assets'] || ''
+  }
+
+  function _filterReportInsights(insights) {
+    const view = S.rptView || 'assets'
+    const byView = {
+      expense:  ['07','08','10','12','13'],
+      income:   ['13','16'],
+      cashflow: ['01','12','13','14','15','16'],
+      assets:   ['05','11','14'],
+      credit:   ['03'],
+      budget:   ['02','09','12'],
+      trend:    ['01','12','13','16'],
+    }
+    const allowed = byView[view]
+    if (!allowed) return []
+    const filtered = (insights || []).filter(ins => allowed.includes(String(ins.type || '')))
+    return filtered.slice(0, 5)
   }
 
   // ── Add-tx detail: budget impact chip ────────────────────
@@ -19547,7 +19661,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="report-category-title">คาดการณ์รายจ่ายตามหมวด</div>
       ${forecast.categories.slice(0,5).map(c => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
         <span>${esc(c.label)}</span>
-        <span>${money(c.projected)}${c.accuracy?.mape !== null ? ` · error ${(c.accuracy.mape*100).toFixed(0)}%` : ''}</span>
+        <span>${fmt(c.projected)}${c.accuracy?.mape !== null ? ` · error ${(c.accuracy.mape*100).toFixed(0)}%` : ''}</span>
       </div>`).join('') || '<div class="list-item-sub">ยังไม่มีข้อมูลคาดการณ์</div>'}
     </div>`)
   }
