@@ -8,7 +8,7 @@ const InsightEngine = (() => {
   const STORE_KEY = 'mt_ai_insight_store'
   const CACHE_TTL_MS = 4 * 60 * 60 * 1000
   const DISMISS_TTL_MS = 30 * 24 * 60 * 60 * 1000
-  const VERSION = 1
+  const VERSION = 2
 
   // ── Helpers ─────────────────────────────────────────────────
   function todayStr() {
@@ -41,6 +41,10 @@ const InsightEngine = (() => {
         bud:      (p.budget || []).map(b => `${b.categoryId}:${Math.round(b.spent || 0)}:${b.limit || 0}`).sort().join(','),
         bills:    (p.billsDue || []).length,
         privExp:  (p.privExpiring || []).length,
+        cc:       (p.creditStatements || [])
+          .map(row => `${row.card?.id || ''}:${Math.round(Number(row.card?.balance || 0))}:${row.dueInfo?.dateStr || ''}:${row.hasPaymentForDue ? 1 : 0}`)
+          .sort()
+          .join(','),
       }))
     } catch (_) { return 'err' }
   }
@@ -52,6 +56,14 @@ const InsightEngine = (() => {
       }
     } catch (_) {}
     return Number(t?.ledgerAmount ?? t?.amount ?? 0) || 0
+  }
+
+  function shiftDateStr(dateStr, dayDelta = 0) {
+    const [y, m, d] = String(dateStr || '').split('-').map(Number)
+    if (!y || !m || !d) return ''
+    const next = new Date(y, m - 1, d)
+    next.setDate(next.getDate() + Number(dayDelta || 0))
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`
   }
 
   // ── Store CRUD ───────────────────────────────────────────────
@@ -140,7 +152,18 @@ const InsightEngine = (() => {
       let stmt = null, dueInfo = null
       try { if (typeof App !== 'undefined' && App.getCardStatement) stmt = App.getCardStatement(card.id) } catch(_) {}
       try { if (typeof App !== 'undefined' && App.getCreditCardDueInfo) dueInfo = App.getCreditCardDueInfo(card) } catch(_) {}
-      return { card, stmt, dueInfo }
+      const dueDate = String(dueInfo?.dateStr || stmt?.dueDate || '')
+      const alertWindowStart = shiftDateStr(dueDate, -3)
+      const hasPaymentForDue = (Number(stmt?.paidTotal || 0) > 0 && (!dueDate || String(stmt?.dueDate || '') === dueDate))
+        || txs.some(t => {
+          if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
+          if (!(Number(t.amount || 0) > 0)) return false
+          if (stmt?.id && String(t.statementId || '') === String(stmt.id)) return true
+          const date = String(t.date || '')
+          if (stmt?.end && stmt?.dueDate && date > String(stmt.end) && date <= String(stmt.dueDate)) return true
+          return !!(date && alertWindowStart && dueDate && date >= alertWindowStart && date <= dueDate)
+        })
+      return { card, stmt, dueInfo, hasPaymentForDue }
     })
 
     // Pending bills with daysLeft
@@ -295,8 +318,9 @@ const InsightEngine = (() => {
 
     // ── INS-03: Credit Card Due Soon ───────────────────────────
     try {
-      payload.creditStatements.forEach(({ card, dueInfo }) => {
+      payload.creditStatements.forEach(({ card, dueInfo, hasPaymentForDue }) => {
         if (!dueInfo) return
+        if (hasPaymentForDue) return
         const daysLeft = Number(dueInfo.daysLeft)
         if (daysLeft < 0 || daysLeft > 7) return
         const amount = Math.abs(Number(card.balance || 0))

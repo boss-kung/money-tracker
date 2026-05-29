@@ -878,7 +878,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.26-r49'
+const APP_VERSION = '2026.05.29-r53'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -1845,7 +1845,25 @@ function init() {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
     if (btn.dataset.bound === '1') return
     btn.dataset.bound = '1'
-    btn.addEventListener('click', () => App.showPage(btn.dataset.tab))
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab
+      if (tab === 'more') {
+        const now = Date.now()
+        const prev = App._moreNavTapMeta || { count: 0, at: 0 }
+        const count = now - Number(prev.at || 0) < 2500 ? Number(prev.count || 0) + 1 : 1
+        App._moreNavTapMeta = { count, at: now }
+        if (count >= 3) {
+          App._moreNavTapMeta = { count: 0, at: 0 }
+          try { navigator.vibrate?.(20) } catch (_) {}
+          toast('ตรวจพบการกดเพิ่มเติม 3 ครั้ง กำลังล้างแคชแอป', 'info')
+          App.forceResetAppCache?.()
+          return
+        }
+      } else {
+        App._moreNavTapMeta = { count: 0, at: 0 }
+      }
+      App.showPage(tab)
+    })
   })
 
   window.addEventListener('hashchange', () => {
@@ -3817,8 +3835,27 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const currentNetWorth = Calc.getNetWorth ? Calc.getNetWorth(S.wallets) : { assets: usable.liquid || 0 }
     const dashboardNetWorth = Number(currentNetWorth.assets || 0) - Number(usable.creditDebt || 0)
     function hasPaymentForCreditDue(card, due) {
-      const dueDate = String(due?.dateStr || '')
-      if (!card?.id || !dueDate || typeof App.getCardStatement !== 'function') return false
+      const shiftDateLocal = (dateStr, dayDelta = 0) => {
+        const [y, m, d] = String(dateStr || '').split('-').map(Number)
+        if (!y || !m || !d) return ''
+        const next = new Date(y, m - 1, d)
+        next.setDate(next.getDate() + Number(dayDelta || 0))
+        return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`
+      }
+      const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+      const dueDate = String(due?.dateStr || (Number(due?.daysLeft) === 0 ? todayStr : ''))
+      if (!card?.id) return false
+      const hasRecentPayment = () => {
+        const start = shiftDateLocal(todayStr, -3)
+        const end = dueDate && dueDate > todayStr ? dueDate : todayStr
+        return (S.transactions || []).some(t => {
+          if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
+          if (!(Number(t.amount || 0) > 0)) return false
+          const date = String(t.date || '')
+          return !!(date && start && date >= start && date <= end)
+        })
+      }
+      if (!dueDate || typeof App.getCardStatement !== 'function') return hasRecentPayment()
       const hasPaymentInStatementWindow = st => (S.transactions || []).some(t => {
         if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
         if (!(Number(t.amount || 0) > 0)) return false
@@ -3826,7 +3863,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         const date = String(t.date || '')
         return !!(st?.end && st?.dueDate && date > String(st.end) && date <= String(st.dueDate))
       })
-      let cursorRef = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+      let cursorRef = todayStr
       const seenStatementIds = new Set()
       for (let i = 0; i < 3; i++) {
         const st = App.getCardStatement(card.id, cursorRef)
@@ -3835,17 +3872,11 @@ Calc.getUsableMoney = function(wallets, state = null) {
         if (String(st.dueDate || '') === dueDate) {
           return Number(st.paidTotal || 0) > 0 || hasPaymentInStatementWindow(st)
         }
-        const prevRef = shiftDateStr(st.start, -1)
+        const prevRef = shiftDateLocal(st.start, -1)
         if (!prevRef || prevRef === cursorRef) break
         cursorRef = prevRef
       }
-      const alertWindowStart = shiftDateStr(dueDate, -3)
-      return (S.transactions || []).some(t => {
-        if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
-        if (!(Number(t.amount || 0) > 0)) return false
-        const date = String(t.date || '')
-        return !!(date && alertWindowStart && date >= alertWindowStart && date <= dueDate)
-      })
+      return hasRecentPayment()
     }
     const alertCards = (typeof visibleWallets === 'function' ? visibleWallets() : S.wallets.filter(w => !w.hiddenFromWalletList))
       .filter(w => w.type === 'credit' && Math.abs(Number(w.balance || 0)) > 0)
@@ -3858,6 +3889,24 @@ Calc.getUsableMoney = function(wallets, state = null) {
       .filter(card => Number(card.due?.daysLeft) >= 0)
       .filter(card => !hasPaymentForCreditDue(card, card.due))
       .sort((a, b) => Number(a.due?.daysLeft ?? 9999) - Number(b.due?.daysLeft ?? 9999))
+    App.debugDashboardCreditAlerts = function() {
+      return (typeof visibleWallets === 'function' ? visibleWallets() : S.wallets.filter(w => !w.hiddenFromWalletList))
+        .filter(w => w.type === 'credit')
+        .map(card => {
+          const due = App.getCreditCardDueInfo ? App.getCreditCardDueInfo(card) : (card.dueDay ? Calc.getDueDate(card.dueDay) : null)
+          return {
+            id: card.id,
+            name: card.name,
+            balance: card.balance,
+            due,
+            hasPaymentForDue: hasPaymentForCreditDue(card, due),
+            payments: (S.transactions || [])
+              .filter(t => t.type === 'cc_payment' && String(t.toWalletId || '') === String(card.id))
+              .map(t => ({ id: t.id, date: t.date, amount: t.amount, statementId: t.statementId, walletId: t.walletId, toWalletId: t.toWalletId }))
+              .slice(0, 10),
+          }
+        })
+    }
     const CREDIT_ALERT_DAYS = 3
     const minDaysLeft = alertCards.length ? Number(alertCards[0].due.daysLeft ?? 0) : null
     const shouldShowCreditAlert = minDaysLeft !== null && minDaysLeft >= 0 && minDaysLeft <= CREDIT_ALERT_DAYS
@@ -14969,24 +15018,30 @@ App._pickMerchant = function(name, opts = {}) {
       title:'ล้างแคชแอป',
       confirmLabel:'ล้างแคช',
       body:'ล้างเฉพาะไฟล์แอปและ service worker เพื่อดึงเวอร์ชันล่าสุด ข้อมูลการเงินในเครื่องจะไม่ถูกลบ',
-      onConfirm: async () => {
-        try {
-          const keys = 'caches' in window ? await caches.keys() : []
-          await Promise.all(keys.filter(key => key.startsWith('money-tracker')).map(key => caches.delete(key)))
-          if ('serviceWorker' in navigator) {
-            const regs = await navigator.serviceWorker.getRegistrations()
-            const appDir = location.href.replace(/[^/]*$/, '')
-            await Promise.all(regs
-              .filter(reg => String(reg.scope || '').startsWith(appDir) || String(reg.active?.scriptURL || reg.waiting?.scriptURL || reg.installing?.scriptURL || '').includes('service-worker_v2.js'))
-              .map(reg => reg.unregister()))
-          }
-          toast('ล้างแคชแล้ว กำลังโหลดไฟล์ล่าสุด', 'success')
-          setTimeout(() => location.reload(), 500)
-        } catch (_) {
-          toast('ล้างแคชไม่สำเร็จ กรุณาปิดและเปิดแอปใหม่', 'error')
-        }
-      },
+      onConfirm: () => App.forceResetAppCache?.(),
     })
+  }
+
+  App.forceResetAppCache = async function() {
+    try {
+      const keys = 'caches' in window ? await caches.keys() : []
+      await Promise.all(keys.filter(key => key.startsWith('money-tracker')).map(key => caches.delete(key)))
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        const appDir = location.href.replace(/[^/]*$/, '')
+        await Promise.all(regs
+          .filter(reg => String(reg.scope || '').startsWith(appDir) || String(reg.active?.scriptURL || reg.waiting?.scriptURL || reg.installing?.scriptURL || '').includes('service-worker_v2.js'))
+          .map(reg => reg.unregister()))
+      }
+      toast('ล้างแคชแล้ว กำลังโหลดไฟล์ล่าสุด', 'success')
+      setTimeout(() => {
+        const url = new URL(location.href)
+        url.searchParams.set('mt_cache_bust', String(Date.now()))
+        location.replace(url.href)
+      }, 500)
+    } catch (_) {
+      toast('ล้างแคชไม่สำเร็จ กรุณาปิดและเปิดแอปใหม่', 'error')
+    }
   }
 
   /* ============================================================
