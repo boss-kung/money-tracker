@@ -878,7 +878,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.29-r58'
+const APP_VERSION = '2026.05.29-r61'
 window.MT_APP_VERSION = APP_VERSION
 
 /* ============================================================
@@ -17328,8 +17328,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     overlay.setAttribute('aria-label', 'AI Financial Coach')
 
     const primary = insights[0]
-    insights.forEach(ins => { try { InsightEngine.markSeen(ins.id) } catch(_) {} })
-
     const monthLabel = Calc.monthLabel?.(S.rptMonth) || S.rptMonth || ''
     const viewLabel = _reportViewLabel(S.rptView)
     const actionHtml = primary.action
@@ -17365,14 +17363,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>
     `
     document.body.appendChild(overlay)
-    requestAnimationFrame(() => overlay.classList.add('open'))
+    overlay.classList.add('open')
   }
 
   App.closeReportsCoach = function() {
     const overlay = document.getElementById('overlay-reports-coach')
-    if (!overlay) return
+    if (!overlay || overlay.classList.contains('mt-closing')) return
     overlay.classList.add('mt-closing')
-    overlay.classList.remove('open')
     setTimeout(() => overlay.remove(), 380)
   }
 
@@ -17436,6 +17433,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // ── Reports: upgrade AI Financial Coach section ───────────
+  document.addEventListener('click', e => {
+    const trigger = e.target?.closest?.('[data-reports-coach-trigger]')
+    if (!trigger) return
+    e.preventDefault()
+    App.openReportsCoach?.()
+  })
+
   const _prevRenderReports = App.renderReports?.bind(App)
   App.renderReports = function() {
     _prevRenderReports?.()
@@ -17478,7 +17482,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
     advisorCard.className = 'card ai-advisor-card ai-coach-card'
     advisorCard.innerHTML = `
-      <button class="ai-coach-strip" onclick="App.openReportsCoach()" aria-haspopup="dialog">
+      <button type="button" class="ai-coach-strip" data-reports-coach-trigger aria-haspopup="dialog">
         <span class="ai-coach-icon">${icon}</span>
         <span class="ai-coach-copy">
           <span class="ai-coach-kicker">AI Coach</span>
