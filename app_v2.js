@@ -1294,6 +1294,7 @@ const App = {
       S.tx.merchant = ''
       S.tx.isRecurring = false
       S.tx.isInstallment = false
+      App._applyLatestTransferDefault?.()
       App._normalizeTransferDraft?.()
     } else if (type !== 'expense') {
       S.tx.isRecurring = false
@@ -2730,6 +2731,20 @@ App.render();
   function getTransferableWallets() {
     return (S.wallets || []).filter(isTransferableWallet)
   }
+  function latestTransferPair() {
+    const walletIds = new Set(getTransferableWallets().map(w => w.id))
+    return [...(S.transactions || [])]
+      .filter(t => t.type === 'transfer' && walletIds.has(t.walletId) && walletIds.has(t.toWalletId) && t.walletId !== t.toWalletId)
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+      [0] || null
+  }
+  function applyLatestTransferDefault() {
+    if (!S.tx || S.tx.type !== 'transfer') return
+    const latest = latestTransferPair()
+    if (!latest) return
+    S.tx.walletId = latest.walletId
+    S.tx.toWalletId = latest.toWalletId
+  }
   function normalizeTransferDraft() {
     if (!S.tx || S.tx.type !== 'transfer') return
     const wallets = getTransferableWallets()
@@ -2739,6 +2754,7 @@ App.render();
     if (!dests.some(w => w.id === S.tx.toWalletId)) S.tx.toWalletId = dests[0]?.id || ''
   }
   App._normalizeTransferDraft = normalizeTransferDraft
+  App._applyLatestTransferDefault = applyLatestTransferDefault
   App._getTransferableWallets = getTransferableWallets
   App._isTransferableWallet = isTransferableWallet
 
@@ -15736,19 +15752,14 @@ App._pickMerchant = function(name, opts = {}) {
     return tx?.walletId || null
   }
 
-  // After openAddTx initialises S.tx, override walletId with most-recently-used.
+  // Keep the base wallet default from openAddTx. Merchant selection may still
+  // override walletId from matching merchant history below.
   const _prevOpenAddTx = App.openAddTx?.bind(App)
   App.openAddTx = function() {
     if (_prevOpenAddTx) _prevOpenAddTx()
     if (!S.tx) return
-    const recent = App._getMostRecentWallet(S.tx.type || 'expense')
-    // Only override if the wallet exists and is not archived
-    if (recent && (S.wallets||[]).find(w => w.id === recent && !w.archived)) {
-      S.tx.walletId = recent
-      // Mark as auto-set so merchant suggestion can still override it
-      S.tx._walletAutoSet = true
-      S.tx._walletManuallySet = false
-    }
+    S.tx._walletAutoSet = false
+    S.tx._walletManuallySet = false
   }
 
   // When user picks a merchant from dropdown, auto-suggest category and wallet
