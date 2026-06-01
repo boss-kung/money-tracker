@@ -8,10 +8,50 @@
   const INSTALL_KEY = 'mt_notification_install_id'
   const PUSH_SUB_KEY = 'mt_notification_push_sub'
   const LAST_SYNC_KEY = 'mt_notification_last_snapshot_sync'
+  const LAST_RULES_SYNC_KEY = 'mt_notification_last_rules_sync'
+  const LAST_RULES_HASH_KEY = 'mt_notification_last_rules_hash'
+  const RULES_SYNC_TTL_MS = 6 * 60 * 60 * 1000
+  const SNAPSHOT_SYNC_TTL_MS = 10 * 60 * 1000
+  const BOOT_SYNC_DELAY_MS = 6000
+  const BACKGROUND_FETCH_TIMEOUT_MS = 3000
+  const MANUAL_FETCH_TIMEOUT_MS = 10000
+  let backgroundSyncTimer = null
+  let backgroundSyncInFlight = false
   const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch]))
 
   function notify(message, type = 'info') {
     try { toast(message, type) } catch (_) { console.log(message) }
+  }
+
+  function bootMark(name, extra = {}) {
+    try { window.MTBoot?.mark?.(`notifications.${name}`, extra) } catch (_) {}
+  }
+
+  function isDisabledByDebugFlag() {
+    return window.MT_DEBUG_FLAGS?.noNotifications === true
+  }
+
+  function runWhenIdle(callback, timeout = 3000) {
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(callback, { timeout })
+      return
+    }
+    setTimeout(callback, Math.min(timeout, 1200))
+  }
+
+  function stableStringify(value) {
+    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+    if (value && typeof value === 'object') {
+      return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
+    }
+    return JSON.stringify(value)
+  }
+
+  function simpleHash(value) {
+    const input = stableStringify(value)
+    let hash = 5381
+    for (let i = 0; i < input.length; i++) hash = ((hash << 5) + hash) ^ input.charCodeAt(i)
+    return String(hash >>> 0)
   }
 
   function defaultPrefs() {
@@ -177,21 +217,35 @@
     return Boolean(cfg.functionsUrl && cfg.supabaseAnonKey && cfg.vapidKey)
   }
 
-  async function callFunction(name, payload) {
+  async function callFunction(name, payload, options = {}) {
     const cfg = getConfig()
     if (!cfg.functionsUrl || !cfg.supabaseAnonKey) throw new Error('Supabase notification config is missing')
-    const response = await fetch(`${cfg.functionsUrl}/${name}`, {
-      method: 'POST',
-      headers: {
-        apikey: cfg.supabaseAnonKey,
-        Authorization: `Bearer ${cfg.supabaseAnonKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    })
-    const data = await response.json().catch(() => ({}))
-    if (!response.ok || data.error) throw new Error(data.error || `Function ${name} failed`)
-    return data
+    const timeoutMs = Number(options.timeoutMs || BACKGROUND_FETCH_TIMEOUT_MS)
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+    const started = performance.now()
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null
+    bootMark(`${name}.start`, { timeoutMs })
+    try {
+      const response = await fetch(`${cfg.functionsUrl}/${name}`, {
+        method: 'POST',
+        headers: {
+          apikey: cfg.supabaseAnonKey,
+          Authorization: `Bearer ${cfg.supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: controller?.signal,
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || data.error) throw new Error(data.error || `Function ${name} failed`)
+      bootMark(`${name}.done`, { duration: Math.round((performance.now() - started) * 10) / 10 })
+      return data
+    } catch (err) {
+      bootMark(`${name}.error`, { message: err?.name === 'AbortError' ? 'timeout' : (err?.message || String(err || '')), duration: Math.round((performance.now() - started) * 10) / 10 })
+      throw err
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
   }
 
   function platform() {
@@ -226,6 +280,14 @@
     } catch (_) { return null }
   }
 
+  function notificationsMaySync() {
+    if (isDisabledByDebugFlag()) return false
+    if (!isConfigured()) return false
+    const prefs = S.settings?.notifications
+    const permission = typeof Notification !== 'undefined' ? Notification.permission : ''
+    return Boolean(prefs?.enabled || permission === 'granted' || storedPushSub())
+  }
+
   function todayStr() {
     const d = new Date()
     const y = d.getFullYear()
@@ -242,10 +304,17 @@
   }
 
   function buildSnapshot() {
+    const started = performance.now()
     const today = todayStr()
     const txs = Array.isArray(S.transactions) ? S.transactions : []
-    const todayTxCount = txs.filter(t => String(t.date || '') === today && ['expense','income','transfer','cc_payment'].includes(String(t.type || ''))).length
-    const lastTxDate = txs.map(t => String(t.date || '')).filter(Boolean).sort().pop() || null
+    const txCountTypes = new Set(['expense','income','transfer','cc_payment'])
+    let todayTxCount = 0
+    let lastTxDate = null
+    for (const tx of txs) {
+      const date = String(tx?.date || '')
+      if (date && (!lastTxDate || date > lastTxDate)) lastTxDate = date
+      if (date === today && txCountTypes.has(String(tx?.type || ''))) todayTxCount++
+    }
 
     const upcomingBills = (S.upcomingBills || [])
       .filter(b => b?.status === 'pending')
@@ -309,7 +378,7 @@
       .filter(p => p.daysLeft >= 0 && p.daysLeft <= 30)
       .slice(0, 25)
 
-    return {
+    const snapshot = {
       installId: getInstallId(),
       snapshotDate: today,
       todayTxCount,
@@ -322,14 +391,19 @@
       lastExportedAt: S.settings?.storageMeta?.lastExportedAt || null,
       appVersion: window.MT_APP_VERSION || '',
     }
+    bootMark('buildSnapshot.done', { duration: Math.round((performance.now() - started) * 10) / 10, transactions: txs.length })
+    return snapshot
   }
 
-  async function syncSnapshot({ force = false } = {}) {
-    if (!isConfigured()) return false
+  async function syncSnapshot({ force = false, timeoutMs = BACKGROUND_FETCH_TIMEOUT_MS } = {}) {
+    if (!notificationsMaySync()) return false
     const now = Date.now()
     const last = Number(localStorage.getItem(LAST_SYNC_KEY) || 0)
-    if (!force && now - last < 10 * 60 * 1000) return true
-    await callFunction('sync-notification-snapshot', buildSnapshot())
+    if (!force && now - last < SNAPSHOT_SYNC_TTL_MS) {
+      bootMark('syncSnapshot.skipped', { reason: 'throttle' })
+      return true
+    }
+    await callFunction('sync-notification-snapshot', buildSnapshot(), { timeoutMs })
     try { localStorage.setItem(LAST_SYNC_KEY, String(now)) } catch (_) {}
     return true
   }
@@ -349,7 +423,7 @@
         backup_reminder_enabled: false,
         monthly_summary_enabled: false,
       },
-    })
+    }, { timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
     return true
   }
 
@@ -480,14 +554,28 @@
     return route || 'dashboard'
   }
 
-  async function syncCustomRules() {
-    if (!isConfigured()) return false
+  async function syncCustomRules({ force = false, timeoutMs = BACKGROUND_FETCH_TIMEOUT_MS } = {}) {
+    if (!notificationsMaySync()) return false
     const rules = getCustomRules()
-    return callFunction('sync-notification-rules', {
+    const payload = {
       installId: getInstallId(),
       rules,
       appVersion: window.MT_APP_VERSION || '',
-    })
+    }
+    const hash = simpleHash(payload)
+    const now = Date.now()
+    const last = Number(localStorage.getItem(LAST_RULES_SYNC_KEY) || 0)
+    const lastHash = localStorage.getItem(LAST_RULES_HASH_KEY) || ''
+    if (!force && hash === lastHash && now - last < RULES_SYNC_TTL_MS) {
+      bootMark('syncCustomRules.skipped', { reason: 'unchanged' })
+      return true
+    }
+    const data = await callFunction('sync-notification-rules', payload, { timeoutMs })
+    try {
+      localStorage.setItem(LAST_RULES_HASH_KEY, hash)
+      localStorage.setItem(LAST_RULES_SYNC_KEY, String(now))
+    } catch (_) {}
+    return data
   }
 
   function routeLabel(route) {
@@ -576,10 +664,10 @@
       hideAmounts: Boolean(prefs.hide_amounts_in_notification),
       appVersion: window.MT_APP_VERSION || '',
       userAgent: navigator.userAgent || '',
-    })
+    }, { timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
     await savePreferences()
-    await syncCustomRules().catch(() => {})
-    await syncSnapshot({ force: true })
+    await syncCustomRules({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS }).catch(() => {})
+    await syncSnapshot({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
     notify('เปิดการแจ้งเตือนแล้ว', 'success')
     App.renderMore?.()
     return true
@@ -602,7 +690,7 @@
         hideAmounts: Boolean(prefs.hide_amounts_in_notification),
         appVersion: window.MT_APP_VERSION || '',
         userAgent: navigator.userAgent || '',
-      }).catch(() => {})
+      }, { timeoutMs: MANUAL_FETCH_TIMEOUT_MS }).catch(() => {})
     }
     await savePreferences().catch(() => {})
     notify('ปิดการแจ้งเตือนแล้ว', 'success')
@@ -901,7 +989,7 @@
     prefs.customRules = rules
     persist()
     S.notificationRuleDraft = null
-    syncCustomRules().catch(() => {})
+    syncCustomRules({ force: true }).catch(() => {})
     notify('บันทึกกฎแจ้งเตือนแล้ว', 'success')
     App.openCustomNotificationRulesScreen()
   }
@@ -913,7 +1001,7 @@
     rule.enabled = !rule.enabled
     rule.updatedAt = new Date().toISOString()
     persist()
-    syncCustomRules().catch(() => {})
+    syncCustomRules({ force: true }).catch(() => {})
     App.openCustomNotificationRulesScreen(false)
   }
 
@@ -928,7 +1016,7 @@
         const prefs = ensureSettings()
         prefs.customRules = prefs.customRules.filter(item => item.id !== ruleId)
         persist()
-        syncCustomRules().catch(() => {})
+        syncCustomRules({ force: true }).catch(() => {})
         notify('ลบกฎแจ้งเตือนแล้ว', 'success')
         App.openCustomNotificationRulesScreen()
       },
@@ -937,15 +1025,15 @@
 
   App.syncAllNotificationData = function() {
     Promise.all([
-      syncSnapshot({ force: true }),
-      syncCustomRules(),
+      syncSnapshot({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS }),
+      syncCustomRules({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS }),
     ])
       .then(() => notify('ซิงค์การแจ้งเตือนแล้ว', 'success'))
       .catch(err => notify(err.message || 'ซิงค์ไม่สำเร็จ', 'error'))
   }
 
   App.syncCustomNotificationRules = function(showToast = false) {
-    syncCustomRules()
+    syncCustomRules({ force: Boolean(showToast), timeoutMs: showToast ? MANUAL_FETCH_TIMEOUT_MS : BACKGROUND_FETCH_TIMEOUT_MS })
       .then(ok => { if (showToast) notify(ok ? 'Sync กฎแจ้งเตือนแล้ว' : 'ยังไม่ได้ตั้งค่า Firebase/Supabase', ok ? 'success' : 'warn') })
       .catch(err => notify(err.message || 'Sync กฎไม่สำเร็จ', 'error'))
   }
@@ -982,9 +1070,50 @@
   }
 
   App.syncNotificationSnapshot = function(force = false) {
-    syncSnapshot({ force: Boolean(force) })
+    syncSnapshot({ force: Boolean(force), timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
       .then(ok => notify(ok ? 'ซิงค์การแจ้งเตือนแล้ว' : 'ยังไม่ได้ตั้งค่า Notification', ok ? 'success' : 'warn'))
       .catch(err => notify(err.message || 'ซิงค์ไม่สำเร็จ', 'error'))
+  }
+
+  function runBackgroundNotificationSync(reason = 'boot') {
+    if (backgroundSyncInFlight) return
+    if (document.visibilityState !== 'visible') {
+      bootMark('backgroundSync.skipped', { reason: 'hidden' })
+      return
+    }
+    if ('onLine' in navigator && !navigator.onLine) {
+      bootMark('backgroundSync.skipped', { reason: 'offline' })
+      return
+    }
+    if (!notificationsMaySync()) {
+      bootMark('backgroundSync.skipped', { reason: isDisabledByDebugFlag() ? 'flag' : 'not-enabled' })
+      return
+    }
+    backgroundSyncInFlight = true
+    bootMark('backgroundSync.start', { reason })
+    Promise.allSettled([
+      syncSnapshot({ timeoutMs: BACKGROUND_FETCH_TIMEOUT_MS }),
+      syncCustomRules({ timeoutMs: BACKGROUND_FETCH_TIMEOUT_MS }),
+    ]).then(results => {
+      bootMark('backgroundSync.done', {
+        snapshot: results[0]?.status,
+        rules: results[1]?.status,
+      })
+    }).finally(() => {
+      backgroundSyncInFlight = false
+    })
+  }
+
+  function scheduleBackgroundNotificationSync(reason = 'boot') {
+    if (backgroundSyncTimer) clearTimeout(backgroundSyncTimer)
+    if (isDisabledByDebugFlag()) {
+      bootMark('backgroundSync.disabledByFlag')
+      return
+    }
+    backgroundSyncTimer = setTimeout(() => {
+      runWhenIdle(() => runBackgroundNotificationSync(reason), 5000)
+    }, reason === 'boot' ? BOOT_SYNC_DELAY_MS : 1000)
+    bootMark('backgroundSync.scheduled', { reason })
   }
 
   App.testLocalNotification = async function() {
@@ -1026,7 +1155,10 @@
     ensureSettings()
     handleNotificationRoute()
     if (S.page === 'more') App.renderMore?.()
-    syncSnapshot().catch(() => {})
-    syncCustomRules().catch(() => {})
   }, 500)
+  window.addEventListener('online', () => scheduleBackgroundNotificationSync('online'), { passive: true })
+  window.addEventListener('pageshow', event => {
+    if (event.persisted) scheduleBackgroundNotificationSync('pageshow')
+  }, { passive: true })
+  scheduleBackgroundNotificationSync('boot')
 })()

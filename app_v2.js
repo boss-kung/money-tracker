@@ -878,8 +878,9 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.05.29-r62'
+const APP_VERSION = '2026.06.01-r63'
 window.MT_APP_VERSION = APP_VERSION
+window.MTBoot?.mark?.('app_v2.version', { version: APP_VERSION })
 
 /* ============================================================
    Core App Shell
@@ -1642,6 +1643,13 @@ Object.assign(App, {
 
 function setupServiceWorkerUpdates() {
   if (!('serviceWorker' in navigator) || location.protocol === 'file:') return
+  if (window.MT_DEBUG_FLAGS?.noServiceWorker) {
+    window.MTBoot?.mark?.('serviceWorker.disabledByFlag')
+    navigator.serviceWorker.getRegistrations()
+      .then(regs => Promise.all(regs.map(reg => reg.unregister())))
+      .catch(() => {})
+    return
+  }
 
   let controllerReloading = false
   const showUpdateBanner = (registration) => {
@@ -1707,7 +1715,9 @@ function setupServiceWorkerUpdates() {
     location.reload()
   })
 
+  window.MTBoot?.mark?.('serviceWorker.register.start')
   navigator.serviceWorker.register(`./service-worker_v2.js?v=${encodeURIComponent(APP_VERSION)}`).then(registration => {
+    window.MTBoot?.mark?.('serviceWorker.register.done')
     if (registration.waiting && navigator.serviceWorker.controller) showUpdateBanner(registration)
     registration.addEventListener('updatefound', () => {
       const worker = registration.installing
@@ -1719,7 +1729,7 @@ function setupServiceWorkerUpdates() {
       })
     })
     setTimeout(() => registration.update().catch(() => {}), 1500)
-  }).catch(() => {})
+  }).catch(err => window.MTBoot?.mark?.('serviceWorker.register.error', { message: err?.message || String(err || '') }))
 }
 
 function setupConnectivityWatch() {
@@ -1750,8 +1760,12 @@ function syncStandaloneBodyClass() {
 
 // ── Init ──────────────────────────────────────────────────────
 function init() {
+  const initStart = performance.now()
+  window.MTBoot?.mark?.('app.init.start')
   // Load data
+  const storageStart = performance.now()
   const data = Storage.init()
+  window.MTBoot?.mark?.('storage.init.done', { duration: Math.round((performance.now() - storageStart) * 10) / 10 })
   S.transactions = data.transactions
   S.wallets      = data.wallets
   S.categories   = data.categories
@@ -1877,7 +1891,9 @@ function init() {
   }, { passive: true })
 
   // Initial render
+  const renderStart = performance.now()
   App.showPage(S.page)
+  window.MTBoot?.mark?.('app.firstRender.done', { page: S.page, duration: Math.round((performance.now() - renderStart) * 10) / 10 })
 
   // If opened via notification with an open= param (e.g. #more?open=upcomingBills),
   // trigger the sub-screen after the initial render completes.
@@ -1897,9 +1913,14 @@ function init() {
 
   setupServiceWorkerUpdates()
   setupConnectivityWatch()
+  window.MTBoot?.mark?.('app.init.done', { duration: Math.round((performance.now() - initStart) * 10) / 10 })
 }
 
-if (window.MTAppLock && typeof window.MTAppLock.start === 'function') {
+if (window.MT_DEBUG_FLAGS?.noAppLock) {
+  window.MTBoot?.mark?.('appLock.disabledByFlag')
+  init()
+} else if (window.MTAppLock && typeof window.MTAppLock.start === 'function') {
+  window.MTBoot?.mark?.('appLock.start')
   window.MTAppLock.start(init)
 } else {
   init()

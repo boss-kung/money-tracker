@@ -1,6 +1,8 @@
-const APP_VERSION = '2026.05.29-r62'
+const APP_VERSION = '2026.06.01-r63'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
+const HTML_NETWORK_TIMEOUT_MS = 800
+const CORE_NETWORK_TIMEOUT_MS = 900
 
 const STATIC_ASSETS = [
   './',
@@ -65,6 +67,15 @@ async function precache() {
   }))
 }
 
+async function matchCached(request, fallbackUrl = '') {
+  return (await caches.match(request, { ignoreSearch: true })) ||
+    (fallbackUrl ? await caches.match(fallbackUrl, { ignoreSearch: true }) : null)
+}
+
+function timeoutResult(ms) {
+  return new Promise(resolve => setTimeout(() => resolve(null), ms))
+}
+
 async function networkFirst(request, fallbackUrl = '') {
   const cache = await caches.open(CACHE_NAME)
   try {
@@ -72,17 +83,27 @@ async function networkFirst(request, fallbackUrl = '') {
     await putIfUsable(cache, request, response)
     return response
   } catch (_) {
-    return (await caches.match(request)) || (fallbackUrl ? await caches.match(fallbackUrl) : null) || Response.error()
+    return (await matchCached(request, fallbackUrl)) || Response.error()
   }
+}
+
+async function networkFirstWithTimeout(request, fallbackUrl = '', timeoutMs = CORE_NETWORK_TIMEOUT_MS) {
+  const cache = await caches.open(CACHE_NAME)
+  const cached = await matchCached(request, fallbackUrl)
+  const fresh = fetch(request)
+    .then(response => putIfUsable(cache, request, response))
+    .catch(() => null)
+  if (!cached) return (await fresh) || Response.error()
+  return (await Promise.race([fresh, timeoutResult(timeoutMs)])) || cached
 }
 
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(CACHE_NAME)
-  const cached = await caches.match(request)
+  const cached = await matchCached(request)
   const fresh = fetch(request)
     .then(response => putIfUsable(cache, request, response))
     .catch(() => null)
-  return cached || fresh || caches.match('./index.html')
+  return cached || fresh || caches.match('./index.html', { ignoreSearch: true })
 }
 
 self.addEventListener('install', event => {
@@ -167,12 +188,12 @@ self.addEventListener('fetch', event => {
   const isCoreCode = ['app_v2.js', 'storage_v2.js', 'calculations.js', 'sample-data_v2.js', 'ai_insights.js', 'finance_intelligence.js', 'ask_my_money_core.js', 'notification_config.js', 'notifications_v2.js', 'style_v2.css', 'LINESeedSansTH_Rg.ttf', 'LINESeedSansTH_Bd.ttf', 'LINESeedSansTH_XBd.ttf'].includes(path)
 
   if (acceptsHtml) {
-    event.respondWith(networkFirst(request, './index.html'))
+    event.respondWith(networkFirstWithTimeout(request, './index.html', HTML_NETWORK_TIMEOUT_MS))
     return
   }
 
   if (isCoreCode) {
-    event.respondWith(networkFirst(request))
+    event.respondWith(networkFirstWithTimeout(request, '', CORE_NETWORK_TIMEOUT_MS))
     return
   }
 

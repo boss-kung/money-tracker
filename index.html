@@ -35,14 +35,42 @@
   <title>Financial Tracker 💰</title>
   <script>
     ;(() => {
+      const bootStartedAt = performance.now()
+      const params = new URLSearchParams(location.search)
+      const debugBoot = params.get('debugBoot') === '1'
+      const flags = {
+        debugBoot,
+        noServiceWorker: params.get('nosw') === '1',
+        noNotifications: params.get('nonoti') === '1',
+        noAppLock: params.get('noapplock') === '1',
+      }
+      const log = []
+      window.MT_DEBUG_FLAGS = flags
+      window.__mtBootLog = log
+      window.MTBoot = {
+        mark(name, extra = {}) {
+          const entry = { name, at: Math.round((performance.now() - bootStartedAt) * 10) / 10, ...extra }
+          log.push(entry)
+          if (debugBoot) console.log('[MT boot]', entry)
+          try { localStorage.setItem('mt_boot_last_log', JSON.stringify(log.slice(-80))) } catch (_) {}
+          return entry
+        },
+      }
+      window.addEventListener('error', event => {
+        window.MTBoot?.mark?.('window.error', { message: event.message, source: event.filename, line: event.lineno })
+      })
+      window.addEventListener('unhandledrejection', event => {
+        window.MTBoot?.mark?.('window.unhandledrejection', { message: event.reason?.message || String(event.reason || '') })
+      })
+      window.MTBoot.mark('html.inline.start', { flags })
       try {
-        if (new URLSearchParams(location.search).get('demo') === '1') {
+        if (params.get('demo') === '1') {
           location.replace('./demo/index.html')
         }
       } catch (_) {}
     })()
   </script>
-  <link rel="stylesheet" href="style_v2.css?v=2026.05.29-r56">
+  <link rel="stylesheet" href="style_v2.css?v=2026.06.01-r63">
   <style>
     /* Active tab dot indicator */
     .nav-btn.active::after {
@@ -253,9 +281,9 @@
   }
 </script>
 <script src="app_lock.js?v=2026.05.20-r40"></script>
-<script src="app_v2.js?v=2026.05.29-r62"></script>
+<script src="app_v2.js?v=2026.06.01-r63"></script>
 <script src="split_bill.js?v=2026.05.15-r1"></script>
 <script src="quick_capture.js?v=2026.05.18-r13"></script>
-<script src="notifications_v2.js?v=2026.05.20-r33"></script>
+<script src="notifications_v2.js?v=2026.06.01-r63"></script>
 </body>
 </html>
