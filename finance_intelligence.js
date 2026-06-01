@@ -12,6 +12,7 @@ const FinanceIntelligence = (() => {
   const MEMORY_KEY = 'mt_financial_memory'
   const FEEDBACK_KEY = 'mt_financial_recommendation_feedback'
   const FEATURE_KEY = 'mt_monthly_financial_features'
+  const FEATURE_META_KEY = 'mt_finance_feature_store_meta'
   const FEATURE_SCHEMA_VERSION = 2
   const FEEDBACK_RATINGS = new Set(['helpful','not_relevant','already_knew','acted','snoozed','hide_type'])
   const ACTION_LOG_KEY = 'mt_financial_action_log'
@@ -28,6 +29,10 @@ const FinanceIntelligence = (() => {
   }
   const pct = (cur, prev) => Math.abs(Number(prev || 0)) > 0 ? ((Number(cur || 0) - Number(prev || 0)) / Math.abs(Number(prev || 0))) * 100 : null
   const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, Number(n || 0)))
+
+  function mark(name, extra = {}) {
+    try { window.MTBoot?.mark?.(`finance.${name}`, extra) } catch(_) {}
+  }
 
   function currentMonth() {
     return typeof THIS_MONTH !== 'undefined'
@@ -1206,10 +1211,130 @@ const FinanceIntelligence = (() => {
     saveJson(FEATURE_KEY, { version:FEATURE_SCHEMA_VERSION, rows })
   }
 
+  function loadFeatureStoreMeta() {
+    return loadJson(FEATURE_META_KEY, {
+      schemaVersion: FEATURE_SCHEMA_VERSION,
+      builtForMonth: '',
+      lastBuiltAt: '',
+      monthsBack: 0,
+      sourceHash: '',
+    })
+  }
+
+  function saveFeatureStoreMeta(meta) {
+    saveJson(FEATURE_META_KEY, {
+      schemaVersion: FEATURE_SCHEMA_VERSION,
+      builtForMonth: currentMonth(),
+      lastBuiltAt: new Date().toISOString(),
+      monthsBack: 12,
+      sourceHash: '',
+      ...meta,
+    })
+  }
+
+  function sourceSignature(S = {}) {
+    const txs = Array.isArray(S.transactions) ? S.transactions : []
+    let latestTx = ''
+    for (const tx of txs) {
+      const marker = `${tx?.updatedAt || tx?.createdAt || ''}|${tx?.date || ''}|${tx?.id || ''}|${tx?.amount || ''}|${tx?.type || ''}`
+      if (marker > latestTx) latestTx = marker
+    }
+    const memories = loadMemory()
+    let latestMemory = ''
+    for (const memory of memories) {
+      const marker = `${memory?.at || memory?.updatedAt || ''}|${memory?.month || ''}|${memory?.id || ''}|${memory?.amount || ''}`
+      if (marker > latestMemory) latestMemory = marker
+    }
+    return [
+      FEATURE_SCHEMA_VERSION,
+      currentMonth(),
+      `tx:${txs.length}:${latestTx}`,
+      `budgets:${(S.budgets || []).length}:${(S.incomeBudgets || []).length}`,
+      `wallets:${(S.wallets || []).length}`,
+      `goals:${(S.goals || []).length}`,
+      `recurring:${(S.recurring || []).length}`,
+      `memory:${memories.length}:${latestMemory}`,
+    ].join('||')
+  }
+
+  function hasFeatureMonths(store, months = []) {
+    const available = new Set((store?.rows || []).map(row => row.month))
+    return months.every(month => available.has(month))
+  }
+
+  function isFeatureStoreFresh(S, opts = {}) {
+    const month = currentMonth()
+    const requiredMonths = opts.requiredMonths || [month, prevMonth(month)].filter(Boolean)
+    const store = loadFeatureStore()
+    const meta = loadFeatureStoreMeta()
+    const sourceHash = sourceSignature(S)
+    return Boolean(
+      meta.schemaVersion === FEATURE_SCHEMA_VERSION &&
+      meta.builtForMonth === month &&
+      meta.sourceHash === sourceHash &&
+      hasFeatureMonths(store, requiredMonths)
+    )
+  }
+
   function rebuildFeatureStore(S, monthsBack = 12) {
+    const started = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    mark('rebuildFull.start', { monthsBack })
     const months = Calc.getMonths?.(monthsBack) || [currentMonth()]
     const rows = months.map(m => featureForMonth(S, m))
     saveFeatureStore(rows)
+    saveFeatureStoreMeta({
+      schemaVersion: FEATURE_SCHEMA_VERSION,
+      builtForMonth: currentMonth(),
+      monthsBack,
+      sourceHash: sourceSignature(S),
+      rebuiltMonths: months,
+      mode: 'full',
+    })
+    mark('rebuildFull.done', { months: rows.length, duration: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - started) * 10) / 10 })
+    return rows
+  }
+
+  function rebuildFeatureStoreIncremental(S, opts = {}) {
+    const started = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const monthsBack = Number(opts.monthsBack || 12)
+    const month = currentMonth()
+    const previous = prevMonth(month)
+    const requested = Array.isArray(opts.months) ? opts.months : []
+    const months = [...new Set([month, previous, ...requested].filter(Boolean))]
+    const sourceHash = sourceSignature(S)
+    const store = loadFeatureStore()
+    const meta = loadFeatureStoreMeta()
+
+    if (opts.forceFull || store.version !== FEATURE_SCHEMA_VERSION || !(store.rows || []).length) {
+      mark('rebuildIncremental.fullFallback', { reason: opts.forceFull ? 'forceFull' : !(store.rows || []).length ? 'missing-store' : 'schema' })
+      return rebuildFeatureStore(S, monthsBack)
+    }
+
+    if (!opts.force && meta.schemaVersion === FEATURE_SCHEMA_VERSION && meta.builtForMonth === month && meta.sourceHash === sourceHash && hasFeatureMonths(store, months)) {
+      mark('rebuildIncremental.skip', { reason: 'fresh', month })
+      return store.rows
+    }
+
+    mark('rebuildIncremental.start', { months })
+    const rebuilt = new Map((store.rows || []).map(row => [row.month, row]))
+    months.forEach(m => rebuilt.set(m, featureForMonth(S, m)))
+
+    const allowed = new Set(Calc.getMonths?.(monthsBack) || [month])
+    const rows = [...rebuilt.values()]
+      .filter(row => allowed.has(row.month))
+      .sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')))
+      .slice(0, monthsBack)
+
+    saveFeatureStore(rows)
+    saveFeatureStoreMeta({
+      schemaVersion: FEATURE_SCHEMA_VERSION,
+      builtForMonth: month,
+      monthsBack,
+      sourceHash,
+      rebuiltMonths: months,
+      mode: 'incremental',
+    })
+    mark('rebuildIncremental.done', { months: months.length, totalRows: rows.length, duration: Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - started) * 10) / 10 })
     return rows
   }
 
@@ -1243,7 +1368,7 @@ const FinanceIntelligence = (() => {
     loadActionLog, recordActionLog, markActionUndone,
     adaptiveRecommendations, monthlyAutopilot, proactiveBrief, copilotBrief, proactiveAlertQueue, weeklyReview, monthlyCloseBrief, decisionLab, learningEngine, learningNudges, sharedFinance, actionProposals, featureForMonth,
     loadLifePlans, saveLifePlan, deleteLifePlan, lifePlanningSummary,
-    loadFeatureStore, rebuildFeatureStore, forecastAccuracyRows, forecastAccuracySummary, categoryForecastAccuracy, categorySeasonality,
+    loadFeatureStore, loadFeatureStoreMeta, isFeatureStoreFresh, rebuildFeatureStore, rebuildFeatureStoreIncremental, forecastAccuracyRows, forecastAccuracySummary, categoryForecastAccuracy, categorySeasonality,
     confidenceMeta, forecastExplanation, recommendationExplanation,
   }
 })()

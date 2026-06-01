@@ -43,6 +43,7 @@
         noServiceWorker: params.get('nosw') === '1',
         noNotifications: params.get('nonoti') === '1',
         noAppLock: params.get('noapplock') === '1',
+        noFinanceRebuild: params.get('noFinanceRebuild') === '1',
       }
       const log = []
       window.MT_DEBUG_FLAGS = flags
@@ -171,7 +172,7 @@
       .mt-boot-bar::after { animation: none; transform: none; width: 100%; }
     }
   </style>
-  <link rel="stylesheet" href="style_v2.css?v=2026.06.01-r64">
+  <link rel="stylesheet" href="style_v2.css?v=2026.06.01-r66">
   <style>
     /* Active tab dot indicator */
     .nav-btn.active::after {
@@ -390,9 +391,9 @@
   }
 </script>
 <script src="app_lock.js?v=2026.05.20-r40"></script>
-<script src="app_v2.js?v=2026.06.01-r64"></script>
+<script src="app_v2.js?v=2026.06.01-r66"></script>
 <script src="split_bill.js?v=2026.05.15-r1"></script>
 <script src="quick_capture.js?v=2026.05.18-r13"></script>
-<script src="notifications_v2.js?v=2026.06.01-r64"></script>
+<script src="notifications_v2.js?v=2026.06.01-r66"></script>
 </body>
 </html>

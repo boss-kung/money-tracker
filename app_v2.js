@@ -878,7 +878,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.06.01-r64'
+const APP_VERSION = '2026.06.01-r66'
 window.MT_APP_VERSION = APP_VERSION
 window.MTBoot?.mark?.('app_v2.version', { version: APP_VERSION })
 
@@ -3874,6 +3874,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App.renderDashboard = function() {
+    const dashboardRenderStart = performance.now()
+    window.MTBoot?.mark?.('app.renderDashboard.start', { month: S.dashMonth || getTHISMONTH() })
     App._ensureV2State?.()
     const dm = S.dashMonth || getTHISMONTH()
     const thisMonth = getTHISMONTH()
@@ -4134,6 +4136,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const target = document.getElementById('dashboard-content')
     if (target) target.innerHTML = html
     App._bindTxRows?.('dashboard-content')
+    window.MTBoot?.mark?.('app.renderDashboard.done', { duration: Math.round((performance.now() - dashboardRenderStart) * 10) / 10 })
   }
 
   // Apply to current page immediately
@@ -19161,7 +19164,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   App.openFeatureHistory = function() {
-    const store = FinanceIntelligence.loadFeatureStore()
+    let store = FinanceIntelligence.loadFeatureStore()
+    if (!store.rows?.length) {
+      App.rebuildFinanceFeaturesIfNeeded?.({ reason: 'feature-history', force: true, forceFull: true })
+      store = FinanceIntelligence.loadFeatureStore()
+    }
     const maxExpense = Math.max(1, ...store.rows.map(r => Number(r.metrics?.expense || 0)))
     App.openSubScreen(`
       <div class="sub-header">
@@ -19782,6 +19789,98 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (dirEl) dirEl.value = direction
   }
 
+  function financeMark(name, extra = {}) {
+    try { window.MTBoot?.mark?.(`financeApp.${name}`, extra) } catch (_) {}
+  }
+
+  function runWhenIdle(callback, timeout = 5000) {
+    if (typeof requestIdleCallback === 'function') return requestIdleCallback(callback, { timeout })
+    return setTimeout(callback, Math.min(timeout, 1500))
+  }
+
+  function currentFinanceMonth() {
+    return typeof now === 'function' ? now() : new Date().toISOString().slice(0, 7)
+  }
+
+  App.rebuildFinanceFeaturesIfNeeded = function(opts = {}) {
+    if (window.MT_DEBUG_FLAGS?.noFinanceRebuild) {
+      financeMark('rebuild.skip', { reason: 'flag' })
+      return []
+    }
+    const force = Boolean(opts.force)
+    const months = Array.isArray(opts.months) ? opts.months : []
+    const started = performance.now()
+    try {
+      if (!force && FinanceIntelligence.isFeatureStoreFresh?.(S, { requiredMonths: [currentFinanceMonth(), Calc.getPreviousMonth?.(currentFinanceMonth())].filter(Boolean) })) {
+        financeMark('rebuild.skip', { reason: 'fresh' })
+        return FinanceIntelligence.loadFeatureStore?.().rows || []
+      }
+      const rows = FinanceIntelligence.rebuildFeatureStoreIncremental
+        ? FinanceIntelligence.rebuildFeatureStoreIncremental(S, { force, forceFull: Boolean(opts.forceFull), months, monthsBack: 12 })
+        : FinanceIntelligence.rebuildFeatureStore(S, 12)
+      financeMark('rebuild.done', { reason: opts.reason || '', rows: rows?.length || 0, duration: Math.round((performance.now() - started) * 10) / 10 })
+      return rows
+    } catch (err) {
+      financeMark('rebuild.error', { message: err?.message || String(err || '') })
+      return []
+    }
+  }
+
+  App.scheduleFinanceFeatureRebuild = function(opts = {}) {
+    if (window.MT_DEBUG_FLAGS?.noFinanceRebuild) {
+      financeMark('rebuild.schedule.skip', { reason: 'flag' })
+      return
+    }
+    clearTimeout(App._financeFeatureRebuildTimer)
+    const delay = Number(opts.delayMs ?? (opts.reason === 'boot' ? 7000 : 1200))
+    financeMark('rebuild.schedule', { reason: opts.reason || '', delay })
+    App._financeFeatureRebuildTimer = setTimeout(() => {
+      if (document.visibilityState !== 'visible') {
+        financeMark('rebuild.skip', { reason: 'hidden' })
+        return
+      }
+      runWhenIdle(() => App.rebuildFinanceFeaturesIfNeeded(opts), 8000)
+    }, delay)
+  }
+
+  function computeFinanceBriefCached() {
+    const started = performance.now()
+    const ctx = FinanceIntelligence.buildContext(S)
+    const brief = FinanceIntelligence.proactiveBrief(ctx)
+    App._financeBriefCache = {
+      month: currentFinanceMonth(),
+      sourceSize: (S.transactions || []).length,
+      brief,
+      at: Date.now(),
+    }
+    financeMark('brief.done', { alerts: brief.alerts?.length || 0, duration: Math.round((performance.now() - started) * 10) / 10 })
+    return brief
+  }
+
+  App.getCachedFinanceBrief = function() {
+    const cache = App._financeBriefCache
+    if (cache && cache.month === currentFinanceMonth() && cache.sourceSize === (S.transactions || []).length) return cache.brief
+    return null
+  }
+
+  App.scheduleFinanceBriefRefresh = function(reason = 'more-render') {
+    clearTimeout(App._financeBriefTimer)
+    financeMark('brief.schedule', { reason })
+    App._financeBriefTimer = setTimeout(() => {
+      if (document.visibilityState !== 'visible') return financeMark('brief.skip', { reason: 'hidden' })
+      runWhenIdle(() => {
+        const brief = computeFinanceBriefCached()
+        const row = document.getElementById('finance-summary-row')
+        if (!row) return
+        const value = row.querySelector('.s-value')
+        const label = row.querySelector('.s-label')
+        if (value) value.textContent = brief.alerts?.length ? `${brief.alerts.length} เรื่อง` : ''
+        const desc = label?.querySelector('div')
+        if (desc) desc.textContent = brief.headline || 'พร้อมดูภาพรวม'
+      }, 5000)
+    }, 900)
+  }
+
   App.saveFinancialMemory = function() {
     const title = document.getElementById('financial-memory-title')?.value?.trim()
     const note = document.getElementById('financial-memory-note')?.value?.trim()
@@ -19797,13 +19896,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       excludeFromBaseline: !!document.getElementById('financial-memory-exclude')?.checked,
       month: now(),
     })
-    FinanceIntelligence.rebuildFeatureStore(S, 12)
+    App.scheduleFinanceFeatureRebuild({ reason: 'memory-save', force: true, months: [currentFinanceMonth()] })
     App.openFinancialMemory(false)
   }
 
   App.deleteFinancialMemory = function(id) {
     FinanceIntelligence.deleteMemory(id)
-    FinanceIntelligence.rebuildFeatureStore(S, 12)
+    App.scheduleFinanceFeatureRebuild({ reason: 'memory-delete', force: true, months: [currentFinanceMonth()] })
     App.openFinancialMemory(false)
   }
 
@@ -19867,12 +19966,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     </div>`)
   }
 
-  try { FinanceIntelligence.rebuildFeatureStore(S, 12) } catch(_) {}
+  App.scheduleFinanceFeatureRebuild?.({ reason: 'boot' })
 
   const _prevSaveAllForFinanceIntelligence = App.saveAll?.bind(App)
   App.saveAll = function(...args) {
     const result = _prevSaveAllForFinanceIntelligence?.(...args)
-    try { FinanceIntelligence.rebuildFeatureStore(S, 12) } catch(_) {}
+    App.scheduleFinanceFeatureRebuild?.({ reason: 'saveAll' })
     return result
   }
 
@@ -22010,6 +22109,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   App.renderMore = function () {
+    const moreRenderStart = performance.now()
+    window.MTBoot?.mark?.('app.renderMore.start')
     const content = document.getElementById('more-content')
     if (!content) return
 
@@ -22023,9 +22124,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const ACCENTS = ['#2563EB', '#7C3AED', '#DC2626', '#059669', '#D97706', '#0891B2', '#BE185D', '#374151']
     const lockStatus = window.MTAppLock?.status?.() || { supported: false, enabled: false, lockOnBackground: true }
 
-    function row ({ icon, label, desc = '', value = '', badge = '', onclick = '', danger = false, toggle = '' }) {
+    function row ({ id = '', icon, label, desc = '', value = '', badge = '', onclick = '', danger = false, toggle = '' }) {
       const sideValue = value || badge
-      return `<div class="settings-row"${onclick ? ` onclick="${onclick}"` : ''}>
+      return `<div class="settings-row"${id ? ` id="${id}"` : ''}${onclick ? ` onclick="${onclick}"` : ''}>
         <div class="s-icon">${icon}</div>
         <div class="s-label"${danger ? ' style="color:var(--expense)"' : ''}>${label}${desc ? `<div style="font-size:12px;font-weight:400;color:var(--muted);margin-top:2px">${desc}</div>` : ''}</div>
         ${sideValue ? `<div class="s-value">${sideValue}</div>` : ''}
@@ -22037,7 +22138,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       return `<div class="more-tab-pane" data-pane="${id}" style="${active ? '' : 'display:none'}">${html}</div>`
     }
 
-    const brief = FinanceIntelligence.proactiveBrief(FinanceIntelligence.buildContext(S))
+    const brief = App.getCachedFinanceBrief?.()
+    if (!brief) App.scheduleFinanceBriefRefresh?.('more-render')
     const memoryCount = FinanceIntelligence.loadMemory().length
     const lifePlanCount = FinanceIntelligence.loadLifePlans().length
     const feedbackCount = Object.keys(FinanceIntelligence.recommendationFeedbackSummary()).length
@@ -22047,7 +22149,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const planHtml = `
       <div class="sec-title">สรุปของฉัน</div>
       <div class="card card-pad">
-        ${row({ icon: '🛰️', label: 'ภาพรวมการเงิน', badge: brief.alerts.length ? `${brief.alerts.length} เรื่อง` : '', onclick: 'App.openFinanceSummary()' })}
+        ${row({ id: 'finance-summary-row', icon: '🛰️', label: 'ภาพรวมการเงิน', desc: brief?.headline || 'กำลังอัปเดต', badge: brief?.alerts?.length ? `${brief.alerts.length} เรื่อง` : '', onclick: 'App.openFinanceSummary()' })}
       </div>
       <div class="sec-title">ควบคุมเงินเดือนนี้</div>
       <div class="card card-pad">
@@ -22154,6 +22256,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       ${pane('plan', activeTab === 'plan', planHtml)}
       ${pane('settings', activeTab === 'settings', settingsHtml)}
     </div>`
+    window.MTBoot?.mark?.('app.renderMore.done', { duration: Math.round((performance.now() - moreRenderStart) * 10) / 10 })
   }
 
   App._filterMoreContent = function (q) {
