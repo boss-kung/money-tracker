@@ -70,7 +70,108 @@
       } catch (_) {}
     })()
   </script>
-  <link rel="stylesheet" href="style_v2.css?v=2026.06.01-r63">
+  <style>
+    html, body {
+      min-height: 100%;
+      margin: 0;
+      background: #F6F7FB;
+    }
+    @media (prefers-color-scheme: dark) {
+      html, body { background: #0B1120; }
+    }
+    #mt-boot-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+      box-sizing: border-box;
+      background:
+        radial-gradient(circle at 50% 20%, rgba(14, 165, 233, 0.14), transparent 34%),
+        #F6F7FB;
+      color: #0F172A;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      opacity: 1;
+      transition: opacity 180ms ease;
+    }
+    @media (prefers-color-scheme: dark) {
+      #mt-boot-screen {
+        background:
+          radial-gradient(circle at 50% 20%, rgba(56, 189, 248, 0.16), transparent 34%),
+          #0B1120;
+        color: #F8FAFC;
+      }
+    }
+    #mt-boot-screen.mt-boot-hide {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .mt-boot-card {
+      width: min(320px, 100%);
+      text-align: center;
+    }
+    .mt-boot-logo {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 18px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      background: #0F172A;
+      color: #FFFFFF;
+      font-size: 28px;
+      box-shadow: 0 18px 42px rgba(15, 23, 42, 0.18);
+    }
+    @media (prefers-color-scheme: dark) {
+      .mt-boot-logo {
+        background: #F8FAFC;
+        color: #0F172A;
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+      }
+    }
+    .mt-boot-title {
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+    .mt-boot-subtitle {
+      min-height: 20px;
+      color: #64748B;
+      font-size: 14px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .mt-boot-subtitle { color: #94A3B8; }
+    }
+    .mt-boot-bar {
+      position: relative;
+      height: 4px;
+      margin: 22px auto 0;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(100, 116, 139, 0.18);
+    }
+    .mt-boot-bar::after {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 42%;
+      border-radius: inherit;
+      background: #0EA5E9;
+      animation: mtBootSlide 1.1s ease-in-out infinite;
+    }
+    @keyframes mtBootSlide {
+      0% { transform: translateX(-110%); }
+      100% { transform: translateX(250%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #mt-boot-screen { transition: none; }
+      .mt-boot-bar::after { animation: none; transform: none; width: 100%; }
+    }
+  </style>
+  <link rel="stylesheet" href="style_v2.css?v=2026.06.01-r64">
   <style>
     /* Active tab dot indicator */
     .nav-btn.active::after {
@@ -97,6 +198,14 @@
 </head>
 <body>
 <div id="app">
+  <div id="mt-boot-screen" role="status" aria-live="polite">
+    <div class="mt-boot-card">
+      <div class="mt-boot-logo" aria-hidden="true">฿</div>
+      <div class="mt-boot-title">Financial Tracker</div>
+      <div class="mt-boot-subtitle">กำลังเตรียมข้อมูลการเงิน</div>
+      <div class="mt-boot-bar" aria-hidden="true"></div>
+    </div>
+  </div>
 
   <!-- Toast (aria-live so screen readers announce new messages) -->
   <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
@@ -281,9 +390,9 @@
   }
 </script>
 <script src="app_lock.js?v=2026.05.20-r40"></script>
-<script src="app_v2.js?v=2026.06.01-r63"></script>
+<script src="app_v2.js?v=2026.06.01-r64"></script>
 <script src="split_bill.js?v=2026.05.15-r1"></script>
 <script src="quick_capture.js?v=2026.05.18-r13"></script>
-<script src="notifications_v2.js?v=2026.06.01-r63"></script>
+<script src="notifications_v2.js?v=2026.06.01-r64"></script>
 </body>
 </html>

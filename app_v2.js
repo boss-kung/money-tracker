@@ -878,9 +878,17 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.06.01-r63'
+const APP_VERSION = '2026.06.01-r64'
 window.MT_APP_VERSION = APP_VERSION
 window.MTBoot?.mark?.('app_v2.version', { version: APP_VERSION })
+
+function hideBootScreen(reason = 'ready') {
+  const el = document.getElementById('mt-boot-screen')
+  if (!el) return
+  window.MTBoot?.mark?.('bootScreen.hide', { reason })
+  el.classList.add('mt-boot-hide')
+  setTimeout(() => el.remove(), 240)
+}
 
 /* ============================================================
    Core App Shell
@@ -1894,6 +1902,7 @@ function init() {
   const renderStart = performance.now()
   App.showPage(S.page)
   window.MTBoot?.mark?.('app.firstRender.done', { page: S.page, duration: Math.round((performance.now() - renderStart) * 10) / 10 })
+  requestAnimationFrame(() => requestAnimationFrame(() => hideBootScreen('first-render')))
 
   // If opened via notification with an open= param (e.g. #more?open=upcomingBills),
   // trigger the sub-screen after the initial render completes.
@@ -1925,6 +1934,8 @@ if (window.MT_DEBUG_FLAGS?.noAppLock) {
 } else {
   init()
 }
+
+setTimeout(() => hideBootScreen('fallback-timeout'), 9000)
 
 /* ============================================================
    Shared UI + Form Foundations

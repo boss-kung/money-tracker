@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.06.01-r63'
+const APP_VERSION = '2026.06.01-r64'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 const HTML_NETWORK_TIMEOUT_MS = 800
