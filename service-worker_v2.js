@@ -1,7 +1,6 @@
-const APP_VERSION = '2026.06.01-r67'
+const APP_VERSION = '2026.06.01-r68'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
-const HTML_NETWORK_TIMEOUT_MS = 800
 const CORE_NETWORK_TIMEOUT_MS = 900
 
 const STATIC_ASSETS = [
@@ -97,6 +96,16 @@ async function networkFirstWithTimeout(request, fallbackUrl = '', timeoutMs = CO
   return (await Promise.race([fresh, timeoutResult(timeoutMs)])) || cached
 }
 
+async function cacheFirstNavigation(request) {
+  const cache = await caches.open(CACHE_NAME)
+  const cached = await matchCached(request, './index.html')
+  const fresh = fetch(request, { cache: 'reload' })
+    .then(response => putIfUsable(cache, request, response))
+    .catch(() => null)
+  if (cached) return cached
+  return (await fresh) || Response.error()
+}
+
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(CACHE_NAME)
   const cached = await matchCached(request)
@@ -188,7 +197,7 @@ self.addEventListener('fetch', event => {
   const isCoreCode = ['app_v2.js', 'storage_v2.js', 'calculations.js', 'sample-data_v2.js', 'ai_insights.js', 'finance_intelligence.js', 'ask_my_money_core.js', 'notification_config.js', 'notifications_v2.js', 'style_v2.css', 'LINESeedSansTH_Rg.ttf', 'LINESeedSansTH_Bd.ttf', 'LINESeedSansTH_XBd.ttf'].includes(path)
 
   if (acceptsHtml) {
-    event.respondWith(networkFirstWithTimeout(request, './index.html', HTML_NETWORK_TIMEOUT_MS))
+    event.respondWith(cacheFirstNavigation(request))
     return
   }
 

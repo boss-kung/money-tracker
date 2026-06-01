@@ -48,6 +48,7 @@
       const log = []
       window.MT_DEBUG_FLAGS = flags
       window.__mtBootLog = log
+      window.MTBootCssReady = false
       window.MTBoot = {
         mark(name, extra = {}) {
           const entry = { name, at: Math.round((performance.now() - bootStartedAt) * 10) / 10, ...extra }
@@ -208,7 +209,16 @@
       .mt-boot-bar::after { animation: none; transform: none; width: 100%; }
     }
   </style>
-  <link rel="stylesheet" href="style_v2.css?v=2026.06.01-r67">
+  <link rel="preload" href="style_v2.css?v=2026.06.01-r68" as="style">
+  <link
+    id="mt-main-css"
+    rel="stylesheet"
+    href="style_v2.css?v=2026.06.01-r68"
+    media="print"
+    onload="this.media='all';window.MTBootCssReady=true;window.MTBoot?.mark?.('css.main.loaded')"
+    onerror="window.MTBootCssReady=true;window.MTBoot?.mark?.('css.main.error')"
+  >
+  <noscript><link rel="stylesheet" href="style_v2.css?v=2026.06.01-r68"></noscript>
   <style>
     /* Active tab dot indicator */
     .nav-btn.active::after {
@@ -243,6 +253,7 @@
       <div class="mt-boot-bar" aria-hidden="true"></div>
     </div>
   </div>
+  <script>window.MTBoot?.mark?.('boot.dom.inserted')</script>
 
   <!-- Toast (aria-live so screen readers announce new messages) -->
   <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
@@ -427,7 +438,7 @@
   }
 </script>
 <script src="app_lock.js?v=2026.05.20-r40"></script>
-<script src="app_v2.js?v=2026.06.01-r67"></script>
+<script src="app_v2.js?v=2026.06.01-r68"></script>
 <script src="split_bill.js?v=2026.05.15-r1"></script>
 <script src="quick_capture.js?v=2026.05.18-r13"></script>
 <script src="notifications_v2.js?v=2026.06.01-r67"></script>

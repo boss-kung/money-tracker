@@ -878,16 +878,59 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.06.01-r67'
+const APP_VERSION = '2026.06.01-r68'
 window.MT_APP_VERSION = APP_VERSION
 window.MTBoot?.mark?.('app_v2.version', { version: APP_VERSION })
 
-function hideBootScreen(reason = 'ready') {
+let bootScreenHideRequested = false
+let bootScreenForceHide = false
+let bootScreenHideRetry = 0
+
+function isMainCssReady() {
+  if (window.MTBootCssReady === true) return true
+  const link = document.getElementById('mt-main-css')
+  if (!link) return true
+  if (link.media === 'all') return true
+  try {
+    if (link.sheet && link.sheet.cssRules !== null) return true
+  } catch (_) {
+    if (link.sheet) return true
+  }
+  return false
+}
+
+function hideBootScreenNow(reason = 'ready') {
   const el = document.getElementById('mt-boot-screen')
   if (!el) return
+  if (el.dataset.hiding === '1') return
+  el.dataset.hiding = '1'
   window.MTBoot?.mark?.('bootScreen.hide', { reason })
   el.classList.add('mt-boot-hide')
   setTimeout(() => el.remove(), 240)
+}
+
+function tryHideBootScreen(reason = 'ready') {
+  if (!bootScreenHideRequested) return
+  if (bootScreenForceHide || isMainCssReady()) {
+    hideBootScreenNow(reason)
+    return
+  }
+  if (bootScreenHideRetry >= 24) {
+    window.MTBoot?.mark?.('css.main.waitTimeout', { reason })
+    hideBootScreenNow(`${reason}:css-timeout`)
+    return
+  }
+  const delay = bootScreenHideRetry < 10 ? 50 : 120
+  bootScreenHideRetry += 1
+  setTimeout(() => tryHideBootScreen(`${reason}:wait-css`), delay)
+}
+
+function requestHideBootScreen(reason = 'ready') {
+  if (!bootScreenHideRequested) {
+    window.MTBoot?.mark?.('bootScreen.hideRequested', { reason })
+  }
+  bootScreenHideRequested = true
+  tryHideBootScreen(reason)
 }
 
 /* ============================================================
@@ -1902,7 +1945,7 @@ function init() {
   const renderStart = performance.now()
   App.showPage(S.page)
   window.MTBoot?.mark?.('app.firstRender.done', { page: S.page, duration: Math.round((performance.now() - renderStart) * 10) / 10 })
-  requestAnimationFrame(() => requestAnimationFrame(() => hideBootScreen('first-render')))
+  requestAnimationFrame(() => requestAnimationFrame(() => requestHideBootScreen('first-render')))
 
   // If opened via notification with an open= param (e.g. #more?open=upcomingBills),
   // trigger the sub-screen after the initial render completes.
@@ -1935,7 +1978,10 @@ if (window.MT_DEBUG_FLAGS?.noAppLock) {
   init()
 }
 
-setTimeout(() => hideBootScreen('fallback-timeout'), 9000)
+setTimeout(() => {
+  bootScreenForceHide = true
+  requestHideBootScreen('fallback-timeout')
+}, 9000)
 
 /* ============================================================
    Shared UI + Form Foundations
