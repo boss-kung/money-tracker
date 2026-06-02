@@ -496,6 +496,30 @@ select.form-input  { appearance: none; cursor: pointer; }
 .search-clear-btn[hidden] {
   display: none;
 }
+.cc-pay-clearable-input {
+  position: relative;
+}
+.cc-pay-clearable-input .form-input {
+  padding-right: 38px;
+}
+.cc-pay-clear-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.cc-pay-clearable-input .form-input:placeholder-shown + .cc-pay-clear-btn {
+  opacity: 0;
+  pointer-events: none;
+}
 
 /* Mobile refinement pass */
 .tx-action-grid {

@@ -1439,7 +1439,10 @@ const App = {
       </div>
       <div class="form-group">
         <label class="form-label">ยอดที่ต้องการตัดจากบัตร (฿)</label>
-        <input class="form-input" type="text" inputmode="decimal" id="cc-pay-amount" placeholder="0" value="${owed}" oninput="App.updateCCPayPreview()">
+        <div class="cc-pay-clearable-input">
+          <input class="form-input" type="text" inputmode="decimal" id="cc-pay-amount" placeholder="0" value="${owed}" oninput="App.updateCCPayPreview()">
+          <button type="button" class="cc-pay-clear-btn" aria-label="ล้างยอดที่ต้องการตัดจากบัตร" onclick="App.clearCCPayAmount()">×</button>
+        </div>
       </div>
       <label class="settings-row" style="margin:0 0 12px;padding:10px 0;border:0">
         <div class="s-icon">🏷️</div>
@@ -1466,6 +1469,14 @@ const App = {
 
     App.updateCCPayPreview()
     App.openOverlay('overlay-cc-pay')
+  },
+
+  clearCCPayAmount() {
+    const amountEl = document.getElementById('cc-pay-amount')
+    if (!amountEl) return
+    amountEl.value = ''
+    App.updateCCPayPreview()
+    amountEl.focus()
   },
 
   updateCCPayPreview(source = '') {
@@ -2206,7 +2217,7 @@ App.render();
     if (!tx) return
     S.txMode = 'edit'
     S.editingTxId = id
-    S.tx = { step:'detail', type:tx.type, amount:String(tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || TODAY, benefitDateOverride:tx.benefitDateOverride || '', isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:tx.splitBillId || '', splitBillOwnerPersonId:tx.splitBillOwnerPersonId || '', splitBillOwnerShare:Number(tx.ledgerAmount || 0), splitBillOwnerPaidAmount:Number(tx.amount || 0), reimbursesSharedExpenseTxId:tx.reimbursesSharedExpenseTxId || '', reimbursementSource:tx.reimbursementSource || '', incomeTreatment:tx.incomeTreatment || '', reimbursementSplitBillId:tx.reimbursementSplitBillId || '', fromSplitPersonId:tx.fromSplitPersonId || '', toSplitPersonId:tx.toSplitPersonId || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:tx.rewardRulesTouched === true, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'detail', type:tx.type, amount:String(tx.benefitBaseAmount || tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || TODAY, benefitDateOverride:tx.benefitDateOverride || '', isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:tx.splitBillId || '', splitBillOwnerPersonId:tx.splitBillOwnerPersonId || '', splitBillOwnerShare:Number(tx.ledgerAmount || 0), splitBillOwnerPaidAmount:Number(tx.amount || 0), reimbursesSharedExpenseTxId:tx.reimbursesSharedExpenseTxId || '', reimbursementSource:tx.reimbursementSource || '', incomeTreatment:tx.incomeTreatment || '', reimbursementSplitBillId:tx.reimbursementSplitBillId || '', fromSplitPersonId:tx.fromSplitPersonId || '', toSplitPersonId:tx.toSplitPersonId || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:tx.rewardRulesTouched === true, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxDetail()
     App.openOverlay('overlay-add-tx')
@@ -2217,7 +2228,7 @@ App.render();
     if (!tx) return
     S.txMode = 'duplicate'
     S.editingTxId = null
-    S.tx = { step:'amount', type:tx.type, amount:String(tx.amount), calcOp:'', calcLeft:'', walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:TODAY, benefitDateOverride:'', isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'amount', type:tx.type, amount:String(tx.benefitBaseAmount || tx.amount), calcOp:'', calcLeft:'', walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:TODAY, benefitDateOverride:'', isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
@@ -4736,6 +4747,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
   const localNow = () => new Date().toISOString()
   const round2 = n => Math.round((Number(n) || 0) * 100) / 100
 
+  App.getBenefitCalculationAmount = function(tx = {}) {
+    const base = Number(tx.benefitBaseAmount)
+    if (Number.isFinite(base) && base > 0) return round2(base)
+    return round2(Number(tx.amount || 0))
+  }
+
   function addMonths(dateStr, months) {
     const [y, m, d] = String(dateStr || today()).split('-').map(Number)
     const target = new Date(y, (m || 1) - 1 + months, 1)
@@ -4806,6 +4823,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (!tx || tx.type !== 'expense') return baseAmount
     const wallet = walletById(tx.walletId)
     if (!wallet || wallet.type !== 'credit') return baseAmount
+    if (Number(tx.instantDiscountAmount || 0) > 0) return baseAmount
     const rewardEstimate = typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(tx) : tx.rewardEstimate
     const discount = Math.max(0, round2(Number(rewardEstimate?.discount || 0)))
     if (!(discount > 0)) return baseAmount
@@ -4824,6 +4842,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (!tx || tx.type !== 'expense') return baseAmount
     const wallet = walletById(tx.walletId)
     if (!wallet || wallet.type !== 'credit') return baseAmount
+    if (Number(tx.instantDiscountAmount || 0) > 0) return baseAmount
     const rewardEstimate = typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(tx) : tx.rewardEstimate
     const discount = Math.max(0, round2(Number(rewardEstimate?.discount || 0)))
     if (!(discount > 0)) return baseAmount
@@ -4946,14 +4965,15 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App._rewardEstimateForTx = function(tx) {
     const card = walletById(tx.walletId)
     if (!card || card.type !== 'credit' || tx.type !== 'expense') return null
+    const rewardTx = { ...tx, amount: App.getBenefitCalculationAmount?.(tx) ?? Number(tx.amount || 0) }
     if (Array.isArray(tx.rewardRuleIds) && App.calculateSelectedRewardEstimate) {
-      const estimate = App.calculateSelectedRewardEstimate(tx, tx.rewardRuleIds)
+      const estimate = App.calculateSelectedRewardEstimate(rewardTx, tx.rewardRuleIds)
       return estimate && (estimate.points || estimate.cashback || estimate.rules?.length)
         ? (App.decorateRewardEstimateValues?.(card.id, estimate) || estimate)
         : null
     }
     const benefit = App._benefit?.(card.id) || S.ccBenefits?.[card.id] || {}
-    const reward = Calc.getCardRewards ? Calc.getCardRewards([tx], benefit) : { points:0, cashback:0 }
+    const reward = Calc.getCardRewards ? Calc.getCardRewards([rewardTx], benefit) : { points:0, cashback:0 }
     if (!reward.points && !reward.cashback) return null
     return App.decorateRewardEstimateValues?.(card.id, {
       points: Number(reward.points || 0),
@@ -4962,6 +4982,23 @@ Calc.getUsableMoney = function(wallets, state = null) {
       calculatedAt: localNow(),
       source:'legacy',
     }) || null
+  }
+
+  App._applyInstantDiscountToTx = function(tx, grossAmount = null) {
+    if (!tx || tx.type !== 'expense') return tx
+    const wallet = walletById(tx.walletId)
+    if (!wallet || wallet.type !== 'credit') return tx
+    const gross = round2(Number(grossAmount ?? tx.benefitBaseAmount ?? tx.amount ?? 0))
+    const discount = Math.min(gross, Math.max(0, round2(Number(tx.rewardEstimate?.discount || 0))))
+    if (discount > 0) {
+      tx.benefitBaseAmount = gross
+      tx.instantDiscountAmount = discount
+      tx.amount = round2(Math.max(0, gross - discount))
+    } else {
+      delete tx.benefitBaseAmount
+      delete tx.instantDiscountAmount
+    }
+    return tx
   }
 
   App.refreshTransactionRewardEstimates = function(options = {}) {
@@ -5129,7 +5166,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
   function cleanTxFromDraft(id) {
     const wallet = walletById(S.tx.walletId)
     const useRewardRules = !!(wallet && wallet.type === 'credit' && S.tx.type === 'expense')
-    const sharedExpense = normalizeSharedExpenseDraft(S.tx)
+    let sharedExpense = normalizeSharedExpenseDraft(S.tx)
+    const grossAmount = round2(Number(S.tx.amount || 0))
     let rewardRuleIds = useRewardRules && Array.isArray(S.tx.rewardRuleIds) ? [...new Set(S.tx.rewardRuleIds.filter(Boolean))] : []
     const rewardDraft = useRewardRules
       ? {
@@ -5156,7 +5194,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const tx = {
       id,
       type: S.tx.type,
-      amount: Number(S.tx.amount || 0),
+      amount: grossAmount,
       walletId: S.tx.walletId,
       toWalletId: S.tx.toWalletId || undefined,
       categoryId: S.tx.categoryId || undefined,
@@ -5189,6 +5227,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
     }
     const reward = App._rewardEstimateForTx(tx)
     if (reward) tx.rewardEstimate = reward
+    App._applyInstantDiscountToTx?.(tx, grossAmount)
+    if (tx.type === 'expense' && sharedExpense.enabled && Number(tx.instantDiscountAmount || 0) > 0) {
+      sharedExpense = normalizeSharedExpenseDraft({ ...S.tx, amount: tx.amount })
+    }
     if (tx.type === 'expense' && tx.splitBillId) {
       tx.sharedExpense = null
       tx.ledgerAmount = round2(Math.max(0, Number(S.tx.splitBillOwnerShare ?? tx.amount) || 0))
@@ -5258,11 +5300,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
             installmentTotalAmount: total,
             scheduled: addMonths(baseDate, i) > today(),
           })
+          delete tx.benefitBaseAmount
+          delete tx.instantDiscountAmount
+          delete tx.rewardEstimate
           const shiftOption = App.getBenefitCycleShiftOption?.(tx)
           if (!shiftOption?.available || tx.benefitDateOverride !== shiftOption.nextCycleStart) delete tx.benefitDateOverride
           const reward = App._rewardEstimateForTx(tx)
           if (reward) tx.rewardEstimate = reward
-          // cleanTxFromDraft computes ledgerAmount from the original full amount.
+          App._applyInstantDiscountToTx?.(tx, amount)
           // Recompute it after splitting the installment so each row uses its own month amount.
           delete tx.ledgerAmount
           tx.ledgerAmount = App.getLedgerAmountForTx?.(tx)
@@ -5317,7 +5362,11 @@ Calc.getUsableMoney = function(wallets, state = null) {
       S.txMode = 'add'; S.editingTxId = null
 
       if (modeBefore === 'edit' || !draft.isRecurring || draft.type !== 'expense') return
-      const createdTx = (S.transactions || []).find(t => !beforeTxIds.has(t.id) && Number(t.amount || 0) === Number(draft.amount || 0) && t.type === draft.type && t.walletId === draft.walletId)
+      const createdTx = (S.transactions || []).find(t => {
+        if (beforeTxIds.has(t.id) || t.type !== draft.type || t.walletId !== draft.walletId) return false
+        const txBaseAmount = App.getBenefitCalculationAmount?.(t) ?? Number(t.amount || 0)
+        return Math.abs(Number(txBaseAmount || 0) - Number(draft.amount || 0)) < 0.01
+      })
       App._createRecurringFromDraft?.({ ...draft, amount: Number(draft.amount || 0), _savedTxId: createdTx?.id })
       const createdRec = (S.recurring || []).find(r => !beforeRecIds.has(r.id) || (createdTx?.id && r.createdFromTxId === createdTx.id))
       if (createdTx && createdRec) {
@@ -8948,7 +8997,7 @@ App._pickMerchant = function(name, opts = {}) {
     const trackChannels = getTriggerTrackChannels(rule.rewardTrigger || {})
     const thresholdAmount = Number(rule.rewardTrigger?.thresholdAmount || 0)
     const cycleTrackTotal = isThresholdMode
-      ? Math.round(txsInCycle.reduce((sum, tx) => sum + (channelMatchesAny(trackChannels, resolveTxChannel(tx)) ? Number(tx.amount || 0) : 0), 0) * 100) / 100
+      ? Math.round(txsInCycle.reduce((sum, tx) => sum + (channelMatchesAny(trackChannels, resolveTxChannel(tx)) ? benefitCalculationAmount(tx) : 0), 0) * 100) / 100
       : 0
     const thresholdUnlocked = !isThresholdMode || (thresholdAmount > 0 && cycleTrackTotal >= thresholdAmount)
     const rows = txsInCycle.map(tx => {
@@ -8963,7 +9012,7 @@ App._pickMerchant = function(name, opts = {}) {
       if (isThresholdMode) {
         eligibility = getEligibility(tx)
         const txChannel = resolveTxChannel(tx)
-        trackContribution = channelMatchesAny(trackChannels, txChannel) ? Number(tx.amount || 0) : 0
+        trackContribution = channelMatchesAny(trackChannels, txChannel) ? benefitCalculationAmount(tx) : 0
         trackBefore = trackAccum
         trackAfter = Math.round((trackBefore + trackContribution) * 100) / 100
         trackAccum = trackAfter
@@ -8973,7 +9022,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (eligibility.matched) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
           const txCK = resolveTxChannel(tx).trim().toLowerCase()
-          eligible = Math.max(0, Number(tx.amount || 0))
+          eligible = Math.max(0, benefitCalculationAmount(tx))
           if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
           if (cycleEligibleCap  > 0) eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - eligAccum))
           if (perMerchantElgCap > 0) eligible = Math.min(eligible, Math.max(0, perMerchantElgCap - (sheetMerchElgAccum[txMK] || 0)))
@@ -9010,7 +9059,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (eligibility.matched) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
           const txCK = resolveTxChannel(tx).trim().toLowerCase()
-          eligible = Math.max(0, Number(tx.amount || 0))
+          eligible = Math.max(0, benefitCalculationAmount(tx))
           if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
           if (cycleEligibleCap  > 0) eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - eligAccum))
           if (perMerchantElgCap > 0) eligible = Math.min(eligible, Math.max(0, perMerchantElgCap - (sheetMerchElgAccum[txMK] || 0)))
@@ -9177,7 +9226,7 @@ App._pickMerchant = function(name, opts = {}) {
             <div style="text-align:right;flex-shrink:0">
               <div style="font-size:13px;font-weight:600">${fmtMoney(tx.amount)}</div>
               <div style="font-size:11px;color:${trackOnly ? 'var(--primary,#2563EB)' : pendingReward ? 'var(--warning,#D97706)' : 'var(--success,#059669)'}">${trackOnly ? 'นับสะสมปลดล็อก' : `${pendingReward ? 'คาดว่าจะได้ ' : '+'}${fmtReward(rewardVal)}`}</div>
-              ${eligible < Number(tx.amount || 0) - 0.005 ? `<div style="font-size:10px;color:var(--text-secondary,#6b7280)">นับ ${fmtMoney(eligible)}</div>` : ''}
+              ${eligible < benefitCalculationAmount(tx) - 0.005 ? `<div style="font-size:10px;color:var(--text-secondary,#6b7280)">นับ ${fmtMoney(eligible)}</div>` : ''}
             </div>
           </div>`
         }).join('')
@@ -9240,7 +9289,7 @@ App._pickMerchant = function(name, opts = {}) {
         const resolvedChannel = resolveTxChannel(tx)
         const posted = typeof App._isPostedTx === 'function' ? !!App._isPostedTx(tx) : tx.scheduled !== true
         const inCycle = !!resolvedDate && resolvedDate >= cycle.start && resolvedDate <= cycle.end
-        const trackContribution = channelMatchesAny(trackChannels, resolvedChannel) ? Number(tx.amount || 0) : 0
+        const trackContribution = channelMatchesAny(trackChannels, resolvedChannel) ? benefitCalculationAmount(tx) : 0
         const explicitIds = Array.isArray(tx.rewardRuleIds) ? tx.rewardRuleIds.map(id => String(id || '')).filter(Boolean) : []
         const estimateRuleIds = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules.map(row => String(row.ruleId || '')).filter(Boolean) : []
         const eligibility = (() => {
@@ -9259,7 +9308,7 @@ App._pickMerchant = function(name, opts = {}) {
           txId: String(tx.id || ''),
           date: String(tx.date || ''),
           resolvedDate,
-          amount: Number(tx.amount || 0),
+          amount: benefitCalculationAmount(tx),
           merchant: String(tx.merchant || ''),
           note: String(tx.note || ''),
           channel: String(tx.channel || ''),
@@ -13510,7 +13559,7 @@ App._pickMerchant = function(name, opts = {}) {
     const merchants = Array.isArray(cond.merchants) ? cond.merchants : []
     const excludedMerchants = Array.isArray(cond.excludedMerchants) ? cond.excludedMerchants : []
     const channels = Array.isArray(cond.channels) ? cond.channels : []
-    const amount = Number(txDraft.amount || 0)
+    const amount = benefitCalculationAmount(txDraft)
     const categoryId = String(txDraft.categoryId || '').trim()
     const merchant = normalizeCompareText(txDraft.merchant || '')
     const channel = normalizeCompareText(String(txDraft.channel || '').trim() || resolveBenefitTxChannel(txDraft))
@@ -13566,6 +13615,13 @@ App._pickMerchant = function(name, opts = {}) {
     if (rows.some(row => String(row.ruleId || '') === String(ruleId || rule.id || ''))) return true
     if (!rule || (!rule.id && !rule.suggestedConditions && !rule.rewardTrigger)) return false
     return getRuleEligibility(tx, rule).matched
+  }
+
+  function benefitCalculationAmount(tx = {}) {
+    if (typeof App.getBenefitCalculationAmount === 'function') return App.getBenefitCalculationAmount(tx)
+    const base = Number(tx?.benefitBaseAmount)
+    if (Number.isFinite(base) && base > 0) return Math.round(base * 100) / 100
+    return Math.round(Number(tx?.amount || 0) * 100) / 100
   }
 
   function normalizeBenefitRule(rule = {}, cardId = '') {
@@ -14256,7 +14312,7 @@ App._pickMerchant = function(name, opts = {}) {
       if (isThresholdMode) {
         txsInCycle.forEach(tx => {
           const txCh = resolveBenefitTxChannel(tx)
-          if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += Number(tx.amount || 0)
+          if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += benefitCalculationAmount(tx)
         })
         trackChannelSpend = Math.round(trackChannelSpend * 100) / 100
         const thresholdAmount = Number(rule.rewardTrigger?.thresholdAmount || 0)
@@ -14287,7 +14343,7 @@ App._pickMerchant = function(name, opts = {}) {
           const txChKey = txCh.toLowerCase()
           const isSameMerchant = !!normalizedTxMerchant && merchantTextsMatch(normalizedTxMerchant, txMerchKey)
           const isSameChannel = !!normalizedTxChannel && txChKey === normalizedTxChannel
-          let eligible = Math.max(0, Number(tx.amount || 0))
+          let eligible = Math.max(0, benefitCalculationAmount(tx))
           if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
           if (cycleEligibleCap > 0)  eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - potentialEligibleSpendUsed))
           if (perMerchantElgCap > 0) eligible = Math.min(eligible, Math.max(0, perMerchantElgCap - (potentialMerchElgAccum[txMerchKey] || 0)))
@@ -14363,7 +14419,7 @@ App._pickMerchant = function(name, opts = {}) {
       }
       txsInCycle.forEach(tx => {
         const txCh = resolveBenefitTxChannel(tx)
-        const txTrackContribution = channelMatchesAny(normalizedTrackChannels, txCh) ? Number(tx.amount || 0) : 0
+        const txTrackContribution = channelMatchesAny(normalizedTrackChannels, txCh) ? benefitCalculationAmount(tx) : 0
         if (isThresholdMode) {
           const trackBefore = trackChannelSpend
           const trackAfter = Math.round((trackBefore + txTrackContribution) * 100) / 100
@@ -14386,7 +14442,7 @@ App._pickMerchant = function(name, opts = {}) {
           const txChKey = txCh.toLowerCase()
           const isSameMerchant = !!normalizedTxMerchant && merchantTextsMatch(normalizedTxMerchant, txMerchKey)
           const isSameChannel = !!normalizedTxChannel && txChKey === normalizedTxChannel
-          let eligible = Math.max(0, Number(tx.amount || 0))
+          let eligible = Math.max(0, benefitCalculationAmount(tx))
           if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
           if (cycleEligibleCap > 0)  eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - eligibleSpendUsed))
           if (perMerchantElgCap > 0) eligible = Math.min(eligible, Math.max(0, perMerchantElgCap - (merchantElgAccum[txMerchKey] || 0)))
@@ -14436,7 +14492,7 @@ App._pickMerchant = function(name, opts = {}) {
         const txChKey    = txCh.toLowerCase()
         const isSameMerchant = !!normalizedTxMerchant && merchantTextsMatch(normalizedTxMerchant, txMerchKey)
         const isSameChannel  = !!normalizedTxChannel  && txChKey === normalizedTxChannel
-        let eligible = Math.max(0, Number(tx.amount || 0))
+        let eligible = Math.max(0, benefitCalculationAmount(tx))
         if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
         if (cycleEligibleCap > 0)  eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - eligibleSpendUsed))
         if (perMerchantElgCap > 0) eligible = Math.min(eligible, Math.max(0, perMerchantElgCap - (merchantElgAccum[txMerchKey] || 0)))
@@ -14489,7 +14545,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (!txHasRule(tx)) return
         const rows = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
         const matchingRows = rows.filter(row => String(row.ruleId || '') === String(ruleId || ''))
-        if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += Number(tx.amount || 0)
+        if (channelMatchesAny(normalizedTrackChannels, txCh)) trackChannelSpend += benefitCalculationAmount(tx)
         matchingRows.forEach(row => {
           eligibleSpendUsed += Number(row.eligibleAmount || 0)
           cashbackUsed += Number(row.cashback || row.finalCashback || 0)
@@ -14558,7 +14614,7 @@ App._pickMerchant = function(name, opts = {}) {
       .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
     const trackChannels = getTriggerTrackChannels(trigger)
     const trackTotal = isThresholdMode
-      ? txsInCycle.reduce((sum, tx) => sum + (channelMatchesAny(trackChannels, resolveBenefitTxChannel(tx)) ? Number(tx.amount || 0) : 0), 0)
+      ? txsInCycle.reduce((sum, tx) => sum + (channelMatchesAny(trackChannels, resolveBenefitTxChannel(tx)) ? benefitCalculationAmount(tx) : 0), 0)
       : 0
     const thresholdUnlocked = !isThresholdMode || trackTotal >= Number(trigger.thresholdAmount || 0)
     txsInCycle
@@ -14569,7 +14625,7 @@ App._pickMerchant = function(name, opts = {}) {
       const txMerchantNorm = normalizeCompareText(tx.merchant || '')
       const txChannelKey   = resolveBenefitTxChannel(tx).trim().toLowerCase()
       // Compute eligible amount from current rule config (ignoring cycle caps — those are what we're measuring)
-      let eligible = Math.max(0, Number(tx.amount || 0))
+      let eligible = Math.max(0, benefitCalculationAmount(tx))
       if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
       eligible = Math.round(eligible * 100) / 100
       // For threshold rules the per-tx cashback depends on cycle context; fall back to stored estimate
@@ -14604,7 +14660,7 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   App.applyBenefitRule = function(txDraft, rule, cycleUsage = {}) {
-    const amount = Math.max(0, Number(txDraft?.amount || 0))
+    const amount = Math.max(0, benefitCalculationAmount(txDraft))
     const limits = rule.limits || {}
     const cashbackCfg = rule.cashback || {}
     const pointsCfg = rule.points || {}
@@ -14982,12 +15038,12 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.getTransactionRewardEstimate = function(tx = {}) {
     if (Array.isArray(tx?.rewardRuleIds) && tx.rewardRuleIds.length && App.calculateSelectedRewardEstimate) {
-      const live = App.calculateSelectedRewardEstimate(tx, tx.rewardRuleIds)
+      const live = App.calculateSelectedRewardEstimate({ ...tx, amount: benefitCalculationAmount(tx) }, tx.rewardRuleIds)
       if (live) return live
     }
     if (tx?.rewardEstimate?.source === 'manual-selected-rules' || Array.isArray(tx?.rewardRuleIds)) return tx.rewardEstimate || { cashback: 0, discount: 0, points: 0, rules: [], warnings: [] }
     const legacy = App._benefit?.(tx.walletId) || S.ccBenefits?.[tx.walletId] || {}
-    const reward = Calc.getCardRewards ? Calc.getCardRewards([tx], legacy) : { points: 0, cashback: 0 }
+    const reward = Calc.getCardRewards ? Calc.getCardRewards([{ ...tx, amount: benefitCalculationAmount(tx) }], legacy) : { points: 0, cashback: 0 }
     return App.decorateRewardEstimateValues?.(tx.walletId, {
       cashback: Math.round(Number(reward.cashback || 0) * 100) / 100,
       discount: 0,
