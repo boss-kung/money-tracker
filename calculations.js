@@ -122,6 +122,53 @@ const Calc = {
     return Math.round((target - base) / 86400000)
   },
 
+  getWeeklyNetSeries(transactions, opts = {}) {
+    const {
+      weeks = 8,
+      refDate = Calc.todayLocalISO(),
+      weekStartsOn = 1,
+    } = opts
+    const totalWeeks = Math.max(1, Number(weeks) || 8)
+    const [ry, rm, rd] = String(refDate || Calc.todayLocalISO()).split('-').map(Number)
+    if (!ry || !rm || !rd) return []
+
+    const ref = new Date(ry, rm - 1, rd)
+    const refDay = ref.getDay()
+    const weekOffset = (refDay - weekStartsOn + 7) % 7
+    const currentWeekStart = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - weekOffset)
+    const rows = []
+
+    for (let i = totalWeeks - 1; i >= 0; i--) {
+      const start = new Date(currentWeekStart.getFullYear(), currentWeekStart.getMonth(), currentWeekStart.getDate() - (i * 7))
+      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6)
+      const startIso = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+      const endIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+
+      let income = 0
+      let expense = 0
+      ;(transactions || []).forEach(t => {
+        const date = String(t?.date || '')
+        if (!date || date < startIso || date > endIso) return
+        if (!Calc.isPostedTx(t)) return
+        if (t.type === 'income') {
+          if (!Calc.isReimbursementTx(t)) income += Number(t.amount || 0)
+        } else if (t.type === 'expense') {
+          expense += Calc.getExpenseLedgerAmount(t)
+        }
+      })
+
+      rows.push({
+        start: startIso,
+        end: endIso,
+        income: Math.round(income * 100) / 100,
+        expense: Math.round(expense * 100) / 100,
+        netCashflow: Math.round((income - expense) * 100) / 100,
+      })
+    }
+
+    return rows
+  },
+
   // ── Business logic ──────────────────────────────────────────
 
   // Returns true for transactions that have actually been posted (not future-scheduled).
