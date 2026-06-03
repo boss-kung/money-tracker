@@ -4200,7 +4200,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
           ${renderNetMetric({ tone: 'debt', icon: '▣', label: 'หนี้สิน', value: FMT(debtTotal)})}
           ${renderNetMetric({ tone: 'bill', icon: '□', label: 'บิลค้างจ่าย', value: FMT(unpaidBillTotal)})}
         </div>
-        ${reimbursementInflow > 0 ? `<div class="list-item-sub mt-net-note">คงเหลือด้านบนไม่รวมเงินคืน เพื่อวัดรายรับปกติ · เงินสดสุทธิหลังรวมเงินคืน ${dashboardCashNet < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(dashboardCashNet))}</div>` : ''}
       </div>`
 
     if (nearDueCards.length) {
