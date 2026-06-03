@@ -21,3 +21,12 @@ test('rule transaction sheet uses calendar-month cycles when a benefit rule is c
   assert.match(body, /calendar_month/)
   assert.match(body, /cycle\s*=\s*cycleForRuleSheet/)
 })
+
+test('rule transaction sheet exposes real diagnostics instead of hiding debug data', () => {
+  const body = functionBody('App._openRuleTransactionsSheetImpl')
+
+  assert.doesNotMatch(body, /showRuleTransactionDebug\s*=\s*false/)
+  assert.match(body, /App\._lastRuleTransactionsDebug\s*=\s*diagnostic/)
+  assert.match(body, /DEBUG หลักฐานรายการ rule/)
+  assert.match(body, /คัดลอก debug JSON/)
+})
