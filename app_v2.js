@@ -4033,9 +4033,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const nearDueCards = shouldShowCreditAlert
       ? alertCards.filter(card => Number(card.due?.daysLeft ?? 0) === minDaysLeft)
       : []
-    const transferTotal = S.transactions
-      .filter(t => (t.date || '').startsWith(dm) && t.type === 'transfer' && Calc.isPostedTx(t))
-      .reduce((s,t) => s + Number(t.amount || 0), 0)
 
     // Daily budget calculation
     const nowDate = new Date()
@@ -4091,32 +4088,119 @@ Calc.getUsableMoney = function(wallets, state = null) {
       }
     }
 
+    const healthyPct = (() => {
+      const income = Number(stats.income || 0)
+      const expense = Number(stats.expense || 0)
+      if (income <= 0 && expense <= 0) return 71
+      if (income <= 0) return 35
+      const cashRatio = Math.max(0, Math.min(1, (income - expense) / income))
+      const debtPressure = usable.creditDebt > 0 && usable.liquid > 0
+        ? Math.min(.35, usable.creditDebt / Math.max(usable.liquid + usable.creditDebt, 1))
+        : 0
+      return Math.max(12, Math.min(96, Math.round((cashRatio * 82 + 18) * (1 - debtPressure))))
+    })()
+
+    const sparkValues = (() => {
+      const values = (typeof Calc.getWeeklyNetSeries === 'function'
+        ? Calc.getWeeklyNetSeries(S.transactions, { weeks: 8 }).map(row => Number(row.netCashflow || 0))
+        : [])
+      return values.some(v => Math.abs(v) > 0) ? values : [12, 18, 14, 24, 29, 25, 36, 31]
+    })()
+
+    function renderNetSparkline(values) {
+      const width = 270
+      const height = 86
+      const pad = 8
+      const min = Math.min(...values)
+      const max = Math.max(...values)
+      const span = Math.max(1, max - min)
+      const points = values.map((value, index) => {
+        const x = pad + (index * (width - pad * 2)) / Math.max(1, values.length - 1)
+        const y = height - pad - ((value - min) / span) * (height - pad * 2)
+        return [Number(x.toFixed(1)), Number(y.toFixed(1))]
+      })
+      const d = points.map(([x, y], index) => `${index ? 'L' : 'M'}${x},${y}`).join(' ')
+      const area = `${d} L${points[points.length - 1][0]},${height - pad} L${points[0][0]},${height - pad} Z`
+      return `<svg class="mt-net-sparkline" viewBox="0 0 ${width} ${height}" aria-hidden="true">
+        <path class="mt-net-spark-area" d="${area}"></path>
+        <path class="mt-net-spark-path" d="${d}"></path>
+        ${points.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3.1"></circle>`).join('')}
+      </svg>`
+    }
+
+    function renderNetRing(pct) {
+      const safePct = Math.max(0, Math.min(100, Number(pct) || 0))
+      const circumference = 2 * Math.PI * 42
+      const offset = circumference * (1 - safePct / 100)
+      return `<div class="mt-net-ring" role="img" aria-label="สถานะการเงิน ${safePct}% Healthy">
+        <svg viewBox="0 0 112 112" aria-hidden="true">
+          <circle class="mt-net-ring-track" cx="56" cy="56" r="42"></circle>
+          <circle class="mt-net-ring-fill" cx="56" cy="56" r="42" style="stroke-dasharray:${circumference.toFixed(2)};stroke-dashoffset:${offset.toFixed(2)}"></circle>
+        </svg>
+        <div class="mt-net-ring-text"><strong>${safePct}%</strong><span>Healthy</span></div>
+      </div>`
+    }
+
+    function renderNetMetric({ tone, icon, label, value, sub }) {
+      return `<div class="mt-net-metric mt-net-metric-${tone}">
+        <span class="mt-net-metric-icon" aria-hidden="true">${icon}</span>
+        <small>${label}</small>
+        <strong>${value}</strong>
+        ${sub ? `<em>${sub}</em>` : ''}
+      </div>`
+    }
+
     const hasUsableBreakdown = (usable.creditDebt > 0 || usable.upcomingReserved > 0)
+    const unpaidBillTotal = Number(usable.upcomingReserved || 0)
+    const pendingUpcomingBills = typeof Calc.getPendingUpcomingBills === 'function'
+      ? Calc.getPendingUpcomingBills(S)
+      : (S.upcomingBills || []).filter(b => b && b.status === 'pending')
+    const unpaidBillCount = pendingUpcomingBills.length
+    const debtTotal = Number(usable.creditDebt || 0)
+    const prevMonth = Calc.getPreviousMonth?.(dm) || Calc.getMonths?.(2)?.[1] || ''
+    const prevMonthly = prevMonth ? Calc.getMonthlyIncomeExpense(S.transactions, prevMonth) : null
+    const shortMonthLabel = ym => String(mlabel(ym) || '').split(' ')[0] || ''
+    const pctText = pct => `${Math.abs(pct) >= 10 ? Math.abs(pct).toFixed(0) : Math.abs(pct).toFixed(1)}%`
+    const monthCompareSub = (current, previous, emptyText) => {
+      const cur = Number(current || 0)
+      const prev = Number(previous || 0)
+      if (cur <= 0) return emptyText
+      if (!(prev > 0)) return 'เดือนนี้'
+      const diffPct = ((cur - prev) / prev) * 100
+      if (Math.abs(diffPct) < 0.05) return `เท่าเดิมจาก ${shortMonthLabel(prevMonth)}`
+      return `${diffPct > 0 ? '▲' : '▼'} ${pctText(diffPct)} จาก ${shortMonthLabel(prevMonth)}`
+    }
+    const incomeCompareSub = monthCompareSub(stats.income, prevMonthly?.income, 'ยังไม่มีรายรับ')
+    const expenseCompareSub = monthCompareSub(stats.expense, prevMonthly?.expense, 'ยังไม่มีรายจ่าย')
+    const billSub = unpaidBillCount > 0 ? `${unpaidBillCount} รายการ` : 'ไม่มีรายการ'
+
     html += `
-      <div class="mt-net-card">
-        <div class="mt-net-head">
-          <div>
-            <div class="mt-net-label">เงินที่ใช้ได้จริง</div>
-            <div class="mt-net-value">${usable.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(usable.net))}</div>
+      <div class="mt-net-card" aria-label="สรุปการเงิน">
+        <div class="mt-net-hero">
+          <div class="mt-net-main">
+            <div class="mt-net-label">สินทรัพย์สุทธิ</div>
+            <div class="mt-net-value" data-val-key="dashboard-net-worth">${dashboardNetWorth < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(dashboardNetWorth))}</div>
+            <button class="mt-net-cash-link" type="button" onclick="App.showPage('wallets')" aria-label="ดูเงินพร้อมใช้">
+              <span>เงินพร้อมใช้</span>
+              <strong data-val-key="dashboard-usable-cash" style="font-weight:  600 !important;">${usable.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(usable.net))}</strong>
+              <i aria-hidden="true"> ›</i>
+            </button>
+          </div>
+          <div class="mt-net-chart" aria-hidden="true">
+            ${renderNetSparkline(sparkValues)}
+          </div>
+          <div class="mt-net-status">
+            <div class="mt-net-status-label">สถานะการเงิน</div>
+            ${renderNetRing(healthyPct)}
           </div>
         </div>
-        ${hasUsableBreakdown ? `<div class="mt-net-split mt-net-split-3">
-          <div class="mt-net-metric"><small>ความมั่งคั่งสุทธิ</small><strong style="color:${dashboardNetWorth >= 0 ? '#4ADE80' : '#F87171'};font-weight:600 !important">${dashboardNetWorth < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(dashboardNetWorth))}</strong></div>
-          <div class="mt-divider"></div>
-          <div class="mt-net-metric"><small>เงินสด</small><strong style="font-weight:600 !important">${FMT(usable.liquid)}</strong></div>
-          ${usable.creditDebt > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>หนี้บัตร</small><strong style="color:#F87171;font-weight:600 !important">-${FMT(usable.creditDebt)}</strong></div>` : ''}
-          ${usable.upcomingReserved > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>รายการรอจ่าย</small><strong style="color:#F59E0B;font-weight:600 !important">-${FMT(usable.upcomingReserved)}</strong></div>` : ''}
-        </div>` : ''}
-        <div class="mt-net-split">
-          <div class="mt-net-metric"><small>รายรับ</small><strong style="color:#4ADE80;font-weight:600 !important">+${FMT(stats.income)}</strong></div>
-          <div class="mt-divider"></div>
-          <div class="mt-net-metric"><small>รายจ่าย</small><strong style="color:#F87171;font-weight:600 !important">-${FMT(stats.expense)}</strong></div>
-          ${reimbursementInflow > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>เงินคืนจากเพื่อน</small><strong style="color:#4ADE80;font-weight:600 !important">+${FMT(reimbursementInflow)}</strong></div>` : ''}
-          ${transferTotal > 0 ? `<div class="mt-divider"></div><div class="mt-net-metric"><small>โอน</small><strong style="font-weight:600 !important">${FMT(transferTotal)}</strong></div>` : ''}
-          <div class="mt-divider"></div>
-          <div class="mt-net-metric"><small>คงเหลือ</small><strong style="color:${stats.net >= 0 ? '#4ADE80' : '#F87171'};font-weight:600 !important">${stats.net < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(stats.net))}</strong></div>
+        <div class="mt-net-split" aria-label="สรุปรายรับรายจ่ายและภาระ">
+          ${renderNetMetric({ tone: 'income', icon: '↓', label: 'รายรับ', value: `+${FMT(stats.income)}`, sub: incomeCompareSub })}
+          ${renderNetMetric({ tone: 'expense', icon: '↑', label: 'รายจ่าย', value: `-${FMT(stats.expense)}`, sub: expenseCompareSub })}
+          ${renderNetMetric({ tone: 'debt', icon: '▣', label: 'หนี้สิน', value: FMT(debtTotal)})}
+          ${renderNetMetric({ tone: 'bill', icon: '□', label: 'บิลค้างจ่าย', value: FMT(unpaidBillTotal)})}
         </div>
-        ${reimbursementInflow > 0 ? `<div class="list-item-sub" style="padding:0 14px 12px">คงเหลือด้านบนไม่รวมเงินคืน เพื่อวัดรายรับปกติ · เงินสดสุทธิหลังรวมเงินคืน ${dashboardCashNet < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(dashboardCashNet))}</div>` : ''}
+        ${reimbursementInflow > 0 ? `<div class="list-item-sub mt-net-note">คงเหลือด้านบนไม่รวมเงินคืน เพื่อวัดรายรับปกติ · เงินสดสุทธิหลังรวมเงินคืน ${dashboardCashNet < 0 && !S.settings.hideMoney ? '-' : ''}${FMT(Math.abs(dashboardCashNet))}</div>` : ''}
       </div>`
 
     if (nearDueCards.length) {
@@ -8829,7 +8913,8 @@ App._pickMerchant = function(name, opts = {}) {
 
     const esc = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])))
     const todayStr = new Date().toISOString().slice(0, 10)
-    const cycle = App.getCyclePeriodForDate(cardId, refDate || todayStr, rule)
+    const cycle = App.getBenefitRuleSheetCyclePeriod?.(cardId, refDate || todayStr, rule)
+      || App.getCyclePeriodForDate(cardId, refDate || todayStr, rule)
     const limits = rule.limits || {}
     const cond = rule.suggestedConditions || {}
     const merchants = Array.isArray(cond.merchants) ? cond.merchants.filter(Boolean) : []
@@ -8929,7 +9014,10 @@ App._pickMerchant = function(name, opts = {}) {
 
     const esc = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])))
     const todayStr = new Date().toISOString().slice(0, 10)
-    const cycle = App.getCyclePeriodForDate?.(cardId, refDate || todayStr, rule) || { start: todayStr, end: todayStr }
+    const cycleForRuleSheet = App.getBenefitRuleSheetCyclePeriod?.(cardId, refDate || todayStr, rule)
+      || App.getCyclePeriodForDate?.(cardId, refDate || todayStr, rule)
+      || { start: todayStr, end: todayStr }
+    const cycle = cycleForRuleSheet
     const limits = rule.limits || {}
     const cashbackCfg = rule.cashback || {}
     const discountCfg = rule.discount || {}
@@ -9274,7 +9362,9 @@ App._pickMerchant = function(name, opts = {}) {
     if (!rule) {
       return null
     }
-    const cycle = App.getCyclePeriodForDate?.(cardId, refDate || todayStr, rule) || { start: todayStr, end: todayStr }
+    const cycle = App.getBenefitRuleSheetCyclePeriod?.(cardId, refDate || todayStr, rule)
+      || App.getCyclePeriodForDate?.(cardId, refDate || todayStr, rule)
+      || { start: todayStr, end: todayStr }
     const trackChannels = getTriggerTrackChannels(rule.rewardTrigger || {})
     const resolveTxDate = tx => {
       if (typeof App._resolveBenefitTxDate === 'function') return App._resolveBenefitTxDate(tx)
@@ -13783,6 +13873,22 @@ App._pickMerchant = function(name, opts = {}) {
   App.ensureCCBenefitRulesState = ensureCCBenefitRulesState
   App.getCyclePeriodForDate = function(cardId, refDate, rule) {
     return getCyclePeriodForDate(cardId, refDate || today(), rule || null)
+  }
+  App.getBenefitRuleSheetCyclePeriod = function(cardId, refDate, rule) {
+    const safeRefDate = String(refDate || today()).slice(0, 10)
+    const cycleHint = String(rule?.validity?.statementCycleHint || 'statement_cycle').trim()
+    if (cycleHint === 'calendar_month') {
+      const [year, month] = safeRefDate.split('-').map(Number)
+      const safeYear = year || new Date().getFullYear()
+      const safeMonth = month || 1
+      const lastDay = new Date(safeYear, safeMonth, 0).getDate()
+      return {
+        start: `${String(safeYear).padStart(4, '0')}-${String(safeMonth).padStart(2, '0')}-01`,
+        end: `${String(safeYear).padStart(4, '0')}-${String(safeMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+        statementId: '',
+      }
+    }
+    return getCyclePeriodForDate(cardId, safeRefDate, rule || null)
   }
   App.getOpenCyclePeriodForDate = function(cardId, refDate, rule) {
     return getOpenCyclePeriodForDate(cardId, refDate || today(), rule || null)

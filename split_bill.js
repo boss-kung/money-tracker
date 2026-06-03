@@ -104,6 +104,40 @@
     return r <= unit / 2 ? satang - r : satang - r + unit
   }
 
+  function allocateCents(ids, weights, totalAmount) {
+    const totalCents = Math.round(r2(totalAmount) * 100)
+    const shares = {}
+    ids.forEach(id => { shares[id] = 0 })
+    if (!ids.length || totalCents === 0) return shares
+
+    const totalWeight = weights.reduce((sum, w) => sum + Math.max(0, Number(w) || 0), 0)
+    const rawRows = ids.map((id, i) => {
+      const raw = totalWeight > 0
+        ? Math.max(0, Number(weights[i]) || 0) / totalWeight * totalCents
+        : totalCents / ids.length
+      const cents = Math.floor(raw)
+      return { id, cents, frac: raw - cents, order: i }
+    })
+
+    let used = rawRows.reduce((sum, row) => sum + row.cents, 0)
+    let remaining = totalCents - used
+    const byFracDesc = [...rawRows].sort((a, b) => (b.frac - a.frac) || (a.order - b.order))
+    const byFracAsc = [...rawRows].sort((a, b) => (a.frac - b.frac) || (a.order - b.order))
+    while (remaining > 0) {
+      byFracDesc[(remaining - 1) % byFracDesc.length].cents += 1
+      remaining -= 1
+    }
+    while (remaining < 0) {
+      const row = byFracAsc.find(r => r.cents > 0)
+      if (!row) break
+      row.cents -= 1
+      remaining += 1
+    }
+
+    rawRows.forEach(row => { shares[row.id] = r2(row.cents / 100) })
+    return shares
+  }
+
   function runPipeline(subtotal, pipeline, rounding = false) {
     const foodBase = r2(subtotal)
     let amount = foodBase
@@ -140,23 +174,16 @@
       if (!parts.length) return
       if (item.splitMode === 'ratio') {
         const sum = parts.reduce((s,p) => s + (Number(p.ratio)||1), 0)
-        parts.forEach(p => { byPerson[p.personId] = r2(byPerson[p.personId] + (Number(p.ratio)||1)/sum * total) })
+        parts.forEach(p => { byPerson[p.personId] += (Number(p.ratio)||1)/sum * total })
       } else {
-        parts.forEach(p => { byPerson[p.personId] = r2(byPerson[p.personId] + total / parts.length) })
+        parts.forEach(p => { byPerson[p.personId] += total / parts.length })
       }
     })
 
     const sub = r2(Object.values(byPerson).reduce((s,v)=>s+v,0))
-    const { finalTotal } = runPipeline(sub, draft.pipeline, draft.rounding)
-    const shares = {}
-    const ceilSatang = n => Math.ceil(Number(n.toFixed(4)) * 100) / 100
-
-    if (sub > 0) {
-      const ids = Object.keys(byPerson)
-      ids.forEach(id => { shares[id] = ceilSatang(byPerson[id] / sub * finalTotal) })
-    } else if (draft.peopleIds.length) {
-      draft.peopleIds.forEach(id => { shares[id] = ceilSatang(finalTotal / draft.peopleIds.length) })
-    }
+    const { finalTotal } = runPipeline(itemSubtotal(draft), draft.pipeline, draft.rounding)
+    const ids = draft.peopleIds || []
+    const shares = allocateCents(ids, ids.map(id => byPerson[id] || 0), finalTotal)
 
     return { shares, sub, finalTotal }
   }

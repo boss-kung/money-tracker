@@ -127,3 +127,56 @@ test('income category breakdown can include reimbursements only when explicitly 
   assert.equal(excluded.length, 0)
   assert.equal(included[0].amount, 300)
 })
+
+test('weekly net series uses calendar weeks and excludes reimbursements from income', () => {
+  const txs = [
+    {
+      id: 'salary',
+      type: 'income',
+      amount: 10000,
+      walletId: 'bank',
+      date: '2026-05-18',
+    },
+    {
+      id: 'groceries',
+      type: 'expense',
+      amount: 1500,
+      ledgerAmount: 1500,
+      walletId: 'cash',
+      date: '2026-05-20',
+    },
+    {
+      id: 'refund',
+      type: 'income',
+      amount: 800,
+      walletId: 'cash',
+      date: '2026-05-21',
+      reimbursesSharedExpenseTxId: 'groceries',
+    },
+    {
+      id: 'rent',
+      type: 'expense',
+      amount: 4000,
+      ledgerAmount: 4000,
+      walletId: 'bank',
+      date: '2026-05-27',
+    },
+    {
+      id: 'bonus',
+      type: 'income',
+      amount: 5000,
+      walletId: 'bank',
+      date: '2026-06-02',
+    },
+  ]
+
+  const weekly = Calc.getWeeklyNetSeries(txs, { weeks: 3, refDate: '2026-06-03' })
+
+  assert.deepEqual(weekly.map(w => ({ start: w.start, end: w.end, net: w.netCashflow })), [
+    { start: '2026-05-18', end: '2026-05-24', net: 8500 },
+    { start: '2026-05-25', end: '2026-05-31', net: -4000 },
+    { start: '2026-06-01', end: '2026-06-07', net: 5000 },
+  ])
+  assert.equal(weekly[0].income, 10000)
+  assert.equal(weekly[0].expense, 1500)
+})
