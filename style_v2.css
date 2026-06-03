@@ -9548,3 +9548,94 @@ details summary::marker {
     max-width: 620px !important;
   }
 }
+
+.cc-cycle-swipe-zone {
+  touch-action: pan-y;
+  will-change: opacity, transform;
+}
+
+.cc-cycle-swipe-zone.cc-cycle-fade-left {
+  animation: cc-cycle-fade-left .22s ease-out both;
+}
+
+.cc-cycle-swipe-zone.cc-cycle-fade-right {
+  animation: cc-cycle-fade-right .22s ease-out both;
+}
+
+.cc-cycle-pager {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.cc-cycle-current {
+  min-width: 0;
+  text-align: center;
+}
+
+.cc-cycle-current strong,
+.cc-cycle-current span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-cycle-current strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.cc-cycle-current span {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.cc-cycle-nav {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.cc-cycle-nav:disabled {
+  opacity: .35;
+  pointer-events: none;
+}
+
+.cc-benefit-cycle-card {
+  scroll-snap-align: start;
+}
+
+@keyframes cc-cycle-fade-left {
+  from {
+    opacity: .35;
+    transform: translateX(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes cc-cycle-fade-right {
+  from {
+    opacity: .35;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .cc-detail-screen .statement-compact,
+  .cc-detail-screen .cc-benefit-cycle-card {
+    scroll-margin-top: 12px;
+  }
+}

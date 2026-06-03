@@ -329,22 +329,20 @@
       .filter(b => b.daysLeft <= 7)
       .slice(0, 25)
 
-    const creditDue = (S.wallets || [])
-      .filter(w => w?.type === 'credit')
-      .map(card => {
-        const due = App.getCreditCardDueInfo?.(card)
-        const amount = Math.abs(Number(card.balance || 0))
-        return due?.dateStr ? {
-          id: card.id,
-          title: card.name,
-          dueDate: due.dateStr,
-          daysLeft: Number(due.daysLeft ?? daysBetween(due.dateStr, today)),
-          amount: S.settings?.notifications?.hide_amounts_in_notification ? null : amount,
-        } : null
-      })
-      .filter(Boolean)
-      .filter(row => row.daysLeft <= 7 && row.amount !== 0)
-      .slice(0, 25)
+    const creditDue = typeof CreditCardCycles !== 'undefined'
+      ? CreditCardCycles.getCreditDueNotificationRows({
+          cards: (S.wallets || []).filter(w => w?.type === 'credit'),
+          transactions: S.transactions || [],
+          refDate: today,
+          hideAmounts: Boolean(S.settings?.notifications?.hide_amounts_in_notification),
+          maxDays: 7,
+          rewardForTx: tx => App.getTransactionRewardEstimate?.(tx) || { points:0, cashback:0, discount:0 },
+          amountForTx: tx => typeof App._expectedLedgerAmountForTx === 'function'
+            ? App._expectedLedgerAmountForTx(tx)
+            : (App.getLedgerAmountForTx?.(tx) || tx.amount || 0),
+          isPostedTx: tx => App._isPostedTx ? App._isPostedTx(tx) : tx.scheduled !== true,
+        })
+      : []
 
     const month = today.slice(0, 7)
     let budgetAlerts = []
