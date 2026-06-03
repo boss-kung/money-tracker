@@ -9042,6 +9042,12 @@ App._pickMerchant = function(name, opts = {}) {
       if (typeof App._resolveBenefitTxDate === 'function') return App._resolveBenefitTxDate(tx)
       return String(tx?.date || '').trim().slice(0, 10)
     }
+    const calcBenefitAmount = tx => {
+      if (typeof App.getBenefitCalculationAmount === 'function') return App.getBenefitCalculationAmount(tx)
+      const base = Number(tx?.benefitBaseAmount)
+      if (Number.isFinite(base) && base > 0) return Math.round(base * 100) / 100
+      return Math.round(Number(tx?.amount || 0) * 100) / 100
+    }
     const getEligibility = tx => {
       try {
         if (typeof App._getRuleEligibility === 'function') return App._getRuleEligibility(tx, rule)
@@ -9086,7 +9092,7 @@ App._pickMerchant = function(name, opts = {}) {
     const trackChannels = getTriggerTrackChannels(rule.rewardTrigger || {})
     const thresholdAmount = Number(rule.rewardTrigger?.thresholdAmount || 0)
     const cycleTrackTotal = isThresholdMode
-      ? Math.round(txsInCycle.reduce((sum, tx) => sum + (channelMatchesAny(trackChannels, resolveTxChannel(tx)) ? benefitCalculationAmount(tx) : 0), 0) * 100) / 100
+      ? Math.round(txsInCycle.reduce((sum, tx) => sum + (channelMatchesAny(trackChannels, resolveTxChannel(tx)) ? calcBenefitAmount(tx) : 0), 0) * 100) / 100
       : 0
     const thresholdUnlocked = !isThresholdMode || (thresholdAmount > 0 && cycleTrackTotal >= thresholdAmount)
     const rows = txsInCycle.map(tx => {
@@ -9101,7 +9107,7 @@ App._pickMerchant = function(name, opts = {}) {
       if (isThresholdMode) {
         eligibility = getEligibility(tx)
         const txChannel = resolveTxChannel(tx)
-        trackContribution = channelMatchesAny(trackChannels, txChannel) ? benefitCalculationAmount(tx) : 0
+        trackContribution = channelMatchesAny(trackChannels, txChannel) ? calcBenefitAmount(tx) : 0
         trackBefore = trackAccum
         trackAfter = Math.round((trackBefore + trackContribution) * 100) / 100
         trackAccum = trackAfter
@@ -9111,7 +9117,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (eligibility.matched) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
           const txCK = resolveTxChannel(tx).trim().toLowerCase()
-          eligible = Math.max(0, benefitCalculationAmount(tx))
+          eligible = Math.max(0, calcBenefitAmount(tx))
           if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
           if (cycleEligibleCap  > 0) eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - eligAccum))
           if (perMerchantElgCap > 0) eligible = Math.min(eligible, Math.max(0, perMerchantElgCap - (sheetMerchElgAccum[txMK] || 0)))
@@ -9148,7 +9154,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (eligibility.matched) {
           const txMK = (typeof normalizeCompareText === 'function' ? normalizeCompareText : v => String(v||'').toLowerCase())(tx.merchant || '')
           const txCK = resolveTxChannel(tx).trim().toLowerCase()
-          eligible = Math.max(0, benefitCalculationAmount(tx))
+          eligible = Math.max(0, calcBenefitAmount(tx))
           if (limits.maxEligibleSpendPerTx > 0 && eligible > limits.maxEligibleSpendPerTx) eligible = Number(limits.maxEligibleSpendPerTx)
           if (cycleEligibleCap  > 0) eligible = Math.min(eligible, Math.max(0, cycleEligibleCap  - eligAccum))
           if (perMerchantElgCap > 0) eligible = Math.min(eligible, Math.max(0, perMerchantElgCap - (sheetMerchElgAccum[txMK] || 0)))
@@ -9355,7 +9361,7 @@ App._pickMerchant = function(name, opts = {}) {
             <div style="text-align:right;flex-shrink:0">
               <div style="font-size:13px;font-weight:600">${fmtMoney(tx.amount)}</div>
               <div style="font-size:11px;color:${trackOnly ? 'var(--primary,#2563EB)' : pendingReward ? 'var(--warning,#D97706)' : 'var(--success,#059669)'}">${trackOnly ? 'นับสะสมปลดล็อก' : `${pendingReward ? 'คาดว่าจะได้ ' : '+'}${fmtReward(rewardVal)}`}</div>
-              ${eligible < benefitCalculationAmount(tx) - 0.005 ? `<div style="font-size:10px;color:var(--text-secondary,#6b7280)">นับ ${fmtMoney(eligible)}</div>` : ''}
+              ${eligible < calcBenefitAmount(tx) - 0.005 ? `<div style="font-size:10px;color:var(--text-secondary,#6b7280)">นับ ${fmtMoney(eligible)}</div>` : ''}
             </div>
           </div>`
         }).join('')
@@ -9441,6 +9447,12 @@ App._pickMerchant = function(name, opts = {}) {
       if (typeof App._resolveBenefitTxChannel === 'function') return App._resolveBenefitTxChannel(tx)
       return String(tx?.channel || '').trim()
     }
+    const calcBenefitAmount = tx => {
+      if (typeof App.getBenefitCalculationAmount === 'function') return App.getBenefitCalculationAmount(tx)
+      const base = Number(tx?.benefitBaseAmount)
+      if (Number.isFinite(base) && base > 0) return Math.round(base * 100) / 100
+      return Math.round(Number(tx?.amount || 0) * 100) / 100
+    }
     const rows = (S.transactions || [])
       .filter(tx => tx.type === 'expense' && String(tx.walletId || '') === String(cardId || ''))
       .map(tx => {
@@ -9448,7 +9460,7 @@ App._pickMerchant = function(name, opts = {}) {
         const resolvedChannel = resolveTxChannel(tx)
         const posted = typeof App._isPostedTx === 'function' ? !!App._isPostedTx(tx) : tx.scheduled !== true
         const inCycle = !!resolvedDate && resolvedDate >= cycle.start && resolvedDate <= cycle.end
-        const trackContribution = channelMatchesAny(trackChannels, resolvedChannel) ? benefitCalculationAmount(tx) : 0
+        const trackContribution = channelMatchesAny(trackChannels, resolvedChannel) ? calcBenefitAmount(tx) : 0
         const explicitIds = Array.isArray(tx.rewardRuleIds) ? tx.rewardRuleIds.map(id => String(id || '')).filter(Boolean) : []
         const estimateRuleIds = Array.isArray(tx.rewardEstimate?.rules) ? tx.rewardEstimate.rules.map(row => String(row.ruleId || '')).filter(Boolean) : []
         const eligibility = (() => {
@@ -9467,7 +9479,7 @@ App._pickMerchant = function(name, opts = {}) {
           txId: String(tx.id || ''),
           date: String(tx.date || ''),
           resolvedDate,
-          amount: benefitCalculationAmount(tx),
+          amount: calcBenefitAmount(tx),
           merchant: String(tx.merchant || ''),
           note: String(tx.note || ''),
           channel: String(tx.channel || ''),

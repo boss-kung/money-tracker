@@ -30,3 +30,13 @@ test('rule transaction sheet exposes real diagnostics instead of hiding debug da
   assert.match(body, /DEBUG หลักฐานรายการ rule/)
   assert.match(body, /คัดลอก debug JSON/)
 })
+
+test('rule transaction sheet and diagnostics do not call private benefit amount helper out of scope', () => {
+  const sheetBody = functionBody('App._openRuleTransactionsSheetImpl')
+  const debugBody = functionBody('App.getBenefitRuleDebugData')
+
+  assert.doesNotMatch(sheetBody, /[^.\w]benefitCalculationAmount\s*\(/)
+  assert.doesNotMatch(debugBody, /[^.\w]benefitCalculationAmount\s*\(/)
+  assert.match(sheetBody, /calcBenefitAmount\s*=/)
+  assert.match(debugBody, /calcBenefitAmount\s*=/)
+})
