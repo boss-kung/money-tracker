@@ -151,7 +151,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync14',
+      version: '2026.06.04-secure-sync15',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -161,6 +161,8 @@
       hasDataKey: Boolean(state.dataKey),
       hasVaultMeta: Boolean(state.vaultMeta),
       hasDeviceRecoveryKey: Boolean(readDeviceRecoveryKey()),
+      freshStartFlag: isFreshStart(),
+      looksLikeDemo: currentDataLooksLikeDemo(),
       vaultVersion: state.vaultMeta?.data_version || null,
       dirty: Boolean(state.dirty),
       syncing: Boolean(state.syncing),
@@ -272,6 +274,12 @@
     await waitForStorageBridge()
     await pullRemoteVault({ silent: true })
     await ensureFirstRunBackup()
+    // Case A: vault was applied but still shows demo data — the vault was originally
+    // created from sample data. Offer user a one-time reset so they can start fresh.
+    if (state.vaultMeta && !needsVaultUnlock() && currentDataLooksLikeDemo()) {
+      console.warn('[MTAuthSync] vault contains demo data — showing reset dialog')
+      showDemoVaultWarning()
+    }
     toastSafe(`เข้าสู่ระบบสำเร็จ: ${state.user.email || ''}`, 'success')
     render()
     return state
@@ -341,24 +349,38 @@
     try { localStorage.removeItem(FRESH_START_KEY) } catch (_) {}
   }
 
+  function currentDataLooksLikeDemo() {
+    return typeof root.App?._looksLikeDemoData === 'function'
+      ? root.App._looksLikeDemoData()
+      : false
+  }
+
   async function ensureFirstRunBackup() {
     if (!state.session?.access_token || !state.user?.id) return null
+
+    console.debug('[MTAuthSync] ensureFirstRunBackup', {
+      hasVaultMeta: !!state.vaultMeta,
+      hasDataKey: !!state.dataKey,
+      hasSavedKey: !!readDeviceRecoveryKey(),
+      freshStart: isFreshStart(),
+      looksLikeDemo: currentDataLooksLikeDemo(),
+    })
 
     if (state.vaultMeta || state.dataKey) {
       const savedKey = readDeviceRecoveryKey()
       if (state.vaultMeta && savedKey && !state.dataKey) {
-        // After logout+reset the FRESH_START_KEY flag is set — apply cloud data so
-        // real data replaces the defaults loaded into localStorage after reset.
-        // On a plain page refresh the flag is absent — keep local data (skipApply)
-        // to avoid overwriting unsynchronised local changes.
         const freshStart = isFreshStart()
         clearFreshStart()
+        console.debug('[MTAuthSync] unlocking vault', { skipApply: !freshStart })
         try {
           await unlockVault(savedKey, { skipApply: !freshStart, silent: true })
+          console.debug('[MTAuthSync] vault unlocked', { stillDemo: currentDataLooksLikeDemo() })
         } catch (err) {
+          console.warn('[MTAuthSync] unlockVault failed', err.message)
           if (freshStart) toastSafe('กู้ข้อมูลอัตโนมัติไม่สำเร็จ — กรุณากรอกรหัสกู้ข้อมูลเองจากเมนูบัญชี', 'warn')
         }
       } else {
+        console.debug('[MTAuthSync] skipping unlock', { hasSavedKey: !!savedKey, hasDataKey: !!state.dataKey })
         clearFreshStart()
       }
       return state.vaultMeta
@@ -366,9 +388,8 @@
 
     // No vault yet — first time this user backs up.
     // Never back up demo/default data; wait until the user has entered real data.
-    const looksLikeDemo = typeof root.App?._looksLikeDemoData === 'function'
-      ? root.App._looksLikeDemoData()
-      : false
+    const looksLikeDemo = currentDataLooksLikeDemo()
+    console.debug('[MTAuthSync] no vault, looksLikeDemo:', looksLikeDemo)
     clearFreshStart()
     if (looksLikeDemo) return null
 
@@ -400,12 +421,19 @@
 
   async function pullRemoteVault({ silent = false } = {}) {
     if (!state.session?.access_token || !state.user?.id) return null
-    const rows = await vaultRequest('GET')
-    const row = Array.isArray(rows) ? rows[0] : null
-    state.vaultMeta = row || null
-    state.locked = row ? true : !state.dataKey
-    if (!silent) render()
-    return row
+    try {
+      const rows = await vaultRequest('GET')
+      const row = Array.isArray(rows) ? rows[0] : null
+      state.vaultMeta = row || null
+      state.locked = row ? true : !state.dataKey
+      console.debug('[MTAuthSync] pullRemoteVault', { hasVault: !!row, version: row?.data_version })
+      if (!silent) render()
+      return row
+    } catch (err) {
+      console.warn('[MTAuthSync] pullRemoteVault failed', err.message)
+      toastSafe(`ดึงข้อมูลจาก cloud ไม่สำเร็จ: ${err.message}`, 'warn')
+      return null
+    }
   }
 
   function currentPayload() {
@@ -465,6 +493,43 @@
     return state.vaultMeta
   }
 
+  async function deleteVault() {
+    if (!state.session?.access_token || !state.user?.id) throw new Error('ต้องเข้าสู่ระบบก่อน')
+    const cfg = getConfig()
+    const response = await fetch(
+      `${cfg.supabaseUrl}/rest/v1/${VAULT_TABLE}?user_id=eq.${encodeURIComponent(state.user.id)}`,
+      { method: 'DELETE', headers: authHeaders() }
+    )
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data?.message || data?.error || 'ลบ vault ไม่สำเร็จ')
+    }
+    state.vaultMeta = null
+    state.dataKey = null
+    state.locked = true
+    console.debug('[MTAuthSync] vault deleted')
+  }
+
+  function showDemoVaultWarning() {
+    document.getElementById('mt-demo-vault-warning')?.remove()
+    const el = document.createElement('div')
+    el.id = 'mt-demo-vault-warning'
+    el.className = 'mt-recovery-key-overlay'
+    el.innerHTML = `
+      <div class="mt-recovery-key-sheet" role="dialog" aria-modal="true" aria-labelledby="mt-demo-vault-title">
+        <div class="mt-recovery-key-header">
+          <h2 id="mt-demo-vault-title">พบข้อมูลตัวอย่างใน Cloud</h2>
+        </div>
+        <p>ข้อมูลที่บันทึกไว้ใน cloud เป็นข้อมูลตัวอย่าง ไม่ใช่ข้อมูลจริงของคุณ</p>
+        <p>กด <strong>"ล้างและเริ่มใหม่"</strong> เพื่อลบข้อมูลตัวอย่างออกจาก cloud จากนั้นเพิ่มข้อมูลจริงและระบบจะ sync ให้อัตโนมัติ</p>
+        <div class="mt-recovery-key-actions" style="flex-direction:column;gap:8px">
+          <button class="btn btn-primary" type="button" data-mt-auth-action="reset-demo-vault" style="background:var(--expense)">ล้างและเริ่มใหม่</button>
+          <button class="btn btn-secondary" type="button" data-mt-auth-action="close-demo-vault-warning">ใช้ข้อมูลตัวอย่างต่อ</button>
+        </div>
+      </div>`
+    document.body.appendChild(el)
+  }
+
   async function unlockVault(recoveryKey, options = {}) {
     const row = state.vaultMeta || await pullRemoteVault({ silent: true })
     if (!row) return createVaultFromLocalData(recoveryKey)
@@ -475,7 +540,13 @@
     if (!options.skipApply) {
       await waitForStorageBridge()
       try { appStorage()?.createLocalBackup?.(root.App?._cloudState?.(), 'before-cloud-restore') } catch (_) {}
-      applyPayload(payload)
+      try {
+        applyPayload(payload)
+        console.debug('[MTAuthSync] applyPayload done', { stillDemo: currentDataLooksLikeDemo() })
+      } catch (err) {
+        console.warn('[MTAuthSync] applyPayload failed', err.message)
+        throw err
+      }
     }
     state.dataKey = dataKey
     state.locked = false
@@ -765,6 +836,17 @@
       }
       if (action === 'copy-recovery-key') copyRecoveryKeyFromSheet()
       if (action === 'close-recovery-key') document.getElementById('mt-recovery-key-sheet')?.remove()
+      if (action === 'close-demo-vault-warning') document.getElementById('mt-demo-vault-warning')?.remove()
+      if (action === 'reset-demo-vault') {
+        document.getElementById('mt-demo-vault-warning')?.remove()
+        deleteVault()
+          .then(() => {
+            try { appStorage()?.reset?.() } catch (_) {}
+            toastSafe('ล้าง cloud vault แล้ว — เพิ่มข้อมูลจริงและระบบจะ sync อัตโนมัติ', 'success')
+            render()
+          })
+          .catch(err => toastSafe(`ล้าง vault ไม่สำเร็จ: ${err.message}`, 'error'))
+      }
       if (action === 'enter-recovery-key-submit') {
         const input = document.getElementById('mt-recovery-key-input')
         const key = (input?.value || '').trim().toUpperCase()
