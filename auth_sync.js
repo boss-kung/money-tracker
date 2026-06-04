@@ -353,6 +353,9 @@
     url.searchParams.set('redirect_to', cfg.redirectTo)
     url.searchParams.set('code_challenge', challenge)
     url.searchParams.set('code_challenge_method', 'S256')
+    // Force Google to show the account picker every time.
+    // Without this, Google silently reuses the last signed-in account.
+    url.searchParams.set('prompt', 'select_account')
     location.href = url.toString()
   }
 
