@@ -9270,23 +9270,12 @@ App._pickMerchant = function(name, opts = {}) {
 
     const debugData = App.getBenefitRuleDebugData?.(ruleId, cardId, refDate) || null
     const displayedTxIds = new Set(rows.map(row => String(row?.tx?.id || '')).filter(Boolean))
+    const usageDebug = App.getRuleCycleUsage?.(ruleId, cardId, cycle.start, cycle.end, '', getTriggerTrackChannels(rule.rewardTrigger || {}), '', '', rule) || {}
     const excludedRows = (debugData?.rows || []).filter(row =>
       row.inCycle &&
       row.posted &&
       !displayedTxIds.has(String(row.txId || ''))
     )
-    const usageDebug = App.getRuleCycleUsage?.(ruleId, cardId, cycle.start, cycle.end, '', getTriggerTrackChannels(rule.rewardTrigger || {}), '', '', rule) || {}
-    const usageHasCountedValue = [
-      usageDebug.eligibleSpendUsedBefore,
-      usageDebug.cashbackUsedBefore,
-      usageDebug.discountUsedBefore,
-      usageDebug.pointsUsedBefore,
-      usageDebug.potentialEligibleSpendUsedBefore,
-      usageDebug.potentialCashbackUsedBefore,
-      usageDebug.potentialDiscountUsedBefore,
-      usageDebug.potentialPointsUsedBefore,
-      usageDebug.trackChannelSpendBefore,
-    ].some(v => Number(v || 0) > 0)
     const diagnostic = {
       openedAt: new Date().toISOString(),
       rule: {
@@ -9314,29 +9303,6 @@ App._pickMerchant = function(name, opts = {}) {
       rows: debugData?.rows || [],
     }
     App._lastRuleTransactionsDebug = diagnostic
-    const debugHtml = debugData
-      ? `<details ${rows.length === 0 || usageHasCountedValue ? 'open' : ''} style="margin-top:12px;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:rgba(148,163,184,.08)">
-          <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text-primary)">DEBUG หลักฐานรายการ rule${excludedRows.length ? ` · ถูกตัดออก ${excludedRows.length}` : ''}</summary>
-          <div style="padding-top:10px;font-size:11px;color:var(--text-secondary,#6b7280);line-height:1.45">
-            <div>รอบที่กำลังตรวจ: ${esc(debugData.summary.cycleStart)} ถึง ${esc(debugData.summary.cycleEnd)}</div>
-            <div>ธุรกรรมบัตรนี้: ${debugData.summary.txCount} · in cycle: ${debugData.summary.inCycleCount} · posted: ${debugData.summary.postedCount} · match rule: ${debugData.summary.matchedCount} · sheet rows: ${rows.length}</div>
-            <div>usage eligible: ${fmtMoney(usageDebug.eligibleSpendUsedBefore || 0)} · potential: ${fmtMoney(usageDebug.potentialEligibleSpendUsedBefore ?? usageDebug.eligibleSpendUsedBefore ?? 0)} · track: ${fmtMoney(usageDebug.trackChannelSpendBefore || 0)}</div>
-            <button type="button" class="btn btn-secondary btn-sm" style="width:auto;margin-top:8px" onclick="App.copyLastRuleTransactionsDebug?.()">คัดลอก debug JSON</button>
-            ${excludedRows.length
-              ? `<div style="margin-top:8px;display:grid;gap:8px">
-                  ${excludedRows.map(row => `<div style="padding-top:8px;border-top:1px solid var(--border)">
-                    <div style="display:flex;justify-content:space-between;gap:10px">
-                      <strong style="font-size:12px;color:var(--text-primary)">${esc(row.merchant || row.note || 'ไม่ระบุรายการ')}</strong>
-                      <span>${fmtMoney(row.amount)}</span>
-                    </div>
-                    <div>${esc(row.resolvedDate || row.date || '-')} · ${esc(row.resolvedChannel || row.channel || 'ไม่ระบุช่องทาง')}</div>
-                    <div style="margin-top:2px;color:var(--expense,#DC2626)">${esc(row.reasons || 'ไม่มีเหตุผล')}</div>
-                  </div>`).join('')}
-                </div>`
-              : `<div style="margin-top:8px;color:var(--success,#059669)">ไม่พบรายการในรอบบิลที่ถูกตัดออกจาก sheet ตาม diagnostics ชุดนี้</div>`}
-          </div>
-        </details>`
-      : ''
 
     const listHtml = rows.length === 0
       ? `<div style="text-align:center;padding:32px 0;color:var(--text-secondary,#6b7280);font-size:14px">ยังไม่มีรายการในรอบนี้</div>`
@@ -9374,7 +9340,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (titleEl) titleEl.textContent = rule.name
 
     const body = document.getElementById('rule-transactions-content')
-    if (body) body.innerHTML = `<div style="padding:0 0 32px">${summaryHtml}${trackSummaryHtml}${conditionHtml}${debugHtml}<div style="padding-top:4px">${listHtml}</div></div>`
+    if (body) body.innerHTML = `<div style="padding:0 0 32px">${summaryHtml}${trackSummaryHtml}${conditionHtml}<div style="padding-top:4px">${listHtml}</div></div>`
 
     App.openOverlay('overlay-rule-transactions')
   }
@@ -9402,26 +9368,13 @@ App._pickMerchant = function(name, opts = {}) {
         body.innerHTML = `<div style="padding:16px 0 32px">
           <div style="text-align:center;padding:20px 0;color:var(--text-secondary,#6b7280);font-size:14px">เปิด sheet ไม่สำเร็จ</div>
           <details open style="border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:rgba(248,113,113,.08)">
-            <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--expense,#DC2626)">DEBUG error ตอนเปิดรายการ rule</summary>
+            <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--expense,#DC2626)">รายละเอียดข้อผิดพลาดตอนเปิดรายการ rule</summary>
             <div style="padding-top:10px;font-size:11px;color:var(--text-secondary,#6b7280);line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere">${message}${stack ? `\n\n${stack}` : ''}</div>
-            <button type="button" class="btn btn-secondary btn-sm" style="width:auto;margin-top:8px" onclick="App.copyLastRuleTransactionsDebug?.()">คัดลอก debug JSON</button>
           </details>
         </div>`
       }
       App.openOverlay('overlay-rule-transactions')
     }
-  }
-
-  App.copyLastRuleTransactionsDebug = async function() {
-    const payload = JSON.stringify(App._lastRuleTransactionsDebug || null, null, 2)
-    try {
-      await navigator.clipboard?.writeText(payload)
-      App.toast?.('คัดลอก debug JSON แล้ว')
-    } catch (_) {
-      console.log('[Benefits][rule transactions debug]', App._lastRuleTransactionsDebug || null)
-      App.toast?.('คัดลอกไม่ได้ ดูข้อมูลใน console')
-    }
-    return App._lastRuleTransactionsDebug || null
   }
 
   App.openTxDetailFromRuleTransactions = function(txId) {
