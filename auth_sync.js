@@ -187,37 +187,23 @@
 
   function readDeviceRecoveryKey() {
     if (_deviceRecoveryKeyMemory) return _deviceRecoveryKeyMemory
-    // sessionStorage persists across page refreshes but is cleared when the browser closes
     try {
-      const fromSession = sessionStorage.getItem(DEVICE_RECOVERY_KEY) || ''
-      if (fromSession) { _deviceRecoveryKeyMemory = fromSession; return fromSession }
-    } catch (_) {}
-    // One-time migration: if the key was previously written to localStorage, move it out
-    // and remove it so it is no longer accessible to persistent JS reads
-    try {
-      const fromLocal = localStorage.getItem(DEVICE_RECOVERY_KEY) || ''
-      if (fromLocal) {
-        _deviceRecoveryKeyMemory = fromLocal
-        try { sessionStorage.setItem(DEVICE_RECOVERY_KEY, fromLocal) } catch (_) {}
-        localStorage.removeItem(DEVICE_RECOVERY_KEY)
-        return fromLocal
-      }
-    } catch (_) {}
-    return ''
+      const stored = localStorage.getItem(DEVICE_RECOVERY_KEY) || ''
+      if (stored) _deviceRecoveryKeyMemory = stored
+      return stored
+    } catch (_) { return '' }
   }
 
   function saveDeviceRecoveryKey(recoveryKey) {
     const key = String(recoveryKey || '')
     _deviceRecoveryKeyMemory = key
-    try { sessionStorage.setItem(DEVICE_RECOVERY_KEY, key) } catch (_) {}
-    // Ensure the key is never left in localStorage (covers devices that had the old version)
-    try { localStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
+    try { localStorage.setItem(DEVICE_RECOVERY_KEY, key) } catch (_) {}
   }
 
   function clearDeviceRecoveryKey() {
     _deviceRecoveryKeyMemory = ''
-    try { sessionStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
     try { localStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
+    try { sessionStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
   }
 
   function esc(value) {
