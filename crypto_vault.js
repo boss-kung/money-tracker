@@ -53,8 +53,19 @@
 
   function canonicalStringify(value) {
     if (value === null || typeof value !== 'object') return JSON.stringify(value)
-    if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(',')}]`
-    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalStringify(value[key])}`).join(',')}}`
+    if (Array.isArray(value)) {
+      // undefined array items → 'null', matching JSON.stringify behaviour
+      return '[' + value.map(item => { const s = canonicalStringify(item); return s === undefined ? 'null' : s }).join(',') + ']'
+    }
+    // undefined object values are skipped entirely, matching JSON.stringify behaviour.
+    // Previously they became the literal text "undefined" via template-literal coercion,
+    // producing invalid JSON that caused "Unexpected identifier 'undefined'" on parse.
+    const props = Object.keys(value).sort().reduce((acc, key) => {
+      const s = canonicalStringify(value[key])
+      if (s !== undefined) acc.push(`${JSON.stringify(key)}:${s}`)
+      return acc
+    }, [])
+    return '{' + props.join(',') + '}'
   }
 
   async function sha256Base64(text) {
@@ -124,7 +135,17 @@
       const actual = await sha256Base64(plaintext)
       if (actual !== expectedChecksum) throw new Error('Vault checksum mismatch')
     }
-    return JSON.parse(plaintext)
+    try {
+      return JSON.parse(plaintext)
+    } catch (_) {
+      // One-time recovery for vaults encrypted before canonicalStringify was fixed.
+      // The old implementation serialised JS `undefined` object values as the literal
+      // text "undefined" via template-literal coercion, producing invalid JSON like
+      // {"merchant":undefined,"date":"2026-01-01"}. Replace every :undefined token
+      // that precedes a JSON delimiter with :null, then retry.
+      const repaired = plaintext.replace(/:undefined(?=[,}\]])/g, ':null')
+      return JSON.parse(repaired)
+    }
   }
 
   const api = {

@@ -398,7 +398,9 @@
     state.syncing = false
     state.vaultConfirmedEmpty = false
     storageSave({ refreshToken: '', expiresAt: 0, userId: '', email: '' })
-    clearDeviceRecoveryKey()
+    // Recovery key is device-specific and vault-specific — keep it in sessionStorage so
+    // the user is auto-unlocked on the next sign-in within the same browser session.
+    // Only clear it when the vault itself is deleted (reset-demo-vault).
     try { localStorage.removeItem(PKCE_VERIFIER_KEY) } catch (_) {}
     if (clearLocalData) {
       try { appStorage()?.reset?.() } catch (_) {}
