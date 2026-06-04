@@ -24,6 +24,8 @@
     debounceTimer: null,
     accountMenuOpen: false,
     uiBound: false,
+    restoring: false,      // true while restoreSession() is in flight
+    restoreError: null,    // last network/transient error during restore (non-null = show retry)
   }
 
   try { document.documentElement.classList.add('mt-auth-gated') } catch (_) {}
@@ -151,7 +153,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync15',
+      version: '2026.06.04-secure-sync16',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -285,17 +287,50 @@
     return state
   }
 
+  // Returns true when Supabase has explicitly rejected the token (not a transient network error).
+  function isTokenRejectedError(error) {
+    const msg = (error?.message || '').toLowerCase()
+    return msg.includes('invalid') || msg.includes('expired') ||
+           msg.includes('revoked') || msg.includes('not found') ||
+           msg.includes('already used') || msg.includes('token')
+  }
+
+  // Retry refresh up to maxAttempts times with a short delay between attempts.
+  // Throws immediately (no retry) when Supabase explicitly rejects the token.
+  async function refreshSessionWithRetry(refreshToken, maxAttempts = 3) {
+    let lastError
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await refreshSession(refreshToken)
+      } catch (err) {
+        lastError = err
+        if (isTokenRejectedError(err)) throw err   // Don't retry a rejected token
+        if (attempt < maxAttempts - 1) await new Promise(r => setTimeout(r, 700 * (attempt + 1)))
+      }
+    }
+    throw lastError
+  }
+
   async function restoreSession() {
     const fromUrl = await parseSessionFromUrl()
     if (fromUrl) return setSession(fromUrl)
     const saved = storageLoad()
     if (!saved.refreshToken) return null
     try {
-      const refreshed = await refreshSession(saved.refreshToken)
+      const refreshed = await refreshSessionWithRetry(saved.refreshToken)
       refreshed.expires_at = Math.floor(Date.now() / 1000) + Number(refreshed.expires_in || 3600)
+      state.restoreError = null
       return setSession(refreshed)
     } catch (error) {
-      storageSave({ refreshToken: '', expiresAt: 0 })
+      // CRITICAL: only wipe the saved token when Supabase explicitly says it's invalid.
+      // Network errors / timeouts must NOT erase a valid refresh token —
+      // otherwise every app restart on a slow mobile connection causes permanent logout.
+      if (isTokenRejectedError(error)) {
+        storageSave({ refreshToken: '', expiresAt: 0 })
+        state.restoreError = null
+      } else {
+        state.restoreError = error.message || 'เชื่อมต่อไม่ได้'
+      }
       throw error
     }
   }
@@ -658,22 +693,55 @@
       return
     }
     document.documentElement.classList.add('mt-auth-gated')
-    if (!gate) {
-      gate = document.createElement('div')
-      gate.id = 'mt-auth-gate'
-      gate.innerHTML = `
+
+    // Determine which panel to show
+    const saved = storageLoad()
+    const hasSavedSession = Boolean(saved.refreshToken || saved.userId)
+    const isRestoring = state.restoring
+    const hasNetworkError = Boolean(state.restoreError) && hasSavedSession
+
+    let innerHtml
+    if (isRestoring) {
+      // Quiet loading state — don't show the full login gate while we're refreshing
+      innerHtml = `
+        <div class="mt-auth-gate-panel" role="status" aria-labelledby="mt-auth-gate-title">
+          <div class="mt-auth-gate-mark">💰</div>
+          <h1 id="mt-auth-gate-title">กำลังเชื่อมต่อ...</h1>
+          <p style="opacity:.6">กำลังกู้เซสชันของคุณ</p>
+        </div>`
+    } else if (hasNetworkError) {
+      // Network failed but token is preserved — show retry instead of full sign-in
+      const email = saved.email ? `<small style="opacity:.6">${esc(saved.email)}</small><br>` : ''
+      innerHtml = `
+        <div class="mt-auth-gate-panel" role="dialog" aria-modal="true" aria-labelledby="mt-auth-gate-title">
+          <div class="mt-auth-gate-mark">💰</div>
+          <h1 id="mt-auth-gate-title">เชื่อมต่อไม่ได้</h1>
+          ${email}
+          <p>ไม่สามารถเชื่อมต่อได้ในขณะนี้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต แล้วลองใหม่</p>
+          <button class="btn btn-primary" type="button" data-mt-auth-action="retry-restore">ลองใหม่</button>
+          <button class="btn btn-secondary" type="button" data-mt-auth-action="login" style="margin-top:8px">เข้าสู่ระบบด้วย Google</button>
+        </div>`
+    } else {
+      innerHtml = `
         <div class="mt-auth-gate-panel" role="dialog" aria-modal="true" aria-labelledby="mt-auth-gate-title">
           <div class="mt-auth-gate-mark">💰</div>
           <h1 id="mt-auth-gate-title">เข้าสู่ระบบเพื่อใช้แอป</h1>
           <p>ข้อมูลการเงินของคุณจะถูกซ่อนไว้จนกว่าจะเข้าสู่ระบบด้วยบัญชี Google</p>
           <button class="btn btn-primary" type="button" data-mt-auth-action="login">Sign in with Google</button>
         </div>`
+    }
+
+    if (!gate) {
+      gate = document.createElement('div')
+      gate.id = 'mt-auth-gate'
       document.body.appendChild(gate)
     }
-    const btn = gate.querySelector('[data-mt-auth-action="login"]')
-    if (btn) {
-      btn.disabled = !configured()
-      btn.textContent = configured() ? 'Sign in with Google' : 'ยังไม่พร้อมเข้าสู่ระบบ'
+    gate.innerHTML = innerHtml
+
+    const loginBtn = gate.querySelector('[data-mt-auth-action="login"]')
+    if (loginBtn) {
+      loginBtn.disabled = !configured()
+      if (!configured()) loginBtn.textContent = 'ยังไม่พร้อมเข้าสู่ระบบ'
     }
   }
 
@@ -816,6 +884,17 @@
         return
       }
       if (action === 'login') signInWithGoogle().catch(error => toastSafe(`เริ่ม Google login ไม่สำเร็จ: ${error.message}`, 'error'))
+      if (action === 'retry-restore') {
+        state.restoring = true
+        state.restoreError = null
+        render()
+        restoreSession()
+          .catch(error => {
+            if (!state.restoreError) toastSafe(`เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่`, 'warn')
+            else console.warn('[MTAuthSync] retry restore failed', error.message)
+          })
+          .finally(() => { state.restoring = false; render() })
+      }
       if (action === 'logout') {
         closeAccountMenu()
         confirmSignOut()
@@ -867,10 +946,25 @@
 
   async function initAuthSync() {
     bindUi()
+    if (!configured()) { renderAuthGate(); return state }
+    // Show "กำลังเชื่อมต่อ..." while restoring so the full login gate
+    // doesn't flash in the user's face on every app open.
+    const hasSavedSession = Boolean(storageLoad().refreshToken)
+    state.restoring = hasSavedSession
+    state.restoreError = null
     renderAuthGate()
-    if (!configured()) return state
-    try { await restoreSession() } catch (error) { toastSafe(`Auth restore ล้มเหลว: ${error.message}`, 'warn') }
-    render()
+    try { await restoreSession() } catch (error) {
+      if (state.restoreError) {
+        // Network / transient — show retry UI (not a hard "sign in" prompt)
+        console.warn('[MTAuthSync] session restore failed (network?)', error.message)
+      } else {
+        // Token was explicitly rejected — treat as signed-out
+        toastSafe(`เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่`, 'warn')
+      }
+    } finally {
+      state.restoring = false
+      render()
+    }
     return state
   }
 
