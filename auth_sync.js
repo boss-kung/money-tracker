@@ -639,22 +639,18 @@
   }
 
   async function sendDeleteOtp() {
-    const email = state.user?.email
-    if (!email) throw new Error('ไม่พบอีเมลของบัญชีนี้')
-    await requestAuth('/otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, create_user: false }),
+    if (!state.session?.access_token) throw new Error('ต้องเข้าสู่ระบบก่อน')
+    await requestAuth('/reauthenticate', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${state.session.access_token}` },
     })
   }
 
   async function verifyOtpAndDelete(token) {
-    const email = state.user?.email
-    if (!email) throw new Error('ไม่พบอีเมลของบัญชีนี้')
     await requestAuth('/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, token, type: 'email' }),
+      body: JSON.stringify({ token, type: 'reauthentication' }),
     })
     await deleteAccount()
   }
