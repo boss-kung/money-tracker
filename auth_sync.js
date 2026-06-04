@@ -151,7 +151,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync11',
+      version: '2026.06.04-secure-sync12',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -274,6 +274,12 @@
     toastSafe('กำลังดึงข้อมูลจาก cloud...', 'info')
     await pullRemoteVault({ silent: true })
     await ensureFirstRunBackup()
+    // If vault exists but is still locked (e.g. device key was wiped on logout),
+    // prompt for recovery key so the user gets their real data instead of defaults.
+    if (state.vaultMeta && needsVaultUnlock()) {
+      toastSafe('พบข้อมูลของคุณบน cloud — กรุณากรอกรหัสกู้ข้อมูล', 'warn')
+      await promptUnlock()
+    }
     toastSafe(`เข้าสู่ระบบสำเร็จ: ${state.user.email || ''}`, 'success')
     render()
     return state
