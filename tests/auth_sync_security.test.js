@@ -21,6 +21,9 @@ test('auth sync module enforces google-only sessions and does not store plaintex
   const source = fs.readFileSync(path.join(root, 'auth_sync.js'), 'utf8')
 
   assert.match(source, /provider:\s*'google'/)
+  assert.match(source, /code_challenge_method', 'S256'/)
+  assert.match(source, /grant_type=pkce/)
+  assert.match(source, /auth_code/)
   assert.match(source, /isGoogleSession/)
   assert.match(source, /mt_user_vaults/)
   assert.match(source, /ciphertext/)

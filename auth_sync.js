@@ -4,8 +4,10 @@
   const VAULT_TABLE = 'mt_user_vaults'
   const STATE_KEY = 'mt_auth_sync_state'
   const DEVICE_KEY = 'mt_auth_sync_device'
+  const PKCE_VERIFIER_KEY = 'mt_auth_sync_pkce_verifier'
   const DIRTY_DEBOUNCE_MS = 2500
   const GOOGLE_AUTH_OPTIONS = Object.freeze({ provider: 'google' })
+  const encoder = new TextEncoder()
 
   const state = {
     client: null,
@@ -32,7 +34,18 @@
     return {
       supabaseUrl,
       anonKey: String(root.MT_SUPABASE_ANON_KEY || ''),
-      redirectTo: String(root.MT_AUTH_REDIRECT_URL || location.href.split('#')[0].split('?code=')[0]),
+      redirectTo: String(root.MT_AUTH_REDIRECT_URL || cleanRedirectUrl()),
+    }
+  }
+
+  function cleanRedirectUrl() {
+    try {
+      const url = new URL(location.href)
+      ;['code', 'error', 'error_code', 'error_description'].forEach(key => url.searchParams.delete(key))
+      url.hash = ''
+      return url.toString()
+    } catch (_) {
+      return location.href.split('#')[0].split('?code=')[0]
     }
   }
 
@@ -47,6 +60,30 @@
 
   function storageSave(next) {
     try { localStorage.setItem(STATE_KEY, JSON.stringify({ ...storageLoad(), ...next })) } catch (_) {}
+  }
+
+  function bytesToBase64Url(bytes) {
+    let base64 = ''
+    if (typeof root.MTCryptoVault?.bytesToBase64 === 'function') {
+      base64 = root.MTCryptoVault.bytesToBase64(bytes)
+    } else {
+      const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
+      let binary = ''
+      array.forEach(byte => { binary += String.fromCharCode(byte) })
+      base64 = btoa(binary)
+    }
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  }
+
+  function randomPkceVerifier() {
+    const bytes = new Uint8Array(32)
+    crypto.getRandomValues(bytes)
+    return bytesToBase64Url(bytes)
+  }
+
+  async function pkceChallenge(verifier) {
+    const digest = await crypto.subtle.digest('SHA-256', encoder.encode(verifier))
+    return bytesToBase64Url(digest)
   }
 
   function deviceId() {
@@ -97,6 +134,19 @@
     })
   }
 
+  async function exchangeCodeForSession(code) {
+    const codeVerifier = localStorage.getItem(PKCE_VERIFIER_KEY) || ''
+    if (!code || !codeVerifier) throw new Error('Missing OAuth code verifier. Please sign in again.')
+    const session = await requestAuth('/token?grant_type=pkce', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auth_code: code, code_verifier: codeVerifier }),
+    })
+    try { localStorage.removeItem(PKCE_VERIFIER_KEY) } catch (_) {}
+    session.expires_at = Math.floor(Date.now() / 1000) + Number(session.expires_in || 3600)
+    return session
+  }
+
   async function fetchUser(session = state.session) {
     const cfg = getConfig()
     const response = await fetch(`${cfg.supabaseUrl}/auth/v1/user`, {
@@ -107,17 +157,28 @@
     return data
   }
 
-  function parseSessionFromUrl() {
+  async function parseSessionFromUrl() {
     const hash = new URLSearchParams(String(location.hash || '').replace(/^#/, ''))
-    if (!hash.get('access_token')) return null
-    const session = {
-      access_token: hash.get('access_token'),
-      refresh_token: hash.get('refresh_token'),
-      expires_at: Math.floor(Date.now() / 1000) + Number(hash.get('expires_in') || 3600),
-      token_type: hash.get('token_type') || 'bearer',
+    const query = new URLSearchParams(String(location.search || '').replace(/^\?/, ''))
+    if (query.get('error') || hash.get('error')) {
+      throw new Error(query.get('error_description') || hash.get('error_description') || query.get('error') || hash.get('error') || 'OAuth sign in failed')
     }
-    history.replaceState(null, document.title, location.pathname + location.search)
-    return session
+    if (query.get('code')) {
+      const session = await exchangeCodeForSession(query.get('code'))
+      history.replaceState(null, document.title, cleanRedirectUrl())
+      return session
+    }
+    if (hash.get('access_token')) {
+      const session = {
+        access_token: hash.get('access_token'),
+        refresh_token: hash.get('refresh_token'),
+        expires_at: Math.floor(Date.now() / 1000) + Number(hash.get('expires_in') || 3600),
+        token_type: hash.get('token_type') || 'bearer',
+      }
+      history.replaceState(null, document.title, cleanRedirectUrl())
+      return session
+    }
+    return null
   }
 
   async function setSession(session) {
@@ -139,7 +200,7 @@
   }
 
   async function restoreSession() {
-    const fromUrl = parseSessionFromUrl()
+    const fromUrl = await parseSessionFromUrl()
     if (fromUrl) return setSession(fromUrl)
     const saved = storageLoad()
     if (!saved.refreshToken) return null
@@ -153,12 +214,17 @@
     }
   }
 
-  function signInWithGoogle() {
+  async function signInWithGoogle() {
     const cfg = getConfig()
     if (!configured()) return toastSafe('ยังไม่ได้ตั้งค่า Supabase URL/Anon key', 'warn')
+    const verifier = randomPkceVerifier()
+    localStorage.setItem(PKCE_VERIFIER_KEY, verifier)
+    const challenge = await pkceChallenge(verifier)
     const url = new URL(`${cfg.supabaseUrl}/auth/v1/authorize`)
     url.searchParams.set('provider', GOOGLE_AUTH_OPTIONS.provider)
     url.searchParams.set('redirect_to', cfg.redirectTo)
+    url.searchParams.set('code_challenge', challenge)
+    url.searchParams.set('code_challenge_method', 'S256')
     location.href = url.toString()
   }
 
@@ -382,7 +448,7 @@
     document.addEventListener('click', event => {
       const action = event.target?.closest?.('[data-mt-auth-action]')?.dataset?.mtAuthAction
       if (!action) return
-      if (action === 'login') signInWithGoogle()
+      if (action === 'login') signInWithGoogle().catch(error => toastSafe(`เริ่ม Google login ไม่สำเร็จ: ${error.message}`, 'error'))
       if (action === 'logout') signOut()
       if (action === 'unlock') promptUnlock()
       if (action === 'sync') syncNow({ direction: 'push' }).catch(error => toastSafe(`Cloud sync ล้มเหลว: ${error.message}`, 'error'))
