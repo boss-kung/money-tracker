@@ -115,6 +115,30 @@
     return appProvider === 'google' || providers.includes('google')
   }
 
+  function needsVaultUnlock() {
+    return state.locked || !state.dataKey
+  }
+
+  function debugSnapshot() {
+    const saved = storageLoad()
+    return {
+      version: '2026.06.04-secure-sync4',
+      configured: configured(),
+      hasSession: Boolean(state.session?.access_token),
+      hasRefreshToken: Boolean(saved.refreshToken),
+      userId: state.user?.id || saved.userId || '',
+      email: state.user?.email || saved.email || '',
+      locked: Boolean(state.locked),
+      hasDataKey: Boolean(state.dataKey),
+      hasVaultMeta: Boolean(state.vaultMeta),
+      vaultVersion: state.vaultMeta?.data_version || null,
+      dirty: Boolean(state.dirty),
+      syncing: Boolean(state.syncing),
+      buttonText: document.getElementById('mt-auth-sync')?.innerText || '',
+      needsVaultUnlock: needsVaultUnlock(),
+    }
+  }
+
   async function requestAuth(path, options = {}) {
     const cfg = getConfig()
     const response = await fetch(`${cfg.supabaseUrl}/auth/v1${path}`, {
@@ -262,7 +286,7 @@
     const rows = await vaultRequest('GET')
     const row = Array.isArray(rows) ? rows[0] : null
     state.vaultMeta = row || null
-    state.locked = !!row
+    state.locked = row ? true : !state.dataKey
     if (!silent) render()
     return row
   }
@@ -429,8 +453,11 @@
       return
     }
     const email = state.user?.email || 'Google account'
-    const label = state.locked ? 'Unlock cloud vault' : (state.syncing ? 'Syncing...' : (state.dirty ? 'Sync pending' : 'Cloud sync'))
-    rootEl.innerHTML = `<button class="mt-auth-btn ${state.locked ? 'warn' : ''}" type="button" data-mt-auth-action="${state.locked ? 'unlock' : 'sync'}">${label}</button><button class="mt-auth-link" type="button" data-mt-auth-action="logout">${email}</button>`
+    const needsUnlock = needsVaultUnlock()
+    const label = needsUnlock
+      ? (state.vaultMeta ? 'Unlock cloud vault' : 'Create cloud vault')
+      : (state.syncing ? 'Syncing...' : (state.dirty ? 'Sync pending' : 'Cloud sync'))
+    rootEl.innerHTML = `<button class="mt-auth-btn ${needsUnlock ? 'warn' : ''}" type="button" data-mt-auth-action="${needsUnlock ? 'unlock' : 'sync'}">${label}</button><button class="mt-auth-link" type="button" data-mt-auth-action="logout">${email}</button>`
   }
 
   async function promptUnlock() {
@@ -468,6 +495,7 @@
     createVaultFromLocalData,
     initAuthSync,
     isGoogleSession,
+    debugSnapshot,
     markDirty,
     pullRemoteVault,
     pushEncryptedVault,
