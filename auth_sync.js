@@ -28,6 +28,7 @@
     restoring: false,      // true while restoreSession() is in flight
     restoreError: null,    // last network/transient error during restore (non-null = show retry)
     vaultConfirmedEmpty: false, // true only when pullRemoteVault succeeded AND Supabase returned no row
+    creatingVault: false,  // guard against concurrent ensureFirstRunBackup calls from markDirty
   }
 
   try { document.documentElement.classList.add('mt-auth-gated') } catch (_) {}
@@ -469,7 +470,18 @@
     const looksLikeDemo = currentDataLooksLikeDemo()
     console.debug('[MTAuthSync] no vault, vaultConfirmedEmpty:true, looksLikeDemo:', looksLikeDemo)
     clearFreshStart()
-    if (looksLikeDemo) return null
+    if (looksLikeDemo) {
+      // New user: wipe demo data so they start with a clean slate
+      try { appStorage()?.reset?.() } catch (_) {}
+      try { location.reload() } catch (_) {}
+      return null
+    }
+
+    // Don't create a vault for empty data — wait until user has added something real
+    const payload = (() => { try { return currentPayload() } catch (_) { return null } })()
+    const txCount = Array.isArray(payload?.transactions) ? payload.transactions.length : 0
+    const walletCount = Array.isArray(payload?.wallets) ? payload.wallets.length : 0
+    if (!txCount && !walletCount) return null
 
     const recoveryKey = generateRecoveryKey()
     // IMPORTANT: save the key only AFTER the vault row is successfully written.
@@ -744,7 +756,17 @@
   }
 
   function markDirty() {
-    if (!state.session?.access_token || state.locked) return
+    if (!state.session?.access_token) return
+    if (state.locked) {
+      // New user flow: no vault yet but user just added real data — create vault now
+      if (!state.vaultMeta && state.vaultConfirmedEmpty && !currentDataLooksLikeDemo() && !state.creatingVault) {
+        state.creatingVault = true
+        ensureFirstRunBackup()
+          .catch(err => console.warn('[MTAuthSync] ensureFirstRunBackup in markDirty:', err.message))
+          .finally(() => { state.creatingVault = false })
+      }
+      return
+    }
     state.dirty = true
     clearTimeout(state.debounceTimer)
     state.debounceTimer = setTimeout(() => {

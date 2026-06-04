@@ -22796,7 +22796,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
   try { if (S.page === 'more') App.renderMore() } catch (_) {}
   try { if (S.page === 'dashboard') App.renderDashboard() } catch (_) {}
-  setTimeout(() => App._showRescueBannerIfNeeded?.(), 600)
 })()
 
 // ── Sheet swipe-to-dismiss ──────────────────────────────────────────────────
