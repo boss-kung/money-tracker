@@ -22575,7 +22575,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>
       <div class="sec-title">ความปลอดภัย</div>
       <div class="card card-pad">
-        ${window.MTAuthSync?.settingsHtml?.() || ''}
         ${row({
           icon: '🔒',
           label: 'App Lock',
@@ -22606,7 +22605,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
     content.innerHTML = `<div style="padding:0px 16px 30px 16px">
       <div class="more-sticky-header">
-        <div style="font-size:20px;font-weight:800;padding:12px 0 8px">เพิ่มเติม</div>
+        <div class="more-title-row">
+          <div class="more-title">เพิ่มเติม</div>
+          ${window.MTAuthSync?.accountMenuHtml?.() || ''}
+        </div>
         <div class="search-field-wrap more-search-wrap">
           <input class="form-input more-search-input" id="more-search" placeholder="🔍 ค้นหาฟีเจอร์..." autocomplete="off" oninput="App._syncSearchClear(this); App._filterMoreContent(this.value)" style="padding:10px 38px 10px 14px;font-size:14px">
           <button type="button" class="search-clear-btn" aria-label="ล้างการค้นหา" hidden onclick="const input=this.parentElement.querySelector('input'); input.value=''; App._syncSearchClear(input); App._filterMoreContent(''); input.focus()">×</button>

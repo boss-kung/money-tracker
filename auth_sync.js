@@ -7,6 +7,7 @@
   const PKCE_VERIFIER_KEY = 'mt_auth_sync_pkce_verifier'
   const DEVICE_RECOVERY_KEY = 'mt_auth_sync_recovery_key'
   const DIRTY_DEBOUNCE_MS = 2500
+  const STORAGE_BRIDGE_TIMEOUT_MS = 8000
   const GOOGLE_AUTH_OPTIONS = Object.freeze({ provider: 'google' })
   const encoder = new TextEncoder()
 
@@ -20,6 +21,8 @@
     dirty: false,
     syncing: false,
     debounceTimer: null,
+    accountMenuOpen: false,
+    uiBound: false,
   }
 
   try { document.documentElement.classList.add('mt-auth-gated') } catch (_) {}
@@ -63,6 +66,23 @@
 
   function storageSave(next) {
     try { localStorage.setItem(STATE_KEY, JSON.stringify({ ...storageLoad(), ...next })) } catch (_) {}
+  }
+
+  function storageBridgeReady() {
+    return typeof root.App?._cloudBuildPayload === 'function'
+      && typeof root.App?._cloudApplyPayload === 'function'
+      && typeof root.Storage?.buildExportPayload === 'function'
+      && typeof root.Storage?.normalizeBackupPayload === 'function'
+  }
+
+  async function waitForStorageBridge({ timeoutMs = STORAGE_BRIDGE_TIMEOUT_MS } = {}) {
+    if (storageBridgeReady()) return true
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+      if (storageBridgeReady()) return true
+    }
+    throw new Error('ยังเชื่อมต่อระบบบันทึกข้อมูลไม่พร้อม')
   }
 
   function bytesToBase64Url(bytes) {
@@ -125,7 +145,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync7',
+      version: '2026.06.04-secure-sync9',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -138,6 +158,7 @@
       vaultVersion: state.vaultMeta?.data_version || null,
       dirty: Boolean(state.dirty),
       syncing: Boolean(state.syncing),
+      accountMenuOpen: Boolean(state.accountMenuOpen),
       buttonText: document.getElementById('mt-auth-gate')?.innerText || '',
       needsVaultUnlock: needsVaultUnlock(),
     }
@@ -242,6 +263,7 @@
       userId: state.user.id,
       email: state.user.email || '',
     })
+    await waitForStorageBridge()
     await pullRemoteVault({ silent: true })
     await ensureFirstRunBackup()
     render()
@@ -395,6 +417,7 @@
 
   async function createVaultFromLocalData(recoveryKey, options = {}) {
     if (!String(recoveryKey || '').trim()) throw new Error('ต้องมีรหัสกู้ข้อมูลสำหรับปกป้องข้อมูล')
+    await waitForStorageBridge()
     const row = await buildEncryptedRow(recoveryKey, currentPayload(), state.vaultMeta)
     const saved = await vaultRequest('POST', row)
     state.vaultMeta = Array.isArray(saved) ? saved[0] : row
@@ -413,6 +436,7 @@
     const dataKey = await cryptoVault.unwrapDataKey(row.wrapped_key, recoveryKeyMaterial, row.wrapped_key_iv)
     const payload = await cryptoVault.decryptVault(row.ciphertext, dataKey, row.iv, row.checksum)
     if (!options.skipApply) {
+      await waitForStorageBridge()
       try { root.Storage?.createLocalBackup?.(root.App?._cloudState?.(), 'before-cloud-restore') } catch (_) {}
       applyPayload(payload)
     }
@@ -430,6 +454,7 @@
       return handleRemoteConflict(remote)
     }
     if (!state.dataKey && !recoveryKey) throw new Error('ต้องกรอกรหัสกู้ข้อมูลก่อนบันทึก')
+    await waitForStorageBridge()
     const row = await buildEncryptedRow(recoveryKey, currentPayload(), remote || state.vaultMeta)
     const saved = await vaultRequest('POST', row)
     state.vaultMeta = Array.isArray(saved) ? saved[0] : row
@@ -442,6 +467,7 @@
     if (!state.dataKey) throw new Error('ต้องกรอกรหัสกู้ข้อมูลก่อนดึงข้อมูล')
     const cryptoVault = root.MTCryptoVault
     const payload = await cryptoVault.decryptVault(remote.ciphertext, state.dataKey, remote.iv, remote.checksum)
+    await waitForStorageBridge()
     applyPayload(payload)
     state.vaultMeta = remote
     state.dirty = false
@@ -455,6 +481,7 @@
     const useRemote = typeof root.confirm === 'function' ? root.confirm(message) : false
     if (useRemote) return restoreRemoteWithCurrentKey(remote)
     try {
+      await waitForStorageBridge()
       const payload = currentPayload()
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
       root.Storage?.triggerDownload?.(blob, `local-conflict-backup-${new Date().toISOString().slice(0, 10)}.json`)
@@ -499,6 +526,17 @@
     try { if (root.App?.renderMore && root.App?._cloudState?.()?.page === 'more') root.App.renderMore() } catch (_) {}
   }
 
+  function accountInitial(email) {
+    const source = String(email || '').trim()
+    return esc((source[0] || 'A').toUpperCase())
+  }
+
+  function closeAccountMenu() {
+    if (!state.accountMenuOpen) return
+    state.accountMenuOpen = false
+    render()
+  }
+
   function renderAuthGate() {
     let gate = document.getElementById('mt-auth-gate')
     if (state.session?.access_token) {
@@ -526,29 +564,48 @@
     }
   }
 
-  function settingsHtml() {
+  function accountMenuHtml() {
     const email = state.user?.email || storageLoad().email || 'Google'
     const recoverySaved = Boolean(readDeviceRecoveryKey())
     const status = state.syncing ? 'กำลังบันทึก' : (state.dirty ? 'รอบันทึก' : 'บันทึกแล้ว')
     return `
-      <div class="settings-row">
-        <div class="s-icon">🔐</div>
-        <div class="s-label">บัญชีและการกู้ข้อมูล
-          <div style="font-size:12px;font-weight:400;color:var(--muted);margin-top:2px">${esc(email)} · ${status}</div>
+      <div class="mt-account-menu-wrap${state.accountMenuOpen ? ' open' : ''}">
+        <button class="mt-account-button" type="button" aria-label="บัญชีและการกู้ข้อมูล" aria-expanded="${state.accountMenuOpen ? 'true' : 'false'}" data-mt-auth-action="toggle-account-menu">
+          <span>${accountInitial(email)}</span>
+        </button>
+        <div class="mt-account-menu-popover" role="menu" aria-label="บัญชีและการกู้ข้อมูล">
+          <div class="mt-account-menu-head">
+            <div class="mt-account-avatar">${accountInitial(email)}</div>
+            <div class="mt-account-summary">
+              <div class="mt-account-title">บัญชีและการกู้ข้อมูล</div>
+              <div class="mt-account-email">${esc(email)}</div>
+              <div class="mt-account-status">${esc(status)}</div>
+            </div>
+          </div>
+          <button class="mt-account-menu-item" type="button" data-mt-auth-action="show-recovery-key" role="menuitem">
+            <span class="mt-account-menu-icon">Key</span>
+            <span>
+              <strong>รหัสกู้ข้อมูล</strong>
+              <small>${recoverySaved ? 'ดูและคัดลอกรหัสของเครื่องนี้' : 'ยังไม่มีรหัสบนเครื่องนี้'}</small>
+            </span>
+          </button>
+          <button class="mt-account-menu-item" type="button" data-mt-auth-action="sync" role="menuitem">
+            <span class="mt-account-menu-icon">Sync</span>
+            <span>
+              <strong>บันทึกข้อมูลตอนนี้</strong>
+              <small>ส่งข้อมูลที่เข้ารหัสขึ้น cloud</small>
+            </span>
+          </button>
+          <button class="mt-account-menu-item danger" type="button" data-mt-auth-action="confirm-sign-out" role="menuitem">
+            <span class="mt-account-menu-icon">Out</span>
+            <span>
+              <strong>ออกจากระบบ</strong>
+              <small>ซ่อนและล้างข้อมูลบัญชีนี้ออกจากเครื่อง</small>
+            </span>
+          </button>
         </div>
       </div>
-      <div class="settings-row" onclick="MTAuthSync.showSavedRecoveryKeySheet()">
-        <div class="s-icon">🧾</div>
-        <div class="s-label">รหัสกู้ข้อมูล
-          <div style="font-size:12px;font-weight:400;color:var(--muted);margin-top:2px">${recoverySaved ? 'กดเพื่อดูและคัดลอกรหัส' : 'ยังไม่มีรหัสบนเครื่องนี้'}</div>
-        </div>
-        <div class="s-arrow">›</div>
-      </div>
-      <div class="settings-row" data-mt-auth-action="confirm-sign-out">
-        <div class="s-icon">🚪</div>
-        <div class="s-label">ออกจากระบบ</div>
-        <div class="s-arrow">›</div>
-      </div>`
+    `
   }
 
   async function promptUnlock() {
@@ -605,16 +662,47 @@
   }
 
   function bindUi() {
+    if (state.uiBound) return
+    state.uiBound = true
     document.addEventListener('click', event => {
       const action = event.target?.closest?.('[data-mt-auth-action]')?.dataset?.mtAuthAction
-      if (!action) return
+      if (!action) {
+        if (state.accountMenuOpen && !event.target?.closest?.('.mt-account-menu-wrap')) {
+          state.accountMenuOpen = false
+          render()
+        }
+        return
+      }
       if (action === 'login') signInWithGoogle().catch(error => toastSafe(`เริ่ม Google login ไม่สำเร็จ: ${error.message}`, 'error'))
-      if (action === 'logout') confirmSignOut()
-      if (action === 'confirm-sign-out') confirmSignOut()
+      if (action === 'logout') {
+        closeAccountMenu()
+        confirmSignOut()
+      }
+      if (action === 'confirm-sign-out') {
+        closeAccountMenu()
+        confirmSignOut()
+      }
+      if (action === 'toggle-account-menu') {
+        state.accountMenuOpen = !state.accountMenuOpen
+        render()
+      }
       if (action === 'unlock') promptUnlock()
-      if (action === 'sync') syncNow({ direction: 'push' }).catch(error => toastSafe(`บันทึกข้อมูลล้มเหลว: ${error.message}`, 'error'))
+      if (action === 'sync') {
+        closeAccountMenu()
+        syncNow({ direction: 'push' }).catch(error => toastSafe(`บันทึกข้อมูลล้มเหลว: ${error.message}`, 'error'))
+      }
+      if (action === 'show-recovery-key') {
+        closeAccountMenu()
+        showSavedRecoveryKeySheet()
+      }
       if (action === 'copy-recovery-key') copyRecoveryKeyFromSheet()
       if (action === 'close-recovery-key') document.getElementById('mt-recovery-key-sheet')?.remove()
+    })
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && state.accountMenuOpen) {
+        state.accountMenuOpen = false
+        render()
+      }
     })
   }
 
@@ -629,6 +717,7 @@
 
   const api = {
     createVaultFromLocalData,
+    accountMenuHtml,
     ensureFirstRunBackup,
     initAuthSync,
     isGoogleSession,
@@ -639,7 +728,6 @@
     pushEncryptedVault,
     signInWithGoogle,
     signOut,
-    settingsHtml,
     showSavedRecoveryKeySheet,
     state,
     syncNow,

@@ -39,7 +39,7 @@ test('auth sync module enforces google-only sessions and does not store plaintex
   assert.doesNotMatch(source, /\.from\('mt_user_vaults'\)[\s\S]{0,500}(transactions|wallets|amount|merchant)/i)
 })
 
-test('auth sync gates app data before sign in and moves account controls into settings', () => {
+test('auth sync gates app data before sign in and moves account controls into the more-page account menu', () => {
   const source = fs.readFileSync(path.join(root, 'auth_sync.js'), 'utf8')
   const appSource = fs.readFileSync(path.join(root, 'app_v2.js'), 'utf8')
   const css = fs.readFileSync(path.join(root, 'style_v2.css'), 'utf8')
@@ -48,10 +48,16 @@ test('auth sync gates app data before sign in and moves account controls into se
   assert.match(source, /mt-auth-gated/)
   assert.match(source, /gate\.id = 'mt-auth-gate'/)
   assert.match(source, /Sign in with Google/)
-  assert.match(source, /function settingsHtml\(\)/)
+  assert.match(source, /function accountMenuHtml\(\)/)
+  assert.match(source, /function closeAccountMenu\(\)/)
   assert.match(source, /บัญชีและการกู้ข้อมูล/)
+  assert.match(source, /data-mt-auth-action="toggle-account-menu"/)
+  assert.match(source, /data-mt-auth-action="sync"/)
   assert.match(source, /showSavedRecoveryKeySheet/)
-  assert.match(appSource, /MTAuthSync\?\.settingsHtml\?\.\(\)/)
+  assert.match(appSource, /MTAuthSync\?\.accountMenuHtml\?\.\(\)/)
+  assert.doesNotMatch(appSource, /MTAuthSync\?\.settingsHtml\?\.\(\)/)
+  assert.match(css, /\.more-title-row/)
+  assert.match(css, /\.mt-account-menu-popover/)
   assert.match(css, /\.mt-auth-gated #app/)
   assert.match(css, /#mt-auth-gate/)
   assert.doesNotMatch(source, /id = 'mt-auth-sync'|id="mt-auth-sync"|className = 'mt-auth-sync'/)
@@ -69,4 +75,14 @@ test('sign out clears local account data before returning to auth gate', () => {
   assert.match(source, /document\.documentElement\.classList\.add\('mt-auth-gated'\)/)
   assert.match(source, /location\.reload\(\)/)
   assert.match(source, /data-mt-auth-action="confirm-sign-out"/)
+})
+
+test('auth restore waits for app storage bridge before creating or restoring vault data', () => {
+  const source = fs.readFileSync(path.join(root, 'auth_sync.js'), 'utf8')
+
+  assert.match(source, /function storageBridgeReady\(\)/)
+  assert.match(source, /async function waitForStorageBridge/)
+  assert.match(source, /await waitForStorageBridge\(\)/)
+  assert.match(source, /root\.App\?\._cloudBuildPayload/)
+  assert.match(source, /root\.App\?\._cloudApplyPayload/)
 })
