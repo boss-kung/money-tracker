@@ -1,10 +1,6 @@
 import { adminClient } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
-function limitedArray(value: unknown, limit: number) {
-  return Array.isArray(value) ? value.slice(0, limit) : []
-}
-
 Deno.serve(async req => {
   const options = handleOptions(req)
   if (options) return options
@@ -17,14 +13,15 @@ Deno.serve(async req => {
 
     const row = {
       install_id: installId,
+      user_id: body.userId ? String(body.userId) : null,
       snapshot_date: String(body.snapshotDate || new Date().toISOString().slice(0, 10)),
-      today_tx_count: Math.max(0, Number(body.todayTxCount || 0)),
-      last_tx_date: body.lastTxDate || null,
-      upcoming_bills: limitedArray(body.upcomingBills, 25),
-      credit_due: limitedArray(body.creditDue, 25),
-      budget_alerts: limitedArray(body.budgetAlerts, 25),
-      recurring_due: limitedArray(body.recurringDue, 25),
-      privileges_expiring: limitedArray(body.privilegesExpiring, 25),
+      today_tx_count: 0,
+      last_tx_date: null,
+      upcoming_bills: [],
+      credit_due: [],
+      budget_alerts: [],
+      recurring_due: [],
+      privileges_expiring: [],
       last_exported_at: body.lastExportedAt || null,
       app_version: body.appVersion ? String(body.appVersion).slice(0, 80) : null,
     }

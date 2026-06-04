@@ -13,12 +13,6 @@ type PreferenceRow = {
   daily_expense_enabled: boolean
 }
 
-type SnapshotRow = {
-  install_id: string
-  today_tx_count: number
-  snapshot_date: string
-}
-
 function bangkokDate() {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Bangkok',
@@ -57,16 +51,7 @@ Deno.serve(async req => {
       : { data: [], error: null }
     if (prefsError) throw prefsError
 
-    const { data: snapshotRows, error: snapshotError } = installIds.length
-      ? await supabase
-        .from('mt_notification_snapshots')
-        .select('install_id, today_tx_count, snapshot_date')
-        .in('install_id', installIds)
-      : { data: [], error: null }
-    if (snapshotError) throw snapshotError
-
     const prefsByInstallId = new Map((prefsRows || []).map(row => [String(row.install_id), row as PreferenceRow]))
-    const snapshotByInstallId = new Map((snapshotRows || []).map(row => [String(row.install_id), row as SnapshotRow]))
 
     let sent = 0
     let skipped = 0
@@ -98,12 +83,8 @@ Deno.serve(async req => {
         continue
       }
 
-      const snapshot = snapshotByInstallId.get(installId)
-      const count = snapshot?.snapshot_date === today ? Number(snapshot.today_tx_count || 0) : 0
-      const title = count > 0 ? 'เช็กวันนี้อีกนิด' : 'อย่าลืมจดรายจ่ายวันนี้'
-      const body = count > 0
-        ? `วันนี้มีบันทึกแล้ว ${count} รายการ มีอะไรตกหล่นไหม?`
-        : 'ใช้เวลาแป๊บเดียว แล้วรายงานเดือนนี้จะแม่นขึ้น'
+      const title = 'อย่าลืมจดรายจ่ายวันนี้'
+      const body = 'เปิดแอปเพื่อบันทึกหรือทบทวนรายการของคุณ'
 
       try {
         await sendWebPush(device.push_subscription, {

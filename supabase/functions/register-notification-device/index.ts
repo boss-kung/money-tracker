@@ -24,6 +24,7 @@ Deno.serve(async req => {
     const supabase = adminClient()
     const device = {
       install_id: installId,
+      user_id: body.userId ? String(body.userId) : null,
       push_subscription: pushSubscription ?? null,
       platform: String(body.platform || 'unknown').slice(0, 64),
       browser: String(body.browser || 'unknown').slice(0, 64),
@@ -44,6 +45,7 @@ Deno.serve(async req => {
       .from('mt_notification_preferences')
       .upsert({
         install_id: installId,
+        user_id: body.userId ? String(body.userId) : null,
         daily_expense_enabled: true,
         timezone: device.timezone,
         hide_amounts_in_notification: Boolean(body.hideAmounts),

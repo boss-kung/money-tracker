@@ -9907,3 +9907,63 @@ details summary::marker {
     scroll-margin-top: 12px;
   }
 }
+/* Secure cloud sync */
+.mt-auth-sync {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(12px);
+}
+.dark .mt-auth-sync {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(15, 23, 42, 0.88);
+}
+.mt-auth-btn,
+.mt-auth-link {
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.mt-auth-btn {
+  background: var(--primary, #2563EB);
+  color: #fff;
+}
+.mt-auth-btn.warn {
+  background: #B45309;
+}
+.mt-auth-btn:disabled {
+  background: #94A3B8;
+  cursor: not-allowed;
+}
+.mt-auth-link {
+  max-width: 168px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: transparent;
+  color: var(--muted, #64748B);
+}
+@media (max-width: 560px) {
+  .mt-auth-sync {
+    right: 8px;
+    left: 8px;
+    justify-content: flex-end;
+  }
+  .mt-auth-link {
+    max-width: 42vw;
+  }
+}

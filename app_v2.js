@@ -1019,6 +1019,8 @@ function persist() {
   const ok = Storage.saveAll(S)
   if (!ok) {
     try { toast('บันทึกไม่สำเร็จ — แนะนำสำรองข้อมูลก่อนลองใหม่', 'error') } catch (_) {}
+  } else {
+    try { window.MTAuthSync?.markDirty?.() } catch (_) {}
   }
   return ok
 }
@@ -1977,6 +1979,7 @@ function init() {
 
   setupServiceWorkerUpdates()
   setupConnectivityWatch()
+  try { window.MTAuthSync?.initAuthSync?.() } catch (err) { console.warn('auth sync init failed', err) }
   window.MTBoot?.mark?.('app.init.done', { duration: Math.round((performance.now() - initStart) * 10) / 10 })
 }
 
@@ -15502,6 +15505,21 @@ App._pickMerchant = function(name, opts = {}) {
     applyTheme?.()
     App.render?.()
     return normalized
+  }
+
+  App._cloudState = function() {
+    return S
+  }
+
+  App._cloudBuildPayload = function() {
+    normalizeCreditCardWallets()
+    App.ensurePrivilegesState?.()
+    return Storage.buildExportPayload(S)
+  }
+
+  App._cloudApplyPayload = function(data) {
+    try { Storage.createLocalBackup?.(S, 'before-cloud-restore') } catch (_) {}
+    return App._applyBackupPayload(data)
   }
 
   App.exportData = function() {

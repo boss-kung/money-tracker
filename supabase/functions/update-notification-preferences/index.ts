@@ -25,6 +25,7 @@ Deno.serve(async req => {
     const prefs = body.preferences && typeof body.preferences === 'object' ? body.preferences : {}
     const row: Record<string, unknown> = {
       install_id: installId,
+      user_id: body.userId ? String(body.userId) : null,
       timezone: String(prefs.timezone || body.timezone || 'Asia/Bangkok').slice(0, 64),
     }
     BOOL_KEYS.forEach(key => {

@@ -67,7 +67,7 @@ function shouldUseTriggerDefaultRoute(route: string, triggerType: string) {
   return false
 }
 
-function normalizeRule(rule: CustomRule, installId: string, appVersion = '') {
+function normalizeRule(rule: CustomRule, installId: string, userId: string | null, appVersion = '') {
   const id = cleanText(rule.id, 80) || crypto.randomUUID()
   const title = cleanText(rule.title, 120)
   if (!title) return null
@@ -83,6 +83,7 @@ function normalizeRule(rule: CustomRule, installId: string, appVersion = '') {
 
   return {
     install_id: installId,
+    user_id: userId,
     rule_id: id,
     enabled: rule.enabled !== false,
     title,
@@ -105,10 +106,11 @@ Deno.serve(async req => {
     const body = await req.json()
     const installId = cleanText(body.installId, 120)
     if (!installId) return jsonResponse({ error: 'installId is required' }, 400)
+    const userId = body.userId ? cleanText(body.userId, 80) : null
 
     const rules = Array.isArray(body.rules) ? body.rules : []
     const rows: Array<NonNullable<ReturnType<typeof normalizeRule>>> = rules
-      .map((rule: CustomRule) => normalizeRule(rule, installId, cleanText(body.appVersion, 80)))
+      .map((rule: CustomRule) => normalizeRule(rule, installId, userId, cleanText(body.appVersion, 80)))
       .filter((row: ReturnType<typeof normalizeRule>): row is NonNullable<ReturnType<typeof normalizeRule>> => Boolean(row))
 
     const supabase = adminClient()

@@ -428,6 +428,8 @@
   // Source: promo-search-appscript.js — deployed at script.google.com
   // To update: re-deploy the script and paste the new Web App URL here.
   window.MT_PROMO_SEARCH_ENDPOINT = "https://script.google.com/macros/s/AKfycbyePN0K-HD4xxL1jumR2YD7pc_suDMY62mtKfgjdey-ur9CpvtuhBGCRnIJbQ5LId8axA/exec";
+  // Supabase Auth/Sync public config. Keep service_role keys out of browser code.
+  window.MT_AUTH_REDIRECT_URL = location.href.split('#')[0];
 
   // Avoid Chrome manifest CORS errors when the app is opened via file://
   if (location.protocol !== 'file:') {
@@ -439,6 +441,8 @@
 </script>
 <script src="app_lock.js?v=2026.05.20-r40"></script>
 <script src="credit_card_cycles.js?v=2026.06.03-r1"></script>
+<script src="crypto_vault.js?v=2026.06.04-secure-sync1"></script>
+<script src="auth_sync.js?v=2026.06.04-secure-sync1"></script>
 <script src="app_v2.js?v=2026.06.04-rule-sheet-amount-r71"></script>
 <script src="split_bill.js?v=2026.05.15-r1"></script>
 <script src="quick_capture.js?v=2026.05.18-r13"></script>

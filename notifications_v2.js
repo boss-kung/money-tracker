@@ -230,10 +230,13 @@
         method: 'POST',
         headers: {
           apikey: cfg.supabaseAnonKey,
-          Authorization: `Bearer ${cfg.supabaseAnonKey}`,
+          Authorization: `Bearer ${window.MTAuthSync?.state?.session?.access_token || cfg.supabaseAnonKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          userId: window.MTAuthSync?.state?.user?.id || payload?.userId || null,
+        }),
         signal: controller?.signal,
       })
       const data = await response.json().catch(() => ({}))
@@ -401,7 +404,20 @@
       bootMark('syncSnapshot.skipped', { reason: 'throttle' })
       return true
     }
-    await callFunction('sync-notification-snapshot', buildSnapshot(), { timeoutMs })
+    const snapshot = buildSnapshot()
+    await callFunction('sync-notification-snapshot', {
+      installId: snapshot.installId,
+      snapshotDate: snapshot.snapshotDate,
+      todayTxCount: 0,
+      lastTxDate: null,
+      upcomingBills: [],
+      creditDue: [],
+      budgetAlerts: [],
+      recurringDue: [],
+      privilegesExpiring: [],
+      lastExportedAt: snapshot.lastExportedAt,
+      appVersion: snapshot.appVersion,
+    }, { timeoutMs })
     try { localStorage.setItem(LAST_SYNC_KEY, String(now)) } catch (_) {}
     return true
   }
