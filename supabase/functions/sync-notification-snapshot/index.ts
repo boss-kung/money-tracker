@@ -1,4 +1,4 @@
-import { adminClient } from '../_shared/supabase.ts'
+import { adminClient, getAuthenticatedUserId } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
 Deno.serve(async req => {
@@ -13,7 +13,7 @@ Deno.serve(async req => {
 
     const row = {
       install_id: installId,
-      user_id: body.userId ? String(body.userId) : null,
+      user_id: await getAuthenticatedUserId(req),
       snapshot_date: String(body.snapshotDate || new Date().toISOString().slice(0, 10)),
       today_tx_count: 0,
       last_tx_date: null,

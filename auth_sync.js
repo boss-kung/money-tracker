@@ -6,6 +6,7 @@
   const DEVICE_KEY = 'mt_auth_sync_device'
   const PKCE_VERIFIER_KEY = 'mt_auth_sync_pkce_verifier'
   const DEVICE_RECOVERY_KEY = 'mt_auth_sync_recovery_key'
+  let _deviceRecoveryKeyMemory = '' // in-memory primary store; never touches localStorage
   const FRESH_START_KEY = 'mt_auth_fresh_start'
   const DIRTY_DEBOUNCE_MS = 2500
   const STORAGE_BRIDGE_TIMEOUT_MS = 8000
@@ -185,11 +186,38 @@
   }
 
   function readDeviceRecoveryKey() {
-    try { return localStorage.getItem(DEVICE_RECOVERY_KEY) || '' } catch (_) { return '' }
+    if (_deviceRecoveryKeyMemory) return _deviceRecoveryKeyMemory
+    // sessionStorage persists across page refreshes but is cleared when the browser closes
+    try {
+      const fromSession = sessionStorage.getItem(DEVICE_RECOVERY_KEY) || ''
+      if (fromSession) { _deviceRecoveryKeyMemory = fromSession; return fromSession }
+    } catch (_) {}
+    // One-time migration: if the key was previously written to localStorage, move it out
+    // and remove it so it is no longer accessible to persistent JS reads
+    try {
+      const fromLocal = localStorage.getItem(DEVICE_RECOVERY_KEY) || ''
+      if (fromLocal) {
+        _deviceRecoveryKeyMemory = fromLocal
+        try { sessionStorage.setItem(DEVICE_RECOVERY_KEY, fromLocal) } catch (_) {}
+        localStorage.removeItem(DEVICE_RECOVERY_KEY)
+        return fromLocal
+      }
+    } catch (_) {}
+    return ''
   }
 
   function saveDeviceRecoveryKey(recoveryKey) {
-    try { localStorage.setItem(DEVICE_RECOVERY_KEY, String(recoveryKey || '')) } catch (_) {}
+    const key = String(recoveryKey || '')
+    _deviceRecoveryKeyMemory = key
+    try { sessionStorage.setItem(DEVICE_RECOVERY_KEY, key) } catch (_) {}
+    // Ensure the key is never left in localStorage (covers devices that had the old version)
+    try { localStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
+  }
+
+  function clearDeviceRecoveryKey() {
+    _deviceRecoveryKeyMemory = ''
+    try { sessionStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
+    try { localStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
   }
 
   function esc(value) {
@@ -370,6 +398,7 @@
     state.syncing = false
     state.vaultConfirmedEmpty = false
     storageSave({ refreshToken: '', expiresAt: 0, userId: '', email: '' })
+    clearDeviceRecoveryKey()
     try { localStorage.removeItem(PKCE_VERIFIER_KEY) } catch (_) {}
     if (clearLocalData) {
       try { appStorage()?.reset?.() } catch (_) {}
@@ -986,7 +1015,7 @@
         document.getElementById('mt-demo-vault-warning')?.remove()
         document.getElementById('mt-recovery-key-sheet')?.remove()
         // Also clear any stale device recovery key so it doesn't interfere next time
-        try { localStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
+        clearDeviceRecoveryKey()
         deleteVault()
           .then(() => {
             try { appStorage()?.reset?.() } catch (_) {}

@@ -1,4 +1,4 @@
-import { adminClient } from '../_shared/supabase.ts'
+import { adminClient, getAuthenticatedUserId } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
 type CustomRule = {
@@ -106,7 +106,7 @@ Deno.serve(async req => {
     const body = await req.json()
     const installId = cleanText(body.installId, 120)
     if (!installId) return jsonResponse({ error: 'installId is required' }, 400)
-    const userId = body.userId ? cleanText(body.userId, 80) : null
+    const userId = await getAuthenticatedUserId(req)
 
     const rules = Array.isArray(body.rules) ? body.rules : []
     const rows: Array<NonNullable<ReturnType<typeof normalizeRule>>> = rules

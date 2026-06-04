@@ -3121,8 +3121,10 @@ App.render();
     const allCats = getFrequentCategories(typeKey)
     const needsCat = type !== 'transfer'
     const _suggestedCatId = S.tx.txSuggestedFields?.categoryId || ''
-    const orderedCats = _suggestedCatId
-      ? [allCats.find(c => c.id === _suggestedCatId), ...allCats.filter(c => c.id !== _suggestedCatId)].filter(Boolean)
+    const _activeCatId = S.tx.categoryId || ''
+    const _frontCatId = _suggestedCatId || _activeCatId
+    const orderedCats = _frontCatId
+      ? [allCats.find(c => c.id === _frontCatId), ...allCats.filter(c => c.id !== _frontCatId)].filter(Boolean)
       : allCats
     const amount = numericAmount(S.tx.amount || 0)
     const display = Calc.fmtNum(Number(String(S.tx.amount || '0').replace(/,/g, '') || 0))
@@ -21899,11 +21901,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       const isFirstEntrance = !document.getElementById('cat-grid')
       _prev?.(...args)
       try {
-        // #2: "อื่น" always last, except when merchant suggestion pins a category
+        // #2: "อื่น" stays last unless suggestion/active category pins it first
         const grid = document.getElementById('cat-grid')
         if (grid) {
           const hasSuggestion = !!(S.tx?.txSuggestedFields?.categoryId)
-          if (!hasSuggestion) {
+          const hasActiveCat = !!(S.tx?.categoryId)
+          if (!hasSuggestion && !hasActiveCat) {
             const otherBtn = Array.from(grid.children).find(b => {
               const lbl = b.querySelector('span:last-child')?.textContent?.trim()
               return lbl === 'อื่น' || lbl === 'อื่นๆ'

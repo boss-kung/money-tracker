@@ -1,4 +1,4 @@
-import { adminClient } from '../_shared/supabase.ts'
+import { adminClient, getAuthenticatedUserId } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
 type WebPushSubscription = {
@@ -21,10 +21,11 @@ Deno.serve(async req => {
       return jsonResponse({ error: 'pushSubscription is required when enabling notifications' }, 400)
     }
 
+    const userId = await getAuthenticatedUserId(req)
     const supabase = adminClient()
     const device = {
       install_id: installId,
-      user_id: body.userId ? String(body.userId) : null,
+      user_id: userId,
       push_subscription: pushSubscription ?? null,
       platform: String(body.platform || 'unknown').slice(0, 64),
       browser: String(body.browser || 'unknown').slice(0, 64),
@@ -45,7 +46,7 @@ Deno.serve(async req => {
       .from('mt_notification_preferences')
       .upsert({
         install_id: installId,
-        user_id: body.userId ? String(body.userId) : null,
+        user_id: userId,
         daily_expense_enabled: true,
         timezone: device.timezone,
         hide_amounts_in_notification: Boolean(body.hideAmounts),
