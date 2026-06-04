@@ -80,8 +80,9 @@
       && typeof storage?.normalizeBackupPayload === 'function'
   }
 
-  async function waitForStorageBridge({ timeoutMs = STORAGE_BRIDGE_TIMEOUT_MS } = {}) {
+  async function waitForStorageBridge({ timeoutMs = STORAGE_BRIDGE_TIMEOUT_MS, silent = false } = {}) {
     if (storageBridgeReady()) return true
+    if (!silent) toastSafe('กำลังโหลดแอป...', 'info')
     const startedAt = Date.now()
     while (Date.now() - startedAt < timeoutMs) {
       await new Promise(resolve => setTimeout(resolve, 50))
@@ -150,7 +151,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync10',
+      version: '2026.06.04-secure-sync11',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -256,6 +257,7 @@
   }
 
   async function setSession(session) {
+    toastSafe('กำลังเข้าสู่ระบบ...', 'info')
     state.session = session
     state.user = await fetchUser(session)
     if (!isGoogleSession(session, state.user)) {
@@ -269,8 +271,10 @@
       email: state.user.email || '',
     })
     await waitForStorageBridge()
+    toastSafe('กำลังดึงข้อมูลจาก cloud...', 'info')
     await pullRemoteVault({ silent: true })
     await ensureFirstRunBackup()
+    toastSafe(`เข้าสู่ระบบสำเร็จ: ${state.user.email || ''}`, 'success')
     render()
     return state
   }
@@ -580,7 +584,7 @@
     const status = state.syncing ? 'กำลังบันทึก' : (state.dirty ? 'รอบันทึก' : 'บันทึกแล้ว')
     return `
       <div class="mt-account-menu-wrap${state.accountMenuOpen ? ' open' : ''}">
-        <button class="mt-account-button" type="button" aria-label="บัญชีและการกู้ข้อมูล" aria-expanded="${state.accountMenuOpen ? 'true' : 'false'}" data-mt-auth-action="toggle-account-menu" onclick="window.MTAuthSync?.toggleAccountMenu?.()">
+        <button class="mt-account-button" type="button" aria-label="บัญชีและการกู้ข้อมูล" aria-expanded="${state.accountMenuOpen ? 'true' : 'false'}" data-mt-auth-action="toggle-account-menu">
           <span>${accountInitial(email)}</span>
         </button>
         <div class="mt-account-menu-popover" role="menu" aria-label="บัญชีและการกู้ข้อมูล">
@@ -692,10 +696,7 @@
         closeAccountMenu()
         confirmSignOut()
       }
-      if (action === 'toggle-account-menu') {
-        if (event.target?.closest?.('[onclick]')) return
-        toggleAccountMenu()
-      }
+      if (action === 'toggle-account-menu') toggleAccountMenu()
       if (action === 'unlock') promptUnlock()
       if (action === 'sync') {
         closeAccountMenu()

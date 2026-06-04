@@ -1979,6 +1979,7 @@ function init() {
 
   setupServiceWorkerUpdates()
   setupConnectivityWatch()
+  window.App = App
   try { window.MTAuthSync?.initAuthSync?.() } catch (err) { console.warn('auth sync init failed', err) }
   window.MTBoot?.mark?.('app.init.done', { duration: Math.round((performance.now() - initStart) * 10) / 10 })
 }
