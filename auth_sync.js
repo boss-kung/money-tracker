@@ -472,12 +472,20 @@
     clearFreshStart()
     if (looksLikeDemo) {
       // New user: wipe demo data so they start with a clean slate.
-      // After reset(), Storage.init() would fall back to DEFAULT_WALLETS (which contains demo
-      // wallet names) causing looksLikeDemo to stay true and triggering an infinite reload loop.
-      // Writing empty arrays first ensures Storage.init() reads [] instead of the demo defaults.
+      // After reset(), Storage.init() falls back to DEFAULT_* values for missing keys.
+      // Several defaults contain sample data (wallets, bills, budgets, etc.) so we must
+      // explicitly write empty values for each to prevent them from reappearing on reload.
       try { appStorage()?.reset?.() } catch (_) {}
-      try { localStorage.setItem('mt_wallets', '[]') } catch (_) {}
-      try { localStorage.setItem('mt_transactions', '[]') } catch (_) {}
+      const emptyArrayKeys = [
+        'mt_wallets', 'mt_transactions', 'mt_upcoming_bills',
+        'mt_budgets', 'mt_income_budgets', 'mt_merchants',
+        'mt_reward_accounts', 'mt_privileges',
+      ]
+      const emptyObjectKeys = ['mt_cc_benefits']
+      try {
+        emptyArrayKeys.forEach(k => localStorage.setItem(k, '[]'))
+        emptyObjectKeys.forEach(k => localStorage.setItem(k, '{}'))
+      } catch (_) {}
       try { location.reload() } catch (_) {}
       return null
     }
@@ -610,6 +618,110 @@
     state.dataKey = null
     state.locked = true
     console.debug('[MTAuthSync] vault deleted')
+  }
+
+  async function deleteAccount() {
+    await deleteVault()
+    const cfg = getConfig()
+    const resp = await fetch(`${cfg.supabaseUrl}/functions/v1/delete-account`, {
+      method: 'POST',
+      headers: authHeaders(),
+    })
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}))
+      throw new Error(data?.error || data?.message || 'ลบบัญชีไม่สำเร็จ')
+    }
+    clearDeviceRecoveryKey()
+    try { appStorage()?.reset?.() } catch (_) {}
+    try { localStorage.clear() } catch (_) {}
+    try { sessionStorage.clear() } catch (_) {}
+    try { location.reload() } catch (_) { renderAuthGate() }
+  }
+
+  async function sendDeleteOtp() {
+    const email = state.user?.email
+    if (!email) throw new Error('ไม่พบอีเมลของบัญชีนี้')
+    await requestAuth('/otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, create_user: false }),
+    })
+  }
+
+  async function verifyOtpAndDelete(token) {
+    const email = state.user?.email
+    if (!email) throw new Error('ไม่พบอีเมลของบัญชีนี้')
+    await requestAuth('/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, token, type: 'email' }),
+    })
+    await deleteAccount()
+  }
+
+  function showDeleteAccountSheet() {
+    document.getElementById('mt-delete-account-sheet')?.remove()
+    const el = document.createElement('div')
+    el.id = 'mt-delete-account-sheet'
+    el.className = 'mt-recovery-key-overlay'
+    el.innerHTML = `
+      <div class="mt-recovery-key-sheet" role="alertdialog" aria-modal="true" aria-labelledby="mt-delete-account-title">
+        <div class="mt-recovery-key-header">
+          <h2 id="mt-delete-account-title" style="color:var(--expense)">ลบบัญชีถาวร</h2>
+        </div>
+        <p>การดำเนินการนี้<strong>ไม่สามารถย้อนกลับได้</strong> และจะ:</p>
+        <ul style="text-align:left;padding-left:20px;margin:8px 0;line-height:1.8">
+          <li>ลบข้อมูลการเงินทั้งหมดออกจาก cloud ถาวร</li>
+          <li>ยกเลิกบัญชี — login ด้วย Google account นี้ไม่ได้อีก</li>
+          <li>ล้างข้อมูลทั้งหมดในเครื่องนี้</li>
+        </ul>
+        <p style="font-size:13px;color:var(--text-secondary)">ระบบจะส่งรหัส OTP ไปยังอีเมล <strong>${esc(state.user?.email || '')}</strong> เพื่อยืนยัน</p>
+        <div class="mt-recovery-key-actions" style="flex-direction:column;gap:8px">
+          <button class="btn" style="background:var(--expense);color:#fff" type="button" data-mt-auth-action="delete-account-step2">ดำเนินการต่อ — ส่ง OTP</button>
+          <button class="btn btn-secondary" type="button" data-mt-auth-action="delete-account-cancel">ยกเลิก</button>
+        </div>
+      </div>`
+    document.body.appendChild(el)
+  }
+
+  function showDeleteAccountOtpSheet() {
+    document.getElementById('mt-delete-account-sheet')?.remove()
+    const el = document.createElement('div')
+    el.id = 'mt-delete-account-sheet'
+    el.className = 'mt-recovery-key-overlay'
+    el.innerHTML = `
+      <div class="mt-recovery-key-sheet" role="alertdialog" aria-modal="true" aria-labelledby="mt-delete-otp-title">
+        <div class="mt-recovery-key-header">
+          <h2 id="mt-delete-otp-title" style="color:var(--expense)">ยืนยันการลบบัญชี</h2>
+        </div>
+        <p>ส่งรหัส OTP ไปที่ <strong>${esc(state.user?.email || '')}</strong> แล้ว<br>กรอกรหัส 6 หลักจากอีเมลเพื่อยืนยัน</p>
+        <input
+          id="mt-delete-otp-input"
+          class="mt-recovery-key-input form-input"
+          type="text"
+          inputmode="numeric"
+          placeholder="000000"
+          maxlength="6"
+          autocomplete="one-time-code"
+          spellcheck="false"
+          style="font-family:monospace;letter-spacing:4px;text-align:center;font-size:22px;margin:12px 0"
+        />
+        <div class="mt-recovery-key-actions" style="flex-direction:column;gap:8px">
+          <button id="mt-delete-otp-confirm" class="btn" style="background:var(--expense);color:#fff;opacity:0.4;pointer-events:none" type="button" data-mt-auth-action="delete-account-confirm-otp" disabled>ลบบัญชีถาวร</button>
+          <button class="btn btn-secondary" type="button" data-mt-auth-action="delete-account-cancel">ยกเลิก</button>
+          <button class="btn btn-secondary" type="button" data-mt-auth-action="delete-account-resend-otp" style="font-size:12px;padding:6px">ส่งรหัสใหม่อีกครั้ง</button>
+        </div>
+      </div>`
+    document.body.appendChild(el)
+    const input = el.querySelector('#mt-delete-otp-input')
+    const confirmBtn = el.querySelector('#mt-delete-otp-confirm')
+    input?.addEventListener('input', () => {
+      const ready = (input.value || '').replace(/\D/g, '').length >= 6
+      confirmBtn.disabled = !ready
+      confirmBtn.style.opacity = ready ? '1' : '0.4'
+      confirmBtn.style.pointerEvents = ready ? '' : 'none'
+    })
+    setTimeout(() => input?.focus(), 50)
   }
 
   // Shown when a vault exists on cloud but couldn't be unlocked automatically —
@@ -899,6 +1011,13 @@
               <small>ซ่อนและล้างข้อมูลบัญชีนี้ออกจากเครื่อง</small>
             </span>
           </button>
+          <button class="mt-account-menu-item danger" type="button" data-mt-auth-action="delete-account" role="menuitem" style="opacity:0.75">
+            <span class="mt-account-menu-icon">🗑</span>
+            <span>
+              <strong>ลบบัญชีถาวร</strong>
+              <small>ลบข้อมูลและยกเลิกบัญชีนี้</small>
+            </span>
+          </button>
         </div>
       </div>
     `
@@ -1060,6 +1179,40 @@
               showVaultLockedSheet()
             } else {
               toastSafe(`กู้ข้อมูลไม่สำเร็จ: ${err.message}`, 'error')
+            }
+          })
+      }
+      if (action === 'delete-account') {
+        closeAccountMenu()
+        showDeleteAccountSheet()
+      }
+      if (action === 'delete-account-step2') {
+        document.getElementById('mt-delete-account-sheet')?.remove()
+        sendDeleteOtp()
+          .then(() => showDeleteAccountOtpSheet())
+          .catch(err => toastSafe(`ส่ง OTP ไม่สำเร็จ: ${err.message}`, 'error'))
+      }
+      if (action === 'delete-account-cancel') {
+        document.getElementById('mt-delete-account-sheet')?.remove()
+      }
+      if (action === 'delete-account-resend-otp') {
+        sendDeleteOtp()
+          .then(() => toastSafe('ส่งรหัส OTP ใหม่แล้ว', 'success'))
+          .catch(err => toastSafe(`ส่ง OTP ไม่สำเร็จ: ${err.message}`, 'error'))
+      }
+      if (action === 'delete-account-confirm-otp') {
+        const input = document.getElementById('mt-delete-otp-input')
+        const token = (input?.value || '').replace(/\D/g, '').trim()
+        if (token.length < 6) { toastSafe('กรุณากรอก OTP ให้ครบ 6 หลัก', 'warn'); return }
+        document.getElementById('mt-delete-account-sheet')?.remove()
+        verifyOtpAndDelete(token)
+          .catch(err => {
+            const isWrongOtp = (err.message || '').toLowerCase().includes('token') || (err.message || '').toLowerCase().includes('otp') || (err.message || '').toLowerCase().includes('invalid') || (err.message || '').toLowerCase().includes('expired')
+            if (isWrongOtp) {
+              toastSafe('รหัส OTP ไม่ถูกต้องหรือหมดอายุ — กรุณาลองใหม่', 'error')
+              showDeleteAccountOtpSheet()
+            } else {
+              toastSafe(`ลบบัญชีไม่สำเร็จ: ${err.message}`, 'error')
             }
           })
       }
