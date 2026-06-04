@@ -22,6 +22,8 @@
     debounceTimer: null,
   }
 
+  try { document.documentElement.classList.add('mt-auth-gated') } catch (_) {}
+
   function toastSafe(message, type = 'info') {
     try {
       if (typeof root.toast === 'function') root.toast(message, type)
@@ -123,7 +125,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync5',
+      version: '2026.06.04-secure-sync6',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -136,7 +138,7 @@
       vaultVersion: state.vaultMeta?.data_version || null,
       dirty: Boolean(state.dirty),
       syncing: Boolean(state.syncing),
-      buttonText: document.getElementById('mt-auth-sync')?.innerText || '',
+      buttonText: document.getElementById('mt-auth-gate')?.innerText || '',
       needsVaultUnlock: needsVaultUnlock(),
     }
   }
@@ -476,27 +478,60 @@
   }
 
   function render() {
-    let rootEl = document.getElementById('mt-auth-sync')
-    if (!rootEl) {
-      rootEl = document.createElement('div')
-      rootEl.id = 'mt-auth-sync'
-      rootEl.className = 'mt-auth-sync'
-      document.body.appendChild(rootEl)
-    }
-    if (!configured()) {
-      rootEl.innerHTML = '<button class="mt-auth-btn" type="button" disabled>ยังไม่พร้อมบันทึกข้อมูล</button>'
+    renderAuthGate()
+    try { if (root.App?.renderMore && root.App?._cloudState?.()?.page === 'more') root.App.renderMore() } catch (_) {}
+  }
+
+  function renderAuthGate() {
+    let gate = document.getElementById('mt-auth-gate')
+    if (state.session?.access_token) {
+      document.documentElement.classList.remove('mt-auth-gated')
+      gate?.remove()
       return
     }
-    if (!state.session?.access_token) {
-      rootEl.innerHTML = '<button class="mt-auth-btn" type="button" data-mt-auth-action="login">Sign in with Google</button>'
-      return
+    document.documentElement.classList.add('mt-auth-gated')
+    if (!gate) {
+      gate = document.createElement('div')
+      gate.id = 'mt-auth-gate'
+      gate.innerHTML = `
+        <div class="mt-auth-gate-panel" role="dialog" aria-modal="true" aria-labelledby="mt-auth-gate-title">
+          <div class="mt-auth-gate-mark">💰</div>
+          <h1 id="mt-auth-gate-title">เข้าสู่ระบบเพื่อใช้แอป</h1>
+          <p>ข้อมูลการเงินของคุณจะถูกซ่อนไว้จนกว่าจะเข้าสู่ระบบด้วยบัญชี Google</p>
+          <button class="btn btn-primary" type="button" data-mt-auth-action="login">Sign in with Google</button>
+        </div>`
+      document.body.appendChild(gate)
     }
-    const email = state.user?.email || 'Google account'
-    const needsUnlock = needsVaultUnlock()
-    const label = needsUnlock
-      ? (state.vaultMeta ? 'กู้ข้อมูล' : 'กำลังบันทึกข้อมูล...')
-      : (state.syncing ? 'กำลังบันทึก...' : (state.dirty ? 'กำลังบันทึก...' : 'ข้อมูลบันทึกแล้ว'))
-    rootEl.innerHTML = `<button class="mt-auth-btn ${needsUnlock ? 'warn' : ''}" type="button" data-mt-auth-action="${needsUnlock ? 'unlock' : 'sync'}">${label}</button><button class="mt-auth-link" type="button" data-mt-auth-action="logout">${email}</button>`
+    const btn = gate.querySelector('[data-mt-auth-action="login"]')
+    if (btn) {
+      btn.disabled = !configured()
+      btn.textContent = configured() ? 'Sign in with Google' : 'ยังไม่พร้อมเข้าสู่ระบบ'
+    }
+  }
+
+  function settingsHtml() {
+    const email = state.user?.email || storageLoad().email || 'Google'
+    const recoverySaved = Boolean(readDeviceRecoveryKey())
+    const status = state.syncing ? 'กำลังบันทึก' : (state.dirty ? 'รอบันทึก' : 'บันทึกแล้ว')
+    return `
+      <div class="settings-row">
+        <div class="s-icon">🔐</div>
+        <div class="s-label">บัญชีและการกู้ข้อมูล
+          <div style="font-size:12px;font-weight:400;color:var(--muted);margin-top:2px">${esc(email)} · ${status}</div>
+        </div>
+      </div>
+      <div class="settings-row" onclick="MTAuthSync.showSavedRecoveryKeySheet()">
+        <div class="s-icon">🧾</div>
+        <div class="s-label">รหัสกู้ข้อมูล
+          <div style="font-size:12px;font-weight:400;color:var(--muted);margin-top:2px">${recoverySaved ? 'กดเพื่อดูและคัดลอกรหัส' : 'ยังไม่มีรหัสบนเครื่องนี้'}</div>
+        </div>
+        <div class="s-arrow">›</div>
+      </div>
+      <div class="settings-row" onclick="MTAuthSync.signOut()">
+        <div class="s-icon">🚪</div>
+        <div class="s-label">ออกจากระบบ</div>
+        <div class="s-arrow">›</div>
+      </div>`
   }
 
   async function promptUnlock() {
@@ -532,6 +567,15 @@
     document.body.appendChild(el)
   }
 
+  function showSavedRecoveryKeySheet() {
+    const key = readDeviceRecoveryKey()
+    if (!key) {
+      toastSafe('เครื่องนี้ไม่มีรหัสกู้ข้อมูล ให้ใช้รหัสที่เคยจดไว้เมื่อต้องกู้ข้อมูล', 'warn')
+      return
+    }
+    showRecoveryKeySheet(key)
+  }
+
   async function copyRecoveryKeyFromSheet() {
     const key = document.getElementById('mt-recovery-key-code')?.textContent?.trim() || ''
     if (!key) return
@@ -557,8 +601,8 @@
   }
 
   async function initAuthSync() {
-    render()
     bindUi()
+    renderAuthGate()
     if (!configured()) return state
     try { await restoreSession() } catch (error) { toastSafe(`Auth restore ล้มเหลว: ${error.message}`, 'warn') }
     render()
@@ -576,11 +620,14 @@
     pushEncryptedVault,
     signInWithGoogle,
     signOut,
+    settingsHtml,
+    showSavedRecoveryKeySheet,
     state,
     syncNow,
     unlockVault,
   }
 
   root.MTAuthSync = api
+  try { setTimeout(renderAuthGate, 0) } catch (_) {}
   if (typeof module !== 'undefined' && module.exports) module.exports = api
 })(typeof globalThis !== 'undefined' ? globalThis : window)

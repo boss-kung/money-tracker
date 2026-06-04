@@ -22575,6 +22575,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>
       <div class="sec-title">ความปลอดภัย</div>
       <div class="card card-pad">
+        ${window.MTAuthSync?.settingsHtml?.() || ''}
         ${row({
           icon: '🔒',
           label: 'App Lock',
