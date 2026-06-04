@@ -68,11 +68,16 @@
     try { localStorage.setItem(STATE_KEY, JSON.stringify({ ...storageLoad(), ...next })) } catch (_) {}
   }
 
+  function appStorage() {
+    return root.MTStorage || null
+  }
+
   function storageBridgeReady() {
+    const storage = appStorage()
     return typeof root.App?._cloudBuildPayload === 'function'
       && typeof root.App?._cloudApplyPayload === 'function'
-      && typeof root.Storage?.buildExportPayload === 'function'
-      && typeof root.Storage?.normalizeBackupPayload === 'function'
+      && typeof storage?.buildExportPayload === 'function'
+      && typeof storage?.normalizeBackupPayload === 'function'
   }
 
   async function waitForStorageBridge({ timeoutMs = STORAGE_BRIDGE_TIMEOUT_MS } = {}) {
@@ -145,7 +150,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync9',
+      version: '2026.06.04-secure-sync10',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -312,7 +317,7 @@
     try { localStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
     try { localStorage.removeItem(PKCE_VERIFIER_KEY) } catch (_) {}
     if (clearLocalData) {
-      try { root.Storage?.reset?.() } catch (_) {}
+      try { appStorage()?.reset?.() } catch (_) {}
     }
     document.documentElement.classList.add('mt-auth-gated')
     renderAuthGate()
@@ -437,7 +442,7 @@
     const payload = await cryptoVault.decryptVault(row.ciphertext, dataKey, row.iv, row.checksum)
     if (!options.skipApply) {
       await waitForStorageBridge()
-      try { root.Storage?.createLocalBackup?.(root.App?._cloudState?.(), 'before-cloud-restore') } catch (_) {}
+      try { appStorage()?.createLocalBackup?.(root.App?._cloudState?.(), 'before-cloud-restore') } catch (_) {}
       applyPayload(payload)
     }
     state.dataKey = dataKey
@@ -484,7 +489,7 @@
       await waitForStorageBridge()
       const payload = currentPayload()
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-      root.Storage?.triggerDownload?.(blob, `local-conflict-backup-${new Date().toISOString().slice(0, 10)}.json`)
+      appStorage()?.triggerDownload?.(blob, `local-conflict-backup-${new Date().toISOString().slice(0, 10)}.json`)
     } catch (_) {}
     throw new Error('พบข้อมูลที่บันทึกไว้ใหม่กว่า ระบบเสนอให้สำรองข้อมูลในเครื่องก่อน')
   }
@@ -537,6 +542,11 @@
     render()
   }
 
+  function toggleAccountMenu() {
+    state.accountMenuOpen = !state.accountMenuOpen
+    render()
+  }
+
   function renderAuthGate() {
     let gate = document.getElementById('mt-auth-gate')
     if (state.session?.access_token) {
@@ -570,7 +580,7 @@
     const status = state.syncing ? 'กำลังบันทึก' : (state.dirty ? 'รอบันทึก' : 'บันทึกแล้ว')
     return `
       <div class="mt-account-menu-wrap${state.accountMenuOpen ? ' open' : ''}">
-        <button class="mt-account-button" type="button" aria-label="บัญชีและการกู้ข้อมูล" aria-expanded="${state.accountMenuOpen ? 'true' : 'false'}" data-mt-auth-action="toggle-account-menu">
+        <button class="mt-account-button" type="button" aria-label="บัญชีและการกู้ข้อมูล" aria-expanded="${state.accountMenuOpen ? 'true' : 'false'}" data-mt-auth-action="toggle-account-menu" onclick="window.MTAuthSync?.toggleAccountMenu?.()">
           <span>${accountInitial(email)}</span>
         </button>
         <div class="mt-account-menu-popover" role="menu" aria-label="บัญชีและการกู้ข้อมูล">
@@ -683,8 +693,8 @@
         confirmSignOut()
       }
       if (action === 'toggle-account-menu') {
-        state.accountMenuOpen = !state.accountMenuOpen
-        render()
+        if (event.target?.closest?.('[onclick]')) return
+        toggleAccountMenu()
       }
       if (action === 'unlock') promptUnlock()
       if (action === 'sync') {
@@ -731,6 +741,7 @@
     showSavedRecoveryKeySheet,
     state,
     syncNow,
+    toggleAccountMenu,
     unlockVault,
   }
 

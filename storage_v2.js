@@ -499,3 +499,5 @@ const Storage = {
     Object.values(KEYS).forEach(k => localStorage.removeItem(k))
   },
 }
+
+window.MTStorage = Storage
