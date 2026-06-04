@@ -6,6 +6,7 @@
   const DEVICE_KEY = 'mt_auth_sync_device'
   const PKCE_VERIFIER_KEY = 'mt_auth_sync_pkce_verifier'
   const DEVICE_RECOVERY_KEY = 'mt_auth_sync_recovery_key'
+  const FRESH_START_KEY = 'mt_auth_fresh_start'
   const DIRTY_DEBOUNCE_MS = 2500
   const STORAGE_BRIDGE_TIMEOUT_MS = 8000
   const GOOGLE_AUTH_OPTIONS = Object.freeze({ provider: 'google' })
@@ -80,9 +81,8 @@
       && typeof storage?.normalizeBackupPayload === 'function'
   }
 
-  async function waitForStorageBridge({ timeoutMs = STORAGE_BRIDGE_TIMEOUT_MS, silent = false } = {}) {
+  async function waitForStorageBridge({ timeoutMs = STORAGE_BRIDGE_TIMEOUT_MS } = {}) {
     if (storageBridgeReady()) return true
-    if (!silent) toastSafe('กำลังโหลดแอป...', 'info')
     const startedAt = Date.now()
     while (Date.now() - startedAt < timeoutMs) {
       await new Promise(resolve => setTimeout(resolve, 50))
@@ -151,7 +151,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync13',
+      version: '2026.06.04-secure-sync14',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -257,7 +257,6 @@
   }
 
   async function setSession(session) {
-    toastSafe('กำลังเข้าสู่ระบบ...', 'info')
     state.session = session
     state.user = await fetchUser(session)
     if (!isGoogleSession(session, state.user)) {
@@ -271,7 +270,6 @@
       email: state.user.email || '',
     })
     await waitForStorageBridge()
-    toastSafe('กำลังดึงข้อมูลจาก cloud...', 'info')
     await pullRemoteVault({ silent: true })
     await ensureFirstRunBackup()
     toastSafe(`เข้าสู่ระบบสำเร็จ: ${state.user.email || ''}`, 'success')
@@ -321,6 +319,7 @@
     try { localStorage.removeItem(PKCE_VERIFIER_KEY) } catch (_) {}
     if (clearLocalData) {
       try { appStorage()?.reset?.() } catch (_) {}
+      try { localStorage.setItem(FRESH_START_KEY, '1') } catch (_) {}
     }
     document.documentElement.classList.add('mt-auth-gated')
     renderAuthGate()
@@ -334,21 +333,45 @@
     signOut({ clearLocalData: true }).catch(error => toastSafe(`ออกจากระบบไม่สำเร็จ: ${error.message}`, 'error'))
   }
 
+  function isFreshStart() {
+    try { return localStorage.getItem(FRESH_START_KEY) === '1' } catch (_) { return false }
+  }
+
+  function clearFreshStart() {
+    try { localStorage.removeItem(FRESH_START_KEY) } catch (_) {}
+  }
+
   async function ensureFirstRunBackup() {
     if (!state.session?.access_token || !state.user?.id) return null
+
     if (state.vaultMeta || state.dataKey) {
       const savedKey = readDeviceRecoveryKey()
       if (state.vaultMeta && savedKey && !state.dataKey) {
-        // Apply cloud data when local storage has only defaults (e.g. after logout+reset).
-        // Keep local data (skipApply: true) only when it looks real, to avoid overwriting
-        // unsynchronised local changes on a plain page refresh.
-        const localIsDefaults = typeof root.App?._looksLikeDemoData === 'function'
-          ? root.App._looksLikeDemoData()
-          : false
-        try { await unlockVault(savedKey, { skipApply: !localIsDefaults, silent: true }) } catch (_) {}
+        // After logout+reset the FRESH_START_KEY flag is set — apply cloud data so
+        // real data replaces the defaults loaded into localStorage after reset.
+        // On a plain page refresh the flag is absent — keep local data (skipApply)
+        // to avoid overwriting unsynchronised local changes.
+        const freshStart = isFreshStart()
+        clearFreshStart()
+        try {
+          await unlockVault(savedKey, { skipApply: !freshStart, silent: true })
+        } catch (err) {
+          if (freshStart) toastSafe('กู้ข้อมูลอัตโนมัติไม่สำเร็จ — กรุณากรอกรหัสกู้ข้อมูลเองจากเมนูบัญชี', 'warn')
+        }
+      } else {
+        clearFreshStart()
       }
       return state.vaultMeta
     }
+
+    // No vault yet — first time this user backs up.
+    // Never back up demo/default data; wait until the user has entered real data.
+    const looksLikeDemo = typeof root.App?._looksLikeDemoData === 'function'
+      ? root.App._looksLikeDemoData()
+      : false
+    clearFreshStart()
+    if (looksLikeDemo) return null
+
     const recoveryKey = generateRecoveryKey()
     saveDeviceRecoveryKey(recoveryKey)
     const saved = await createVaultFromLocalData(recoveryKey, { silent: true })
@@ -662,11 +685,40 @@
 
   function showSavedRecoveryKeySheet() {
     const key = readDeviceRecoveryKey()
-    if (!key) {
-      toastSafe('เครื่องนี้ไม่มีรหัสกู้ข้อมูล ให้ใช้รหัสที่เคยจดไว้เมื่อต้องกู้ข้อมูล', 'warn')
+    if (key) {
+      showRecoveryKeySheet(key)
       return
     }
-    showRecoveryKeySheet(key)
+    // No key on this device — show an input form so the user can enter their key
+    // and unlock / restore their vault on this device.
+    document.getElementById('mt-recovery-key-sheet')?.remove()
+    const el = document.createElement('div')
+    el.id = 'mt-recovery-key-sheet'
+    el.className = 'mt-recovery-key-overlay'
+    el.innerHTML = `
+      <div class="mt-recovery-key-sheet" role="dialog" aria-modal="true" aria-labelledby="mt-recovery-key-title">
+        <div class="mt-recovery-key-header">
+          <h2 id="mt-recovery-key-title">กรอกรหัสกู้ข้อมูล</h2>
+        </div>
+        <p>เครื่องนี้ยังไม่มีรหัสกู้ข้อมูล กรอกรหัสที่เคยจดไว้เพื่อดึงข้อมูลจาก cloud กลับมา</p>
+        <input
+          id="mt-recovery-key-input"
+          class="mt-recovery-key-input form-input"
+          type="text"
+          placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          style="font-family:monospace;letter-spacing:2px;text-align:center;margin:12px 0"
+        />
+        <div class="mt-recovery-key-note">รหัสนี้คือรหัสที่แสดงให้จดเมื่อ login ครั้งแรก</div>
+        <div class="mt-recovery-key-actions">
+          <button class="btn btn-primary" type="button" data-mt-auth-action="enter-recovery-key-submit">กู้ข้อมูล</button>
+          <button class="btn btn-secondary" type="button" data-mt-auth-action="close-recovery-key">ยกเลิก</button>
+        </div>
+      </div>`
+    document.body.appendChild(el)
+    setTimeout(() => el.querySelector('#mt-recovery-key-input')?.focus(), 50)
   }
 
   async function copyRecoveryKeyFromSheet() {
@@ -713,6 +765,15 @@
       }
       if (action === 'copy-recovery-key') copyRecoveryKeyFromSheet()
       if (action === 'close-recovery-key') document.getElementById('mt-recovery-key-sheet')?.remove()
+      if (action === 'enter-recovery-key-submit') {
+        const input = document.getElementById('mt-recovery-key-input')
+        const key = (input?.value || '').trim().toUpperCase()
+        if (!key) { toastSafe('กรุณากรอกรหัสกู้ข้อมูล', 'warn'); return }
+        document.getElementById('mt-recovery-key-sheet')?.remove()
+        unlockVault(key)
+          .then(() => { saveDeviceRecoveryKey(key); toastSafe('กู้ข้อมูลสำเร็จ', 'success') })
+          .catch(err => toastSafe(`กู้ข้อมูลไม่สำเร็จ: ${err.message}`, 'error'))
+      }
     })
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && state.accountMenuOpen) {
