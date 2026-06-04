@@ -9967,3 +9967,71 @@ details summary::marker {
     max-width: 42vw;
   }
 }
+.mt-recovery-key-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.48);
+}
+.mt-recovery-key-sheet {
+  width: min(420px, 100%);
+  border-radius: 8px;
+  padding: 22px;
+  background: var(--card, #fff);
+  color: var(--text, #0F172A);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+}
+.mt-recovery-key-header h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+.mt-recovery-key-sheet p {
+  margin: 0;
+  color: var(--muted, #64748B);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.mt-recovery-key-code {
+  margin: 18px 0 12px;
+  padding: 14px;
+  border: 1px solid rgba(37, 99, 235, 0.24);
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--text, #0F172A);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.45;
+  text-align: center;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.mt-recovery-key-note {
+  color: var(--muted, #64748B);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.mt-recovery-key-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+.mt-recovery-key-actions .btn {
+  flex: 1;
+}
+@media (max-width: 560px) {
+  .mt-recovery-key-overlay {
+    align-items: end;
+    padding: 12px;
+  }
+  .mt-recovery-key-sheet {
+    padding: 18px;
+  }
+  .mt-recovery-key-actions {
+    flex-direction: column;
+  }
+}

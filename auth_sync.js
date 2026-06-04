@@ -5,6 +5,7 @@
   const STATE_KEY = 'mt_auth_sync_state'
   const DEVICE_KEY = 'mt_auth_sync_device'
   const PKCE_VERIFIER_KEY = 'mt_auth_sync_pkce_verifier'
+  const DEVICE_RECOVERY_KEY = 'mt_auth_sync_recovery_key'
   const DIRTY_DEBOUNCE_MS = 2500
   const GOOGLE_AUTH_OPTIONS = Object.freeze({ provider: 'google' })
   const encoder = new TextEncoder()
@@ -122,7 +123,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync4',
+      version: '2026.06.04-secure-sync5',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -131,12 +132,33 @@
       locked: Boolean(state.locked),
       hasDataKey: Boolean(state.dataKey),
       hasVaultMeta: Boolean(state.vaultMeta),
+      hasDeviceRecoveryKey: Boolean(readDeviceRecoveryKey()),
       vaultVersion: state.vaultMeta?.data_version || null,
       dirty: Boolean(state.dirty),
       syncing: Boolean(state.syncing),
       buttonText: document.getElementById('mt-auth-sync')?.innerText || '',
       needsVaultUnlock: needsVaultUnlock(),
     }
+  }
+
+  function generateRecoveryKey() {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    const bytes = new Uint8Array(24)
+    crypto.getRandomValues(bytes)
+    const chars = [...bytes].map(byte => alphabet[byte % alphabet.length])
+    return [0, 4, 8, 12, 16, 20].map(start => chars.slice(start, start + 4).join('')).join('-')
+  }
+
+  function readDeviceRecoveryKey() {
+    try { return localStorage.getItem(DEVICE_RECOVERY_KEY) || '' } catch (_) { return '' }
+  }
+
+  function saveDeviceRecoveryKey(recoveryKey) {
+    try { localStorage.setItem(DEVICE_RECOVERY_KEY, String(recoveryKey || '')) } catch (_) {}
+  }
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]))
   }
 
   async function requestAuth(path, options = {}) {
@@ -219,6 +241,7 @@
       email: state.user.email || '',
     })
     await pullRemoteVault({ silent: true })
+    await ensureFirstRunBackup()
     render()
     return state
   }
@@ -262,6 +285,22 @@
     render()
   }
 
+  async function ensureFirstRunBackup() {
+    if (!state.session?.access_token || !state.user?.id) return null
+    if (state.vaultMeta || state.dataKey) {
+      const savedKey = readDeviceRecoveryKey()
+      if (state.vaultMeta && savedKey && !state.dataKey) {
+        try { await unlockVault(savedKey, { skipApply: true, silent: true }) } catch (_) {}
+      }
+      return state.vaultMeta
+    }
+    const recoveryKey = generateRecoveryKey()
+    saveDeviceRecoveryKey(recoveryKey)
+    const saved = await createVaultFromLocalData(recoveryKey, { silent: true })
+    showRecoveryKeySheet(recoveryKey)
+    return saved
+  }
+
   async function vaultRequest(method, body) {
     const cfg = getConfig()
     if (!state.session?.access_token) throw new Error('ต้องเข้าสู่ระบบก่อน sync')
@@ -293,31 +332,31 @@
 
   function currentPayload() {
     if (typeof root.App?._cloudBuildPayload === 'function') return root.App._cloudBuildPayload()
-    throw new Error('Cloud sync is not connected to app storage yet')
+    throw new Error('ยังเชื่อมต่อระบบบันทึกข้อมูลไม่พร้อม')
   }
 
   function applyPayload(payload) {
     if (typeof root.App?._cloudApplyPayload === 'function') return root.App._cloudApplyPayload(payload)
-    throw new Error('Cloud restore is not connected to app storage yet')
+    throw new Error('ยังเชื่อมต่อระบบกู้ข้อมูลไม่พร้อม')
   }
 
-  async function buildEncryptedRow(passphrase, payload, previousMeta = null) {
+  async function buildEncryptedRow(recoveryKey, payload, previousMeta = null) {
     const cryptoVault = root.MTCryptoVault
     if (!cryptoVault) throw new Error('Crypto vault module is not loaded')
     const salt = previousMeta?.salt || cryptoVault.bytesToBase64(cryptoVault.randomBytes(16))
     const kdfParams = previousMeta?.kdf_params || cryptoVault.DEFAULT_KDF_PARAMS
-    const passphraseKey = await cryptoVault.deriveKey(passphrase, salt, kdfParams)
+    const recoveryKeyMaterial = await cryptoVault.deriveKey(recoveryKey, salt, kdfParams)
     let dataKey = state.dataKey
     let wrapped = { wrappedKey: previousMeta?.wrapped_key, iv: previousMeta?.wrapped_key_iv }
     if (!dataKey) {
       if (previousMeta?.wrapped_key && previousMeta?.wrapped_key_iv) {
-        dataKey = await cryptoVault.unwrapDataKey(previousMeta.wrapped_key, passphraseKey, previousMeta.wrapped_key_iv)
+        dataKey = await cryptoVault.unwrapDataKey(previousMeta.wrapped_key, recoveryKeyMaterial, previousMeta.wrapped_key_iv)
       } else {
         dataKey = await cryptoVault.generateDataKey()
-        wrapped = await cryptoVault.wrapDataKey(dataKey, passphraseKey)
+        wrapped = await cryptoVault.wrapDataKey(dataKey, recoveryKeyMaterial)
       }
     }
-    if (!wrapped.wrappedKey || !wrapped.iv) wrapped = await cryptoVault.wrapDataKey(dataKey, passphraseKey)
+    if (!wrapped.wrappedKey || !wrapped.iv) wrapped = await cryptoVault.wrapDataKey(dataKey, recoveryKeyMaterial)
     const encrypted = await cryptoVault.encryptVault(payload, dataKey)
     state.dataKey = dataKey
     return {
@@ -335,24 +374,24 @@
     }
   }
 
-  async function createVaultFromLocalData(passphrase) {
-    if (!String(passphrase || '').trim()) throw new Error('ต้องมี passphrase สำหรับเข้ารหัสข้อมูล')
-    const row = await buildEncryptedRow(passphrase, currentPayload(), state.vaultMeta)
+  async function createVaultFromLocalData(recoveryKey, options = {}) {
+    if (!String(recoveryKey || '').trim()) throw new Error('ต้องมีรหัสกู้ข้อมูลสำหรับปกป้องข้อมูล')
+    const row = await buildEncryptedRow(recoveryKey, currentPayload(), state.vaultMeta)
     const saved = await vaultRequest('POST', row)
     state.vaultMeta = Array.isArray(saved) ? saved[0] : row
     state.locked = false
     state.dirty = false
     render()
-    toastSafe('สร้าง secure cloud vault แล้ว', 'success')
+    if (!options.silent) toastSafe('บันทึกข้อมูลไว้แล้ว', 'success')
     return state.vaultMeta
   }
 
-  async function unlockVault(passphrase, options = {}) {
+  async function unlockVault(recoveryKey, options = {}) {
     const row = state.vaultMeta || await pullRemoteVault({ silent: true })
-    if (!row) return createVaultFromLocalData(passphrase)
+    if (!row) return createVaultFromLocalData(recoveryKey)
     const cryptoVault = root.MTCryptoVault
-    const passphraseKey = await cryptoVault.deriveKey(passphrase, row.salt, row.kdf_params)
-    const dataKey = await cryptoVault.unwrapDataKey(row.wrapped_key, passphraseKey, row.wrapped_key_iv)
+    const recoveryKeyMaterial = await cryptoVault.deriveKey(recoveryKey, row.salt, row.kdf_params)
+    const dataKey = await cryptoVault.unwrapDataKey(row.wrapped_key, recoveryKeyMaterial, row.wrapped_key_iv)
     const payload = await cryptoVault.decryptVault(row.ciphertext, dataKey, row.iv, row.checksum)
     if (!options.skipApply) {
       try { root.Storage?.createLocalBackup?.(root.App?._cloudState?.(), 'before-cloud-restore') } catch (_) {}
@@ -362,17 +401,17 @@
     state.locked = false
     state.vaultMeta = row
     render()
-    toastSafe('ปลดล็อก cloud sync แล้ว', 'success')
+    if (!options.silent) toastSafe('กู้ข้อมูลสำเร็จ', 'success')
     return payload
   }
 
-  async function pushEncryptedVault(passphrase = '') {
+  async function pushEncryptedVault(recoveryKey = '') {
     const remote = await pullRemoteVault({ silent: true })
     if (remote && state.vaultMeta && Number(remote.data_version || 0) > Number(state.vaultMeta.data_version || 0)) {
       return handleRemoteConflict(remote)
     }
-    if (!state.dataKey && !passphrase) throw new Error('ต้องปลดล็อก vault ก่อน sync')
-    const row = await buildEncryptedRow(passphrase, currentPayload(), remote || state.vaultMeta)
+    if (!state.dataKey && !recoveryKey) throw new Error('ต้องกรอกรหัสกู้ข้อมูลก่อนบันทึก')
+    const row = await buildEncryptedRow(recoveryKey, currentPayload(), remote || state.vaultMeta)
     const saved = await vaultRequest('POST', row)
     state.vaultMeta = Array.isArray(saved) ? saved[0] : row
     state.dirty = false
@@ -381,7 +420,7 @@
   }
 
   async function restoreRemoteWithCurrentKey(remote) {
-    if (!state.dataKey) throw new Error('ต้องปลดล็อก vault ก่อนดึงข้อมูล remote')
+    if (!state.dataKey) throw new Error('ต้องกรอกรหัสกู้ข้อมูลก่อนดึงข้อมูล')
     const cryptoVault = root.MTCryptoVault
     const payload = await cryptoVault.decryptVault(remote.ciphertext, state.dataKey, remote.iv, remote.checksum)
     applyPayload(payload)
@@ -393,7 +432,7 @@
   }
 
   async function handleRemoteConflict(remote) {
-    const message = 'พบข้อมูล cloud ใหม่กว่า กด OK เพื่อใช้ข้อมูล cloud หรือ Cancel เพื่อ export backup ข้อมูลในเครื่องก่อน'
+    const message = 'พบข้อมูลที่บันทึกไว้ใหม่กว่า กด OK เพื่อใช้ข้อมูลนั้น หรือ Cancel เพื่อสำรองข้อมูลในเครื่องก่อน'
     const useRemote = typeof root.confirm === 'function' ? root.confirm(message) : false
     if (useRemote) return restoreRemoteWithCurrentKey(remote)
     try {
@@ -401,10 +440,10 @@
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
       root.Storage?.triggerDownload?.(blob, `local-conflict-backup-${new Date().toISOString().slice(0, 10)}.json`)
     } catch (_) {}
-    throw new Error('Remote vault is newer. Local backup was offered before overwrite.')
+    throw new Error('พบข้อมูลที่บันทึกไว้ใหม่กว่า ระบบเสนอให้สำรองข้อมูลในเครื่องก่อน')
   }
 
-  async function syncNow({ direction = 'push', passphrase = '' } = {}) {
+  async function syncNow({ direction = 'push', recoveryKey = '' } = {}) {
     if (state.syncing) return false
     state.syncing = true
     render()
@@ -412,13 +451,13 @@
       if (direction === 'pull') {
         await pullRemoteVault({ silent: true })
         if (state.locked) {
-          if (!passphrase) throw new Error('ต้องใส่ passphrase เพื่อดึงข้อมูล cloud')
-          await unlockVault(passphrase)
+              if (!recoveryKey) throw new Error('ต้องใส่รหัสกู้ข้อมูล')
+              await unlockVault(recoveryKey)
         }
       } else {
-        await pushEncryptedVault(passphrase)
+        await pushEncryptedVault(recoveryKey)
       }
-      toastSafe('Cloud sync สำเร็จ', 'success')
+      toastSafe('บันทึกข้อมูลแล้ว', 'success')
       return true
     } finally {
       state.syncing = false
@@ -431,7 +470,7 @@
     state.dirty = true
     clearTimeout(state.debounceTimer)
     state.debounceTimer = setTimeout(() => {
-      syncNow({ direction: 'push' }).catch(error => toastSafe(`Cloud sync ล้มเหลว: ${error.message}`, 'warn'))
+          syncNow({ direction: 'push' }).catch(error => toastSafe(`บันทึกข้อมูลล้มเหลว: ${error.message}`, 'warn'))
     }, DIRTY_DEBOUNCE_MS)
     render()
   }
@@ -445,7 +484,7 @@
       document.body.appendChild(rootEl)
     }
     if (!configured()) {
-      rootEl.innerHTML = '<button class="mt-auth-btn" type="button" disabled>Cloud sync ยังไม่ตั้งค่า</button>'
+      rootEl.innerHTML = '<button class="mt-auth-btn" type="button" disabled>ยังไม่พร้อมบันทึกข้อมูล</button>'
       return
     }
     if (!state.session?.access_token) {
@@ -455,19 +494,52 @@
     const email = state.user?.email || 'Google account'
     const needsUnlock = needsVaultUnlock()
     const label = needsUnlock
-      ? (state.vaultMeta ? 'Unlock cloud vault' : 'Create cloud vault')
-      : (state.syncing ? 'Syncing...' : (state.dirty ? 'Sync pending' : 'Cloud sync'))
+      ? (state.vaultMeta ? 'กู้ข้อมูล' : 'กำลังบันทึกข้อมูล...')
+      : (state.syncing ? 'กำลังบันทึก...' : (state.dirty ? 'กำลังบันทึก...' : 'ข้อมูลบันทึกแล้ว'))
     rootEl.innerHTML = `<button class="mt-auth-btn ${needsUnlock ? 'warn' : ''}" type="button" data-mt-auth-action="${needsUnlock ? 'unlock' : 'sync'}">${label}</button><button class="mt-auth-link" type="button" data-mt-auth-action="logout">${email}</button>`
   }
 
   async function promptUnlock() {
-    const passphrase = prompt(state.vaultMeta ? 'ใส่ cloud sync passphrase' : 'ตั้ง cloud sync passphrase ใหม่')
-    if (!passphrase) return
+    const savedKey = readDeviceRecoveryKey()
+    const recoveryKey = savedKey || prompt('กรอกรหัสกู้ข้อมูล')
+    if (!recoveryKey) return
     try {
-      if (state.vaultMeta) await unlockVault(passphrase)
-      else await createVaultFromLocalData(passphrase)
+      if (state.vaultMeta) await unlockVault(recoveryKey)
+      else await ensureFirstRunBackup()
     } catch (error) {
-      toastSafe(`ปลดล็อกไม่สำเร็จ: ${error.message}`, 'error')
+      toastSafe(`กู้ข้อมูลไม่สำเร็จ: ${error.message}`, 'error')
+    }
+  }
+
+  function showRecoveryKeySheet(recoveryKey) {
+    document.getElementById('mt-recovery-key-sheet')?.remove()
+    const el = document.createElement('div')
+    el.id = 'mt-recovery-key-sheet'
+    el.className = 'mt-recovery-key-overlay'
+    el.innerHTML = `
+      <div class="mt-recovery-key-sheet" role="dialog" aria-modal="true" aria-labelledby="mt-recovery-key-title">
+        <div class="mt-recovery-key-header">
+          <h2 id="mt-recovery-key-title">เก็บรหัสนี้ไว้เพื่อกู้ข้อมูล</h2>
+        </div>
+        <p>ถ้าเปลี่ยนเครื่อง ล้าง browser หรือข้อมูลในเครื่องหาย ให้ใช้รหัสนี้เพื่อเอาข้อมูลกลับมา</p>
+        <div class="mt-recovery-key-code" id="mt-recovery-key-code">${esc(recoveryKey)}</div>
+        <div class="mt-recovery-key-note">แอปไม่เก็บรหัสนี้ไว้บน server เพื่อให้ข้อมูลของคุณเป็นส่วนตัว</div>
+        <div class="mt-recovery-key-actions">
+          <button class="btn btn-primary" type="button" data-mt-auth-action="copy-recovery-key">คัดลอกรหัส</button>
+          <button class="btn btn-secondary" type="button" data-mt-auth-action="close-recovery-key">ฉันจดไว้แล้ว</button>
+        </div>
+      </div>`
+    document.body.appendChild(el)
+  }
+
+  async function copyRecoveryKeyFromSheet() {
+    const key = document.getElementById('mt-recovery-key-code')?.textContent?.trim() || ''
+    if (!key) return
+    try {
+      await navigator.clipboard?.writeText?.(key)
+      toastSafe('คัดลอกรหัสแล้ว', 'success')
+    } catch (_) {
+      toastSafe('คัดลอกอัตโนมัติไม่ได้ ให้กดค้างเพื่อคัดลอกรหัส', 'warn')
     }
   }
 
@@ -478,7 +550,9 @@
       if (action === 'login') signInWithGoogle().catch(error => toastSafe(`เริ่ม Google login ไม่สำเร็จ: ${error.message}`, 'error'))
       if (action === 'logout') signOut()
       if (action === 'unlock') promptUnlock()
-      if (action === 'sync') syncNow({ direction: 'push' }).catch(error => toastSafe(`Cloud sync ล้มเหลว: ${error.message}`, 'error'))
+      if (action === 'sync') syncNow({ direction: 'push' }).catch(error => toastSafe(`บันทึกข้อมูลล้มเหลว: ${error.message}`, 'error'))
+      if (action === 'copy-recovery-key') copyRecoveryKeyFromSheet()
+      if (action === 'close-recovery-key') document.getElementById('mt-recovery-key-sheet')?.remove()
     })
   }
 
@@ -493,6 +567,7 @@
 
   const api = {
     createVaultFromLocalData,
+    ensureFirstRunBackup,
     initAuthSync,
     isGoogleSession,
     debugSnapshot,
