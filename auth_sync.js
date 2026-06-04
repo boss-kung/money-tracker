@@ -26,6 +26,7 @@
     uiBound: false,
     restoring: false,      // true while restoreSession() is in flight
     restoreError: null,    // last network/transient error during restore (non-null = show retry)
+    vaultConfirmedEmpty: false, // true only when pullRemoteVault succeeded AND Supabase returned no row
   }
 
   try { document.documentElement.classList.add('mt-auth-gated') } catch (_) {}
@@ -153,7 +154,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync17',
+      version: '2026.06.04-secure-sync18',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -166,6 +167,7 @@
       freshStartFlag: isFreshStart(),
       looksLikeDemo: currentDataLooksLikeDemo(),
       vaultVersion: state.vaultMeta?.data_version || null,
+      vaultConfirmedEmpty: Boolean(state.vaultConfirmedEmpty),
       dirty: Boolean(state.dirty),
       syncing: Boolean(state.syncing),
       accountMenuOpen: Boolean(state.accountMenuOpen),
@@ -363,6 +365,7 @@
     state.vaultMeta = null
     state.dirty = false
     state.syncing = false
+    state.vaultConfirmedEmpty = false
     storageSave({ refreshToken: '', expiresAt: 0, userId: '', email: '' })
     try { localStorage.removeItem(PKCE_VERIFIER_KEY) } catch (_) {}
     if (clearLocalData) {
@@ -431,10 +434,20 @@
       return state.vaultMeta
     }
 
-    // No vault yet — first time this user backs up.
+    // No vault in memory — but only proceed to create one when we have a confirmed
+    // network response that no vault exists on Supabase (vaultConfirmedEmpty = true).
+    //
+    // If pullRemoteVault failed earlier (network error), vaultConfirmedEmpty stays false.
+    // In that case we must NOT create a new vault — doing so would overwrite any existing
+    // vault with a fresh key, permanently invalidating the recovery key the user already has.
+    if (!state.vaultConfirmedEmpty) {
+      console.warn('[MTAuthSync] vault pull unconfirmed — skipping auto-create to prevent overwrite')
+      return null
+    }
+
     // Never back up demo/default data; wait until the user has entered real data.
     const looksLikeDemo = currentDataLooksLikeDemo()
-    console.debug('[MTAuthSync] no vault, looksLikeDemo:', looksLikeDemo)
+    console.debug('[MTAuthSync] no vault, vaultConfirmedEmpty:true, looksLikeDemo:', looksLikeDemo)
     clearFreshStart()
     if (looksLikeDemo) return null
 
@@ -474,10 +487,14 @@
       const row = Array.isArray(rows) ? rows[0] : null
       state.vaultMeta = row || null
       state.locked = row ? true : !state.dataKey
-      console.debug('[MTAuthSync] pullRemoteVault', { hasVault: !!row, version: row?.data_version })
+      // Mark that we have a confirmed network answer — safe to create a new vault if row is null.
+      state.vaultConfirmedEmpty = !row
+      console.debug('[MTAuthSync] pullRemoteVault', { hasVault: !!row, vaultConfirmedEmpty: state.vaultConfirmedEmpty, version: row?.data_version })
       if (!silent) render()
       return row
     } catch (err) {
+      // On failure we cannot confirm whether a vault exists — leave vaultConfirmedEmpty unchanged
+      // so ensureFirstRunBackup won't risk overwriting an existing vault with a new key.
       console.warn('[MTAuthSync] pullRemoteVault failed', err.message)
       toastSafe(`ดึงข้อมูลจาก cloud ไม่สำเร็จ: ${err.message}`, 'warn')
       return null
@@ -862,7 +879,7 @@
         <div class="mt-recovery-key-note">แอปไม่เก็บรหัสนี้ไว้บน server เพื่อให้ข้อมูลของคุณเป็นส่วนตัว</div>
         <div class="mt-recovery-key-actions">
           <button class="btn btn-primary" type="button" data-mt-auth-action="copy-recovery-key">คัดลอกรหัส</button>
-          <button class="btn btn-secondary" type="button" data-mt-auth-action="close-recovery-key">ฉันจดไว้แล้ว</button>
+          <button class="btn btn-secondary" type="button" data-mt-auth-action="close-recovery-key">ปิด</button>
         </div>
       </div>`
     document.body.appendChild(el)
