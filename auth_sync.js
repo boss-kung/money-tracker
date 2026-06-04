@@ -153,7 +153,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync16',
+      version: '2026.06.04-secure-sync17',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -276,11 +276,16 @@
     await waitForStorageBridge()
     await pullRemoteVault({ silent: true })
     await ensureFirstRunBackup()
-    // Case A: vault was applied but still shows demo data — the vault was originally
-    // created from sample data. Offer user a one-time reset so they can start fresh.
+    // Case A: vault applied but data is still demo → vault was originally created from sample data.
     if (state.vaultMeta && !needsVaultUnlock() && currentDataLooksLikeDemo()) {
       console.warn('[MTAuthSync] vault contains demo data — showing reset dialog')
       showDemoVaultWarning()
+    }
+    // Case B: vault exists on cloud but is still locked (new device, key mismatch, unlock failed).
+    // Prompt the user to enter their recovery key so data can be decrypted.
+    else if (state.vaultMeta && needsVaultUnlock()) {
+      console.warn('[MTAuthSync] vault still locked after login — showing recovery sheet')
+      showVaultLockedSheet()
     }
     toastSafe(`เข้าสู่ระบบสำเร็จ: ${state.user.email || ''}`, 'success')
     render()
@@ -406,13 +411,18 @@
       if (state.vaultMeta && savedKey && !state.dataKey) {
         const freshStart = isFreshStart()
         clearFreshStart()
-        console.debug('[MTAuthSync] unlocking vault', { skipApply: !freshStart })
+        // Apply vault data when: (a) fresh start after logout, OR (b) local data is still demo.
+        // Never skip-apply when local data is demo — that would leave the user staring at sample data.
+        const localIsDemo = currentDataLooksLikeDemo()
+        const skipApply = !freshStart && !localIsDemo
+        console.debug('[MTAuthSync] unlocking vault', { skipApply, freshStart, localIsDemo })
         try {
-          await unlockVault(savedKey, { skipApply: !freshStart, silent: true })
+          await unlockVault(savedKey, { skipApply, silent: true })
           console.debug('[MTAuthSync] vault unlocked', { stillDemo: currentDataLooksLikeDemo() })
         } catch (err) {
           console.warn('[MTAuthSync] unlockVault failed', err.message)
-          if (freshStart) toastSafe('กู้ข้อมูลอัตโนมัติไม่สำเร็จ — กรุณากรอกรหัสกู้ข้อมูลเองจากเมนูบัญชี', 'warn')
+          // Always surface the failure — silent errors leave the user confused with demo data.
+          toastSafe('กู้ข้อมูลอัตโนมัติไม่สำเร็จ — ไปที่เมนูบัญชีเพื่อกรอกรหัสกู้ข้อมูล', 'warn')
         }
       } else {
         console.debug('[MTAuthSync] skipping unlock', { hasSavedKey: !!savedKey, hasDataKey: !!state.dataKey })
@@ -429,8 +439,11 @@
     if (looksLikeDemo) return null
 
     const recoveryKey = generateRecoveryKey()
-    saveDeviceRecoveryKey(recoveryKey)
+    // IMPORTANT: save the key only AFTER the vault row is successfully written.
+    // If createVaultFromLocalData throws, the key stays unchanged so the next
+    // unlock attempt still works with the existing vault.
     const saved = await createVaultFromLocalData(recoveryKey, { silent: true })
+    saveDeviceRecoveryKey(recoveryKey)
     showRecoveryKeySheet(recoveryKey)
     return saved
   }
@@ -543,6 +556,39 @@
     state.dataKey = null
     state.locked = true
     console.debug('[MTAuthSync] vault deleted')
+  }
+
+  // Shown when a vault exists on cloud but couldn't be unlocked automatically —
+  // either a new device (no key saved here) or a key mismatch (stale/wrong key).
+  function showVaultLockedSheet() {
+    document.getElementById('mt-recovery-key-sheet')?.remove()
+    const el = document.createElement('div')
+    el.id = 'mt-recovery-key-sheet'
+    el.className = 'mt-recovery-key-overlay'
+    el.innerHTML = `
+      <div class="mt-recovery-key-sheet" role="dialog" aria-modal="true" aria-labelledby="mt-recovery-key-title">
+        <div class="mt-recovery-key-header">
+          <h2 id="mt-recovery-key-title">พบข้อมูลของคุณบน Cloud</h2>
+        </div>
+        <p>กรอกรหัสกู้ข้อมูลที่จดไว้เมื่อ login ครั้งแรก เพื่อดึงข้อมูลกลับมายังเครื่องนี้</p>
+        <input
+          id="mt-recovery-key-input"
+          class="mt-recovery-key-input form-input"
+          type="text"
+          placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          style="font-family:monospace;letter-spacing:2px;text-align:center;margin:12px 0"
+        />
+        <div class="mt-recovery-key-note">รหัสนี้แสดงครั้งแรกเมื่อ login — ถ้าไม่มีรหัสสามารถลบข้อมูลเก่าและเริ่มต้นใหม่ได้</div>
+        <div class="mt-recovery-key-actions" style="flex-direction:column;gap:8px">
+          <button class="btn btn-primary" type="button" data-mt-auth-action="enter-recovery-key-submit">ดึงข้อมูลกลับมา</button>
+          <button class="btn btn-secondary" type="button" data-mt-auth-action="reset-demo-vault" style="color:var(--expense)">ลบข้อมูลเก่าและเริ่มใหม่</button>
+        </div>
+      </div>`
+    document.body.appendChild(el)
+    setTimeout(() => el.querySelector('#mt-recovery-key-input')?.focus(), 50)
   }
 
   function showDemoVaultWarning() {
@@ -917,7 +963,11 @@
       if (action === 'close-recovery-key') document.getElementById('mt-recovery-key-sheet')?.remove()
       if (action === 'close-demo-vault-warning') document.getElementById('mt-demo-vault-warning')?.remove()
       if (action === 'reset-demo-vault') {
+        // Covers both: demo vault warning AND vault-locked sheet "start fresh" button
         document.getElementById('mt-demo-vault-warning')?.remove()
+        document.getElementById('mt-recovery-key-sheet')?.remove()
+        // Also clear any stale device recovery key so it doesn't interfere next time
+        try { localStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
         deleteVault()
           .then(() => {
             try { appStorage()?.reset?.() } catch (_) {}
@@ -933,7 +983,16 @@
         document.getElementById('mt-recovery-key-sheet')?.remove()
         unlockVault(key)
           .then(() => { saveDeviceRecoveryKey(key); toastSafe('กู้ข้อมูลสำเร็จ', 'success') })
-          .catch(err => toastSafe(`กู้ข้อมูลไม่สำเร็จ: ${err.message}`, 'error'))
+          .catch(err => {
+            // OperationError = wrong recovery key (WebCrypto AES-GCM tag mismatch)
+            const isWrongKey = err.name === 'OperationError' || (err.message || '').toLowerCase().includes('operation')
+            if (isWrongKey) {
+              toastSafe('รหัสกู้ข้อมูลไม่ถูกต้อง — กรุณากรอกรหัสที่จดไว้', 'error')
+              showVaultLockedSheet()
+            } else {
+              toastSafe(`กู้ข้อมูลไม่สำเร็จ: ${err.message}`, 'error')
+            }
+          })
       }
     })
     document.addEventListener('keydown', event => {
