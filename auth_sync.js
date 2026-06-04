@@ -471,8 +471,13 @@
     console.debug('[MTAuthSync] no vault, vaultConfirmedEmpty:true, looksLikeDemo:', looksLikeDemo)
     clearFreshStart()
     if (looksLikeDemo) {
-      // New user: wipe demo data so they start with a clean slate
+      // New user: wipe demo data so they start with a clean slate.
+      // After reset(), Storage.init() would fall back to DEFAULT_WALLETS (which contains demo
+      // wallet names) causing looksLikeDemo to stay true and triggering an infinite reload loop.
+      // Writing empty arrays first ensures Storage.init() reads [] instead of the demo defaults.
       try { appStorage()?.reset?.() } catch (_) {}
+      try { localStorage.setItem('mt_wallets', '[]') } catch (_) {}
+      try { localStorage.setItem('mt_transactions', '[]') } catch (_) {}
       try { location.reload() } catch (_) {}
       return null
     }
