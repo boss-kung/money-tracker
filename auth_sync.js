@@ -715,7 +715,7 @@
     throw new Error('พบข้อมูลที่บันทึกไว้ใหม่กว่า ระบบเสนอให้สำรองข้อมูลในเครื่องก่อน')
   }
 
-  async function syncNow({ direction = 'push', recoveryKey = '' } = {}) {
+  async function syncNow({ direction = 'push', recoveryKey = '', silent = false } = {}) {
     if (state.syncing) return false
     state.syncing = true
     render()
@@ -729,12 +729,18 @@
       } else {
         await pushEncryptedVault(recoveryKey)
       }
-      toastSafe('บันทึกข้อมูลแล้ว', 'success')
+      if (!silent) toastSafe('บันทึกข้อมูลแล้ว', 'success')
       return true
     } finally {
       state.syncing = false
       render()
     }
+  }
+
+  function autoSyncIfReady() {
+    if (!state.session?.access_token || state.locked || !state.dataKey || state.syncing) return
+    syncNow({ direction: 'push', silent: true })
+      .catch(err => toastSafe(`บันทึกข้อมูลอัตโนมัติล้มเหลว: ${err.message}`, 'warn'))
   }
 
   function markDirty() {
@@ -1041,6 +1047,12 @@
 
   async function initAuthSync() {
     bindUi()
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') autoSyncIfReady()
+    }, { passive: true })
+    window.addEventListener('pageshow', () => {
+      setTimeout(autoSyncIfReady, 1500)
+    }, { passive: true })
     if (!configured()) { renderAuthGate(); return state }
     // Show "กำลังเชื่อมต่อ..." while restoring so the full login gate
     // doesn't flash in the user's face on every app open.
