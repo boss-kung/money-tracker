@@ -15,12 +15,12 @@ const BOOL_KEYS = [
 Deno.serve(async req => {
   const options = handleOptions(req)
   if (options) return options
-  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
+  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405, req)
 
   try {
     const body = await req.json()
     const installId = String(body.installId || '').trim()
-    if (!installId) return jsonResponse({ error: 'installId is required' }, 400)
+    if (!installId) return jsonResponse({ error: 'installId is required' }, 400, req)
 
     const prefs = body.preferences && typeof body.preferences === 'object' ? body.preferences : {}
     const row: Record<string, unknown> = {
@@ -40,8 +40,8 @@ Deno.serve(async req => {
       .upsert(row, { onConflict: 'install_id' })
     if (error) throw error
 
-    return jsonResponse({ ok: true })
+    return jsonResponse({ ok: true }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 500)
+    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 500, req)
   }
 })

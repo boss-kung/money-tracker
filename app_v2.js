@@ -22558,6 +22558,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div style="font-size:40px">💰</div>
         <div style="font-size:16px;font-weight:700;margin-top:8px">Financial Tracker</div>
         <div style="font-size:12px;color:var(--muted);margin-top:4px" onclick="App._tapDemoEntry?.()" title="เวอร์ชัน">${esc(window.MT_APP_VERSION || (typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''))}</div>
+        <div style="margin-top:10px"><a href="./privacy.html" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--muted);text-decoration:underline;text-underline-offset:2px">นโยบายความเป็นส่วนตัว</a></div>
       </div>`
 
     content.innerHTML = `<div style="padding:0px 16px 30px 16px">

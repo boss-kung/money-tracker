@@ -9,16 +9,16 @@ type WebPushSubscription = {
 Deno.serve(async req => {
   const options = handleOptions(req)
   if (options) return options
-  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
+  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405, req)
 
   try {
     const body = await req.json()
     const installId = String(body.installId || '').trim()
-    if (!installId) return jsonResponse({ error: 'installId is required' }, 400)
+    if (!installId) return jsonResponse({ error: 'installId is required' }, 400, req)
 
     const pushSubscription = body.pushSubscription as WebPushSubscription | null
     if (body.enabled !== false && (!pushSubscription?.endpoint || !pushSubscription?.keys?.p256dh)) {
-      return jsonResponse({ error: 'pushSubscription is required when enabling notifications' }, 400)
+      return jsonResponse({ error: 'pushSubscription is required when enabling notifications' }, 400, req)
     }
 
     const userId = await getAuthenticatedUserId(req)
@@ -52,8 +52,8 @@ Deno.serve(async req => {
         hide_amounts_in_notification: Boolean(body.hideAmounts),
       }, { onConflict: 'install_id', ignoreDuplicates: false })
 
-    return jsonResponse({ ok: true })
+    return jsonResponse({ ok: true }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 500)
+    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 500, req)
   }
 })

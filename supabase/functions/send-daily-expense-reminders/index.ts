@@ -27,7 +27,7 @@ function bangkokDate() {
 Deno.serve(async req => {
   const options = handleOptions(req)
   if (options) return options
-  if (!['GET', 'POST'].includes(req.method)) return jsonResponse({ error: 'Method not allowed' }, 405)
+  if (!['GET', 'POST'].includes(req.method)) return jsonResponse({ error: 'Method not allowed' }, 405, req)
 
   const supabase = adminClient()
   const today = bangkokDate()
@@ -126,8 +126,8 @@ Deno.serve(async req => {
       }
     }
 
-    return jsonResponse({ ok: true, date: today, sent, skipped, failures })
+    return jsonResponse({ ok: true, date: today, sent, skipped, failures }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, 500)
+    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, 500, req)
   }
 })

@@ -100,12 +100,12 @@ function normalizeRule(rule: CustomRule, installId: string, userId: string | nul
 Deno.serve(async req => {
   const options = handleOptions(req)
   if (options) return options
-  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405)
+  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405, req)
 
   try {
     const body = await req.json()
     const installId = cleanText(body.installId, 120)
-    if (!installId) return jsonResponse({ error: 'installId is required' }, 400)
+    if (!installId) return jsonResponse({ error: 'installId is required' }, 400, req)
     const userId = await getAuthenticatedUserId(req)
 
     const rules = Array.isArray(body.rules) ? body.rules : []
@@ -127,11 +127,8 @@ Deno.serve(async req => {
       if (error) throw error
     }
 
-    return jsonResponse({
-      ok: true,
-      synced: rows.length,
-    })
+    return jsonResponse({ ok: true, synced: rows.length }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, 500)
+    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, 500, req)
   }
 })

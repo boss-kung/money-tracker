@@ -42,7 +42,7 @@
         debugBoot,
         noServiceWorker: params.get('nosw') === '1',
         noNotifications: params.get('nonoti') === '1',
-        noAppLock: params.get('noapplock') === '1',
+        noAppLock: ['localhost', '127.0.0.1', ''].includes(location.hostname) && params.get('noapplock') === '1',
         noFinanceRebuild: params.get('noFinanceRebuild') === '1',
       }
       const log = []

@@ -21,11 +21,11 @@ type SnapshotRow = {
   snapshot_date: string
   today_tx_count: number
   last_tx_date: string | null
-  upcoming_bills: Array<Record<string, unknown>>
-  credit_due: Array<Record<string, unknown>>
-  budget_alerts: Array<{ pct: number; over: boolean; categoryId: string; label: string }>
-  recurring_due: Array<Record<string, unknown>>
-  privileges_expiring: Array<{ id: string; daysLeft: number }>
+  upcoming_bills: Array<{ daysLeft: number }>
+  credit_due: Array<{ daysLeft: number }>
+  budget_alerts: Array<{ pct: number; over: boolean }>
+  recurring_due: Array<{ daysLeft: number }>
+  privileges_expiring: Array<{ daysLeft: number }>
   last_exported_at: string | null
 }
 
@@ -147,7 +147,7 @@ function shouldSend(rule: RuleRow, snapshot: SnapshotRow | undefined, now = bang
 Deno.serve(async req => {
   const options = handleOptions(req)
   if (options) return options
-  if (!['GET', 'POST'].includes(req.method)) return jsonResponse({ error: 'Method not allowed' }, 405)
+  if (!['GET', 'POST'].includes(req.method)) return jsonResponse({ error: 'Method not allowed' }, 405, req)
 
   const supabase = adminClient()
 
@@ -165,7 +165,7 @@ Deno.serve(async req => {
         .filter(d => d.push_subscription?.endpoint)
         .map(device => String(device.install_id))
     )]
-    if (!installIds.length) return jsonResponse({ ok: true, sent: 0, skipped: 0, failures: [] })
+    if (!installIds.length) return jsonResponse({ ok: true, sent: 0, skipped: 0, failures: [] }, 200, req)
 
     const { data: rules, error: rulesError } = await supabase
       .from('mt_notification_rules')
@@ -260,8 +260,8 @@ Deno.serve(async req => {
       sent += sentForRule
     }
 
-    return jsonResponse({ ok: true, sent, skipped, failures })
+    return jsonResponse({ ok: true, sent, skipped, failures }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, 500)
+    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, 500, req)
   }
 })

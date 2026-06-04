@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; font-src 'self';">
+  <title>นโยบายความเป็นส่วนตัว — Financial Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px 20px 60px;
+      max-width: 720px;
+      margin-inline: auto;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.65;
+      color: #0f172a;
+      background: #f8fafc;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0f172a; color: #e2e8f0; }
+      a { color: #60a5fa; }
+      .card { background: #1e293b; border-color: #334155; }
+      h2 { border-color: #334155; }
+    }
+    .back { display:inline-flex; align-items:center; gap:6px; color:#2563eb; text-decoration:none; font-size:14px; margin-bottom:24px; }
+    h1 { font-size: clamp(22px, 5vw, 30px); font-weight: 800; margin: 0 0 6px; }
+    .meta { font-size: 13px; color: #64748b; margin-bottom: 32px; }
+    h2 { font-size: 18px; font-weight: 700; margin: 32px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
+    h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+    p, ul, ol { margin: 0 0 14px; }
+    ul, ol { padding-left: 22px; }
+    li { margin-bottom: 6px; }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 12px;
+    }
+    .highlight { background: #eff6ff; border-left: 3px solid #2563eb; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 14px; }
+    @media (prefers-color-scheme: dark) { .highlight { background: #1e3a5f; border-color: #3b82f6; } }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 16px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
+    th { font-weight: 600; background: #f1f5f9; }
+    @media (prefers-color-scheme: dark) { th { background: #1e293b; } td, th { border-color: #334155; } }
+    .footer { margin-top: 48px; font-size: 13px; color: #64748b; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <a class="back" href="./index.html">← กลับแอป</a>
+
+  <h1>นโยบายความเป็นส่วนตัว</h1>
+  <p class="meta">Privacy Policy &nbsp;·&nbsp; อัปเดตล่าสุด: มิถุนายน 2026</p>
+
+  <div class="highlight">
+    <strong>สรุปสั้น ๆ:</strong> ข้อมูลการเงินของคุณถูกเข้ารหัสบนอุปกรณ์ก่อนบันทึกบน cloud — เราอ่านไม่ได้ ข้อมูลที่แอปเก็บในเซิร์ฟเวอร์มีเพียง email สำหรับ login และสัญญาณตัวเลขสำหรับการแจ้งเตือน (ไม่มีชื่อรายการ จำนวนเงิน หรือรายละเอียดส่วนตัว)
+  </div>
+
+  <h2>1. ข้อมูลที่เก็บรวบรวม</h2>
+
+  <h3>ข้อมูลที่จำเป็นสำหรับการเข้าสู่ระบบ</h3>
+  <ul>
+    <li>Email address และ Google account ID (ผ่าน Google OAuth เท่านั้น)</li>
+    <li>ข้อมูลนี้ใช้เพื่อระบุตัวตนและเชื่อมกับ vault ที่เข้ารหัสของคุณ</li>
+  </ul>
+
+  <h3>ข้อมูล vault (ข้อมูลการเงิน)</h3>
+  <ul>
+    <li>ข้อมูลทุกรายการที่คุณบันทึก (รายรับ-รายจ่าย กระเป๋า งบประมาณ ฯลฯ) จะถูก <strong>เข้ารหัสด้วย AES-256-GCM บนอุปกรณ์ของคุณ</strong> ก่อนส่งขึ้น cloud</li>
+    <li>เราไม่สามารถอ่านข้อมูลการเงินของคุณได้ — รหัสถอดรหัสอยู่กับคุณเท่านั้น</li>
+    <li>ถ้าคุณไม่เปิดใช้ sync ข้อมูลจะอยู่บนอุปกรณ์ของคุณเท่านั้น</li>
+  </ul>
+
+  <h3>ข้อมูลสำหรับการแจ้งเตือน (ถ้าเปิดใช้)</h3>
+  <ul>
+    <li>Push subscription token และ device ID (ไม่มีชื่อหรือข้อมูลส่วนตัว)</li>
+    <li>Platform, browser name, timezone — เพื่อส่งการแจ้งเตือนถูกเวลา</li>
+    <li>สัญญาณตัวเลขเท่านั้น เช่น "มีบิล X วัน" หรือ "ใช้งบถึง Y%" — <strong>ไม่มีชื่อรายการ จำนวนเงิน หรือร้านค้า</strong></li>
+    <li>App version และวันที่ export ล่าสุด</li>
+  </ul>
+
+  <h2>2. วัตถุประสงค์ในการใช้ข้อมูล</h2>
+  <table>
+    <tr><th>ข้อมูล</th><th>ใช้เพื่อ</th></tr>
+    <tr><td>Email / Google ID</td><td>ยืนยันตัวตน, เชื่อม vault</td></tr>
+    <tr><td>Vault (encrypted)</td><td>Sync ข้ามอุปกรณ์ (ข้อมูลอ่านไม่ได้จากฝั่งเรา)</td></tr>
+    <tr><td>Push token</td><td>ส่งการแจ้งเตือนที่คุณตั้งค่าไว้</td></tr>
+    <tr><td>สัญญาณตัวเลข</td><td>ตรวจสอบว่าควรส่งการแจ้งเตือนหรือไม่</td></tr>
+  </table>
+  <p>เราไม่ขาย แชร์ หรือนำข้อมูลของคุณไปใช้เพื่อโฆษณาหรือวัตถุประสงค์อื่น</p>
+
+  <h2>3. บริการบุคคลที่สาม</h2>
+  <table>
+    <tr><th>บริการ</th><th>วัตถุประสงค์</th><th>ข้อมูลที่แชร์</th></tr>
+    <tr><td><a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase</a></td><td>Authentication, encrypted cloud storage</td><td>Email, encrypted vault blob</td></tr>
+    <tr><td><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google OAuth</a></td><td>Sign-in</td><td>Email, Google ID</td></tr>
+    <tr><td><a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase / FCM</a></td><td>Push notifications</td><td>Push subscription token</td></tr>
+    <tr><td>CoinGecko / CoinCap</td><td>ราคาสินทรัพย์ดิจิทัล</td><td>รหัสสินทรัพย์ (ไม่มีข้อมูลส่วนตัว)</td></tr>
+    <tr><td>Frankfurter API</td><td>อัตราแลกเปลี่ยนเงิน</td><td>รหัสสกุลเงิน (ไม่มีข้อมูลส่วนตัว)</td></tr>
+    <tr><td>Anthropic Claude API</td><td>ค้นหาโปรโมชันบัตรเครดิต</td><td>ชื่อธนาคาร, เดือนที่ค้นหา (ไม่มีข้อมูลส่วนตัว)</td></tr>
+  </table>
+
+  <h2>4. การเก็บรักษาข้อมูล</h2>
+  <ul>
+    <li>ข้อมูล vault เก็บไว้จนกว่าคุณจะลบบัญชีหรือลบ vault</li>
+    <li>ข้อมูลอุปกรณ์สำหรับการแจ้งเตือนจะถูกลบเมื่อคุณยกเลิกการแจ้งเตือนหรือลบบัญชี</li>
+    <li>ข้อมูลบนอุปกรณ์ (localStorage) อยู่ภายใต้การควบคุมของคุณ — ลบได้ผ่าน "รีเซ็ตข้อมูลทั้งหมด" ในการตั้งค่า หรือลบ browser data</li>
+  </ul>
+
+  <h2>5. สิทธิ์ของคุณ (PDPA / สิทธิ์ผู้ใช้)</h2>
+  <div class="card">
+    <h3 style="margin-top:0">📤 ส่งออกข้อมูล (Data Portability)</h3>
+    <p>ใช้ฟีเจอร์ <strong>"ส่งออกข้อมูล (JSON)"</strong> ในแท็บตั้งค่าของแอป เพื่อดาวน์โหลดข้อมูลทั้งหมดของคุณในรูปแบบ JSON ที่อ่านได้</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">🗑️ ลบข้อมูล (Right to Erasure)</h3>
+    <p>กด <strong>"รีเซ็ตข้อมูลทั้งหมด"</strong> ในแท็บตั้งค่า เพื่อลบข้อมูลทั้งหมดบนอุปกรณ์ และลบ vault บน cloud ผ่านเมนูบัญชี (ลบ vault) หรือติดต่อเราเพื่อขอลบข้อมูลทั้งหมด</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">👁️ เข้าถึงข้อมูล (Right of Access)</h3>
+    <p>ข้อมูลการเงินทั้งหมดอยู่ในอุปกรณ์ของคุณและใน vault ที่คุณถอดรหัสได้เอง ใช้ฟีเจอร์ Export เพื่อดูข้อมูลทั้งหมด</p>
+  </div>
+
+  <h2>6. ความปลอดภัย</h2>
+  <ul>
+    <li>ข้อมูลการเงินเข้ารหัส AES-256-GCM ก่อนออกจากอุปกรณ์</li>
+    <li>Key derivation ใช้ PBKDF2 (SHA-256, 310,000 iterations)</li>
+    <li>รหัสกู้ข้อมูล (Recovery Key) เก็บบนอุปกรณ์เท่านั้น — เราไม่มีสำเนา</li>
+    <li>การรับส่งข้อมูลทั้งหมดผ่าน HTTPS</li>
+  </ul>
+
+  <h2>7. คุกกี้และ Local Storage</h2>
+  <p>แอปนี้ไม่ใช้คุกกี้ แต่ใช้ <code>localStorage</code> และ <code>sessionStorage</code> ของเบราว์เซอร์เพื่อบันทึกข้อมูลการเงินและการตั้งค่าบนอุปกรณ์ของคุณ ข้อมูลเหล่านี้ไม่ถูกส่งไปยังเซิร์ฟเวอร์ยกเว้นในรูปแบบที่เข้ารหัสแล้ว</p>
+
+  <h2>8. ข้อมูลเด็กและผู้เยาว์</h2>
+  <p>แอปนี้ไม่ได้ออกแบบมาสำหรับเด็กอายุต่ำกว่า 13 ปี เราไม่เก็บข้อมูลของเด็กโดยตั้งใจ</p>
+
+  <h2>9. การเปลี่ยนแปลงนโยบาย</h2>
+  <p>หากมีการเปลี่ยนแปลงสำคัญ เราจะแสดงการแจ้งเตือนในแอปและอัปเดตวันที่ด้านบน</p>
+
+  <h2>10. ติดต่อเรา</h2>
+  <p>หากมีคำถามเกี่ยวกับข้อมูลส่วนตัวหรือต้องการใช้สิทธิ์ข้างต้น กรุณาเปิด Issue ที่ GitHub repository ของโปรเจคนี้</p>
+
+  <div class="footer">
+    <p>Financial Tracker &nbsp;·&nbsp; <a href="./index.html">กลับแอป</a></p>
+  </div>
+
+</body>
+</html>
