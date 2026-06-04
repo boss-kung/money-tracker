@@ -878,7 +878,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.06.03-r69'
+const APP_VERSION = '2026.06.04-r70'
 window.MT_APP_VERSION = APP_VERSION
 window.MTBoot?.mark?.('app_v2.version', { version: APP_VERSION })
 

@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.06.03-r69'
+const APP_VERSION = '2026.06.04-r70'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 const CORE_NETWORK_TIMEOUT_MS = 900
@@ -46,9 +46,9 @@ function isSameOrigin(request) {
 }
 
 async function putIfUsable(cache, request, response) {
-  if (!response || !response.ok) return response
+  if (!response || !response.ok) return null  // null so callers fall back to cache on 5xx/4xx
   const type = response.type
-  if (type && type !== 'basic' && type !== 'default') return response
+  if (type && type !== 'basic' && type !== 'default') return null
   await cache.put(request, response.clone())
   return response
 }
@@ -79,8 +79,9 @@ async function networkFirst(request, fallbackUrl = '') {
   const cache = await caches.open(CACHE_NAME)
   try {
     const response = await fetch(request)
-    await putIfUsable(cache, request, response)
-    return response
+    const saved = await putIfUsable(cache, request, response)
+    // Fall back to cache on 5xx/4xx so a transient server error never breaks the app.
+    return saved || (await matchCached(request, fallbackUrl)) || response
   } catch (_) {
     return (await matchCached(request, fallbackUrl)) || Response.error()
   }
@@ -89,6 +90,8 @@ async function networkFirst(request, fallbackUrl = '') {
 async function networkFirstWithTimeout(request, fallbackUrl = '', timeoutMs = CORE_NETWORK_TIMEOUT_MS) {
   const cache = await caches.open(CACHE_NAME)
   const cached = await matchCached(request, fallbackUrl)
+  // putIfUsable returns null for non-ok responses, so a 503 resolves as null
+  // and the || cached fallback below kicks in correctly.
   const fresh = fetch(request)
     .then(response => putIfUsable(cache, request, response))
     .catch(() => null)
