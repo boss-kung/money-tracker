@@ -23,7 +23,9 @@ test('add transaction category grid moves the active category to the front on re
   assert.match(body, /allCats\.filter\(c\s*=>\s*c\.id\s*!==\s*_frontCatId\)/)
 })
 
-test('add transaction other-category tail sorting does not override the active category', () => {
-  assert.match(appSource, /const hasActiveCat\s*=\s*!!\(S\.tx\?\.categoryId\)/)
-  assert.match(appSource, /if\s*\(!hasSuggestion\s*&&\s*!hasActiveCat\)/)
+test('add transaction keeps other category last unless other is the active category', () => {
+  assert.match(appSource, /const isOtherActive\s*=\s*Array\.from\(grid\.children\)\.some/)
+  assert.match(appSource, /btn\.dataset\.catid\s*===\s*S\.tx\?\.categoryId/)
+  assert.match(appSource, /lbl\s*===\s*'อื่น'\s*\|\|\s*lbl\s*===\s*'อื่นๆ'/)
+  assert.match(appSource, /if\s*\(!hasSuggestion\s*&&\s*!isOtherActive\)/)
 })

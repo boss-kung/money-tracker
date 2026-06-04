@@ -21901,16 +21901,19 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       const isFirstEntrance = !document.getElementById('cat-grid')
       _prev?.(...args)
       try {
-        // #2: "อื่น" stays last unless suggestion/active category pins it first
+        // #2: "อื่น" stays last unless it is the active category
         const grid = document.getElementById('cat-grid')
         if (grid) {
           const hasSuggestion = !!(S.tx?.txSuggestedFields?.categoryId)
-          const hasActiveCat = !!(S.tx?.categoryId)
-          if (!hasSuggestion && !hasActiveCat) {
-            const otherBtn = Array.from(grid.children).find(b => {
-              const lbl = b.querySelector('span:last-child')?.textContent?.trim()
-              return lbl === 'อื่น' || lbl === 'อื่นๆ'
-            })
+          const otherBtn = Array.from(grid.children).find(b => {
+            const lbl = b.querySelector('span:last-child')?.textContent?.trim()
+            return lbl === 'อื่น' || lbl === 'อื่นๆ'
+          })
+          const isOtherActive = Array.from(grid.children).some(btn => {
+            const lbl = btn.querySelector('span:last-child')?.textContent?.trim()
+            return btn.dataset.catid === S.tx?.categoryId && (lbl === 'อื่น' || lbl === 'อื่นๆ')
+          })
+          if (!hasSuggestion && !isOtherActive) {
             if (otherBtn) grid.appendChild(otherBtn)
           }
         }
