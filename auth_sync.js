@@ -769,8 +769,7 @@
       innerHtml = `
         <div class="mt-auth-gate-panel" role="status" aria-labelledby="mt-auth-gate-title">
           <div class="mt-auth-gate-mark">💰</div>
-          <h1 id="mt-auth-gate-title">กำลังเชื่อมต่อ...</h1>
-          <p style="opacity:.6">กำลังกู้เซสชันของคุณ</p>
+          <h1 id="mt-auth-gate-title">กำลังเชื่อมต่อบัญชี...</h1>
         </div>`
     } else if (hasNetworkError) {
       // Network failed but token is preserved — show retry instead of full sign-in
@@ -788,8 +787,8 @@
       innerHtml = `
         <div class="mt-auth-gate-panel" role="dialog" aria-modal="true" aria-labelledby="mt-auth-gate-title">
           <div class="mt-auth-gate-mark">💰</div>
-          <h1 id="mt-auth-gate-title">เข้าสู่ระบบเพื่อใช้แอป</h1>
-          <p>ข้อมูลการเงินของคุณจะถูกซ่อนไว้จนกว่าจะเข้าสู่ระบบด้วยบัญชี Google</p>
+          <h1 id="mt-auth-gate-title">Financial Tracker</h1></br><h1 id="mt-auth-gate-title">กรุณาเข้าสู่ระบบ</h1>
+          <p>ข้อมูลการเงินของคุณจะถูกซ่อนไว้</br>จนกว่าจะเข้าสู่ระบบด้วยบัญชี Google</p>
           <button class="btn btn-primary" type="button" data-mt-auth-action="login">Sign in with Google</button>
         </div>`
     }
