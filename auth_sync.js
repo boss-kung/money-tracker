@@ -125,7 +125,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync6',
+      version: '2026.06.04-secure-sync7',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -233,7 +233,7 @@
     state.session = session
     state.user = await fetchUser(session)
     if (!isGoogleSession(session, state.user)) {
-      await signOut()
+      await signOut({ clearLocalData: false })
       throw new Error('บัญชีนี้ไม่ได้เข้าสู่ระบบผ่าน Google')
     }
     storageSave({
@@ -277,14 +277,31 @@
     location.href = url.toString()
   }
 
-  async function signOut() {
+  async function signOut({ clearLocalData = true } = {}) {
+    clearTimeout(state.debounceTimer)
     state.session = null
     state.user = null
     state.locked = true
     state.dataKey = null
     state.vaultMeta = null
+    state.dirty = false
+    state.syncing = false
     storageSave({ refreshToken: '', expiresAt: 0, userId: '', email: '' })
-    render()
+    try { localStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
+    try { localStorage.removeItem(PKCE_VERIFIER_KEY) } catch (_) {}
+    if (clearLocalData) {
+      try { root.Storage?.reset?.() } catch (_) {}
+    }
+    document.documentElement.classList.add('mt-auth-gated')
+    renderAuthGate()
+    try { location.reload() } catch (_) { render() }
+  }
+
+  function confirmSignOut() {
+    const message = 'ออกจากระบบ?\n\nข้อมูลบน cloud จะยังอยู่กับบัญชี Google นี้ แต่ข้อมูลในเครื่องนี้จะถูกซ่อนและล้างออกเพื่อไม่ให้ปนกับบัญชีอื่น'
+    const ok = typeof root.confirm === 'function' ? root.confirm(message) : true
+    if (!ok) return
+    signOut({ clearLocalData: true }).catch(error => toastSafe(`ออกจากระบบไม่สำเร็จ: ${error.message}`, 'error'))
   }
 
   async function ensureFirstRunBackup() {
@@ -527,7 +544,7 @@
         </div>
         <div class="s-arrow">›</div>
       </div>
-      <div class="settings-row" onclick="MTAuthSync.signOut()">
+      <div class="settings-row" data-mt-auth-action="confirm-sign-out">
         <div class="s-icon">🚪</div>
         <div class="s-label">ออกจากระบบ</div>
         <div class="s-arrow">›</div>
@@ -592,7 +609,8 @@
       const action = event.target?.closest?.('[data-mt-auth-action]')?.dataset?.mtAuthAction
       if (!action) return
       if (action === 'login') signInWithGoogle().catch(error => toastSafe(`เริ่ม Google login ไม่สำเร็จ: ${error.message}`, 'error'))
-      if (action === 'logout') signOut()
+      if (action === 'logout') confirmSignOut()
+      if (action === 'confirm-sign-out') confirmSignOut()
       if (action === 'unlock') promptUnlock()
       if (action === 'sync') syncNow({ direction: 'push' }).catch(error => toastSafe(`บันทึกข้อมูลล้มเหลว: ${error.message}`, 'error'))
       if (action === 'copy-recovery-key') copyRecoveryKeyFromSheet()
@@ -614,6 +632,7 @@
     ensureFirstRunBackup,
     initAuthSync,
     isGoogleSession,
+    confirmSignOut,
     debugSnapshot,
     markDirty,
     pullRemoteVault,

@@ -56,3 +56,17 @@ test('auth sync gates app data before sign in and moves account controls into se
   assert.match(css, /#mt-auth-gate/)
   assert.doesNotMatch(source, /id = 'mt-auth-sync'|id="mt-auth-sync"|className = 'mt-auth-sync'/)
 })
+
+test('sign out clears local account data before returning to auth gate', () => {
+  const source = fs.readFileSync(path.join(root, 'auth_sync.js'), 'utf8')
+
+  assert.match(source, /function confirmSignOut\(\)/)
+  assert.match(source, /async function signOut\(\{ clearLocalData = true \} = \{\}\)/)
+  assert.match(source, /clearTimeout\(state\.debounceTimer\)/)
+  assert.match(source, /localStorage\.removeItem\(DEVICE_RECOVERY_KEY\)/)
+  assert.match(source, /localStorage\.removeItem\(PKCE_VERIFIER_KEY\)/)
+  assert.match(source, /root\.Storage\?\.reset\?\.\(\)/)
+  assert.match(source, /document\.documentElement\.classList\.add\('mt-auth-gated'\)/)
+  assert.match(source, /location\.reload\(\)/)
+  assert.match(source, /data-mt-auth-action="confirm-sign-out"/)
+})
