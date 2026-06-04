@@ -151,7 +151,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync12',
+      version: '2026.06.04-secure-sync13',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -274,12 +274,6 @@
     toastSafe('กำลังดึงข้อมูลจาก cloud...', 'info')
     await pullRemoteVault({ silent: true })
     await ensureFirstRunBackup()
-    // If vault exists but is still locked (e.g. device key was wiped on logout),
-    // prompt for recovery key so the user gets their real data instead of defaults.
-    if (state.vaultMeta && needsVaultUnlock()) {
-      toastSafe('พบข้อมูลของคุณบน cloud — กรุณากรอกรหัสกู้ข้อมูล', 'warn')
-      await promptUnlock()
-    }
     toastSafe(`เข้าสู่ระบบสำเร็จ: ${state.user.email || ''}`, 'success')
     render()
     return state
@@ -324,7 +318,6 @@
     state.dirty = false
     state.syncing = false
     storageSave({ refreshToken: '', expiresAt: 0, userId: '', email: '' })
-    try { localStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
     try { localStorage.removeItem(PKCE_VERIFIER_KEY) } catch (_) {}
     if (clearLocalData) {
       try { appStorage()?.reset?.() } catch (_) {}
@@ -346,7 +339,13 @@
     if (state.vaultMeta || state.dataKey) {
       const savedKey = readDeviceRecoveryKey()
       if (state.vaultMeta && savedKey && !state.dataKey) {
-        try { await unlockVault(savedKey, { skipApply: true, silent: true }) } catch (_) {}
+        // Apply cloud data when local storage has only defaults (e.g. after logout+reset).
+        // Keep local data (skipApply: true) only when it looks real, to avoid overwriting
+        // unsynchronised local changes on a plain page refresh.
+        const localIsDefaults = typeof root.App?._looksLikeDemoData === 'function'
+          ? root.App._looksLikeDemoData()
+          : false
+        try { await unlockVault(savedKey, { skipApply: !localIsDefaults, silent: true }) } catch (_) {}
       }
       return state.vaultMeta
     }
