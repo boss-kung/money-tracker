@@ -1981,6 +1981,19 @@ function init() {
   setupConnectivityWatch()
   window.App = App
   try { window.MTAuthSync?.initAuthSync?.() } catch (err) { console.warn('auth sync init failed', err) }
+
+  // Auto-sync market prices on app open if stale (silent — no toast on success)
+  requestAnimationFrame(() => {
+    try { App._autoSyncMarketIfStale?.() } catch (_) {}
+  })
+
+  // Auto-sync when switching back to the app from background
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      try { App._autoSyncMarketIfStale?.() } catch (_) {}
+    }
+  }, { passive: true })
+
   window.MTBoot?.mark?.('app.init.done', { duration: Math.round((performance.now() - initStart) * 10) / 10 })
 }
 
@@ -3341,7 +3354,7 @@ App.render();
   const esc = App._esc
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const numFmt = (n, digits = 4) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: digits })
-  const investTypes = new Set(['gold','crypto','fcd'])
+  const investTypes = new Set(['gold','fcd'])
   const AURORA_GOLD_URL = 'https://www.aurora.co.th/price/gold_pricelist'
 
   function isInvestType(type) { return investTypes.has(type) }
@@ -3354,13 +3367,11 @@ App.render();
   }
   function marketUrlFor(type, w) {
     if (type === 'gold') return AURORA_GOLD_URL
-    if (type === 'crypto') return 'https://www.coingecko.com/'
     if (type === 'fcd') return 'https://www.frankfurter.app/'
     return '#'
   }
   function marketSourceLabel(type) {
     if (type === 'gold') return 'Aurora รับซื้อรูปพรรณ'
-    if (type === 'crypto') return 'CoinGecko'
     if (type === 'fcd') return 'Frankfurter FX'
     return 'ราคาจริง'
   }
@@ -3419,12 +3430,12 @@ App.render();
 
     const w = S.editingWalletId ? S.wallets.find(x => x.id === S.editingWalletId) : null
     if (!investBox.querySelector('#wf-units')) {
-      investBox.insertAdjacentHTML('beforeend', `<div class="form-group"><label class="form-label">จำนวน Asset ที่มี</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${esc(w?.units || '')}" placeholder="เช่น 1.5, 0.05, 1000"></div><div class="form-group"><label class="form-label">ราคาสำรองต่อหน่วย (บาท)</label><input class="form-input" type="number" step="0.01" id="wf-manual-price" value="${esc(w?.manualPrice || '')}" placeholder="ใช้เมื่อดึงราคาจริงไม่ได้"></div>`)
+      investBox.insertAdjacentHTML('beforeend', `<div class="form-group"><label class="form-label">จำนวน Asset ที่มี</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${esc(w?.units || '')}" placeholder="เช่น 1, 2.5, 1000"></div><div class="form-group"><label class="form-label">ราคาสำรองต่อหน่วย (บาท)</label><input class="form-input" type="number" step="0.01" id="wf-manual-price" value="${esc(w?.manualPrice || '')}" placeholder="ใช้เมื่อดึงราคาจริงไม่ได้"></div>`)
     }
 
     const units = document.getElementById('wf-units')
     if (units) {
-      units.placeholder = type === 'gold' ? 'เช่น 1, 2.5 บาททอง' : 'เช่น 0.05, 2.5, 1000'
+      units.placeholder = type === 'gold' ? 'เช่น 1, 2.5 บาททอง' : 'เช่น 1000, 2500'
       const label = units.closest('.form-group')?.querySelector('.form-label')
       if (label) label.textContent = type === 'gold' ? 'จำนวนทองคำที่มี (บาททอง)' : 'จำนวน Asset ที่มี'
     }
@@ -4097,7 +4108,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const healthyPct = (() => {
       const income = Number(stats.income || 0)
       const expense = Number(stats.expense || 0)
-      if (income <= 0 && expense <= 0) return 71
+      if (income <= 0 && expense <= 0) return null
       if (income <= 0) return 35
       const cashRatio = Math.max(0, Math.min(1, (income - expense) / income))
       const debtPressure = usable.creditDebt > 0 && usable.liquid > 0
@@ -4110,13 +4121,22 @@ Calc.getUsableMoney = function(wallets, state = null) {
       const values = (typeof Calc.getWeeklyNetSeries === 'function'
         ? Calc.getWeeklyNetSeries(S.transactions, { weeks: 8 }).map(row => Number(row.netCashflow || 0))
         : [])
-      return values.some(v => Math.abs(v) > 0) ? values : [12, 18, 14, 24, 29, 25, 36, 31]
+      return values.some(v => Math.abs(v) > 0) ? values : []
     })()
 
     function renderNetSparkline(values) {
       const width = 270
       const height = 86
       const pad = 8
+      // No data — render a neutral flat line in the middle
+      if (!values.length) {
+        const y = (height / 2).toFixed(1)
+        const x1 = pad.toFixed(1)
+        const x2 = (width - pad).toFixed(1)
+        return `<svg class="mt-net-sparkline" viewBox="0 0 ${width} ${height}" aria-hidden="true">
+          <path class="mt-net-spark-path" d="M${x1},${y} L${x2},${y}" style="opacity:.25"></path>
+        </svg>`
+      }
       const min = Math.min(...values)
       const max = Math.max(...values)
       const span = Math.max(1, max - min)
@@ -4135,8 +4155,17 @@ Calc.getUsableMoney = function(wallets, state = null) {
     }
 
     function renderNetRing(pct) {
-      const safePct = Math.max(0, Math.min(100, Number(pct) || 0))
       const circumference = 2 * Math.PI * 42
+      // No data yet — show --% with an empty track
+      if (pct === null) {
+        return `<div class="mt-net-ring" role="img" aria-label="สถานะการเงิน ยังไม่มีข้อมูล">
+          <svg viewBox="0 0 112 112" aria-hidden="true">
+            <circle class="mt-net-ring-track" cx="56" cy="56" r="42"></circle>
+          </svg>
+          <div class="mt-net-ring-text"><strong>--%</strong><span>Healthy</span></div>
+        </div>`
+      }
+      const safePct = Math.max(0, Math.min(100, Number(pct) || 0))
       const offset = circumference * (1 - safePct / 100)
       return `<div class="mt-net-ring" role="img" aria-label="สถานะการเงิน ${safePct}% Healthy">
         <svg viewBox="0 0 112 112" aria-hidden="true">
@@ -9865,17 +9894,17 @@ App._pickMerchant = function(name, opts = {}) {
   App.openWalletForm = function(walletId) {
     S.editingWalletId = walletId
     const w = walletId ? (S.wallets || []).find(x => x.id === walletId) : null
-    if (w?.legacyMigratedToCryptoPortfolio || w?.hiddenFromWalletList) {
-      notify('กระเป๋า Crypto เดิมถูกย้ายไปที่ Crypto Portfolio แล้ว', 'info')
-      App.openCryptoPortfolioDetail()
+    if (w?.hiddenFromWalletList) {
+      notify('กระเป๋านี้ถูกซ่อนจากหน้ากระเป๋าแล้ว', 'info')
       return
     }
     const COLORS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
-    const TYPES  = [['bank','🏦','ธนาคาร'],['cash','💵','เงินสด'],['ewallet','📱','E-Wallet'],['credit','💳','บัตรเครดิต'],['gold','🥇','ทอง'],['crypto','₿','Crypto'],['fcd','💱','FCD']]
-    const type   = w?.type || 'bank'
+    const TYPES  = [['bank','🏦','ธนาคาร'],['cash','💵','เงินสด'],['ewallet','📱','E-Wallet'],['credit','💳','บัตรเครดิต'],['gold','🥇','ทอง'],['fcd','💱','FCD']]
+    const walletFormTypes = new Set(TYPES.map(([value]) => value))
+    const type   = walletFormTypes.has(w?.type) ? w.type : 'bank'
     const isCC   = type === 'credit'
-    const isInv  = ['gold','crypto','fcd'].includes(type)
-    const accordion = (id, title, body, open = false, extraStyle = '') => `<details id="${id}" class="card card-pad" style="margin-bottom:12px;${extraStyle}"${open ? ' open' : ''}><summary style="cursor:pointer;list-style:none;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px">${title}<span style="font-size:12px;color:var(--muted);font-weight:600">แตะเพื่อ${open ? 'ย่อ' : 'ขยาย'}</span></summary><div style="padding-top:12px">${body}</div></details>`
+    const isInv  = ['gold','fcd'].includes(type)
+    const formSection = (id, title, body, extraStyle = '') => `<div id="${id}" class="card card-pad" style="margin-bottom:12px;${extraStyle}"><div style="font-size:14px;font-weight:800;margin-bottom:12px">${title}</div><div>${body}</div></div>`
 
     const creditLimitMode = w?.creditLimitMode || 'individual'
     const issuer          = w?.issuer || ''
@@ -9912,7 +9941,7 @@ App._pickMerchant = function(name, opts = {}) {
 
     const ccExtraHtml = `
       <div id="wf-cc-extra">
-        ${accordion('wf-cc-billing-acc', 'วงเงินและรอบบิล', `
+        ${formSection('wf-cc-billing-acc', 'วงเงินและรอบบิล', `
           <div class="form-group">
             <label class="form-label">ผู้ออกบัตร / ธนาคาร</label>
             <input class="form-input" id="wf-issuer" list="wf-issuer-list" value="${esc(issuer)}" placeholder="เช่น KTC, SCB, KBank" oninput="App._onWfIssuerChange()">
@@ -10010,8 +10039,8 @@ App._pickMerchant = function(name, opts = {}) {
             <div id="wf-due-preview" class="form-hint cc-due-preview" style="margin-top:8px"></div>
             `
           })()}
-        `, true)}
-        ${accordion('wf-cc-reward-acc', 'บัญชีคะแนนสะสม', `
+        `)}
+        ${formSection('wf-cc-reward-acc', 'บัญชีคะแนนสะสม', `
           ${(() => {
             const fallbackPts = App.DEFAULT_POINT_VALUE_POINTS || 1000
             const fallbackBaht = App.DEFAULT_POINT_VALUE_BAHT || 100
@@ -10035,15 +10064,15 @@ App._pickMerchant = function(name, opts = {}) {
           </div>
             `
           })()}
-        `, false)}
+        `)}
       </div>`
 
     const investHtml = `
       <div id="wf-invest-acc" class="card card-pad" style="margin-bottom:12px;${isInv ? '' : 'display:none;'}">
         <div style="font-size:14px;font-weight:800;margin-bottom:12px">ข้อมูลสินทรัพย์</div>
         <div id="wf-invest-fields" style="${isInv?'':'display:none'}">
-          <div class="form-group"><label class="form-label">Symbol / สกุลเงิน</label><input class="form-input" id="wf-symbol" placeholder="BTC, ETH, USD, บาททอง" value="${w?.symbol||w?.currency||''}"></div>
-          <div class="form-group"><label class="form-label">จำนวน Asset</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${w?.units||''}" placeholder="เช่น 0.05, 2.5, 1000"></div>
+          <div class="form-group"><label class="form-label">Symbol / สกุลเงิน</label><input class="form-input" id="wf-symbol" placeholder="USD, JPY, บาททอง" value="${w?.symbol||w?.currency||''}"></div>
+          <div class="form-group"><label class="form-label">จำนวน Asset</label><input class="form-input" type="number" step="0.00000001" id="wf-units" value="${w?.units||''}" placeholder="เช่น 1, 2.5, 1000"></div>
           <div class="form-group"><label class="form-label">ราคาต่อหน่วยสำรอง (บาท)</label><input class="form-input" type="number" step="0.01" id="wf-manual-price" value="${w?.manualPrice||''}"></div>
           <div id="wf-market-price-link" class="market-price-box"></div>
         </div>
@@ -10053,11 +10082,11 @@ App._pickMerchant = function(name, opts = {}) {
     const walletSaveBtn = document.getElementById('wallet-form-save-btn')
     if (walletSaveBtn) walletSaveBtn.textContent = w ? 'บันทึก' : 'เพิ่ม'
     document.getElementById('wallet-form-content').innerHTML = `
-      ${accordion('wf-basic-acc', 'ข้อมูลพื้นฐาน', `
+      ${formSection('wf-basic-acc', 'ข้อมูลพื้นฐาน', `
         <div class="form-group"><label class="form-label">ชื่อกระเป๋า</label><input class="form-input" id="wf-name" value="${esc(w?.name||'')}"></div>
         <div class="form-group">
           <label class="form-label">ประเภท</label>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px" id="wf-type-grid">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px" id="wf-type-grid">
             ${TYPES.map(([v,icon,lbl]) => `<button class="cat-btn${type===v?' active':''}" onclick="App._selectWalletType('${v}')" data-type="${v}">${icon}<br><small>${lbl}</small></button>`).join('')}
           </div>
           <input type="hidden" id="wf-type" value="${type}">
@@ -10074,7 +10103,7 @@ App._pickMerchant = function(name, opts = {}) {
           <label class="form-label">ยอดค้างชำระ (฿)</label>
           <input class="form-input" type="number" id="wf-cc-balance" value="${w ? Math.abs(w.balance||0) : ''}">
         </div>` : ''}
-      `, true)}
+      `)}
       <div id="wf-cc-fields" style="${isCC?'':'display:none'}">${ccExtraHtml}</div>
       ${investHtml}
       ${w ? `<button class="btn btn-outline" onclick="App.deleteWallet('${esc(w.id)}')" style="margin-top:12px">ลบ</button>` : ''}`
@@ -10087,7 +10116,7 @@ App._pickMerchant = function(name, opts = {}) {
   App._syncWalletFormSections = function() {
     const type = document.getElementById('wf-type')?.value || 'bank'
     const isCC = type === 'credit'
-    const isInv = ['gold','crypto','fcd'].includes(type)
+    const isInv = ['gold','fcd'].includes(type)
     const limitMode = document.getElementById('wf-credit-limit-mode')?.value || 'individual'
     const rewardAccountMode = document.getElementById('wf-reward-account-select')?.value || ''
     const groupMode = document.getElementById('wf-shared-group-select')?.value || ''
@@ -10095,7 +10124,6 @@ App._pickMerchant = function(name, opts = {}) {
       const el = document.getElementById(id)
       if (!el) return
       el.style.display = visible ? '' : 'none'
-      if (el.tagName === 'DETAILS' && !visible) el.open = false
     }
     setVisible('wf-cc-fields', isCC)
     setVisible('wf-invest-acc', isInv)
@@ -10239,10 +10267,11 @@ App._pickMerchant = function(name, opts = {}) {
 
   // ── Updated _selectWalletType ───────────────────────────────
   App._selectWalletType = function(type) {
+    if (!new Set(['bank','cash','ewallet','credit','gold','fcd']).has(type)) type = 'bank'
     document.getElementById('wf-type').value = type
     document.querySelectorAll('#wf-type-grid .cat-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type))
     const isCC  = type === 'credit'
-    const isInv = ['gold','crypto','fcd'].includes(type)
+    const isInv = ['gold','fcd'].includes(type)
     const balLabel = document.getElementById('wf-balance-label')
     if (balLabel) balLabel.textContent = isInv ? 'มูลค่าปัจจุบัน / ราคาสำรอง (฿)' : 'มูลค่าปัจจุบัน (฿)'
     const sym = document.getElementById('wf-symbol')
@@ -10255,18 +10284,14 @@ App._pickMerchant = function(name, opts = {}) {
   // ── Updated saveWallet ──────────────────────────────────────
   App.saveWallet = function() {
     const name  = document.getElementById('wf-name')?.value.trim()
-    const type  = document.getElementById('wf-type')?.value || 'bank'
+    const walletFormTypes = new Set(['bank','cash','ewallet','credit','gold','fcd'])
+    const requestedType = document.getElementById('wf-type')?.value || 'bank'
+    const type  = walletFormTypes.has(requestedType) ? requestedType : 'bank'
     const color = document.getElementById('wf-color')?.value || '#2563EB'
     const isCC  = type === 'credit'
-    const isInv = ['gold','crypto','fcd'].includes(type)
-    if (type === 'crypto') {
-      notify('เพิ่ม Crypto ผ่าน Crypto Portfolio แทน เพื่อกันข้อมูลซ้ำ', 'warn')
-      App.closeOverlay('overlay-wallet-form')
-      App.openCryptoHoldingForm()
-      return
-    }
+    const isInv = ['gold','fcd'].includes(type)
     const rawBalance = parseFloat(document.getElementById(isCC ? 'wf-cc-balance' : 'wf-balance')?.value) || 0
-    const ICONS = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', saving:'🏦', gold:'🥇', crypto:'₿', fcd:'💱' }
+    const ICONS = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', saving:'🏦', gold:'🥇', fcd:'💱' }
 
     if (!name) { notify('กรุณากรอกชื่อกระเป๋า', 'error'); return }
     const _wErr = _fieldTooLong(name, FIELD_MAX.name, 'ชื่อกระเป๋า')
@@ -12385,10 +12410,10 @@ App._pickMerchant = function(name, opts = {}) {
     return syncCryptoPrices({ silent: true, reason })
   }
 
-  async function syncMarketSuite({ cryptoOnly = false } = {}) {
+  async function syncMarketSuite({ cryptoOnly = false, silent = false } = {}) {
     ensureCryptoState()
     if (navigator.onLine === false) {
-      notify('ออฟไลน์อยู่ ใช้ราคาเดิมหรือราคาสำรองแทน', 'warn')
+      if (!silent) notify('ออฟไลน์อยู่ ใช้ราคาเดิมหรือราคาสำรองแทน', 'warn')
       return { syncedIds: [], failedIds: [], offline: true }
     }
     const next = { ...(S.marketPrices || {}), crypto: { ...(S.marketPrices?.crypto || {}) } }
@@ -12415,14 +12440,18 @@ App._pickMerchant = function(name, opts = {}) {
     App.render?.()
 
     if (cryptoOnly) {
-      if (cryptoOk && !(cryptoResult?.failedIds || []).length) notify('Sync ราคา Crypto สำเร็จ', 'success')
-      else if (cryptoOk) notify('Sync ราคา Crypto ได้บางส่วน บางเหรียญใช้ราคาสำรองเดิม', 'warn')
-      else notify('Sync ราคา Crypto ไม่สำเร็จ ใช้ราคาสำรองแทน', 'warn')
+      if (!silent) {
+        if (cryptoOk && !(cryptoResult?.failedIds || []).length) notify('Sync ราคา Crypto สำเร็จ', 'success')
+        else if (cryptoOk) notify('Sync ราคา Crypto ได้บางส่วน บางเหรียญใช้ราคาสำรองเดิม', 'warn')
+        else notify('Sync ราคา Crypto ไม่สำเร็จ ใช้ราคาสำรองแทน', 'warn')
+      }
       return
     }
 
-    if (cryptoOk || fxOk || goldOk) notify(goldOk ? 'Sync ราคาทอง, Crypto และ FX สำเร็จ' : 'อัปเดตราคาแล้ว', 'success')
-    else notify('Sync ราคาไม่ได้ ใช้ราคาสำรองแทน', 'error')
+    if (!silent) {
+      if (cryptoOk || fxOk || goldOk) notify(goldOk ? 'Sync ราคาทอง, Crypto และ FX สำเร็จ' : 'อัปเดตราคาแล้ว', 'success')
+      else notify('Sync ราคาไม่ได้ ใช้ราคาสำรองแทน', 'error')
+    }
   }
 
   App.refreshCryptoPrices = function() {
@@ -12436,6 +12465,16 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.refreshMarketPrices = function() {
     return syncMarketSuite({ cryptoOnly: false })
+  }
+
+  const MARKET_AUTO_SYNC_STALE_MS = 15 * 60 * 1000
+
+  App._autoSyncMarketIfStale = function() {
+    if (navigator.onLine === false) return
+    const updatedAt = S.marketPrices?.updatedAt
+    const age = updatedAt ? Date.now() - new Date(updatedAt).getTime() : Infinity
+    if (age < MARKET_AUTO_SYNC_STALE_MS) return
+    syncMarketSuite({ cryptoOnly: false, silent: true }).catch(() => {})
   }
 
   App.openCryptoHoldingForm = function(holdingId = '') {
