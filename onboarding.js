@@ -229,4 +229,19 @@
     targetSec.insertAdjacentElement('beforebegin', hint)
   }
 
+  // ════════════════════════════════════════════════════════════
+  // INITIAL PAINT
+  // init() in app_v2.js calls App.showPage(S.page) before this
+  // script loads, so the first render happens without our wrappers.
+  // Re-render the active page now so our empty states and checklist
+  // are applied immediately on first load.
+  // ════════════════════════════════════════════════════════════
+  try {
+    const p = S.page
+    if      (p === 'dashboard') App.renderDashboard()
+    else if (p === 'wallets')   App.renderWallets()
+    else if (p === 'reports')   App.renderReports()
+    else if (p === 'more')      App.renderMore()
+  } catch (_) {}
+
 })()
