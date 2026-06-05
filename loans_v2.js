@@ -19,7 +19,9 @@
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
   }
   function fmt(n) {
-    return (typeof Calc !== 'undefined' && Calc.fmt) ? Calc.fmt(n) : Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    if (typeof moneyFmt === 'function') return moneyFmt(n)
+    if (typeof Calc !== 'undefined' && Calc.fmt) return Calc.fmt(n)
+    return '฿' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
   function fmtDate(d) {
     if (!d) return ''
@@ -236,9 +238,9 @@
         <div style="font-size:20px;margin-right:12px;margin-top:2px">👤</div>
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:15px">${esc(l.borrowerName)}</div>
-          <div style="font-size:13px;color:var(--muted);margin-top:2px">฿${hideMoney ? '*****' : fmt(l.amount)} · ${fmtDate(l.date)}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:2px">${fmt(l.amount)} · ${fmtDate(l.date)}</div>
           ${dueLine}
-          ${l.status !== 'settled' ? `<div style="font-size:13px;font-weight:600;color:var(--expense);margin-top:2px">คงค้าง ฿${hideMoney ? '*****' : fmt(rem)}</div>` : ''}
+          ${l.status !== 'settled' ? `<div style="font-size:13px;font-weight:600;color:var(--expense);margin-top:2px">คงค้าง ${fmt(rem)}</div>` : ''}
           ${progressBar}
         </div>
         <div style="color:var(--muted);font-size:18px;margin-left:8px;margin-top:4px">›</div>
@@ -270,7 +272,7 @@
         ${outstanding.length || !settled.length ? `
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <div style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">ยังค้างอยู่</div>
-            <div style="font-size:15px;font-weight:700;color:var(--expense)">฿${hideMoney ? '*****' : fmt(total)}</div>
+            <div style="font-size:15px;font-weight:700;color:var(--expense)">${fmt(total)}</div>
           </div>
           <div class="card" style="margin-bottom:8px" id="loans-outstanding-list">
             ${outstandingHtml}
@@ -298,7 +300,7 @@
       .map(r => `
         <div style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
           <div style="flex:1">
-            <div style="font-size:14px;font-weight:600;color:var(--income)">+฿${hideMoney ? '*****' : fmt(r.amount)}</div>
+            <div style="font-size:14px;font-weight:600;color:var(--income)">+${fmt(r.amount)}</div>
             <div style="font-size:12px;color:var(--muted)">${fmtDate(r.date)}${r.walletId ? ' · ' + _walletName(r.walletId) : ''}${r.note ? ' · ' + esc(r.note) : ''}</div>
           </div>
           <button class="btn-icon" style="color:var(--muted);font-size:16px" onclick="App._loanDeleteRepayment('${esc(loan.id)}','${esc(r.id)}')">🗑</button>
@@ -317,7 +319,7 @@
       </div>
       <div class="sub-scroll" style="padding:16px 16px 48px">
         <div class="card card-pad" style="margin-bottom:12px">
-          <div style="font-size:28px;font-weight:700;margin-bottom:4px">฿${hideMoney ? '*****' : fmt(loan.amount)}</div>
+          <div style="font-size:28px;font-weight:700;margin-bottom:4px">${fmt(loan.amount)}</div>
           <div style="font-size:13px;color:var(--muted)">ให้ยืมเมื่อ ${fmtDate(loan.date)} · ${_walletName(loan.walletId)}</div>
           ${loan.dueDate ? `<div style="font-size:13px;margin-top:4px;color:${overdue ? 'var(--expense)' : dueSoon ? '#D97706' : 'var(--muted)'}">
             ${overdue ? '⚠️ เกินกำหนดแล้ว' : dueSoon ? '⏰ ใกล้ครบกำหนด'  : '📅 ครบกำหนด'} ${fmtDate(loan.dueDate)}
@@ -330,7 +332,7 @@
         <div class="card card-pad" style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <div style="font-size:13px;color:var(--muted)">คงค้าง</div>
-            <div style="font-size:18px;font-weight:700;color:var(--expense)">฿${hideMoney ? '*****' : fmt(rem)}</div>
+            <div style="font-size:18px;font-weight:700;color:var(--expense)">${fmt(rem)}</div>
           </div>
           <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
             <div style="width:${progressPct}%;height:100%;background:var(--income);border-radius:3px;transition:width .3s"></div>
@@ -466,7 +468,7 @@
     if (!loan) return
     App.showConfirm({
       title: 'ลบรายการให้ยืม',
-      body: `ลบ "${loan.borrowerName}" ฿${fmt(loan.amount)} ออก?\nยอดจะถูกคืนกลับกระเป๋า`,
+      body: `ลบ "${loan.borrowerName}" ${fmt(loan.amount)} ออก?\nยอดจะถูกคืนกลับกระเป๋า`,
       danger: true,
       confirmLabel: 'ลบ',
       onConfirm() {
@@ -512,7 +514,7 @@
         <div class="card card-pad" style="margin-bottom:12px">
           <div style="font-size:13px;color:var(--muted)">รับคืนจาก</div>
           <div style="font-size:18px;font-weight:700;margin-top:2px">${esc(loan.borrowerName)}</div>
-          <div style="font-size:13px;color:var(--expense);margin-top:2px">คงค้าง ฿${fmt(LoanStore.remaining(loan))}</div>
+          <div style="font-size:13px;color:var(--expense);margin-top:2px">คงค้าง ${fmt(LoanStore.remaining(loan))}</div>
         </div>
         <div class="card card-pad" style="margin-bottom:12px">
           <div class="form-group">
