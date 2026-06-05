@@ -1859,6 +1859,7 @@ function init() {
   S.splitBills = data.splitBills || []
   S.splitPeople = data.splitPeople || []
   S.splitBillDraft = data.splitBillDraft || null
+  S.loans = data.loans || []
   S.migrations = { cryptoCentralizedV1: false, ...(data.migrations || {}) }
   S.creditLimitGroups  = data.creditLimitGroups  || []
   S.rewardAccounts     = data.rewardAccounts     || []
