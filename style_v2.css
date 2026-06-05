@@ -3426,9 +3426,6 @@ label.color-swatch {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
   flex: 0 0 auto;
 }
 .more-search-input {

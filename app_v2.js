@@ -1998,8 +1998,15 @@ function init() {
   // Auto-sync when switching back to the app from background
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
+      // keyboard is always closed when app becomes visible — clear stuck class
+      setTimeout(() => { try { document.body?.classList.remove('keyboard-open') } catch (_) {} }, 300)
       try { App._autoSyncMarketIfStale?.() } catch (_) {}
     }
+  }, { passive: true })
+
+  // iOS PWA: clear stuck keyboard-open after bfcache restore
+  window.addEventListener('pageshow', () => {
+    setTimeout(() => { try { document.body?.classList.remove('keyboard-open') } catch (_) {} }, 200)
   }, { passive: true })
 
   window.MTBoot?.mark?.('app.init.done', { duration: Math.round((performance.now() - initStart) * 10) / 10 })
