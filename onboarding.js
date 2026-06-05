@@ -88,7 +88,7 @@
 
     const card = document.createElement('div')
     card.className = 'card card-pad ob-checklist'
-    card.style.cssText = 'margin-bottom:16px'
+    card.style.cssText = 'margin-top:16px;margin-bottom:16px'
     card.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <span style="font-size:13px;font-weight:600;color:var(--text)">เริ่มต้น 3 ขั้น</span>

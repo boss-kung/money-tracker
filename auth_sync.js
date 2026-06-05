@@ -277,7 +277,7 @@
     return null
   }
 
-  async function setSession(session) {
+  async function setSession(session, { _silent = false } = {}) {
     state.session = session
     state.user = await fetchUser(session)
     if (!isGoogleSession(session, state.user)) {
@@ -285,6 +285,7 @@
       throw new Error('บัญชีนี้ไม่ได้เข้าสู่ระบบผ่าน Google')
     }
     storageSave({
+      accessToken: session.access_token || '',
       refreshToken: session.refresh_token || storageLoad().refreshToken || '',
       expiresAt: session.expires_at || 0,
       userId: state.user.id,
@@ -304,7 +305,7 @@
       console.warn('[MTAuthSync] vault still locked after login — showing recovery sheet')
       showVaultLockedSheet()
     }
-    toastSafe(`เข้าสู่ระบบสำเร็จ: ${state.user.email || ''}`, 'success')
+    if (!_silent) toastSafe(`เข้าสู่ระบบสำเร็จ: ${state.user.email || ''}`, 'success')
     render()
     return state
   }
@@ -333,11 +334,40 @@
     throw lastError
   }
 
+  function scheduleBackgroundTokenRefresh(saved) {
+    ;(async () => {
+      try {
+        const refreshed = await refreshSessionWithRetry(saved.refreshToken)
+        refreshed.expires_at = Math.floor(Date.now() / 1000) + Number(refreshed.expires_in || 3600)
+        await setSession(refreshed, { _silent: true })
+      } catch (err) {
+        console.warn('[MTAuthSync] background token refresh failed', err.message)
+      }
+    })()
+  }
+
   async function restoreSession() {
     const fromUrl = await parseSessionFromUrl()
     if (fromUrl) return setSession(fromUrl)
     const saved = storageLoad()
     if (!saved.refreshToken) return null
+
+    // Fast path: cached token still valid — restore without a network round trip.
+    // Background refresh runs in parallel to update the token for the next boot.
+    const TOKEN_BUFFER_MS = 5 * 60 * 1000
+    if (saved.accessToken && saved.expiresAt &&
+        (saved.expiresAt * 1000) > (Date.now() + TOKEN_BUFFER_MS)) {
+      state.session = {
+        access_token: saved.accessToken,
+        refresh_token: saved.refreshToken,
+        expires_at: saved.expiresAt,
+        token_type: 'bearer',
+      }
+      state.user = { id: saved.userId, email: saved.email }
+      scheduleBackgroundTokenRefresh(saved)
+      return state
+    }
+
     try {
       const refreshed = await refreshSessionWithRetry(saved.refreshToken)
       refreshed.expires_at = Math.floor(Date.now() / 1000) + Number(refreshed.expires_in || 3600)
@@ -384,7 +414,7 @@
     state.dirty = false
     state.syncing = false
     state.vaultConfirmedEmpty = false
-    storageSave({ refreshToken: '', expiresAt: 0, userId: '', email: '' })
+    storageSave({ accessToken: '', refreshToken: '', expiresAt: 0, userId: '', email: '' })
     // Recovery key is device-specific and vault-specific — keep it in sessionStorage so
     // the user is auto-unlocked on the next sign-in within the same browser session.
     // Only clear it when the vault itself is deleted (reset-demo-vault).
