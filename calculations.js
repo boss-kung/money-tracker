@@ -467,13 +467,22 @@ const Calc = {
     }).filter(b => b.monthlyLimit > 0)
   },
 
-  getNetWorth(wallets) {
+  getNetWorth(wallets, loans) {
     let assets = 0, debt = 0
     wallets.forEach(w => {
       if (w.balance >= 0) assets += w.balance
       else                debt   += Math.abs(w.balance)
     })
-    return { assets, debt, net: assets - debt }
+    let loanReceivable = 0
+    if (Array.isArray(loans)) {
+      loans.forEach(l => {
+        if (l.status !== 'settled') {
+          const paid = (l.repayments || []).reduce((s, r) => s + Number(r.amount || 0), 0)
+          loanReceivable += Math.max(0, Number(l.amount || 0) - paid)
+        }
+      })
+    }
+    return { assets: assets + loanReceivable, debt, net: assets + loanReceivable - debt, loanReceivable }
   },
 
   getPendingUpcomingBills(state) {

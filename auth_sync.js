@@ -929,7 +929,7 @@
       // Quiet loading state — don't show the full login gate while we're refreshing
       innerHtml = `
         <div class="mt-auth-gate-panel" role="status" aria-labelledby="mt-auth-gate-title">
-          <div class="mt-auth-gate-mark">💰</div>
+          <img class="mt-auth-gate-mark" src="./assets/icon-180.png" alt="" draggable="false">
           <h1 id="mt-auth-gate-title">กำลังเชื่อมต่อบัญชี...</h1>
         </div>`
     } else if (hasNetworkError) {
@@ -937,7 +937,7 @@
       const email = saved.email ? `<small style="opacity:.6">${esc(saved.email)}</small><br>` : ''
       innerHtml = `
         <div class="mt-auth-gate-panel" role="dialog" aria-modal="true" aria-labelledby="mt-auth-gate-title">
-          <div class="mt-auth-gate-mark">💰</div>
+          <img class="mt-auth-gate-mark" src="./assets/icon-180.png" alt="" draggable="false">
           <h1 id="mt-auth-gate-title">เชื่อมต่อไม่ได้</h1>
           ${email}
           <p>ไม่สามารถเชื่อมต่อได้ในขณะนี้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต แล้วลองใหม่</p>
@@ -947,7 +947,7 @@
     } else {
       innerHtml = `
         <div class="mt-auth-gate-panel" role="dialog" aria-modal="true" aria-labelledby="mt-auth-gate-title">
-          <div class="mt-auth-gate-mark">💰</div>
+          <img class="mt-auth-gate-mark" src="./assets/icon-180.png" alt="" draggable="false">
           <h1 id="mt-auth-gate-title">Financial Tracker</h1></br><h1 id="mt-auth-gate-title">กรุณาเข้าสู่ระบบ</h1>
           <p>ข้อมูลการเงินของคุณจะถูกซ่อนไว้</br>จนกว่าจะเข้าสู่ระบบด้วยบัญชี Google</p>
           <button class="btn btn-primary" type="button" data-mt-auth-action="login">Sign in with Google</button>

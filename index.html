@@ -32,7 +32,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Financial Tracker">
   <meta name="description" content="ศูนย์รวมการเงินส่วนตัวของคุณ ติดตามรายรับรายจ่าย จัดการกระเป๋าเงิน และวิเคราะห์การใช้จ่ายในที่เดียว">
-  <title>Financial Tracker 💰</title>
+  <!-- App icons — iOS uses apple-touch-icon (dark variant for iOS 18+) -->
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/icon-180.png">
+  <link rel="apple-touch-icon" sizes="180x180" media="(prefers-color-scheme: dark)" href="./assets/icon-180.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="./assets/icon-120.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="./assets/icon-512.png">
+  <title>Financial Tracker</title>
   <script>
     ;(() => {
       const bootStartedAt = performance.now()
@@ -138,28 +144,20 @@
       width: 82px;
       height: 82px;
       margin: 0 auto 20px;
-      border-radius: 28px;
-      display: grid;
-      place-items: center;
-      background: linear-gradient(145deg, #FFFFFF 0%, #EFF6FF 48%, #DCFCE7 100%);
-      color: #0F172A;
-      font-size: 46px;
-      line-height: 1;
+      border-radius: 19px;
+      display: block;
       box-shadow:
-        0 20px 44px rgba(37, 99, 235, 0.20),
-        0 8px 18px rgba(15, 23, 42, 0.10),
-        inset 0 1px 0 rgba(255, 255, 255, 0.92);
+        0 20px 44px rgba(37, 99, 235, 0.22),
+        0 8px 18px rgba(15, 23, 42, 0.12);
       animation: mtBootBounce 1.35s cubic-bezier(.34, 1.56, .64, 1) infinite;
       will-change: transform;
     }
     @media (prefers-color-scheme: dark) {
       .mt-boot-logo {
-        background: linear-gradient(145deg, #F8FAFC 0%, #DBEAFE 46%, #DCFCE7 100%);
-        color: #0F172A;
         box-shadow:
-          0 22px 48px rgba(0, 0, 0, 0.34),
-          0 10px 24px rgba(56, 189, 248, 0.16),
-          inset 0 1px 0 rgba(255, 255, 255, 0.9);
+          0 0 0 1px rgba(14, 165, 233, 0.35),
+          0 10px 28px rgba(14, 165, 233, 0.28),
+          0 22px 48px rgba(0, 0, 0, 0.45);
       }
     }
     .mt-boot-title {
@@ -247,7 +245,7 @@
 <div id="app">
   <div id="mt-boot-screen" role="status" aria-live="polite">
     <div class="mt-boot-card">
-      <div class="mt-boot-logo" aria-hidden="true">💰</div>
+      <img class="mt-boot-logo" src="./assets/icon-180.png" alt="" aria-hidden="true" draggable="false">
       <div class="mt-boot-title">Financial Tracker</div>
       <div class="mt-boot-subtitle">กำลังเตรียมข้อมูลการเงิน</div>
       <div class="mt-boot-bar" aria-hidden="true"></div>
@@ -452,6 +450,7 @@
 <script src="auth_sync.js?v=2026.06.04-secure-sync18"></script>
 <script src="app_v2.js?v=2026.06.04-account-menu-rule-sheet-clean-r74"></script>
 <script src="split_bill.js?v=2026.05.15-r1"></script>
+<script src="loans_v2.js?v=2026.06.05-r1"></script>
 <script src="quick_capture.js?v=2026.05.18-r13"></script>
 <script src="notifications_v2.js?v=2026.06.01-r67"></script>
 </body>

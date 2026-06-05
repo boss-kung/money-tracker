@@ -2124,7 +2124,12 @@ App.render();
       else debt += Math.abs(value)
     })
     const cryptoValue = Number(App.getCryptoPortfolioSummary?.().totalValueTHB || 0)
-    return { assets: assets + cryptoValue, debt, net: assets + cryptoValue - debt }
+    let loanReceivable = 0
+    ;(typeof LoanStore !== 'undefined' ? LoanStore.outstanding() : []).forEach(l => {
+      const paid = (l.repayments || []).reduce((s, r) => s + Number(r.amount || 0), 0)
+      loanReceivable += Math.max(0, Number(l.amount || 0) - paid)
+    })
+    return { assets: assets + cryptoValue + loanReceivable, debt, net: assets + cryptoValue + loanReceivable - debt, loanReceivable }
   }
 
   Calc.getWalletGroups = function(wallets) {
@@ -22514,6 +22519,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="card card-pad">
         ${row({ icon: '🍽️', label: 'หารบิล', value: splitBillCount ? `${splitBillCount} บิล` : '', onclick: 'App.openSplitBillScreen()' })}
         ${row({ icon: '🤝', label: 'เงินที่แชร์กับคนอื่น', onclick: 'App.openSharedFinanceDashboard()' })}
+        ${(() => { const lo = (typeof LoanStore !== 'undefined') ? LoanStore.outstanding() : []; const tot = lo.reduce((s,l) => s+(Number(l.amount||0) - (l.repayments||[]).reduce((ss,r)=>ss+Number(r.amount||0),0)), 0); return row({ icon: '💸', label: 'ให้ยืมเงิน', desc: 'ลูกหนี้รายย่อย', value: lo.length ? `${lo.length} ราย · ฿${Calc.fmt(tot)}` : '', onclick: 'App.openLoansScreen()' }) })()}
       </div>
       <div class="sec-title">ผู้ช่วยส่วนตัว</div>
       <div class="card card-pad">

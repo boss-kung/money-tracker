@@ -34,6 +34,7 @@ const KEYS = {
   financialRecommendationFeedback: 'mt_financial_recommendation_feedback',
   financialActionLog: 'mt_financial_action_log',
   financialLifePlans: 'mt_financial_life_plans',
+  loans:              'mt_loans',
 }
 
 const BACKUP_SCHEMA_VERSION = 3
@@ -323,6 +324,7 @@ const Storage = {
     data.splitBills              = Storage.load(KEYS.splitBills)              || []
     data.splitPeople             = Storage.load(KEYS.splitPeople)             || []
     data.splitBillDraft          = Storage.load(KEYS.splitBillDraft)          || null
+    data.loans                   = Storage.load(KEYS.loans)                   || []
     const loadedPrivileges   = Storage.load(KEYS.privileges)
     data.privileges          = loadedPrivileges || JSON.parse(JSON.stringify(
       typeof DEFAULT_PRIVILEGES !== 'undefined'
@@ -363,6 +365,7 @@ const Storage = {
       Storage.save(KEYS.splitBills,              state.splitBills              || []),
       Storage.save(KEYS.splitPeople,             state.splitPeople             || []),
       Storage.save(KEYS.splitBillDraft,          state.splitBillDraft          || null),
+      Storage.save(KEYS.loans,                   state.loans                   || []),
       Storage.save(KEYS.migrations,          state.migrations          || { cryptoCentralizedV1: false }),
     ]
     if (!results.every(Boolean)) return false

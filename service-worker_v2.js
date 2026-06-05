@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.06.04-r70'
+const APP_VERSION = '2026.06.05-r71'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 const CORE_NETWORK_TIMEOUT_MS = 900
@@ -17,6 +17,7 @@ const STATIC_ASSETS = [
   './ask_my_money_core.js',
   './notification_config.js',
   './notifications_v2.js',
+  './loans_v2.js',
   './manifest.json',
   './assets/icon.svg',
   './assets/fonts/LINESeedSansTH_Rg.ttf',
