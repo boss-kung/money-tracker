@@ -68,6 +68,7 @@ const BACKUP_SCHEMA_KEYS = [
   'splitBills',
   'splitPeople',
   'splitBillDraft',
+  'loans',
   'migrations',
   'settings',
   'aiInsightStore',
@@ -106,6 +107,7 @@ const BACKUP_DEFAULTS = {
   splitBills: [],
   splitPeople: [],
   splitBillDraft: null,
+  loans: [],
   migrations: { cryptoCentralizedV1: false },
   settings: {},
   aiInsightStore: { version: 1, lastRefreshed: null, payloadHash: '', insights: [], hiddenTypes: [], feedback: [] },
@@ -383,7 +385,7 @@ const Storage = {
     BACKUP_SCHEMA_KEYS.forEach(key => {
       const fallback = BACKUP_DEFAULTS[key]
       let value = state?.[key]
-      if (['splitBills', 'splitPeople', 'splitBillDraft'].includes(key)) {
+      if (['splitBills', 'splitPeople', 'splitBillDraft', 'loans'].includes(key)) {
         value = Storage.load(KEYS[key])
         if (value === null) value = state?.[key]
       }
