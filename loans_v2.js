@@ -160,13 +160,12 @@
 
   window.LoanStore = LoanStore
 
-  // ── hook into _computeWalletFlows for balance repair ─────────
-  const _origFlows = typeof App !== 'undefined' && App._computeWalletFlows
+  // ── hook into _ledgerFlows so recalculateWalletBalances includes loans ──
+  // recalculateWalletBalances (called at startup) uses _ledgerFlows directly.
+  // Without this patch, it resets wallet balances ignoring loans on every reload.
   if (typeof App !== 'undefined') {
     const _patchFlows = () => {
-      const prev = App._computeWalletFlows?.bind(App)
-      App._computeWalletFlows = function () {
-        const result = prev ? prev() : { cash: {}, units: {} }
+      function _addLoanFlows(result) {
         ;(S.loans || []).forEach(loan => {
           if (loan.walletId)
             result.cash[loan.walletId] = (result.cash[loan.walletId] || 0) - Number(loan.amount || 0)
@@ -177,11 +176,28 @@
         })
         return result
       }
+
+      // Patch _ledgerFlows — the one recalculateWalletBalances actually uses
+      if (typeof App._ledgerFlows === 'function') {
+        const prevLedger = App._ledgerFlows.bind(App)
+        App._ledgerFlows = function () { return _addLoanFlows(prevLedger()) }
+      }
+
+      // Also patch _computeWalletFlows for the balance-repair UI
+      if (typeof App._computeWalletFlows === 'function') {
+        const prevFlows = App._computeWalletFlows.bind(App)
+        App._computeWalletFlows = function () { return _addLoanFlows(prevFlows()) }
+      }
+
+      // Re-run recalculateWalletBalances so current session has correct balances
+      // (it already ran in app_v2.js before loans_v2.js loaded, without loan flows)
+      try { App.recalculateWalletBalances?.({ save: false }) } catch (_) {}
+      try { if (typeof S !== 'undefined') App.render?.() } catch (_) {}
     }
-    if (App._computeWalletFlows) {
+
+    if (App._ledgerFlows) {
       _patchFlows()
     } else {
-      // App might not be ready yet — patch after DOMContentLoaded
       document.addEventListener('DOMContentLoaded', _patchFlows, { once: true })
     }
   }
