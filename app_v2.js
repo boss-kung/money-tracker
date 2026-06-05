@@ -885,6 +885,7 @@ window.MTBoot?.mark?.('app_v2.version', { version: APP_VERSION })
 let bootScreenHideRequested = false
 let bootScreenForceHide = false
 let bootScreenHideRetry = 0
+let bootScreenAuthHold = false
 
 function isMainCssReady() {
   if (window.MTBootCssReady === true) return true
@@ -911,6 +912,7 @@ function hideBootScreenNow(reason = 'ready') {
 
 function tryHideBootScreen(reason = 'ready') {
   if (!bootScreenHideRequested) return
+  if (bootScreenAuthHold && !bootScreenForceHide) return
   if (bootScreenForceHide || isMainCssReady()) {
     hideBootScreenNow(reason)
     return
@@ -931,6 +933,11 @@ function requestHideBootScreen(reason = 'ready') {
   }
   bootScreenHideRequested = true
   tryHideBootScreen(reason)
+}
+
+window.MTBootScreen = {
+  hold() { bootScreenAuthHold = true },
+  release(r = 'auth-done') { bootScreenAuthHold = false; tryHideBootScreen(r) },
 }
 
 /* ============================================================
@@ -2010,6 +2017,10 @@ if (window.MT_DEBUG_FLAGS?.noAppLock) {
 setTimeout(() => {
   bootScreenForceHide = true
   requestHideBootScreen('fallback-timeout')
+  // Ensure auth gate is rendered if boot screen was holding for auth
+  setTimeout(() => {
+    try { window.MTAuthSync?.renderGate?.() } catch (_) {}
+  }, 300)
 }, 9000)
 
 /* ============================================================

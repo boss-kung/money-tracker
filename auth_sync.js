@@ -909,7 +909,55 @@
     render()
   }
 
+  function updateBootScreen() {
+    const subtitleEl = document.getElementById('mt-boot-subtitle')
+    const barEl = document.getElementById('mt-boot-bar')
+    const actionsEl = document.getElementById('mt-boot-actions')
+    if (!subtitleEl) return false  // boot screen gone or missing IDs
+
+    if (state.session?.access_token) {
+      document.documentElement.classList.remove('mt-auth-gated')
+      window.MTBootScreen?.release?.('auth-done')
+      return true
+    }
+
+    const saved = storageLoad()
+    const hasSavedSession = Boolean(saved.refreshToken || saved.userId)
+    const hasNetworkError = Boolean(state.restoreError) && hasSavedSession
+
+    window.MTBootScreen?.hold?.()
+
+    if (state.restoring) {
+      subtitleEl.textContent = 'กำลังเชื่อมต่อบัญชี...'
+      return true
+    }
+
+    // Need user action — show interactive UI inside boot screen
+    if (barEl) barEl.style.display = 'none'
+    if (actionsEl) {
+      actionsEl.style.display = ''
+      if (hasNetworkError) {
+        const emailHtml = saved.email ? `<div style="font-size:13px;opacity:.6;margin-bottom:10px">${esc(saved.email)}</div>` : ''
+        subtitleEl.textContent = 'เชื่อมต่อไม่ได้'
+        actionsEl.innerHTML = `${emailHtml}<p style="font-size:14px;color:#64748B;margin:0 0 16px;line-height:1.55">ไม่สามารถเชื่อมต่อได้ในขณะนี้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต แล้วลองใหม่</p><button class="btn btn-primary" type="button" data-mt-auth-action="retry-restore">ลองใหม่</button><button class="btn btn-secondary" type="button" data-mt-auth-action="login" style="margin-top:8px">เข้าสู่ระบบด้วย Google</button>`
+      } else {
+        subtitleEl.innerHTML = 'ข้อมูลการเงินของคุณจะถูกซ่อนไว้<br>จนกว่าจะเข้าสู่ระบบด้วยบัญชี Google'
+        actionsEl.innerHTML = `<button class="btn btn-primary" type="button" data-mt-auth-action="login">Sign in with Google</button>`
+      }
+      const loginBtn = actionsEl.querySelector('[data-mt-auth-action="login"]')
+      if (loginBtn) {
+        loginBtn.disabled = !configured()
+        if (!configured()) loginBtn.textContent = 'ยังไม่พร้อมเข้าสู่ระบบ'
+      }
+    }
+    return true
+  }
+
   function renderAuthGate() {
+    // During boot: update boot screen in place instead of creating a separate overlay
+    if (updateBootScreen()) return
+
+    // Post-boot (boot screen already gone): use the auth gate as before
     let gate = document.getElementById('mt-auth-gate')
     if (state.session?.access_token) {
       document.documentElement.classList.remove('mt-auth-gated')
@@ -918,7 +966,6 @@
     }
     document.documentElement.classList.add('mt-auth-gated')
 
-    // Determine which panel to show
     const saved = storageLoad()
     const hasSavedSession = Boolean(saved.refreshToken || saved.userId)
     const isRestoring = state.restoring
@@ -926,14 +973,12 @@
 
     let innerHtml
     if (isRestoring) {
-      // Quiet loading state — don't show the full login gate while we're refreshing
       innerHtml = `
         <div class="mt-auth-gate-panel" role="status" aria-labelledby="mt-auth-gate-title">
           <img class="mt-auth-gate-mark" src="./assets/icon-180.png" alt="" draggable="false">
           <h1 id="mt-auth-gate-title">กำลังเชื่อมต่อบัญชี...</h1>
         </div>`
     } else if (hasNetworkError) {
-      // Network failed but token is preserved — show retry instead of full sign-in
       const email = saved.email ? `<small style="opacity:.6">${esc(saved.email)}</small><br>` : ''
       innerHtml = `
         <div class="mt-auth-gate-panel" role="dialog" aria-modal="true" aria-labelledby="mt-auth-gate-title">
@@ -1262,6 +1307,7 @@
     markDirty,
     pullRemoteVault,
     pushEncryptedVault,
+    renderGate: renderAuthGate,
     signInWithGoogle,
     signOut,
     showSavedRecoveryKeySheet,
