@@ -6359,6 +6359,13 @@ Calc.getUsableMoney = function(wallets, state = null) {
       ['networth','📈 ความมั่งคั่ง'],
     ].map(([v,l]) => `<button class="chip${S.rptView === v ? ' active' : ''}" onclick="App.setRptView('${v}')">${l}</button>`).join('')
 
+    // Net Worth view ไม่ใช้ข้อมูลรายเดือน — render แยกและ return ทันที
+    if (S.rptView === 'networth') {
+      const content = document.getElementById('reports-content')
+      if (content) content.innerHTML = renderNetWorthView()
+      return
+    }
+
     const month = S.rptMonth
     const prevMonth = Calc.getPreviousMonth?.(month) || Calc.getMonths(2)[1]
     const monthly = Calc.getMonthlyIncomeExpense(S.transactions, month)
