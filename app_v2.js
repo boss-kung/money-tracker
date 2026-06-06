@@ -4125,15 +4125,34 @@ Calc.getUsableMoney = function(wallets, state = null) {
     }
 
     const healthyPct = (() => {
-      const income = Number(stats.income || 0)
+      const income  = Number(stats.income  || 0)
       const expense = Number(stats.expense || 0)
       if (income <= 0 && expense <= 0) return null
-      if (income <= 0) return 35
-      const cashRatio = Math.max(0, Math.min(1, (income - expense) / income))
-      const debtPressure = usable.creditDebt > 0 && usable.liquid > 0
-        ? Math.min(.35, usable.creditDebt / Math.max(usable.liquid + usable.creditDebt, 1))
-        : 0
-      return Math.max(12, Math.min(96, Math.round((cashRatio * 82 + 18) * (1 - debtPressure))))
+
+      // --- Component 1: Savings Rate (weight 50%) ---
+      // เกณฑ์: ออม 20%+ ของรายรับ = 100 คะแนน (50/30/20 rule)
+      const savingsRate   = income > 0 ? (income - expense) / income : -1
+      const savingsScore  = savingsRate <= 0 ? 0 : Math.min(1, savingsRate / 0.20) * 100
+
+      // --- Component 2: Debt Burden (weight 30%) ---
+      // เกณฑ์: ไม่มีหนี้ = 100, หนี้ = creditDebt / (creditDebt + liquid)
+      const creditDebt  = Number(usable.creditDebt || 0)
+      const liquid      = Number(usable.liquid     || 0)
+      const debtScore   = creditDebt <= 0
+        ? 100
+        : liquid <= 0
+          ? 0
+          : Math.max(0, 1 - creditDebt / Math.max(creditDebt + liquid, 1)) * 100
+
+      // --- Component 3: Emergency Buffer (weight 20%) ---
+      // เกณฑ์: มีเงินสำรอง 3 เดือนของรายจ่าย = 100 คะแนน
+      const monthlyExpense = expense > 0 ? expense : 0
+      const bufferScore    = monthlyExpense <= 0 || liquid <= 0
+        ? (liquid > 0 ? 100 : 0)
+        : Math.min(1, liquid / (3 * monthlyExpense)) * 100
+
+      const raw = savingsScore * 0.5 + debtScore * 0.3 + bufferScore * 0.2
+      return Math.max(0, Math.min(100, Math.round(raw)))
     })()
 
     const sparkValues = (() => {
