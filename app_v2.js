@@ -1563,7 +1563,7 @@ const App = {
   },
 
   _txTypeLabel(type) {
-    const m = { expense:'รายจ่าย', income:'รายรับ', transfer:'โอน', cc_payment:'ชำระบัตร' }
+    const m = { expense:'รายจ่าย', income:'รายรับ', transfer:'โอน', cc_payment:'ชำระบัตร', bnpl_payment:'จ่าย BNPL' }
     return m[type] || type
   },
 }
@@ -1867,6 +1867,7 @@ function init() {
   S.splitPeople = data.splitPeople || []
   S.splitBillDraft = data.splitBillDraft || null
   S.loans = data.loans || []
+  S.bnplPlans = data.bnplPlans || []
   S.migrations = { cryptoCentralizedV1: false, ...(data.migrations || {}) }
   S.creditLimitGroups  = data.creditLimitGroups  || []
   S.rewardAccounts     = data.rewardAccounts     || []
@@ -2284,18 +2285,18 @@ App.render();
     if (S.settings?.hideMoney) {
       if (type === 'income') return '+฿*****'
       if (type === 'expense') return '-฿*****'
-      if (type === 'transfer' || type === 'cc_payment') return '↔ ฿*****'
+      if (type === 'transfer' || type === 'cc_payment' || type === 'bnpl_payment') return '↔ ฿*****'
       return '฿*****'
     }
     if (type === 'income') return '+' + Calc.fmt(n)
     if (type === 'expense') return '-' + Calc.fmt(n)
-    if (type === 'transfer' || type === 'cc_payment') return '↔ ' + Calc.fmt(n)
+    if (type === 'transfer' || type === 'cc_payment' || type === 'bnpl_payment') return '↔ ' + Calc.fmt(n)
     return Calc.fmt(n)
   }
   const amountClass = type => type === 'income' ? 'c-income' : type === 'transfer' ? 'c-primary' : 'c-expense'
   const cssAmountColor = type => type === 'income' ? 'var(--income)' : type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
   const walletValue = w => App._walletValueTHB ? App._walletValueTHB(w) : Number(w?.balance || 0)
-  const walletTypeLabelMap = { bank:'ธนาคาร', cash:'เงินสด', ewallet:'E-Wallet', credit:'บัตรเครดิต', saving:'ออมทรัพย์', gold:'ทองคำ', crypto:'Crypto', fcd:'เงินฝากต่างประเทศ' }
+  const walletTypeLabelMap = { bank:'ธนาคาร', cash:'เงินสด', ewallet:'E-Wallet', credit:'บัตรเครดิต', saving:'ออมทรัพย์', gold:'ทองคำ', crypto:'Crypto', fcd:'เงินฝากต่างประเทศ', bnpl:'BNPL' }
 
   App._esc = esc
   App._fmtMoney = fmt
@@ -2491,7 +2492,7 @@ App.render();
   const typeSign = type => type === 'income' ? '+' : type === 'transfer' ? '' : '-'
   const signedFmt = (n, type) => `${typeSign(type)}${fmt(Math.abs(Number(n) || 0))}`
   const activeColorClass = type => type === 'income' ? 'income' : type === 'expense' ? 'expense' : 'transfer'
-  const primaryWallet = () => S.wallets.find(w => w.type !== 'credit')?.id || S.wallets[0]?.id || ''
+  const primaryWallet = () => S.wallets.find(w => w.type !== 'credit' && w.type !== 'bnpl')?.id || S.wallets[0]?.id || ''
   const maybeSectionHeader = (title, actionLabel, action) => App._sectionHeader ? App._sectionHeader(title, actionLabel, action) : `<div class="section-header"><h3>${esc(title)}</h3>${actionLabel ? `<button onclick="${esc(action)}">${esc(actionLabel)}</button>` : ''}</div>`
   const txToday = () => (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
 
@@ -2730,7 +2731,7 @@ App.render();
   App.openAddTx = function() {
     S.txMode = 'add'
     S.editingTxId = null
-    S.tx = { step:'amount', type:'expense', amount:'0', calcOp:'', calcLeft:'', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', channel:'', note:'', date:txToday(), benefitDateOverride:'', isRecurring:false, isInstallment:false, installmentMonths:'', sharedExpense:{ enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
+    S.tx = { step:'amount', type:'expense', amount:'0', calcOp:'', calcLeft:'', walletId:primaryWallet(), toWalletId:'', categoryId:'', merchant:'', channel:'', note:'', date:txToday(), benefitDateOverride:'', isRecurring:false, isInstallment:false, installmentMonths:'', bnplInstallments:0, sharedExpense:{ enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:null, rewardIncludePoints:true, rewardIncludeCashback:true, recurrenceType:'monthly', everyDays:30, durationMonths:'', recurringDayOfMonth:parseInt(String(txToday()).slice(-2), 10) || 1 }
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
   }
@@ -2985,6 +2986,7 @@ App.render();
     if (tx.type === 'income') return '+' + fmt(tx.amount)
     if (tx.type === 'expense') return '-' + fmt(tx.amount)
     if (tx.type === 'cc_payment') return '-' + fmt(App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(tx) : (tx.cashAmount || tx.amount))
+    if (tx.type === 'bnpl_payment') return '-' + fmt(tx.amount)
     return fmt(tx.amount)
   }
 
@@ -2995,7 +2997,7 @@ App.render();
     const isTransfer = tx.type === 'transfer'
     const isReimbursement = App.isReimbursementTx?.(tx)
     const title = isTransfer ? `${wallet?.name || 'ไม่ระบุ'} → ${toWallet?.name || 'ไม่ระบุ'}` : (isReimbursement ? (tx.merchant || 'คืนเงินจากเพื่อน') : (tx.merchant || tx.note || cat?.label || 'รายการ'))
-    const icon = isReimbursement ? '↩️' : (cat?.icon || (tx.type === 'income' ? '💰' : isTransfer ? '🔁' : tx.type === 'cc_payment' ? '💳' : '💸'))
+    const icon = isReimbursement ? '↩️' : (cat?.icon || (tx.type === 'income' ? '💰' : isTransfer ? '🔁' : tx.type === 'cc_payment' ? '💳' : tx.type === 'bnpl_payment' ? '🛍️' : '💸'))
     const meta = []
     if (isReimbursement) {
       const parent = tx.reimbursesSharedExpenseTxId ? (S.transactions || []).find(row => row.id === tx.reimbursesSharedExpenseTxId) : null
@@ -3300,7 +3302,25 @@ App.render();
 	      ${S.tx.merchantSuggestionNote ? `<div class="form-hint">${esc(S.tx.merchantSuggestionNote)}</div>` : ''}
 	    </div>`}
           <div class="form-split-row"><div><label class="form-label">วันที่</label><input class="form-input" type="date" id="tx-date" value="${esc(S.tx.date)}" onchange="App._txField('date',this.value);App._renderAddTxDetail()"></div><div><label class="form-label">หมายเหตุ</label><input class="form-input" id="tx-note" placeholder="เพิ่มเติม..." value="${esc(S.tx.note)}" oninput="App._txField('note',this.value)"></div></div>
-          ${isExpense ? `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? (App._recurringInlineHtml?.() || '') : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}` : ''}
+          ${(() => {
+            if (!isExpense) return ''
+            const _selWallet = S.wallets.find(w => w.id === S.tx.walletId)
+            if (_selWallet?.type === 'bnpl') {
+              const _bi = Number(S.tx.bnplInstallments || 0)
+              const _amt = Number(S.tx.amount || 0)
+              const _schedulePreview = (_bi > 1 && _amt > 0)
+                ? `<div style="font-size:12px;opacity:.65;margin-top:6px">งวดละ ≈ ${typeof Calc !== 'undefined' && Calc.fmt ? Calc.fmt(Math.round(_amt/_bi*100)/100) : '฿'+(_amt/_bi).toFixed(2)} · ${_bi} งวด</div>`
+                : ''
+              return `<div class="form-group"><label class="form-label">แบ่งชำระ (BNPL)</label>
+                <div class="installment-month-grid">
+                  ${[0,3,6,12].map(m => `<button type="button" class="${_bi===m?'active':''}" onclick="App._txField('bnplInstallments',${m});App._renderAddTxDetail()">${m===0?'ไม่แบ่ง':m+' งวด'}</button>`).join('')}
+                </div>
+                <input class="form-input" type="number" min="2" inputmode="numeric" value="${_bi > 0 && ![3,6,12].includes(_bi) ? _bi : ''}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('bnplInstallments',this.value?Number(this.value):0);App._renderAddTxDetail()" style="margin-top:8px">
+                ${_schedulePreview}
+              </div>`
+            }
+            return `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? (App._recurringInlineHtml?.() || '') : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}`
+          })()}
           ${(() => {
             try {
               if (type !== 'expense' || !S.tx.walletId) return ''
@@ -3718,7 +3738,7 @@ App.render();
   const GOLD_API_URL = 'https://api.chnwt.dev/thai-gold-api/latest';
   const GOLDTRADERS_URL = 'https://www.goldtraders.or.th/';
   const isInvest = w => INVEST_TYPES.has(w?.type);
-  const walletTypeLabel = type => ({ bank:'ธนาคาร', cash:'เงินสด', ewallet:'E-Wallet', saving:'ออมทรัพย์', credit:'บัตรเครดิต', gold:'ทองคำ', crypto:'Crypto', fcd:'เงินฝากต่างประเทศ' })[type] || type || 'กระเป๋า';
+  const walletTypeLabel = type => ({ bank:'ธนาคาร', cash:'เงินสด', ewallet:'E-Wallet', saving:'ออมทรัพย์', credit:'บัตรเครดิต', gold:'ทองคำ', crypto:'Crypto', fcd:'เงินฝากต่างประเทศ', bnpl:'BNPL' })[type] || type || 'กระเป๋า';
   const unitLabel = w => w?.type === 'gold' ? 'บาททอง' : w?.type === 'fcd' ? (w.currency || w.symbol || 'USD') : (w?.symbol || 'หน่วย');
   const marketUrl = w => w?.type === 'gold' ? GOLDTRADERS_URL : w?.type === 'crypto' ? 'https://www.coingecko.com/' : w?.type === 'fcd' ? 'https://www.frankfurter.app/' : '#';
   const goldData = () => S.marketPrices?.thaiGold || S.marketPrices?.auroraGold || null;
@@ -3953,7 +3973,7 @@ App.render();
 
   // ── 2. Export CSV ────────────────────────────────────────────
   App.exportCSVLegacy = function() {
-    const typeLabel = { expense: 'รายจ่าย', income: 'รายรับ', transfer: 'โอนเงิน', cc_payment: 'ชำระบัตร' }
+    const typeLabel = { expense: 'รายจ่าย', income: 'รายรับ', transfer: 'โอนเงิน', cc_payment: 'ชำระบัตร', bnpl_payment: 'จ่าย BNPL' }
     const headers = ['วันที่','ประเภท','หมวดหมู่','ร้านค้า/แหล่งที่มา','จำนวนเงิน','กระเป๋าเงิน','หมายเหตุ']
     const rows = [...S.transactions]
       .sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
@@ -4690,6 +4710,17 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
   // ── Wallet card rendering ─────────────────────────────────────
   App._walletCard = function(w) {
+    if (w.type === 'bnpl') {
+      const _reorderMode = !!S._walletReorderMode
+      const _dragHandle = _reorderMode
+        ? `<div class="wallet-drag-handle" ontouchstart="App._walletDragStart(event,'${ESC(w.id)}')" onmousedown="App._walletDragStart(event,'${ESC(w.id)}')">⠿</div>`
+        : ''
+      const editBtn = `<button class="wc-edit-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')" aria-label="แก้ไข">✏️</button>`
+      const cardHtml = typeof BNPL !== 'undefined' ? BNPL.ui.walletCard(w) : `<div class="wallet-card">BNPL: ${ESC(w.name)}</div>`
+      return `<div data-wallet-id="${ESC(w.id)}" data-wallet-type="bnpl" class="${_reorderMode ? 'wallet-drag-item' : ''}" style="position:relative">
+        ${_dragHandle}${editBtn}${cardHtml}
+      </div>`
+    }
     const isCC = w.type === 'credit'
     const invest = isInvest(w)
     const color = w.color || (isCC ? '#DC2626' : invest ? '#D97706' : '#2563EB')
@@ -5002,7 +5033,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
 ;(function() {
   const esc = App._esc
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
-  const TX_TYPE_LABELS = { income:'รายรับ', expense:'รายจ่าย', transfer:'โอนเงิน', cc_payment:'ชำระบัตร' }
+  const TX_TYPE_LABELS = { income:'รายรับ', expense:'รายจ่าย', transfer:'โอนเงิน', cc_payment:'ชำระบัตร', bnpl_payment:'จ่าย BNPL' }
   const isInvestWalletForRepair = w => ['gold','crypto','fcd'].includes(String(w?.type || '').toLowerCase())
   const round2Repair = n => Math.round((Number(n) || 0) * 100) / 100
   const round8Repair = n => Math.round((Number(n) || 0) * 1e8) / 1e8
@@ -5028,6 +5059,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
           ? App.getCCPaymentCashAmount(tx)
           : (Number(tx.cashAmount) > 0 ? Number(tx.cashAmount) : amt)
         cash[tx.walletId] = (cash[tx.walletId] || 0) - cashAmount
+        if (tx.toWalletId)
+          cash[tx.toWalletId] = (cash[tx.toWalletId] || 0) + amt
+      } else if (tx.type === 'bnpl_payment') {
+        cash[tx.walletId] = (cash[tx.walletId] || 0) - amt
         if (tx.toWalletId)
           cash[tx.toWalletId] = (cash[tx.toWalletId] || 0) + amt
       }
@@ -5363,6 +5398,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       else if (tx.type === 'investment_buy') { addCash(tx.cashWalletId || tx.sourceWalletId, -amt); addUnits(tx.walletId, Number(tx.units || 0)) }
       else if (tx.type === 'investment_sell') { addCash(tx.cashWalletId || tx.sourceWalletId, amt); addUnits(tx.walletId, -Math.abs(Number(tx.units || 0))) }
       else if (tx.type === 'investment_adjust') addUnits(tx.walletId, Number(tx.unitsDelta || tx.units || 0))
+      else if (tx.type === 'bnpl_payment') { addCash(tx.walletId, -amt); addCash(tx.toWalletId, amt) }
     })
     return { cash, units }
   }
@@ -5827,6 +5863,16 @@ Calc.getUsableMoney = function(wallets, state = null) {
       }
       App._registerMerchantFromTx?.(tx)
       App.refreshTransactionRewardEstimates?.()
+
+      // Create BNPL plan when saving a new expense on a BNPL wallet with installments
+      if (!isEdit && tx.type === 'expense' && typeof BNPL !== 'undefined') {
+        const _bnplWallet = (S.wallets || []).find(w => w.id === tx.walletId)
+        const _bnplN = Number(draft.bnplInstallments || 0)
+        if (_bnplWallet?.type === 'bnpl' && _bnplN >= 2) {
+          BNPL.store.createPlan({ walletId: tx.walletId, txId: tx.id, merchant: tx.merchant || '', purchaseDate: tx.date, totalAmount: Number(tx.amount), installments: _bnplN })
+        }
+      }
+
       App.recalculateWalletBalances({ save:false, recordSnapshot:true })
       persist()
       resetAfterSaveChrome()
@@ -10421,10 +10467,11 @@ App._pickMerchant = function(name, opts = {}) {
       return
     }
     const COLORS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
-    const TYPES  = [['bank','🏦','ธนาคาร'],['cash','💵','เงินสด'],['ewallet','📱','E-Wallet'],['credit','💳','บัตรเครดิต'],['gold','🥇','ทอง'],['fcd','💱','FCD']]
+    const TYPES  = [['bank','🏦','ธนาคาร'],['cash','💵','เงินสด'],['ewallet','📱','E-Wallet'],['credit','💳','บัตรเครดิต'],['bnpl','🛍️','BNPL'],['gold','🥇','ทอง'],['fcd','💱','FCD']]
     const walletFormTypes = new Set(TYPES.map(([value]) => value))
     const type   = walletFormTypes.has(w?.type) ? w.type : 'bank'
     const isCC   = type === 'credit'
+    const isBNPL = type === 'bnpl'
     const isInv  = ['gold','fcd'].includes(type)
     const formSection = (id, title, body, extraStyle = '') => `<div id="${id}" class="card card-pad" style="margin-bottom:12px;${extraStyle}"><div style="font-size:14px;font-weight:800;margin-bottom:12px">${title}</div><div>${body}</div></div>`
 
@@ -10621,12 +10668,29 @@ App._pickMerchant = function(name, opts = {}) {
           <label class="form-label" id="wf-balance-label">${isInv?'มูลค่าปัจจุบัน / ราคาสำรอง (฿)':'มูลค่าปัจจุบัน (฿)'}</label>
           <input class="form-input" type="number" id="wf-balance" value="${w && !isCC ? Math.abs(w.balance) : ''}">
         </div>
-        ${isCC ? `<div class="form-group" id="wf-cc-balance-group">
+        ${(isCC || isBNPL) ? `<div class="form-group" id="wf-cc-balance-group">
           <label class="form-label">ยอดค้างชำระ (฿)</label>
           <input class="form-input" type="number" id="wf-cc-balance" value="${w ? Math.abs(w.balance||0) : ''}">
         </div>` : ''}
       `)}
       <div id="wf-cc-fields" style="${isCC?'':'display:none'}">${ccExtraHtml}</div>
+      <div id="wf-bnpl-fields" style="${isBNPL?'':'display:none'}">${formSection('wf-bnpl-acc', 'ตั้งค่า BNPL', `
+        <div class="form-group">
+          <label class="form-label">ผู้ให้บริการ</label>
+          <input class="form-input" id="wf-bnpl-provider" list="wf-bnpl-provider-list" value="${esc(w?.provider||'')}" placeholder="เช่น Shopee PayLater, Aeon, Lazada">
+          <datalist id="wf-bnpl-provider-list">
+            <option value="Shopee PayLater">
+            <option value="Lazada Wallet Credit">
+            <option value="Aeon">
+            <option value="KTC">
+            <option value="True Money">
+          </datalist>
+        </div>
+        <div class="form-group">
+          <label class="form-label">วงเงิน (฿)</label>
+          <input class="form-input" type="number" min="0" id="wf-bnpl-limit" value="${w?.creditLimit||''}">
+        </div>
+      `)}</div>
       ${investHtml}
       ${w ? `<button class="btn btn-outline" onclick="App.deleteWallet('${esc(w.id)}')" style="margin-top:12px">ลบ</button>` : ''}`
     App.openOverlay('overlay-wallet-form')
@@ -10638,6 +10702,8 @@ App._pickMerchant = function(name, opts = {}) {
   App._syncWalletFormSections = function() {
     const type = document.getElementById('wf-type')?.value || 'bank'
     const isCC = type === 'credit'
+    const isBNPL = type === 'bnpl'
+    const isDebt = isCC || isBNPL
     const isInv = ['gold','fcd'].includes(type)
     const limitMode = document.getElementById('wf-credit-limit-mode')?.value || 'individual'
     const rewardAccountMode = document.getElementById('wf-reward-account-select')?.value || ''
@@ -10648,10 +10714,11 @@ App._pickMerchant = function(name, opts = {}) {
       el.style.display = visible ? '' : 'none'
     }
     setVisible('wf-cc-fields', isCC)
+    setVisible('wf-bnpl-fields', isBNPL)
     setVisible('wf-invest-acc', isInv)
     setVisible('wf-invest-fields', isInv)
-    setVisible('wf-balance-group', !isCC)
-    setVisible('wf-cc-balance-group', isCC)
+    setVisible('wf-balance-group', !isDebt)
+    setVisible('wf-cc-balance-group', isDebt)
     setVisible('wf-shared-group-section', isCC && limitMode === 'shared')
     setVisible('wf-limit-individual', isCC && limitMode !== 'shared')
     setVisible('wf-new-group-fields', isCC && limitMode === 'shared' && groupMode === 'new')
@@ -10806,20 +10873,22 @@ App._pickMerchant = function(name, opts = {}) {
   // ── Updated saveWallet ──────────────────────────────────────
   App.saveWallet = function() {
     const name  = document.getElementById('wf-name')?.value.trim()
-    const walletFormTypes = new Set(['bank','cash','ewallet','credit','gold','fcd'])
+    const walletFormTypes = new Set(['bank','cash','ewallet','credit','bnpl','gold','fcd'])
     const requestedType = document.getElementById('wf-type')?.value || 'bank'
     const type  = walletFormTypes.has(requestedType) ? requestedType : 'bank'
     const color = document.getElementById('wf-color')?.value || '#2563EB'
     const isCC  = type === 'credit'
+    const isBNPL = type === 'bnpl'
+    const isDebt = isCC || isBNPL
     const isInv = ['gold','fcd'].includes(type)
-    const rawBalance = parseFloat(document.getElementById(isCC ? 'wf-cc-balance' : 'wf-balance')?.value) || 0
-    const ICONS = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', saving:'🏦', gold:'🥇', fcd:'💱' }
+    const rawBalance = parseFloat(document.getElementById(isDebt ? 'wf-cc-balance' : 'wf-balance')?.value) || 0
+    const ICONS = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', bnpl:'🛍️', saving:'🏦', gold:'🥇', fcd:'💱' }
 
     if (!name) { notify('กรุณากรอกชื่อกระเป๋า', 'error'); return }
     const _wErr = _fieldTooLong(name, FIELD_MAX.name, 'ชื่อกระเป๋า')
     if (_wErr) { notify(_wErr, 'error'); return }
 
-    let balance = isCC ? -Math.abs(rawBalance) : rawBalance
+    let balance = isDebt ? -Math.abs(rawBalance) : rawBalance
 
     const data = { name, type, color, icon: ICONS[type] || '💳', balance }
 
@@ -10894,6 +10963,12 @@ App._pickMerchant = function(name, opts = {}) {
       if (dueDateMode === 'fixedDay') {
         Object.assign(data, { fixedDueDay, holidayShiftEnabled, includeDefaultHolidays, customHolidays })
       }
+    }
+
+    if (isBNPL) {
+      const provider    = document.getElementById('wf-bnpl-provider')?.value.trim() || ''
+      const creditLimit = parseFloat(document.getElementById('wf-bnpl-limit')?.value) || 0
+      Object.assign(data, { provider, creditLimit })
     }
 
     if (isInv) {
@@ -16513,6 +16588,20 @@ App._pickMerchant = function(name, opts = {}) {
       if (p.remaining <= 0 || g.targetDate > end) return
       rows.push({ id:`goal-${g.id}`, date:g.targetDate, icon:g.icon || '🎯', title:`เป้าหมาย ${g.name}`, amount:p.remaining, type:'goal', status:String(g.targetDate) < t ? 'overdue' : 'upcoming', open:`App.openGoalForm('${esc(g.id)}')` })
     })
+    if (typeof BNPL !== 'undefined') {
+      BNPL.store.getUpcomingInstallments(days).forEach(item => {
+        rows.push({
+          id: `bnpl-${item.planId}:${item.no}`,
+          date: item.dueDate,
+          icon: item.walletIcon || '🛍️',
+          title: `${item.merchant || 'BNPL'} (งวด ${item.no}/${item.installments})`,
+          amount: item.amount,
+          type: 'bnpl_due',
+          status: item.isOverdue ? 'overdue' : 'upcoming',
+          open: `BNPL.ui.openPayModal('${esc(item.planId)}',${item.no})`,
+        })
+      })
+    }
     return rows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.title).localeCompare(String(b.title)))
   }
 
@@ -16528,7 +16617,7 @@ App._pickMerchant = function(name, opts = {}) {
     const order = ['ค้างอยู่', '7 วันข้างหน้า', 'เดือนนี้ / 30 วัน', 'ถัดไป']
     const itemHtml = row => `<div class="list-item upcoming-item ${row.status === 'overdue' ? 'overdue' : ''}" ${row.open ? `onclick="${row.open}"` : ''}>
       <div class="list-item-icon">${esc(row.icon)}</div>
-      <div class="list-item-info"><div class="list-item-name">${esc(row.title)}</div><div class="list-item-sub">${thaiDate(row.date)} · ${{ recurring:'รายการประจำ', installment:'ผ่อนชำระ', credit_due:'ชำระบัตรเครดิต', scheduled:'ตามแผน', goal:'เป้าหมาย' }[row.type] || esc(row.type)} · ${row.status === 'overdue' ? 'เลยกำหนด' : 'กำลังจะถึง'}</div></div>
+      <div class="list-item-info"><div class="list-item-name">${esc(row.title)}</div><div class="list-item-sub">${thaiDate(row.date)} · ${{ recurring:'รายการประจำ', installment:'ผ่อนชำระ', credit_due:'ชำระบัตรเครดิต', scheduled:'ตามแผน', goal:'เป้าหมาย', bnpl_due:'ผ่อน BNPL' }[row.type] || esc(row.type)} · ${row.status === 'overdue' ? 'เลยกำหนด' : 'กำลังจะถึง'}</div></div>
       <div style="text-align:right"><strong>${fmtHidden(row.amount)}</strong>${row.action ? `<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();${row.action}" style="width:auto">บันทึก</button>${row.skip ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();${row.skip}" style="width:auto">ข้าม</button>` : ''}</div>` : ''}</div>
     </div>`
     const html = order.filter(k => grouped[k]?.length).map(k => `<div class="sec-title">${k}</div><div class="card"><div style="padding:0 12px">${grouped[k].map(itemHtml).join('')}</div></div>`).join('')

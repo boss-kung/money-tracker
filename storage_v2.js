@@ -35,6 +35,7 @@ const KEYS = {
   financialActionLog: 'mt_financial_action_log',
   financialLifePlans: 'mt_financial_life_plans',
   loans:              'mt_loans',
+  bnplPlans:          'mt_bnpl_plans',
 }
 
 const BACKUP_SCHEMA_VERSION = 3
@@ -69,6 +70,7 @@ const BACKUP_SCHEMA_KEYS = [
   'splitPeople',
   'splitBillDraft',
   'loans',
+  'bnplPlans',
   'migrations',
   'settings',
   'aiInsightStore',
@@ -108,6 +110,7 @@ const BACKUP_DEFAULTS = {
   splitPeople: [],
   splitBillDraft: null,
   loans: [],
+  bnplPlans: [],
   migrations: { cryptoCentralizedV1: false },
   settings: {},
   aiInsightStore: { version: 1, lastRefreshed: null, payloadHash: '', insights: [], hiddenTypes: [], feedback: [] },
@@ -327,6 +330,7 @@ const Storage = {
     data.splitPeople             = Storage.load(KEYS.splitPeople)             || []
     data.splitBillDraft          = Storage.load(KEYS.splitBillDraft)          || null
     data.loans                   = Storage.load(KEYS.loans)                   || []
+    data.bnplPlans               = Storage.load(KEYS.bnplPlans)               || []
     const loadedPrivileges   = Storage.load(KEYS.privileges)
     data.privileges          = loadedPrivileges || JSON.parse(JSON.stringify(
       typeof DEFAULT_PRIVILEGES !== 'undefined'
@@ -368,6 +372,7 @@ const Storage = {
       Storage.save(KEYS.splitPeople,             state.splitPeople             || []),
       Storage.save(KEYS.splitBillDraft,          state.splitBillDraft          || null),
       Storage.save(KEYS.loans,                   state.loans                   || []),
+      Storage.save(KEYS.bnplPlans,               state.bnplPlans               || []),
       Storage.save(KEYS.migrations,          state.migrations          || { cryptoCentralizedV1: false }),
     ]
     if (!results.every(Boolean)) return false
@@ -385,7 +390,7 @@ const Storage = {
     BACKUP_SCHEMA_KEYS.forEach(key => {
       const fallback = BACKUP_DEFAULTS[key]
       let value = state?.[key]
-      if (['splitBills', 'splitPeople', 'splitBillDraft', 'loans'].includes(key)) {
+      if (['splitBills', 'splitPeople', 'splitBillDraft', 'loans', 'bnplPlans'].includes(key)) {
         value = Storage.load(KEYS[key])
         if (value === null) value = state?.[key]
       }

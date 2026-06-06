@@ -376,6 +376,7 @@ const Calc = {
       else if (type === 'gold') gold += Math.max(0, value)
       else if (type === 'fcd') fcd += Math.max(0, value)
       else if (type === 'credit') liabilities += Math.abs(Math.min(0, value))
+      else if (type === 'bnpl') liabilities += Math.abs(Math.min(0, value))
       else if (type !== 'crypto') investment += Math.max(0, value)
     })
     const crypto = Math.max(0, Number(cryptoTotal || 0))
