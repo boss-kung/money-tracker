@@ -10447,7 +10447,7 @@ App._pickMerchant = function(name, opts = {}) {
       if (effectiveBalance(tx.walletId) < amt) return 'ยอดเงินในกระเป๋าต้นทางไม่เพียงพอ'
     } else if (tx.type === 'expense') {
       if (!tx.categoryId) return 'กรุณาเลือกหมวดหมู่รายจ่าย'
-      if (w.type !== 'credit' && effectiveBalance(tx.walletId) < amt) return 'ยอดเงินในกระเป๋าไม่เพียงพอ'
+      if (w.type !== 'credit' && w.type !== 'bnpl' && effectiveBalance(tx.walletId) < amt) return 'ยอดเงินในกระเป๋าไม่เพียงพอ'
       if (w.type === 'credit') {
         const limit = App.getCreditLimitForCard(w)
         if (limit > 0) {
@@ -10457,6 +10457,14 @@ App._pickMerchant = function(name, opts = {}) {
             const modeLabel = (w.creditLimitMode === 'shared' && w.creditLimitGroupId) ? '(วงเงินร่วม)' : ''
             return `วงเงินบัตรคงเหลือ ${money(Math.max(0, available))} ${modeLabel} ไม่พอสำหรับ ${money(amt)}`
           }
+        }
+      }
+      if (w.type === 'bnpl') {
+        const limit = Number(w.creditLimit || 0)
+        if (limit > 0) {
+          const origAmt = (origTx && origTx.walletId === tx.walletId && origTx.type === 'expense') ? Number(origTx.amount || 0) : 0
+          const available = limit + effectiveBalance(tx.walletId) + origAmt
+          if (amt > available) return `วงเงิน BNPL คงเหลือ ${money(Math.max(0, available))} ไม่พอสำหรับ ${money(amt)}`
         }
       }
     } else if (tx.type === 'income') {
