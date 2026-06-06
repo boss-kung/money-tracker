@@ -10856,7 +10856,7 @@ App._pickMerchant = function(name, opts = {}) {
 
   // ── Updated _selectWalletType ───────────────────────────────
   App._selectWalletType = function(type) {
-    if (!new Set(['bank','cash','ewallet','credit','gold','fcd']).has(type)) type = 'bank'
+    if (!new Set(['bank','cash','ewallet','credit','bnpl','gold','fcd']).has(type)) type = 'bank'
     document.getElementById('wf-type').value = type
     document.querySelectorAll('#wf-type-grid .cat-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type))
     const isCC  = type === 'credit'
