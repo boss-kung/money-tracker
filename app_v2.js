@@ -4217,6 +4217,43 @@ Calc.getUsableMoney = function(wallets, state = null) {
       }
     }
 
+    // Monthly summary banner (วันที่ 1-5 ของเดือน, เฉพาะที่ยังไม่แสดง)
+    if (isCurrentMonth) {
+      const _summaryData = App._checkMonthlySummary?.()
+      if (_summaryData) {
+        const { stats: sumStats, lastMonth } = _summaryData
+        const sumIncome = sumStats.income || 0
+        const sumExpense = sumStats.expense || 0
+        const sumNet = sumStats.net || 0
+        const savingsPct = sumStats.savingsRate || 0
+        const isDeficit = sumNet < 0
+        const mLabel = Calc.monthLabel(lastMonth)
+        const expCats = S.categories?.expense || []
+        const catBreakdown = Calc.getCategoryBreakdown(S.transactions, lastMonth, {
+          type: 'expense', categories: expCats
+        }).slice(0, 3)
+        const catText = catBreakdown.map(c => `${c.icon || '📦'} ${ESC(c.label)} ${FMT(c.amount)}`).join('  ·  ')
+        const savingChipHtml = isDeficit
+          ? `<span class="mt-sb-saving mt-sb-saving--bad">ขาดดุล ${FMT(Math.abs(sumNet))}</span>`
+          : `<span class="mt-sb-saving mt-sb-saving--good">ออม ${Math.round(savingsPct)}%${sumNet > 0 ? ' ▲' : ''}</span>`
+        html += `<div class="mt-summary-banner" id="mt-summary-banner">
+          <div class="mt-summary-banner-close" onclick="App._dismissMonthlySummary('${ESC(lastMonth)}')">×</div>
+          <div class="mt-summary-banner-head">🎉 สรุปเดือน ${ESC(mLabel)}</div>
+          <div class="mt-summary-banner-stats">
+            <span class="mt-sb-income">รายรับ ${FMT(sumIncome)}</span>
+            <span class="mt-sb-dot"> · </span>
+            <span class="mt-sb-expense">รายจ่าย ${FMT(sumExpense)}</span>
+            <span class="mt-sb-dot"> · </span>
+            ${savingChipHtml}
+          </div>
+          ${catText ? `<div class="mt-summary-banner-cats">${catText}</div>` : ''}
+          <div class="mt-summary-banner-actions">
+            <button class="btn btn-sm" onclick="App._showMonthlySummaryDetail('${ESC(lastMonth)}')">ดูรายละเอียด</button>
+          </div>
+        </div>`
+      }
+    }
+
     const healthyPct = (() => {
       const income  = Number(stats.income  || 0)
       const expense = Number(stats.expense || 0)
@@ -4520,6 +4557,111 @@ Calc.getUsableMoney = function(wallets, state = null) {
     })
   }
 
+  // ── Monthly Financial Summary Banner ───────────────────────────
+  App._checkMonthlySummary = function() {
+    // เงื่อนไข 1: วันที่ 1-5 ของเดือน
+    const today = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10)
+    const dayOfMonth = parseInt(today.slice(8))
+    if (dayOfMonth > 5) return null
+
+    // เงื่อนไข 2: ยังไม่แสดงเดือนที่ต้องสรุปนี้
+    const thisMonth = typeof getTHISMONTH === 'function' ? getTHISMONTH() : today.slice(0,7)
+    const lastMonth = Calc.getPreviousMonth(thisMonth)
+    if ((S.settings || {}).lastSummaryShownFor === lastMonth) return null
+
+    // เงื่อนไข 3: dismiss ใน session นี้แล้ว
+    if (S._summaryDismissed === lastMonth) return null
+
+    // เงื่อนไข 4: เดือนที่แล้วมีข้อมูล
+    const stats = Calc.getMonthlyStats(S.transactions || [], lastMonth)
+    if (!stats.income && !stats.expense) return null
+
+    return { stats, lastMonth }
+  }
+
+  App._dismissMonthlySummary = function(month) {
+    S._summaryDismissed = month
+    S.settings ||= {}
+    S.settings.lastSummaryShownFor = month
+    try { persist() } catch (_) {}
+    const el = document.getElementById('mt-summary-banner')
+    if (el) {
+      el.style.transition = 'opacity .2s, max-height .3s'
+      el.style.opacity = '0'
+      el.style.overflow = 'hidden'
+      el.style.maxHeight = el.offsetHeight + 'px'
+      requestAnimationFrame(() => { el.style.maxHeight = '0'; el.style.margin = '0'; el.style.padding = '0' })
+      setTimeout(() => el.remove(), 320)
+    }
+  }
+
+  App._showMonthlySummaryDetail = function(month) {
+    const stats = Calc.getMonthlyStats(S.transactions || [], month)
+    const prevMonth = Calc.getPreviousMonth(month)
+    const prevStats = Calc.getMonthlyStats(S.transactions || [], prevMonth)
+    const mLabel = Calc.monthLabel(month)
+    const expCats = S.categories?.expense || []
+    const catBreakdown = Calc.getCategoryBreakdown(S.transactions, month, {
+      type: 'expense', categories: expCats
+    }).slice(0, 5)
+    const ESC2 = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+    const FMT2 = n => moneyFmt(Number(n) || 0)
+    const net = stats.net || 0
+    const isDeficit = net < 0
+    const savingsPct = Math.round(stats.savingsRate || 0)
+
+    // vs เดือนก่อน
+    let vsExpenseHtml = ''
+    if (prevStats.expense > 0 && stats.expense > 0) {
+      const diff = stats.expense - prevStats.expense
+      const diffPct = Math.round(Math.abs(diff) / prevStats.expense * 100)
+      const dir = diff > 0 ? '▲' : '▼'
+      const color = diff > 0 ? 'var(--expense)' : 'var(--income)'
+      vsExpenseHtml = `<span style="color:${color};font-size:11px"> ${dir} ${diffPct}% จากเดือนก่อน</span>`
+    }
+
+    // Budgets overrun count
+    const budgets = Calc.getBudgetProgress(S.transactions, S.budgets || [], S.categories, month)
+    const overBudget = budgets.filter(b => (b.rawPct || 0) > 100)
+
+    const catRowsHtml = catBreakdown.length
+      ? catBreakdown.map(c =>
+          `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span>${c.icon || '📦'} ${ESC2(c.label)}</span>
+            <span style="font-weight:600">${FMT2(c.amount)}</span>
+          </div>`
+        ).join('')
+      : '<div style="color:var(--muted);font-size:12px">ไม่มีรายจ่าย</div>'
+
+    App.showConfirm?.({
+      title: `สรุปเดือน ${mLabel}`,
+      bodyHtml: true,
+      body: `<div style="font-size:13px;line-height:1.8;color:var(--text)">
+        <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:12px;background:var(--surface-2,#f8fafc);border-radius:8px;padding:10px 12px">
+          <div style="display:flex;justify-content:space-between"><span>💰 รายรับ</span><span style="color:var(--income);font-weight:700">${FMT2(stats.income)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>💸 รายจ่าย</span><span style="color:var(--expense);font-weight:700">${FMT2(stats.expense)}${vsExpenseHtml}</span></div>
+          <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:4px;padding-top:4px">
+            <span>${isDeficit ? '⚠ ขาดดุล' : '✅ คงเหลือ'}</span>
+            <span style="color:${isDeficit?'var(--expense)':'var(--income)'};font-weight:700">${FMT2(Math.abs(net))}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between"><span>📊 อัตราออม</span><span style="font-weight:700">${isDeficit ? 'ขาดดุล' : savingsPct + '%'}</span></div>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">หมวดรายจ่ายสูงสุด</div>
+        ${catRowsHtml}
+        ${overBudget.length ? `<div style="margin-top:10px;font-size:12px;color:var(--expense)">⚠ เกินงบประมาณ ${overBudget.length} หมวด</div>` : ''}
+      </div>`,
+      confirmLabel: 'ไปรายงาน',
+      cancelLabel: 'ปิด',
+      onConfirm() {
+        App._dismissMonthlySummary?.(month)
+        const yr = parseInt((month || '').slice(0,4))
+        if (!isNaN(yr) && App._setRptYear) App._setRptYear(yr)
+        if (App.setRptMonth) App.setRptMonth(month)
+        App.showPage?.('reports')
+      }
+    })
+  }
+
   // Apply to current page immediately
   try { if (S.page === 'dashboard') App.renderDashboard() } catch (_) {}
   try { if (S.page === 'more') App.renderMore() } catch (_) {}
@@ -4555,11 +4697,19 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const typeLabel = App._walletTypeLabel ? App._walletTypeLabel(w.type) : w.type
     const editBtn = `<button class="wc-edit-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')" aria-label="แก้ไข">✏️</button>`
 
+    const _reorderMode = !!S._walletReorderMode
+    const _dragHandle = _reorderMode
+      ? `<div class="wallet-drag-handle" ontouchstart="App._walletDragStart(event,'${ESC(w.id)}')" onmousedown="App._walletDragStart(event,'${ESC(w.id)}')">⠿</div>`
+      : ''
+    const _dataAttrs = `data-wallet-id="${ESC(w.id)}" data-wallet-type="${ESC(w.type)}"`
+    const _dragCls = _reorderMode ? ' wallet-drag-item' : ''
+
     if (invest) {
       const price = App._investmentUnitPriceTHB ? App._investmentUnitPriceTHB(w) : 0
       const thbValue = App._investmentValueTHB ? App._investmentValueTHB(w) : (price * Number(w.units || 0))
       const units = Number(w.units || 0)
-      return `<div class="wallet-card wallet-card-colored wallet-card-invest" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB">
+      return `<div ${_dataAttrs} class="wallet-card wallet-card-colored wallet-card-invest${_dragCls}" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB">
+        ${_dragHandle}
         <div class="wc-header">
           <div><div class="wc-name">${ESC(name)}</div><div class="wc-type">${ESC(typeLabel)}</div></div>
           ${editBtn}
@@ -4596,20 +4746,22 @@ Calc.getUsableMoney = function(wallets, state = null) {
         const gAvail = Math.max(0, (g?.limit || 0) - gUsed)
         sharedBadge = g ? `<div class="v5-shared-badge">วงเงินร่วม ${ESC(g.name)} · คงเหลือ ${MONEY(gAvail)}</div>` : ''
       }
-      return `<div class="wallet-card wallet-card-colored wallet-card-credit" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="App.openCCDetail('${ESC(w.id)}')">
+      return `<div ${_dataAttrs} class="wallet-card wallet-card-colored wallet-card-credit${_dragCls}" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB"${_reorderMode ? '' : ` onclick="App.openCCDetail('${ESC(w.id)}')"`}>
+        ${_dragHandle}
         <div class="wc-header">
           <div><div class="wc-name">${ESC(name)}</div><div class="wc-type">บัตรเครดิต${w.issuer ? ` · ${ESC(w.issuer)}` : ''}${limit ? ` · วงเงิน ${MONEY(limit)}` : ''}</div></div>
-          <div class="wc-card-actions">${payBtn}${editBtn}</div>
+          <div class="wc-card-actions">${_reorderMode ? '' : payBtn}${editBtn}</div>
         </div>
         <div class="wc-balance">-${MONEY(totalOwed)}</div>
         ${installmentNote}
-        ${due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${ESC(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}
+        ${!_reorderMode && due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${ESC(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}
         ${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : `<div class="wc-no-limit-warn" onclick="event.stopPropagation();App.openEditWallet('${ESC(w.id)}')">⚠ ยังไม่ได้ตั้งวงเงิน — แตะเพื่อตั้งค่า</div>`}
       </div>`
     }
 
     // Regular asset wallet
-    return `<div class="wallet-card wallet-card-colored" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB" onclick="App.openWalletDetail('${ESC(w.id)}')">
+    return `<div ${_dataAttrs} class="wallet-card wallet-card-colored${_dragCls}" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB"${_reorderMode ? '' : ` onclick="App.openWalletDetail('${ESC(w.id)}')"`}>
+      ${_dragHandle}
       <div class="wc-header">
         <div><div class="wc-name">${ESC(name)}</div><div class="wc-type">${ESC(typeLabel)}</div></div>
         ${editBtn}
@@ -6050,8 +6202,143 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   // ── 4. Reports rollback: restore previous report structure ─────────────────
+  // ── Net Worth Trend Chart ────────────────────────────────────────
+  function renderNetWorthView() {
+    const snapshots = (S.netWorthSnapshots || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    const range = S.nwRange || '3M'
+    const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+
+    function addMonthsToDateStr(dateStr, months) {
+      const [y, m, d] = dateStr.split('-').map(Number)
+      const dt = new Date(y, m - 1 + months, d)
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+    }
+    const cutoffs = {
+      '1M': addMonthsToDateStr(todayStr, -1),
+      '3M': addMonthsToDateStr(todayStr, -3),
+      '6M': addMonthsToDateStr(todayStr, -6),
+      '1Y': addMonthsToDateStr(todayStr, -12),
+      'all': '2000-01-01'
+    }
+    const cutoff = cutoffs[range] || cutoffs['3M']
+    const data = snapshots.filter(s => s.date >= cutoff)
+
+    const latest = snapshots[snapshots.length - 1] || { assets: 0, debt: 0, net: 0 }
+    const first = data[0] || latest
+    const delta = (latest.net || 0) - (first.net || 0)
+
+    const fmtAbbr = v => {
+      const n = Number(v || 0)
+      const abs = Math.abs(n)
+      if (abs >= 1000000) return `${(n / 1000000).toFixed(1)}ล.`
+      if (abs >= 1000) return `${(n / 1000).toFixed(0)}K`
+      return `฿${Math.round(n).toLocaleString('en-US')}`
+    }
+    const deltaText = data.length >= 2
+      ? `${delta >= 0 ? '▲' : '▼'} ${fmtAbbr(Math.abs(delta))} จากต้นช่วง`
+      : ''
+    const deltaColor = delta >= 0 ? 'var(--income)' : 'var(--expense)'
+
+    // Range chips
+    const rangeChips = [['1M','1 เดือน'],['3M','3 เดือน'],['6M','6 เดือน'],['1Y','1 ปี'],['all','ทั้งหมด']]
+      .map(([v, l]) => `<button class="chip mini${range === v ? ' active' : ''}" onclick="App._setNWRange('${v}')">${l}</button>`)
+      .join('')
+
+    let html = `<div class="card card-pad" style="margin-bottom:12px">
+      <div class="nw-label">มูลค่าสุทธิปัจจุบัน</div>
+      <div class="nw-value ${latest.net >= 0 ? 'c-income' : 'c-expense'}">${money(latest.net || 0)}</div>
+      <div class="nw-detail">
+        <span class="nw-item">สินทรัพย์ <strong class="c-income">${money(latest.assets || 0)}</strong></span>
+        <span class="nw-item">หนี้สิน <strong class="c-expense">${money(latest.debt || 0)}</strong></span>
+      </div>
+      ${data.length >= 2 ? `<div class="nw-summary-delta" style="color:${deltaColor}">${esc(deltaText)}</div>` : ''}
+    </div>`
+    html += `<div class="chips" style="margin-bottom:12px">${rangeChips}</div>`
+
+    if (!snapshots.length) {
+      return html + App._emptyState('📈', 'ยังไม่มีข้อมูลความมั่งคั่ง', 'เพิ่มกระเป๋าเงินและรายการเพื่อเริ่มติดตาม')
+    }
+    if (!data.length) {
+      return html + `<div class="card card-pad"><div class="list-item-sub">ไม่มีข้อมูลในช่วงที่เลือก · ลองเลือกช่วงเวลาที่นานขึ้น</div></div>`
+    }
+    if (data.length < 2) {
+      return html + `<div class="card card-pad"><div class="list-item-sub">มีข้อมูลเพียง 1 จุดในช่วงนี้ · ใช้แอปต่อไปเพื่อเห็นแนวโน้ม</div></div>`
+    }
+
+    // SVG chart
+    const W = 360, H = 200
+    const PAD = { t: 18, b: 32, l: 8, r: 8 }
+    const innerW = W - PAD.l - PAD.r
+    const innerH = H - PAD.t - PAD.b
+
+    const nets = data.map(s => Number(s.net || 0))
+    const assets = data.map(s => Number(s.assets || 0))
+    const debts = data.map(s => -Number(s.debt || 0))
+    const allVals = [...nets, ...assets, ...debts]
+    const minY = Math.min(0, ...allVals)
+    const maxY = Math.max(0, ...allVals)
+    const rangeY = (maxY - minY) || 1
+
+    const toX = i => PAD.l + (i / (data.length - 1)) * innerW
+    const toY = v => PAD.t + innerH - ((Number(v || 0) - minY) / rangeY) * innerH
+    const zeroY = toY(0)
+
+    const linePath = vals => vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ')
+    const netPath  = linePath(nets)
+    const assetPath = linePath(assets)
+    const debtPath  = linePath(debts)
+    const netArea  = `${netPath} L${toX(data.length - 1).toFixed(1)},${zeroY.toFixed(1)} L${toX(0).toFixed(1)},${zeroY.toFixed(1)} Z`
+
+    // X-axis labels (4–5 points)
+    const LC = Math.min(5, data.length)
+    const lblIdxSet = new Set(Array.from({ length: LC }, (_, i) => Math.round(i * (data.length - 1) / (LC - 1))))
+    const TH_M = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+    const xLabels = [...lblIdxSet].map(i => {
+      const [, mm, dd] = (data[i].date || '').split('-')
+      const lbl = (range === '1Y' || range === 'all')
+        ? TH_M[parseInt(mm)] || ''
+        : `${parseInt(dd)} ${TH_M[parseInt(mm)] || ''}`
+      return `<text x="${toX(i).toFixed(1)}" y="${H - 4}" text-anchor="middle" class="nw-chart-label">${lbl}</text>`
+    }).join('')
+
+    const zeroLine = minY < 0
+      ? `<line x1="${PAD.l}" y1="${zeroY.toFixed(1)}" x2="${W - PAD.r}" y2="${zeroY.toFixed(1)}" class="nw-chart-zero-line"/>`
+      : ''
+
+    const dotX = toX(data.length - 1).toFixed(1)
+    const dotY = toY(nets[nets.length - 1]).toFixed(1)
+
+    const svg = `<svg class="nw-chart-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="nwAreaGrad${range}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--primary,#2563EB)" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="var(--primary,#2563EB)" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
+      ${zeroLine}
+      <path d="${netArea}" fill="url(#nwAreaGrad${range})"/>
+      <path d="${assetPath}" class="nw-chart-asset-line"/>
+      <path d="${debtPath}" class="nw-chart-debt-line"/>
+      <path d="${netPath}" class="nw-chart-net-line"/>
+      <circle cx="${dotX}" cy="${dotY}" r="3.5" class="nw-chart-dot"/>
+      ${xLabels}
+    </svg>`
+
+    html += `<div class="card card-pad" style="margin-bottom:12px">
+      <div class="report-category-title">แนวโน้มความมั่งคั่ง</div>
+      <div style="margin:12px -8px 8px">${svg}</div>
+      <div class="nw-chart-legend">
+        <span><span class="nw-chart-legend-dot" style="background:var(--primary,#2563EB)"></span>มูลค่าสุทธิ</span>
+        <span><span class="nw-chart-legend-dot" style="background:var(--income,#16A34A)"></span>สินทรัพย์</span>
+        <span><span class="nw-chart-legend-dot" style="background:var(--expense,#DC2626)"></span>หนี้สิน</span>
+      </div>
+    </div>`
+
+    return html
+  }
+
   App.renderReports = function() {
-    if (!['expense','income','cashflow','assets','credit','budget'].includes(S.rptView)) S.rptView = 'assets'
+    if (!['expense','income','cashflow','assets','credit','budget','networth'].includes(S.rptView)) S.rptView = 'assets'
     const currentYear = new Date().getFullYear()
     const selectedYear = S.rptYear || currentYear
     const years = [currentYear, currentYear - 1, currentYear - 2]
@@ -6069,6 +6356,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       ['cashflow','กระแสเงินสด'],
       ['credit','บัตร/หนี้'],
       ['budget','งบประมาณ'],
+      ['networth','📈 ความมั่งคั่ง'],
     ].map(([v,l]) => `<button class="chip${S.rptView === v ? ' active' : ''}" onclick="App.setRptView('${v}')">${l}</button>`).join('')
 
     const month = S.rptMonth
@@ -6297,6 +6585,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
             <div class="reward-tile"><span>ผ่อนอนาคต</span><strong>${money(row.committedInstallments)}</strong></div>
           </div>
         </div>`).join('') + `</div>`
+    } else if (S.rptView === 'networth') {
+      html += renderNetWorthView()
     } else if (S.rptView === 'assets') {
       const cryptoStatus = cryptoSummary.holdings?.length
         ? (App.getMarketFreshnessText?.('crypto') || (S.cryptoSyncMeta?.lastSuccessAt ? 'ราคา crypto มีการ sync แล้ว' : cryptoSummary.holdings.some(h => Number(h.manualPriceTHB || 0) > 0) ? 'Crypto บางรายการใช้ราคาสำรอง' : 'Crypto บางรายการอาจยังไม่มีราคาตลาด'))
@@ -6338,6 +6628,11 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const allMonths = Calc.getMonths ? Calc.getMonths(36) : []
     const months = allMonths.filter(m => m.startsWith(String(year)))
     if (months.length && !months.includes(S.rptMonth)) S.rptMonth = months[0]
+    App.renderReports()
+  }
+
+  App._setNWRange = function(range) {
+    S.nwRange = range
     App.renderReports()
   }
 
@@ -11899,13 +12194,31 @@ App._pickMerchant = function(name, opts = {}) {
     if (!r) return
     const info = nextOccurrence(r, { includeFuture: true })
     if (!info) { r.paused = true; persist(); notify('รายการประจำนี้ครบจำนวนรอบแล้ว', 'info'); return }
+
+    // บันทึก state ก่อน skip สำหรับ undo
+    const prevLastSkippedAt = r.lastSkippedAt
+    const prevNextDueDate = r.nextDueDate
+    const prevNextOccurrenceNo = r.nextOccurrenceNo
+
     addSkippedException(r, info)
     r.lastSkippedAt = today()
     updateRecurringNext(r)
-    try { persist() } catch (_) {}
+
     if (document.getElementById('sub-screen')?.classList.contains('open')) App.openRecurringScreen?.()
     else App.renderDashboard?.()
-    notify(`ข้าม "${r.name}" แล้ว`, 'info')
+
+    App._withUndo(
+      `ข้าม "${r.name}" แล้ว`,
+      () => {
+        removeSkippedException(r, info)
+        r.lastSkippedAt = prevLastSkippedAt
+        r.nextDueDate = prevNextDueDate
+        r.nextOccurrenceNo = prevNextOccurrenceNo
+        if (document.getElementById('sub-screen')?.classList.contains('open')) App.openRecurringScreen?.()
+        else App.renderDashboard?.()
+      },
+      () => { try { persist() } catch (_) {} }
+    )
   }
   App.skipRecurring = function(id) { App.skipRecurringNow(id) }
 
@@ -11939,37 +12252,60 @@ App._pickMerchant = function(name, opts = {}) {
       })
       return
     }
-    S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
+    const idx = (S.transactions || []).findIndex(t => t.id === tx.id)
+    if (idx < 0) return
+    const removed = S.transactions[idx]
+    const label = removed.merchant || removed.note || `฿${removed.amount}`
+    S.transactions.splice(idx, 1)
     S.deleteConfirm = false
     App.refreshTransactionRewardEstimates?.()
-    App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-    try { persist() } catch (_) {}
+    App.recalculateWalletBalances?.({ save:false })
     App.closeOverlay?.('overlay-tx-detail')
     App.render?.()
-    notify('ลบรายการแล้ว', 'success')
+    App._withUndo(
+      `ลบ "${label}" แล้ว`,
+      () => {
+        S.transactions.splice(idx, 0, removed)
+        App.refreshTransactionRewardEstimates?.()
+        App.recalculateWalletBalances?.({ save:false })
+        App.render?.()
+      },
+      () => {
+        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+        try { persist() } catch (_) {}
+      }
+    )
   }
 
   App.deleteTxFromSub = function(id, backType = '', backId = '') {
     const tx = (S.transactions || []).find(t => t.id === id)
     if (!tx) return
     if (isRecurringTx(tx)) { showRecurringDeleteChoice(tx, { backType, backId }); return }
-    App.showConfirm?.({
-      title:'ลบรายการ',
-      danger:true,
-      body:`ยืนยันลบรายการ ${money(tx.amount)}?`,
-      confirmLabel:'ลบ',
-      onConfirm() {
-        cleanupRewardReceived(tx)
-        S.transactions = (S.transactions || []).filter(t => t.id !== id)
+    const idx = (S.transactions || []).findIndex(t => t.id === id)
+    if (idx < 0) return
+    const removed = S.transactions[idx]
+    const label = removed.merchant || removed.note || `฿${removed.amount}`
+    cleanupRewardReceived(removed)
+    S.transactions.splice(idx, 1)
+    App.refreshTransactionRewardEstimates?.()
+    App.recalculateWalletBalances?.({ save:false })
+    if (backType === 'cc' && backId) App.openCCDetail?.(backId)
+    else if (backType === 'wallet' && backId) App.openWalletDetail?.(backId)
+    else App.closeSubScreen?.()
+    App._withUndo(
+      `ลบ "${label}" แล้ว`,
+      () => {
+        S.transactions.splice(idx, 0, removed)
         App.refreshTransactionRewardEstimates?.()
-        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-        try { persist() } catch (_) {}
+        App.recalculateWalletBalances?.({ save:false })
         if (backType === 'cc' && backId) App.openCCDetail?.(backId)
         else if (backType === 'wallet' && backId) App.openWalletDetail?.(backId)
-        else App.closeSubScreen?.()
-        notify('ลบรายการแล้ว', 'success')
+      },
+      () => {
+        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+        try { persist() } catch (_) {}
       }
-    })
+    )
   }
 
   try { migrateRecurringLite() } catch (err) { console.warn('V6.5 recurring migration failed', err) }
@@ -12020,7 +12356,18 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   function visibleWallets() {
-    return (S.wallets || []).filter(w => !w.hiddenFromWalletList)
+    return (S.wallets || [])
+      .filter(w => !w.hiddenFromWalletList)
+      .sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999))
+  }
+
+  // Assign `order` to wallets that don't have it yet (migration)
+  function _migrateWalletOrder() {
+    let changed = false
+    ;(S.wallets || []).forEach((w, idx) => {
+      if (w.order == null) { w.order = idx * 10; changed = true }
+    })
+    if (changed) try { persist() } catch (_) {}
   }
 
   function inferCryptoPreset(source = {}) {
@@ -13312,15 +13659,25 @@ App._pickMerchant = function(name, opts = {}) {
         refreshBtn.className = 'btn btn-secondary btn-sm wallet-section-refresh-btn'
         refreshBtn.innerHTML = '↻'
         refreshBtn.onclick = e => { e.stopPropagation(); App.refreshMarketPrices() }
+        const reorderBtn = document.createElement('button')
+        reorderBtn.className = 'btn btn-secondary btn-sm wallets-header-reorder-btn'
+        reorderBtn.style.cssText = 'width:auto;padding:8px 12px;flex-shrink:0'
+        reorderBtn.textContent = S._walletReorderMode ? '✓ เสร็จ' : '⠿ จัดเรียง'
+        reorderBtn.onclick = () => App._toggleWalletReorder?.()
         const addBtn = document.createElement('button')
         addBtn.className = 'btn btn-primary btn-sm wallets-header-add-btn'
         addBtn.style.cssText = 'width:auto;padding:8px 14px;flex-shrink:0'
         addBtn.textContent = '+ เพิ่มกระเป๋า'
         addBtn.onclick = () => App.openWalletForm(null)
-        actions.appendChild(refreshBtn)
-        actions.appendChild(addBtn)
+        if (!S._walletReorderMode) actions.appendChild(refreshBtn)
+        actions.appendChild(reorderBtn)
+        if (!S._walletReorderMode) actions.appendChild(addBtn)
         row.appendChild(actions)
       }
+    } else {
+      // Update reorder button text if header already rendered
+      const reorderBtn = pageHeader?.querySelector('.wallets-header-reorder-btn')
+      if (reorderBtn) reorderBtn.textContent = S._walletReorderMode ? '✓ เสร็จ' : '⠿ จัดเรียง'
     }
 
     const content = document.getElementById('wallets-content')
@@ -13400,6 +13757,123 @@ App._pickMerchant = function(name, opts = {}) {
       }
     })
   }
+
+  // ── Wallet Drag-to-Reorder ─────────────────────────────────────
+  App._toggleWalletReorder = function() {
+    _migrateWalletOrder()
+    S._walletReorderMode = !S._walletReorderMode
+    App.renderWallets()
+  }
+
+  // Map wallet type → section group (must match renderWallets grouping)
+  function _walletGroup(type) {
+    if (['bank','cash','ewallet','saving'].includes(type)) return 'asset'
+    if (type === 'credit') return 'credit'
+    if (['gold','fcd'].includes(type)) return 'invest'
+    return 'other'
+  }
+
+  App._walletDrag = { id: null, type: null, ghost: null, startY: 0, startX: 0, currentTarget: null }
+
+  App._walletDragStart = function(e, walletId) {
+    e.preventDefault()
+    e.stopPropagation()
+    const w = (S.wallets || []).find(x => x.id === walletId)
+    if (!w) return
+    const d = App._walletDrag
+    d.id = walletId
+    d.type = w.type
+    const touch = e.touches?.[0] || e
+    d.startX = touch.clientX
+    d.startY = touch.clientY
+
+    const card = document.querySelector(`[data-wallet-id="${walletId}"]`)
+    if (!card) return
+    const rect = card.getBoundingClientRect()
+    d.ghost = card.cloneNode(true)
+    // Remove handle from ghost to avoid recursive drag
+    d.ghost.querySelector?.('.wallet-drag-handle')?.remove()
+    d.ghost.className += ' wallet-drag-ghost'
+    d.ghost.style.cssText = `width:${rect.width}px;height:${rect.height}px;position:fixed;top:${rect.top}px;left:${rect.left}px;z-index:9999;opacity:.88;pointer-events:none;box-shadow:0 8px 28px rgba(0,0,0,.3);transform:scale(1.02);border-radius:12px;overflow:hidden;`
+    document.body.appendChild(d.ghost)
+    card.style.opacity = '0.3'
+
+    document.addEventListener('touchmove', App._walletDragMove, { passive: false })
+    document.addEventListener('touchend', App._walletDragEnd, { once: true })
+    document.addEventListener('touchcancel', App._walletDragEnd, { once: true })
+    document.addEventListener('mousemove', App._walletDragMove)
+    document.addEventListener('mouseup', App._walletDragEnd, { once: true })
+  }
+
+  App._walletDragMove = function(e) {
+    e.preventDefault()
+    const d = App._walletDrag
+    if (!d.id || !d.ghost) return
+    const touch = e.touches?.[0] || e
+    const dy = touch.clientY - d.startY
+    const card = document.querySelector(`[data-wallet-id="${d.id}"]`)
+    if (card) {
+      const rect = card.getBoundingClientRect()
+      d.ghost.style.top = `${rect.top + dy}px`
+    }
+
+    // Find card under cursor
+    d.ghost.style.pointerEvents = 'none'
+    const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    d.ghost.style.pointerEvents = ''
+    const targetCard = el?.closest('[data-wallet-id]')
+    const targetId = targetCard?.dataset?.walletId
+    const targetType = targetCard?.dataset?.walletType
+
+    document.querySelectorAll('.wallet-drag-over').forEach(el => el.classList.remove('wallet-drag-over'))
+    if (targetId && targetId !== d.id && targetType && _walletGroup(targetType) === _walletGroup(d.type)) {
+      targetCard.classList.add('wallet-drag-over')
+      d.currentTarget = targetId
+    } else {
+      d.currentTarget = null
+    }
+  }
+
+  App._walletDragEnd = function() {
+    const d = App._walletDrag
+    document.removeEventListener('touchmove', App._walletDragMove)
+    document.removeEventListener('mousemove', App._walletDragMove)
+
+    d.ghost?.remove()
+    d.ghost = null
+
+    const srcCard = document.querySelector(`[data-wallet-id="${d.id}"]`)
+    if (srcCard) srcCard.style.opacity = ''
+    document.querySelectorAll('.wallet-drag-over').forEach(el => el.classList.remove('wallet-drag-over'))
+
+    if (d.currentTarget && d.currentTarget !== d.id) {
+      App._walletReorderApply(d.id, d.currentTarget)
+    }
+
+    d.id = null; d.type = null; d.currentTarget = null
+  }
+
+  App._walletReorderApply = function(fromId, toId) {
+    _migrateWalletOrder()
+    const fromW = (S.wallets || []).find(w => w.id === fromId)
+    if (!fromW) return
+    // Get wallets in the same visual group, sorted by current order
+    const group = visibleWallets().filter(w => _walletGroup(w.type) === _walletGroup(fromW.type))
+    const fromIdx = group.findIndex(w => w.id === fromId)
+    const toIdx   = group.findIndex(w => w.id === toId)
+    if (fromIdx < 0 || toIdx < 0) return
+
+    const reordered = [...group]
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    reordered.forEach((w, i) => { w.order = i * 10 })
+
+    try { persist() } catch (_) {}
+    App.renderWallets()
+  }
+
+  // Run migration on startup
+  _migrateWalletOrder()
 
   ensureCryptoState()
   const migrated = migrateLegacyCryptoWallets()
