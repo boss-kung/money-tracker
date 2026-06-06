@@ -650,12 +650,12 @@
     console.debug('[MTAuthSync] vault deleted')
   }
 
-  async function deleteAccount() {
-    await deleteVault()
+  async function deleteAccount(otp) {
     const cfg = getConfig()
     const resp = await fetch(`${cfg.supabaseUrl}/functions/v1/delete-account`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ otp }),
     })
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}))
@@ -669,20 +669,19 @@
   }
 
   async function sendDeleteOtp() {
-    if (!state.session?.access_token) throw new Error('ต้องเข้าสู่ระบบก่อน')
-    await requestAuth('/reauthenticate', {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${state.session.access_token}` },
+    const cfg = getConfig()
+    const resp = await fetch(`${cfg.supabaseUrl}/functions/v1/send-delete-otp`, {
+      method: 'POST',
+      headers: authHeaders(),
     })
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}))
+      throw new Error(data?.error || data?.message || 'ส่ง OTP ไม่สำเร็จ')
+    }
   }
 
   async function verifyOtpAndDelete(token) {
-    await requestAuth('/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, type: 'reauthentication' }),
-    })
-    await deleteAccount()
+    await deleteAccount(token)
   }
 
   function showDeleteAccountSheet() {
