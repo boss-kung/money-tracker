@@ -329,7 +329,8 @@ select.form-input  { appearance: none; cursor: pointer; }
   position: absolute;
   left: 0; top: 0; bottom: 0;
   width: 36px;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 14px;
   font-size: 18px; color: rgba(255,255,255,.55);
   cursor: grab; touch-action: none; user-select: none;
   z-index: 2;
