@@ -33,17 +33,19 @@
 
   // ── BNPLCalc ────────────────────────────────────────────────────────────────
   const BNPLCalc = {
-    buildSchedule(totalAmount, installments, purchaseDate) {
+    buildSchedule(totalAmount, installments, purchaseDate, payDay) {
       const total = Number(totalAmount)
       const n = Number(installments)
       const unitAmt = Math.floor((total / n) * 100) / 100
       const lastAmt = Math.round((total - unitAmt * (n - 1)) * 100) / 100
-      return Array.from({ length: n }, (_, i) => ({
-        no: i + 1,
-        dueDate: addMonths(purchaseDate, i + 1),
-        amount: i === n - 1 ? lastAmt : unitAmt,
-        paidTxId: null,
-      }))
+      return Array.from({ length: n }, (_, i) => {
+        // If payDay is set, use that fixed day-of-month instead of purchase day
+        let dueDate = addMonths(purchaseDate, i + 1)
+        if (payDay && payDay >= 1 && payDay <= 28) {
+          dueDate = dueDate.slice(0, 8) + String(payDay).padStart(2, '0')
+        }
+        return { no: i + 1, dueDate, amount: i === n - 1 ? lastAmt : unitAmt, paidTxId: null }
+      })
     },
     getUsedCredit(wallet) {
       return Math.abs(Math.min(0, Number(wallet?.balance || 0)))
@@ -71,6 +73,8 @@
     },
 
     createPlan({ walletId, txId, merchant, purchaseDate, totalAmount, installments }) {
+      const wallet = (typeof S !== 'undefined' ? S.wallets : [])?.find(w => w.id === walletId)
+      const payDay = wallet?.payDay || null
       const plan = {
         id: genId(),
         walletId,
@@ -80,7 +84,7 @@
         totalAmount: Number(totalAmount),
         installments: Number(installments),
         interestRate: 0,
-        schedule: BNPLCalc.buildSchedule(Number(totalAmount), Number(installments), purchaseDate || todayStr()),
+        schedule: BNPLCalc.buildSchedule(Number(totalAmount), Number(installments), purchaseDate || todayStr(), payDay),
         status: 'active',
         createdAt: new Date().toISOString(),
       }

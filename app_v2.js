@@ -10690,6 +10690,11 @@ App._pickMerchant = function(name, opts = {}) {
           <label class="form-label">วงเงิน (฿)</label>
           <input class="form-input" type="number" min="0" id="wf-bnpl-limit" value="${w?.creditLimit||''}">
         </div>
+        <div class="form-group">
+          <label class="form-label">วันครบกำหนดชำระ (วันที่ 1–28)</label>
+          <input class="form-input" type="number" min="1" max="28" id="wf-bnpl-payday" value="${w?.payDay||''}" placeholder="ปล่อยว่าง = ใช้วันที่ซื้อ">
+          <div class="form-hint">เช่น ใส่ 15 = ทุกงวดครบกำหนดวันที่ 15 ของเดือนถัดไป</div>
+        </div>
       `)}</div>
       ${investHtml}
       ${w ? `<button class="btn btn-outline" onclick="App.deleteWallet('${esc(w.id)}')" style="margin-top:12px">ลบ</button>` : ''}`
@@ -10968,7 +10973,9 @@ App._pickMerchant = function(name, opts = {}) {
     if (isBNPL) {
       const provider    = document.getElementById('wf-bnpl-provider')?.value.trim() || ''
       const creditLimit = parseFloat(document.getElementById('wf-bnpl-limit')?.value) || 0
-      Object.assign(data, { provider, creditLimit })
+      const payDayRaw   = parseInt(document.getElementById('wf-bnpl-payday')?.value) || 0
+      const payDay      = payDayRaw >= 1 && payDayRaw <= 28 ? payDayRaw : null
+      Object.assign(data, { provider, creditLimit, ...(payDay ? { payDay } : {}) })
     }
 
     if (isInv) {
@@ -13710,6 +13717,7 @@ App._pickMerchant = function(name, opts = {}) {
     const wallets = visibleWallets()
     const assets = wallets.filter(w => ['bank','cash','ewallet','saving'].includes(w.type))
     const credits = wallets.filter(w => w.type === 'credit')
+    const bnpls = wallets.filter(w => w.type === 'bnpl')
     const invests = wallets.filter(w => ['gold','fcd'].includes(w.type))
     const cryptoSummary = App.getCryptoPortfolioSummary()
     const sumBase = assets.reduce((s, w) => s + Math.max(0, Number(w.balance || 0)), 0)
@@ -13719,7 +13727,7 @@ App._pickMerchant = function(name, opts = {}) {
     const debt = credits.reduce((s, w) => {
       const committedInstallments = App._getUnpostedInstallmentDebt ? App._getUnpostedInstallmentDebt(w.id) : 0
       return s + Math.abs(Number(w.balance || 0)) + committedInstallments
-    }, 0)
+    }, 0) + bnpls.reduce((s, w) => s + Math.abs(Math.min(0, Number(w.balance || 0))), 0)
     const summaryEl = document.getElementById('wallets-summary')
     if (summaryEl) summaryEl.innerHTML = `<div class="wallet-summary-grid wallet-summary-grid-fixed">
       <div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${S.settings?.hideMoney ? '฿*****' : plainMoney(sumBase + sumInv + cryptoSummary.totalValueTHB)}</strong></div>
@@ -13773,6 +13781,7 @@ App._pickMerchant = function(name, opts = {}) {
       tabBar.innerHTML = [
         ['wallet-anchor-assets',  '🏦 สินทรัพย์'],
         ['wallet-anchor-credits', '💳 บัตร'],
+        ['wallet-anchor-bnpl',    '🛍️ BNPL'],
         ['wallet-anchor-invest',  '📈 ลงทุน'],
         ['wallet-anchor-crypto',  '🪙 Crypto'],
       ].map(([id, label]) =>
@@ -13817,6 +13826,7 @@ App._pickMerchant = function(name, opts = {}) {
     content.innerHTML = goldNote
       + section('สินทรัพย์', '🏦', assets, 'ยังไม่มีสินทรัพย์', true, '', 'wallet-anchor-assets')
       + section('บัตรเครดิต', '💳', credits, 'ยังไม่มีบัตรเครดิต', false, '', 'wallet-anchor-credits')
+      + section('BNPL', '🛍️', bnpls, 'ยังไม่มีกระเป๋า BNPL', false, '', 'wallet-anchor-bnpl')
       + section('การลงทุน', '📈', invests, 'เพิ่มทอง / FCD เพื่อดูราคาอ้างอิง', true, '', 'wallet-anchor-invest')
       + cryptoSection
   }
@@ -13851,6 +13861,7 @@ App._pickMerchant = function(name, opts = {}) {
   function _walletGroup(type) {
     if (['bank','cash','ewallet','saving'].includes(type)) return 'asset'
     if (type === 'credit') return 'credit'
+    if (type === 'bnpl') return 'bnpl'
     if (['gold','fcd'].includes(type)) return 'invest'
     return 'other'
   }
