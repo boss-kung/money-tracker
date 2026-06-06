@@ -329,6 +329,7 @@ select.form-input  { appearance: none; cursor: pointer; }
 .wc-prog-bar{ height: 6px; border-radius: 3px; background: rgba(255,255,255,.2); overflow: hidden; margin: 6px 0; }
 .wc-prog-fill{ height: 100%; border-radius: 3px; }
 .wc-prog-info{ display: flex; justify-content: space-between; font-size: 11px; opacity: .75; }
+.wc-no-limit-warn { margin-top: 10px; font-size: 11px; font-weight: 600; color: #FEF3C7; background: rgba(245,158,11,.25); border: 1px solid rgba(245,158,11,.4); border-radius: 6px; padding: 4px 10px; cursor: pointer; display: inline-block; }
 
 /* ── Progress Bar ────────────────────────────────────────── */
 .progress-bar  { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
@@ -825,6 +826,7 @@ select.form-input  { appearance: none; cursor: pointer; }
   line-height: 1.4;
 }
 .mt-offline-dot[hidden] { display: none !important; }
+.mt-integrity-warn { font-size: 12px; font-weight: 600; color: var(--expense, #DC2626); background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.2); border-radius: 8px; padding: 8px 12px; margin: 6px 0 2px; cursor: pointer; }
 .healthy-breakdown-row {
   display: flex;
   justify-content: space-between;
@@ -3260,6 +3262,7 @@ label.color-swatch {
 .mt-recurring-alert-amount { font-size: 13px; color: var(--muted); margin-top: 2px; }
 .mt-recurring-alert-btns { display: flex; gap: 6px; flex-shrink: 0; }
 .mt-recurring-alert-btns .btn { min-width: 60px; }
+.mt-recurring-overdue-badge { display: inline-block; font-size: 10px; font-weight: 700; color: var(--expense, #DC2626); background: rgba(220,38,38,.1); border-radius: 4px; padding: 1px 5px; margin-left: 6px; vertical-align: middle; }
 
 /* Daily budget chip */
 .daily-budget-chip {

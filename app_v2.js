@@ -4185,6 +4185,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
           <button class="mt-hide-btn" onclick="App.toggleHideMoney()">${S.settings.hideMoney ? '👁' : '🙈'}</button>
         </div>
       </div>
+      ${S._ledgerIssues?.length ? `<div class="mt-integrity-warn" onclick="App._showLedgerIssues()">⚠ พบรายการ ${S._ledgerIssues.length} รายการอ้างถึงกระเป๋าที่ไม่มีอยู่แล้ว — แตะเพื่อดูรายละเอียด</div>` : ''}
       <div class="dash-month-nav">${months.map(m =>
         `<button class="chip${m === dm ? ' active' : ''}" onclick="App.setDashMonth('${ESC(m)}')">${ESC(mlabel(m))}</button>`
       ).join('')}</div>`
@@ -4195,12 +4196,16 @@ Calc.getUsableMoney = function(wallets, state = null) {
       if (due.length) {
         html += `<div class="sec-title" style="margin-top:4px;margin-bottom:6px">🔁 รายการประจำที่ถึงกำหนด</div>`
         due.forEach(r => {
+          const overdueCount = Number(r._overdueCount || 0)
+          const overdueTag = overdueCount > 1
+            ? `<span class="mt-recurring-overdue-badge">⚠ เกินกำหนด ${overdueCount} รอบ</span>`
+            : ''
           html += `<div class="mt-recurring-alert" onclick="App.openRecurringScreen()" style="cursor:pointer" title="ดูรายการประจำทั้งหมด">
             <div class="mt-recurring-alert-info">
               <span class="mt-recurring-alert-icon">${ESC(r.icon || '🔁')}</span>
               <div>
-                <div class="mt-recurring-alert-name">${ESC(r.name)}</div>
-                <div class="mt-recurring-alert-amount">${FMT(r.amount)}</div>
+                <div class="mt-recurring-alert-name">${ESC(r.name)}${overdueTag}</div>
+                <div class="mt-recurring-alert-amount">${FMT(r.amount)}${overdueCount > 1 ? ` · ครั้งนี้: ${ESC(r.nextDueDate || '')}` : ''}</div>
               </div>
             </div>
             <div class="mt-recurring-alert-btns" onclick="event.stopPropagation()">
@@ -4427,7 +4432,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,Math.max(0,b.pct))}%;background:${barColor}"></div></div>
           ${b.over
-            ? `<div style="font-size:11px;color:var(--expense);margin-top:3px;font-weight:600">เกิน ${FMT(b.spent - b.monthlyLimit)}</div>`
+            ? `<div style="font-size:11px;color:var(--expense);margin-top:3px;font-weight:600">เกิน ${FMT(b.spent - b.monthlyLimit)} <span style="font-weight:400;opacity:.8">(${Math.round(b.rawPct ?? b.pct)}%)</span></div>`
             : b.pct > 80
               ? `<div style="font-size:11px;color:var(--amber);margin-top:3px">เหลือ ${FMT(b.monthlyLimit - b.spent)}</div>`
               : ''}
@@ -4489,6 +4494,26 @@ Calc.getUsableMoney = function(wallets, state = null) {
           </div>
           <div style="font-size:11px;color:var(--muted);margin:-4px 0 0 20px">เกณฑ์ดี = มีเงินสำรอง 3 เดือนของรายจ่าย · น้ำหนัก 20%</div>
         </div>
+      </div>`,
+      confirmLabel: 'เข้าใจแล้ว',
+      onConfirm() {}
+    })
+  }
+
+  // แสดง popup รายละเอียด orphaned transactions
+  App._showLedgerIssues = function() {
+    const issues = S._ledgerIssues || []
+    if (!issues.length) return
+    App.showConfirm({
+      title: 'พบรายการมีปัญหา',
+      bodyHtml: true,
+      body: `<div style="font-size:13px;line-height:1.6;color:var(--text)">
+        <div style="margin-bottom:8px">พบ <strong>${issues.length}</strong> รายการที่อ้างถึงกระเป๋าเงินที่ถูกลบแล้ว อาจทำให้ยอดคงเหลือไม่ถูกต้อง</div>
+        <div style="font-size:11px;color:var(--muted);background:var(--surface-2,#f8fafc);border-radius:6px;padding:8px 10px;max-height:120px;overflow-y:auto">
+          ${issues.slice(0,10).map(i => `<div>${i.date || ''} · ${i.field === 'toWalletId' ? 'ปลายทาง' : 'ต้นทาง'} ไม่พบ (${i.value || 'ไม่ระบุ'})</div>`).join('')}
+          ${issues.length > 10 ? `<div style="color:var(--muted)">... และอีก ${issues.length - 10} รายการ</div>` : ''}
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:var(--muted)">แนะนำ: ส่งออกข้อมูลสำรองก่อน จากนั้นลบรายการที่มีปัญหาหรือ restore กระเป๋าเงินที่หายไป</div>
       </div>`,
       confirmLabel: 'เข้าใจแล้ว',
       onConfirm() {}
@@ -4579,7 +4604,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         <div class="wc-balance">-${MONEY(totalOwed)}</div>
         ${installmentNote}
         ${due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${ESC(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}
-        ${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : ''}
+        ${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : `<div class="wc-no-limit-warn" onclick="event.stopPropagation();App.openEditWallet('${ESC(w.id)}')">⚠ ยังไม่ได้ตั้งวงเงิน — แตะเพื่อตั้งค่า</div>`}
       </div>`
     }
 
@@ -5219,6 +5244,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
       if ((tx.type === 'transfer' || tx.type === 'cc_payment') && (!tx.toWalletId || !walletIds.has(tx.toWalletId)))
         issues.push({ txId: tx.id, date: tx.date, field: 'toWalletId', value: tx.toWalletId })
     })
+    // บันทึกเพื่อแสดง warning บน dashboard
+    S._ledgerIssues = issues.length > 0 ? issues : null
     return issues
   }
 
@@ -6244,7 +6271,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       if (!budget.length) html += App._emptyState('💰', 'ยังไม่ได้ตั้งงบประมาณ', 'ไปที่ เพิ่มเติม → งบประมาณ')
       else budget.forEach(b => {
         const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'
-        html += `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="font-weight:600">${esc(b.icon)} ${esc(b.label)}</span><span style="color:${b.over?'var(--expense)':'var(--muted)'}">${money(b.spent)} / ${money(b.monthlyLimit)}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,b.pct)}%;background:${barColor}"></div></div><div style="font-size:11px;color:${b.over?'var(--expense)':'var(--muted)'};margin-top:4px">${b.over ? `เกิน ${money(b.spent - b.monthlyLimit)}` : `เหลือ ${money(b.monthlyLimit - b.spent)}`}</div></div>`
+        html += `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="font-weight:600">${esc(b.icon)} ${esc(b.label)}</span><span style="color:${b.over?'var(--expense)':'var(--muted)'}">${money(b.spent)} / ${money(b.monthlyLimit)}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,b.pct)}%;background:${barColor}"></div></div><div style="font-size:11px;color:${b.over?'var(--expense)':'var(--muted)'};margin-top:4px">${b.over ? `เกิน ${money(b.spent - b.monthlyLimit)} <span style="opacity:.7">(${Math.round(b.rawPct ?? b.pct)}%)</span>` : `เหลือ ${money(b.monthlyLimit - b.spent)}`}</div></div>`
       })
       html += `</div>`
     } else if (S.rptView === 'credit') {
@@ -11790,6 +11817,20 @@ App._pickMerchant = function(name, opts = {}) {
     })
   }
 
+  // นับ occurrence ที่เกินกำหนด (date ≤ today, ยังไม่ได้บันทึก/ข้าม)
+  function _countOverdueOccurrences(r) {
+    const t = today()
+    const total = totalOccurrences(r)
+    const limit = total || 240
+    let count = 0
+    for (let no = 1; no <= limit; no++) {
+      const scheduledDate = occurrenceDate(r, no)
+      if (scheduledDate > t) break  // ผ่าน future แล้ว หยุด
+      if (!hasOccurrenceTx(r, no, scheduledDate) && !isSkipped(r, no, scheduledDate)) count++
+    }
+    return count
+  }
+
   App._getOverdueRecurringLite = function() {
     migrateRecurringLite()
     const t = today()
@@ -11799,7 +11840,10 @@ App._pickMerchant = function(name, opts = {}) {
       if (!info) return false
       r.nextDueDate = info.scheduledDate
       r.nextOccurrenceNo = info.occurrenceNo
-      return info.scheduledDate <= t
+      if (info.scheduledDate > t) return false
+      // นับ backlog occurrences เพื่อแสดง badge
+      r._overdueCount = _countOverdueOccurrences(r)
+      return true
     })
   }
 
@@ -11840,7 +11884,7 @@ App._pickMerchant = function(name, opts = {}) {
     const err = App.validateTransactionDraft?.(tx)
     if (err) { notify(err, 'error'); return }
     S.transactions.unshift(tx)
-    r.lastPostedAt = today()
+    r.lastPostedAt = info.scheduledDate  // บันทึกวันที่ due จริง ไม่ใช่วันที่กดปุ่ม
     updateRecurringNext(r)
     App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
     try { persist() } catch (_) {}

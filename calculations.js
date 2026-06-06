@@ -461,9 +461,10 @@ const Calc = {
         .filter(t => t.categoryId === b.categoryId)
         .reduce((s, t) => s + Calc.getExpenseLedgerAmount(t), 0)
       const cat   = categories.expense.find(c => c.id === b.categoryId)
-      const pct   = b.monthlyLimit > 0 ? Math.min((spent / b.monthlyLimit) * 100, 100) : 0
+      const rawPct = b.monthlyLimit > 0 ? (spent / b.monthlyLimit) * 100 : 0
+      const pct   = Math.min(rawPct, 100)  // สำหรับ CSS bar width (ไม่ overflow layout)
       const over  = spent > b.monthlyLimit
-      return { ...b, spent, pct, over, icon: cat?.icon || '📦', label: cat?.label || b.categoryId, color: cat?.color || '#6B7280' }
+      return { ...b, spent, pct, rawPct, over, icon: cat?.icon || '📦', label: cat?.label || b.categoryId, color: cat?.color || '#6B7280' }
     }).filter(b => b.monthlyLimit > 0)
   },
 

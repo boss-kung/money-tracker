@@ -217,8 +217,11 @@ const InsightEngine = (() => {
       }
     } catch(_) {}
 
-    // Today's transactions for INS-10 duplicate check
+    // Today's transactions (and 3-day window) for INS-10 duplicate check
     const todayTxs = txs.filter(t => (t.date || '') === today && t.type === 'expense')
+    const d3 = new Date(); d3.setDate(d3.getDate() - 3)
+    const _d3Str = `${d3.getFullYear()}-${String(d3.getMonth()+1).padStart(2,'0')}-${String(d3.getDate()).padStart(2,'0')}`
+    const recentExpTxs = txs.filter(t => t.type === 'expense' && (t.date || '') >= _d3Str && (t.date || '') <= today)
 
     // Projection helpers
     const dayOfMonth  = new Date().getDate()
@@ -243,7 +246,7 @@ const InsightEngine = (() => {
       usable, upcoming, upcomingCommitted,
       creditCards, creditStatements,
       billsDue, goalProgress, privExpiring,
-      merchantBreakdown, unregisteredRecurring, stalePrices, todayTxs,
+      merchantBreakdown, unregisteredRecurring, stalePrices, todayTxs, recentExpTxs,
       dayOfMonth, daysInMonth, monthFraction, projectedExpense, daysLeft,
       recurringMerchants, monthlyRecurringTotal,
     }
@@ -456,27 +459,36 @@ const InsightEngine = (() => {
     } catch(_) {}
 
     // ── INS-10: Duplicate Transaction ─────────────────────────
+    // ตรวจสอบใน 3 วันย้อนหลัง พร้อม ±1 THB tolerance เพื่อจับ double-tap/off-by-one
     try {
-      const seen = {}
-      ;(payload.todayTxs || []).forEach(t => {
-        const key = `${Number(t.amount||0).toFixed(2)}-${(t.merchant||'').toLowerCase()}-${t.walletId||''}`
-        if (!seen[key]) seen[key] = []
-        seen[key].push(t)
-      })
-      const dups = Object.values(seen).filter(g => g.length >= 2)
-      if (dups.length > 0) {
-        const dup = dups[0]
-        const t = dup[0]
+      const recentTxs = payload.recentExpTxs || payload.todayTxs || []
+      const flagged = []
+      for (let i = 0; i < recentTxs.length; i++) {
+        const a = recentTxs[i]
+        for (let j = i + 1; j < recentTxs.length; j++) {
+          const b = recentTxs[j]
+          if (a.id === b.id) continue
+          const sameMerchant = (a.merchant||'').toLowerCase() === (b.merchant||'').toLowerCase() && (a.merchant||'').trim() !== ''
+          const sameWallet = (a.walletId||'') === (b.walletId||'')
+          const amountClose = Math.abs(Number(a.amount||0) - Number(b.amount||0)) <= 1
+          if (sameMerchant && sameWallet && amountClose) { flagged.push([a, b]); break }
+        }
+        if (flagged.length) break
+      }
+      if (flagged.length > 0) {
+        const [t1, t2] = flagged[0]
+        const t = t1
         const personalAmount = expenseAmount(t)
         const sharedHint = t.sharedExpense?.enabled && Math.abs(personalAmount - Number(t.amount || 0)) > 0.01
           ? ` (นับเข้างบ ฿${Calc.fmtNum(personalAmount)})`
           : ''
+        const dateHint = t1.date !== t2.date ? ` (${t1.date} / ${t2.date})` : ` วันนี้`
         add('10', `${t.amount}-${t.merchant||''}`, {
           title: 'อาจมีรายการซ้ำกัน',
-          body: `"${t.merchant||'รายการ'}" ฿${Calc.fmtNum(t.amount)}${sharedHint} บันทึก ${dup.length} ครั้งวันนี้ — ตรวจสอบว่าไม่ได้บันทึกซ้ำ`,
+          body: `"${t.merchant||'รายการ'}" ฿${Calc.fmtNum(t.amount)}${sharedHint} บันทึกซ้ำกัน${dateHint} — ตรวจสอบว่าไม่ได้บันทึกซ้ำ`,
           severity: 'warning', urgency: 7, impact: 5,
-          action: { label: 'ดูรายการวันนี้', fn: "App.showPage('transactions')" },
-          evidence: { merchant: t.merchant, amount: t.amount, budgetAmount: personalAmount, count: dup.length },
+          action: { label: 'ดูรายการ', fn: "App.showPage('transactions')" },
+          evidence: { merchant: t.merchant, amount: t.amount, budgetAmount: personalAmount, count: 2 },
         })
       }
     } catch(_) {}
