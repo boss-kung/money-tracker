@@ -102,6 +102,14 @@
       const item = plan.schedule.find(s => s.no === no)
       if (!item || item.paidTxId) return null
 
+      // Defense-in-depth: validate source wallet type
+      const sourceWallet = (typeof S !== 'undefined' ? S.wallets : [])?.find(w => w.id === sourceWalletId)
+      const validSourceTypes = new Set(['bank', 'cash', 'ewallet', 'saving'])
+      if (sourceWallet && !validSourceTypes.has(sourceWallet.type)) {
+        console.warn('[BNPL] payInstallment: invalid source wallet type', sourceWallet.type)
+        return null
+      }
+
       const txId = 'tx_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
       const tx = {
         id: txId,
@@ -201,7 +209,7 @@
         ? `<button type="button" class="wallet-chip-btn wc-card-pay-btn" onclick="event.stopPropagation();BNPL.ui.openPayModal('${esc(nextDueItem.planId)}',${nextDueItem.no})">จ่ายงวด</button>`
         : ''
 
-      return `<div class="wallet-card wallet-card-colored" style="${colorStyle};cursor:pointer" onclick="App.showPage?.('wallets')">
+      return `<div class="wallet-card wallet-card-colored" style="${colorStyle};cursor:pointer" onclick="BNPL.ui.openPlanList('${esc(w.id)}')">
         <div class="wc-header">
           <span class="wc-icon">${esc(w.icon || '🛍️')}</span>
           <div class="wc-title-wrap">

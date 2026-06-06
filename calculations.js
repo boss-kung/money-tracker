@@ -239,6 +239,7 @@ const Calc = {
     let reimbursementInflow = 0
     let transfer = 0
     let ccPayment = 0
+    let bnplPayment = 0
     txns.forEach(t => {
       if (t.type === 'income') {
         if (Calc.isReimbursementTx(t)) reimbursementInflow += Number(t.amount || 0)
@@ -247,6 +248,7 @@ const Calc = {
       else if (t.type === 'expense') expense += Calc.getExpenseLedgerAmount(t)
       else if (t.type === 'transfer') transfer += Number(t.amount || 0)
       else if (t.type === 'cc_payment') ccPayment += Calc.getCCPaymentCashAmount(t)
+      else if (t.type === 'bnpl_payment') bnplPayment += Number(t.amount || 0)
     })
     const netCashflow = income - expense
     const cashNetCashflow = income + reimbursementInflow - expense
@@ -257,6 +259,7 @@ const Calc = {
       reimbursementInflow: Math.round(reimbursementInflow * 100) / 100,
       transfer: Math.round(transfer * 100) / 100,
       ccPayment: Math.round(ccPayment * 100) / 100,
+      bnplPayment: Math.round(bnplPayment * 100) / 100,
       netCashflow: Math.round(netCashflow * 100) / 100,
       cashNetCashflow: Math.round(cashNetCashflow * 100) / 100,
       savingsRate: savingsRate === null ? null : Math.round(savingsRate * 10) / 10,

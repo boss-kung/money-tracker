@@ -1433,7 +1433,7 @@ const App = {
     const card    = S.wallets.find(w => w.id === cardId)
     const due     = App.getCreditCardDueInfo?.(card)
     const owed    = Math.max(0, Number(due?.amount || due?.statement?.balanceDue || Math.abs(card.balance || 0)))
-    const sources = S.wallets.filter(w => w.id !== cardId && w.type !== 'credit')
+    const sources = S.wallets.filter(w => w.id !== cardId && w.type !== 'credit' && w.type !== 'bnpl')
 
     document.getElementById('cc-pay-content').innerHTML = `
       <div style="text-align:center;margin-bottom:20px">
@@ -2343,6 +2343,10 @@ App.render();
   App.openWalletDetail = function(id, animate = true) {
     const w = S.wallets.find(x => x.id === id)
     if (!w) return
+    if (w.type === 'bnpl' && typeof BNPL !== 'undefined') {
+      BNPL.ui.openPlanList(id)
+      return
+    }
     S.walletDetailId = id
     S.walletTxRange ||= 'all'
     const tx = App._filterWalletTx ? App._filterWalletTx(id) : S.transactions.filter(t => t.walletId === id || t.toWalletId === id).sort((a,b) => (b.date || '').localeCompare(a.date || ''))
@@ -3259,7 +3263,9 @@ App.render();
     const transferWallets = getTransferableWallets()
     const hasEnoughForTransfer = !isTransfer || transferWallets.length >= 2
 
-    const pickableWallets = isTransfer ? transferWallets : activeWallets.filter(w => !INVEST_TYPES.has(w.type))
+    const pickableWallets = isTransfer
+      ? transferWallets
+      : activeWallets.filter(w => !INVEST_TYPES.has(w.type) && (type !== 'income' || w.type !== 'bnpl'))
     const walletOptions = pickableWallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
     const toWalletOptions = transferWallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
     const isExpense = type === 'expense'
@@ -5923,7 +5929,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (!Array.isArray(data?.wallets)) errors.push('ไม่พบ wallets')
     if (errors.length) return { ok:false, errors, warnings, data:null }
     const walletIds = new Set(data.wallets.map(w => w.id).filter(Boolean))
-    const validTypes = new Set(['income','expense','transfer','cc_payment','investment_buy','investment_sell','investment_adjust'])
+    const validTypes = new Set(['income','expense','transfer','cc_payment','bnpl_payment','investment_buy','investment_sell','investment_adjust'])
     const transactions = data.transactions.filter(t => {
       if (!validTypes.has(t.type)) { warnings.push(`ข้ามรายการ type ผิด: ${t.type}`); return false }
       if (!(Number(t.amount) > 0) && !['investment_adjust'].includes(t.type)) { warnings.push('ข้ามรายการจำนวนเงินไม่ถูกต้อง'); return false }
@@ -6106,6 +6112,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App.deleteWallet = function(id) {
     const refs = (S.transactions || []).filter(t => t.walletId === id || t.toWalletId === id || t.cashWalletId === id).length + (S.recurring || []).filter(r => r.walletId === id).length
     if (refs > 0) { const w = walletById(id); if (w) { w.archived = true; persist(); App.closeOverlay('overlay-wallet-form'); App.render(); toast('มีรายการอ้างอิง จึง Archive กระเป๋าแทนการลบ', 'warn') } return }
+    // Cascade: ลบ BNPL plans ของ wallet นี้ด้วย
+    if ((S.bnplPlans || []).some(p => p.walletId === id)) {
+      S.bnplPlans = (S.bnplPlans || []).filter(p => p.walletId !== id)
+    }
     S.wallets = (S.wallets || []).filter(w => w.id !== id); persist(); App.closeOverlay('overlay-wallet-form'); App.render(); toast('ลบกระเป๋าแล้ว', 'success')
   }
   App.deleteCategory = function(id) {
@@ -13773,9 +13783,10 @@ App._pickMerchant = function(name, opts = {}) {
     const content = document.getElementById('wallets-content')
     if (!content) return
 
-    // Inject wallet tab bar into page-header (once)
+    // Inject wallet tab bar into page-header (rebuild each render to ensure visibility)
     const walletPageHeader = document.querySelector('#page-wallets .page-header')
-    if (walletPageHeader && !walletPageHeader.querySelector('.wallet-tab-bar')) {
+    if (walletPageHeader) {
+      walletPageHeader.querySelector('.wallet-tab-bar')?.remove()
       const tabBar = document.createElement('div')
       tabBar.className = 'wallet-tab-bar'
       tabBar.innerHTML = [
