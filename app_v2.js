@@ -1807,16 +1807,23 @@ function setupServiceWorkerUpdates() {
 function setupConnectivityWatch() {
   if (!('onLine' in navigator)) return
   let lastOnline = navigator.onLine
-  if (!lastOnline) setTimeout(() => toast('ออฟไลน์อยู่ ข้อมูลราคาบางอย่างอาจไม่อัปเดต', 'warn'), 500)
+  if (!lastOnline) {
+    S._isOffline = true
+    setTimeout(() => toast('ออฟไลน์อยู่ ข้อมูลราคาบางอย่างอาจไม่อัปเดต', 'warn'), 500)
+  }
   window.addEventListener('offline', () => {
     if (lastOnline === false) return
     lastOnline = false
+    S._isOffline = true
     toast('ออฟไลน์อยู่ ข้อมูลราคาบางอย่างอาจไม่อัปเดต', 'warn')
+    window.App?._syncOfflineIndicator?.()
   }, { passive: true })
   window.addEventListener('online', () => {
     if (lastOnline === true) return
     lastOnline = true
+    S._isOffline = false
     toast('กลับมาออนไลน์แล้ว', 'success')
+    window.App?._syncOfflineIndicator?.()
   }, { passive: true })
 }
 
@@ -2193,10 +2200,70 @@ App.render();
     const ccId = root.querySelector('.cc-detail-screen')?.dataset.cardId
     root.querySelectorAll('.tx-row').forEach(el => {
       el.onclick = () => {
+        if (el.classList.contains('swipe-reveal-delete')) {
+          el.classList.remove('swipe-reveal-delete')
+          return
+        }
         if (walletId) return App.openTxDetailSub(el.dataset.txid, 'wallet', walletId)
         if (ccId) return App.openTxDetailSub(el.dataset.txid, 'cc', ccId)
         App.openTxDetail(el.dataset.txid)
       }
+
+      // Swipe-to-delete (skip if already bound)
+      if (el._swipeBound) return
+      el._swipeBound = true
+
+      // Inject delete action button
+      if (!el.querySelector('.tx-row-delete-action')) {
+        const delBtn = document.createElement('div')
+        delBtn.className = 'tx-row-delete-action'
+        delBtn.setAttribute('aria-label', 'ลบรายการ')
+        delBtn.innerHTML = '🗑'
+        delBtn.addEventListener('click', e => {
+          e.stopPropagation()
+          const txId = el.dataset.txid
+          App.showConfirm({
+            title: 'ลบรายการ',
+            confirmLabel: 'ลบ',
+            danger: true,
+            onConfirm() {
+              const tx = (S.transactions || []).find(t => t.id === txId)
+              if (!tx) return
+              S.transactions = S.transactions.filter(t => t.id !== txId)
+              App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
+              persist()
+              App.render()
+              toast('ลบรายการแล้ว', 'success')
+            },
+            onCancel() { el.classList.remove('swipe-reveal-delete') }
+          })
+        })
+        el.appendChild(delBtn)
+      }
+
+      // Touch swipe detection
+      let startX = 0, startY = 0, tracking = false
+      el.addEventListener('touchstart', e => {
+        startX = e.touches[0].clientX
+        startY = e.touches[0].clientY
+        tracking = true
+      }, { passive: true })
+      el.addEventListener('touchend', e => {
+        if (!tracking) return
+        tracking = false
+        const dx = e.changedTouches[0].clientX - startX
+        const dy = e.changedTouches[0].clientY - startY
+        if (Math.abs(dy) > 40) return // ป้องกัน vertical scroll กระตุ้น swipe
+        if (dx < -60) {
+          // Close other open rows first
+          document.querySelectorAll('.tx-row.swipe-reveal-delete').forEach(r => {
+            if (r !== el) r.classList.remove('swipe-reveal-delete')
+          })
+          el.classList.add('swipe-reveal-delete')
+        } else if (dx > 30) {
+          el.classList.remove('swipe-reveal-delete')
+        }
+      }, { passive: true })
     })
   }
 
@@ -2678,11 +2745,13 @@ App.render();
 ;(function(){
   const syncChrome = () => {
     const isDashboard = S.page === 'dashboard'
-    const allowFab = isDashboard || S.page === 'transactions'
     const fab = document.getElementById('fab')
-    if (fab) fab.classList.toggle('hidden', !allowFab)
+    if (fab) fab.classList.remove('hidden')
     document.body.classList.toggle('is-dashboard', isDashboard)
     document.body.classList.toggle('is-transactions', S.page === 'transactions')
+    document.body.classList.toggle('is-wallets', S.page === 'wallets')
+    document.body.classList.toggle('is-reports', S.page === 'reports')
+    document.body.classList.toggle('is-more', S.page === 'more')
   }
 
   if (document.readyState === 'loading') {
@@ -2731,14 +2800,16 @@ App.render();
 
   const syncChrome = () => {
     const isDashboard = S.page === 'dashboard'
-    const allowFab = isDashboard || S.page === 'transactions'
     document.body.classList.toggle('is-dashboard', isDashboard)
     document.body.classList.toggle('is-transactions', S.page === 'transactions')
+    document.body.classList.toggle('is-wallets', S.page === 'wallets')
+    document.body.classList.toggle('is-reports', S.page === 'reports')
+    document.body.classList.toggle('is-more', S.page === 'more')
     const fab = document.getElementById('fab')
     if (fab) {
-      fab.classList.toggle('hidden', !allowFab)
-      fab.setAttribute('aria-hidden', allowFab ? 'false' : 'true')
-      fab.tabIndex = allowFab ? 0 : -1
+      fab.classList.remove('hidden')
+      fab.setAttribute('aria-hidden', 'false')
+      fab.tabIndex = 0
     }
 
     const nav = document.getElementById('bottom-nav')
@@ -3093,18 +3164,28 @@ App.render();
   }
 
   App.renameChannel = function(value, currentLabel) {
-    const newLabel = prompt('เปลี่ยนชื่อช่องทาง', currentLabel)
-    if (newLabel === null) return
-    const trimmed = newLabel.trim()
-    if (!trimmed) { toast('กรุณากรอกชื่อ', 'warn'); return }
-    S.settings ||= {}
-    S.settings.channelLabels ||= {}
-    S.settings.channelLabels[value] = trimmed
-    const ci = (S.settings.customChannels || []).findIndex(c => c.value === value)
-    if (ci >= 0) S.settings.customChannels[ci].label = trimmed
-    persist()
-    App.openChannelScreen()
-    toast('เปลี่ยนชื่อแล้ว', 'success')
+    App.showConfirm({
+      title: 'เปลี่ยนชื่อช่องทาง',
+      bodyHtml: true,
+      body: `<input id="v23-rename-ch-input" class="v23-confirm-text-input"
+        type="text" value="${esc(currentLabel)}" placeholder="ชื่อช่องทาง"
+        autocomplete="off" autocorrect="off" spellcheck="false"
+        style="margin-top:4px">`,
+      confirmLabel: 'บันทึก',
+      onConfirm() {
+        const trimmed = (document.getElementById('v23-rename-ch-input')?.value || '').trim()
+        if (!trimmed) { toast('กรุณากรอกชื่อ', 'warn'); return }
+        S.settings ||= {}
+        S.settings.channelLabels ||= {}
+        S.settings.channelLabels[value] = trimmed
+        const ci = (S.settings.customChannels || []).findIndex(c => c.value === value)
+        if (ci >= 0) S.settings.customChannels[ci].label = trimmed
+        persist()
+        App.openChannelScreen()
+        toast('เปลี่ยนชื่อแล้ว', 'success')
+      }
+    })
+    setTimeout(() => document.getElementById('v23-rename-ch-input')?.select(), 80)
   }
 
   App.saveCustomChannel = function() {
@@ -3125,12 +3206,19 @@ App.render();
     S.settings ||= {}
     const ch = (S.settings.customChannels || []).find(c => c.value === value)
     if (!ch) return
-    if (!confirm(`ลบช่องทาง "${ch.label}" ?`)) return
-    S.settings.customChannels = S.settings.customChannels.filter(c => c.value !== value)
-    if (S.settings.channelLabels) delete S.settings.channelLabels[value]
-    persist()
-    App.openChannelScreen()
-    toast('ลบช่องทางแล้ว', 'success')
+    App.showConfirm({
+      title: `ลบช่องทาง "${ch.label}"`,
+      body: 'ช่องทางที่ลบจะหายจากตัวเลือกทั้งหมด',
+      confirmLabel: 'ลบ',
+      danger: true,
+      onConfirm() {
+        S.settings.customChannels = S.settings.customChannels.filter(c => c.value !== value)
+        if (S.settings.channelLabels) delete S.settings.channelLabels[value]
+        persist()
+        App.openChannelScreen()
+        toast('ลบช่องทางแล้ว', 'success')
+      }
+    })
   }
 
   App.showAllTxCategories = function() { S.txShowAllCats = true; App._renderAddTxDetail() }
@@ -3802,7 +3890,7 @@ App.render();
   }
 
   // ── 1. Inline confirm dialog — replaces all 6 browser confirm() calls ──
-  App.showConfirm = function({ title = 'ยืนยัน', body = '', confirmLabel = 'ยืนยัน', danger = false, requireText = '', onConfirm, onCancel } = {}) {
+  App.showConfirm = function({ title = 'ยืนยัน', body = '', bodyHtml = false, confirmLabel = 'ยืนยัน', danger = false, requireText = '', onConfirm, onCancel } = {}) {
     document.getElementById('v23-confirm-overlay')?.remove()
     const el = document.createElement('div')
     el.id = 'v23-confirm-overlay'
@@ -3810,7 +3898,7 @@ App.render();
     el.innerHTML = `
       <div class="v23-confirm-sheet" role="alertdialog" aria-modal="true">
         <div class="v23-confirm-title">${ESC(title)}</div>
-        ${body ? `<div class="v23-confirm-body">${ESC(body)}</div>` : ''}
+        ${body ? `<div class="v23-confirm-body">${bodyHtml ? body : ESC(body)}</div>` : ''}
         ${requireText ? `<div class="v23-confirm-body" style="margin-top:8px">พิมพ์ <strong>${ESC(requireText)}</strong> เพื่อยืนยัน</div><input id="v23-confirm-text-input" class="v23-confirm-text-input" type="text" placeholder="${ESC(requireText)}" autocomplete="off" autocorrect="off" spellcheck="false">` : ''}
         <div class="v23-confirm-actions">
           <button class="btn btn-secondary v23-cancel-btn">ยกเลิก</button>
@@ -4083,13 +4171,13 @@ Calc.getUsableMoney = function(wallets, state = null) {
       return `<span class="daily-budget-chip${remaining < 0 ? ' over' : ''}">฿${daily.toLocaleString('en-US')}/วัน</span>`
     }
 
-    // Month nav (last 4 months, newest first)
-    const months = Calc.getMonths ? Calc.getMonths(4) : [thisMonth]
+    // Month nav (last 6 months, newest first)
+    const months = Calc.getMonths ? Calc.getMonths(6) : [thisMonth]
 
     let html = `
       <div class="mt-topbar">
         <div>
-          <div class="mt-title">Financial Tracker</div>
+          <div class="mt-title">Financial Tracker <span id="mt-offline-dot" class="mt-offline-dot"${S._isOffline ? '' : ' hidden'}>● ออฟไลน์</span></div>
           <div class="mt-subtitle">ศูนย์รวมการเงินและสิทธิพิเศษ</div>
         </div>
         <div class="mt-topbar-actions">
@@ -4107,7 +4195,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       if (due.length) {
         html += `<div class="sec-title" style="margin-top:4px;margin-bottom:6px">🔁 รายการประจำที่ถึงกำหนด</div>`
         due.forEach(r => {
-          html += `<div class="mt-recurring-alert">
+          html += `<div class="mt-recurring-alert" onclick="App.openRecurringScreen()" style="cursor:pointer" title="ดูรายการประจำทั้งหมด">
             <div class="mt-recurring-alert-info">
               <span class="mt-recurring-alert-icon">${ESC(r.icon || '🔁')}</span>
               <div>
@@ -4115,7 +4203,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
                 <div class="mt-recurring-alert-amount">${FMT(r.amount)}</div>
               </div>
             </div>
-            <div class="mt-recurring-alert-btns">
+            <div class="mt-recurring-alert-btns" onclick="event.stopPropagation()">
               <button class="btn btn-primary btn-sm" onclick="App.postRecurringNow('${ESC(r.id)}')">บันทึก</button>
               <button class="btn btn-secondary btn-sm" onclick="App.skipRecurringNow('${ESC(r.id)}')">ข้าม</button>
             </div>
@@ -4127,7 +4215,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const healthyPct = (() => {
       const income  = Number(stats.income  || 0)
       const expense = Number(stats.expense || 0)
-      if (income <= 0 && expense <= 0) return null
+      if (income <= 0 && expense <= 0) { S._lastHealthyBreakdown = null; return null }
 
       // --- Component 1: Savings Rate (weight 50%) ---
       // เกณฑ์: ออม 20%+ ของรายรับ = 100 คะแนน (50/30/20 rule)
@@ -4152,6 +4240,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         : Math.min(1, liquid / (3 * monthlyExpense)) * 100
 
       const raw = savingsScore * 0.5 + debtScore * 0.3 + bufferScore * 0.2
+      S._lastHealthyBreakdown = { savingsScore, debtScore, bufferScore, savingsRate, raw }
       return Math.max(0, Math.min(100, Math.round(raw)))
     })()
 
@@ -4194,18 +4283,24 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
     function renderNetRing(pct) {
       const circumference = 2 * Math.PI * 42
-      // No data yet — show --% with an empty track
+      // No data yet — show CTA to add first transaction
       if (pct === null) {
-        return `<div class="mt-net-ring" role="img" aria-label="สถานะการเงิน ยังไม่มีข้อมูล">
+        return `<div class="mt-net-ring mt-net-ring--empty" role="button" tabindex="0"
+          aria-label="ยังไม่มีข้อมูล แตะเพื่อเพิ่มรายการแรก"
+          onclick="App.openAddTx()" style="cursor:pointer" title="เพิ่มรายการแรกเพื่อดูสถานะการเงิน">
           <svg viewBox="0 0 112 112" aria-hidden="true">
-            <circle class="mt-net-ring-track" cx="56" cy="56" r="42"></circle>
+            <circle class="mt-net-ring-track" cx="56" cy="56" r="42" stroke-dasharray="4 6"></circle>
           </svg>
-          <div class="mt-net-ring-text"><strong>--%</strong><span>Healthy</span></div>
+          <div class="mt-net-ring-text" style="font-size:10px;gap:2px">
+            <span>แตะ +</span><span style="font-size:9px;opacity:.7">เริ่มบันทึก</span>
+          </div>
         </div>`
       }
       const safePct = Math.max(0, Math.min(100, Number(pct) || 0))
       const offset = circumference * (1 - safePct / 100)
-      return `<div class="mt-net-ring" role="img" aria-label="สถานะการเงิน ${safePct}% Healthy">
+      return `<div class="mt-net-ring" role="button" tabindex="0"
+        aria-label="สถานะการเงิน ${safePct}% Healthy — แตะเพื่อดูรายละเอียด"
+        onclick="App._showHealthyBreakdown()" style="cursor:pointer">
         <svg viewBox="0 0 112 112" aria-hidden="true">
           <circle class="mt-net-ring-track" cx="56" cy="56" r="42"></circle>
           <circle class="mt-net-ring-fill" cx="56" cy="56" r="42" style="stroke-dasharray:${circumference.toFixed(2)};stroke-dashoffset:${offset.toFixed(2)}"></circle>
@@ -4311,10 +4406,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
           <div class="name">${card.name}</div>
         </div>`).join('')}</div>`
 
-    const budgetRows = [...expBudgets]
+    const allBudgetRows = [...expBudgets]
       .filter(b => Number(b.monthlyLimit || 0) > 0)
       .sort((a, b) => Number(b.pct || 0) - Number(a.pct || 0))
-      .slice(0, 3)
+    const MAX_BUDGET_ROWS = 3
+    const budgetRows = allBudgetRows.slice(0, MAX_BUDGET_ROWS)
+    const hiddenBudgetCount = allBudgetRows.length - MAX_BUDGET_ROWS
     if (budgetRows.length) {
       html += secHdr('งบประมาณเดือนนี้', 'ดูรายงาน', "App.setRptView('budget');App.showPage('reports')")
       html += `<div class="card card-pad">`
@@ -4336,6 +4433,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
               : ''}
         </div>`
       })
+      if (hiddenBudgetCount > 0) {
+        const hiddenOver = allBudgetRows.slice(MAX_BUDGET_ROWS).filter(b => b.over).length
+        html += `<button class="btn btn-secondary btn-sm" style="width:100%;margin-top:4px" onclick="App.setRptView('budget');App.showPage('reports')">ดูอีก ${hiddenBudgetCount} หมวด${hiddenOver > 0 ? ` · ${hiddenOver} เกิน` : ''}</button>`
+      }
       html += `</div>`
       html += `<div style="height:1px;background:var(--border,#e2e8f0);margin:10px 4px"></div>`
     }
@@ -4351,6 +4452,47 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (target) target.innerHTML = html
     App._bindTxRows?.('dashboard-content')
     window.MTBoot?.mark?.('app.renderDashboard.done', { duration: Math.round((performance.now() - dashboardRenderStart) * 10) / 10 })
+  }
+
+  // Sync offline indicator without full re-render
+  App._syncOfflineIndicator = function() {
+    const el = document.getElementById('mt-offline-dot')
+    if (el) el.hidden = !S._isOffline
+  }
+
+  // Show Healthy% score breakdown popup
+  App._showHealthyBreakdown = function() {
+    const b = S._lastHealthyBreakdown
+    if (!b) return
+    const ESC2 = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+    const pct = n => `${Math.round(Math.max(0, Math.min(100, n)))}%`
+    const savingsPctText = b.savingsRate > 0 ? `ออม ${pct(b.savingsRate * 100)} ของรายรับ` : 'รายจ่ายมากกว่ารายรับ'
+    App.showConfirm({
+      title: `${Math.round(b.raw)}% Healthy`,
+      bodyHtml: true,
+      body: `<div style="font-size:13px;line-height:1.7;color:var(--text)">
+        <div style="margin-bottom:10px;color:var(--muted);font-size:12px">คะแนนสุขภาพการเงินของคุณ (เกณฑ์ 50/30/20)</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="healthy-breakdown-row">
+            <span>💰 Savings Rate</span>
+            <span style="font-weight:700;color:${b.savingsScore >= 50 ? 'var(--income)' : 'var(--expense)'}">${pct(b.savingsScore)}</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin:-4px 0 0 20px">${ESC2(savingsPctText)} · เกณฑ์ดี ≥ 20% · น้ำหนัก 50%</div>
+          <div class="healthy-breakdown-row">
+            <span>💳 Debt Burden</span>
+            <span style="font-weight:700;color:${b.debtScore >= 70 ? 'var(--income)' : 'var(--amber)'}">${pct(b.debtScore)}</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin:-4px 0 0 20px">ยิ่งหนี้น้อยเทียบกับเงินสด = คะแนนยิ่งสูง · น้ำหนัก 30%</div>
+          <div class="healthy-breakdown-row">
+            <span>🛡️ Emergency Buffer</span>
+            <span style="font-weight:700;color:${b.bufferScore >= 70 ? 'var(--income)' : 'var(--amber)'}">${pct(b.bufferScore)}</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin:-4px 0 0 20px">เกณฑ์ดี = มีเงินสำรอง 3 เดือนของรายจ่าย · น้ำหนัก 20%</div>
+        </div>
+      </div>`,
+      confirmLabel: 'เข้าใจแล้ว',
+      onConfirm() {}
+    })
   }
 
   // Apply to current page immediately
@@ -5883,10 +6025,16 @@ Calc.getUsableMoney = function(wallets, state = null) {
   // ── 4. Reports rollback: restore previous report structure ─────────────────
   App.renderReports = function() {
     if (!['expense','income','cashflow','assets','credit','budget'].includes(S.rptView)) S.rptView = 'assets'
-    const months = Calc.getMonths(6)
+    const currentYear = new Date().getFullYear()
+    const selectedYear = S.rptYear || currentYear
+    const years = [currentYear, currentYear - 1, currentYear - 2]
+    const allMonths = Calc.getMonths ? Calc.getMonths(36) : Calc.getMonths(6)
+    const months = allMonths.filter(m => m.startsWith(String(selectedYear)))
     const monthEl = document.getElementById('report-month-chips')
     const viewEl = document.getElementById('report-view-chips')
-    if (monthEl) monthEl.innerHTML = months.map(m => `<button class="chip${m === S.rptMonth ? ' active' : ''}" onclick="App.setRptMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`).join('')
+    if (monthEl) monthEl.innerHTML =
+      `<div class="chips" style="padding:0;margin-bottom:4px">${years.map(y => `<button class="chip${y === selectedYear ? ' active' : ''}" onclick="App._setRptYear(${y})">${y}</button>`).join('')}</div>` +
+      `<div class="chips" style="padding:0">${months.map(m => `<button class="chip${m === S.rptMonth ? ' active' : ''}" onclick="App.setRptMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`).join('')}</div>`
     if (viewEl) viewEl.innerHTML = [
       ['assets','สินทรัพย์'],
       ['expense','ใช้จ่าย'],
@@ -6156,6 +6304,13 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (S.page === 'reports' && /^\d{4}-\d{2}$/.test(String(m || ''))) {
       try { history.replaceState(null, '', `${location.pathname}${location.search}#reports?month=${encodeURIComponent(m)}`) } catch (_) {}
     }
+    App.renderReports()
+  }
+  App._setRptYear = function(year) {
+    S.rptYear = year
+    const allMonths = Calc.getMonths ? Calc.getMonths(36) : []
+    const months = allMonths.filter(m => m.startsWith(String(year)))
+    if (months.length && !months.includes(S.rptMonth)) S.rptMonth = months[0]
     App.renderReports()
   }
 
