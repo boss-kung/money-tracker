@@ -17827,6 +17827,17 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return ok
   }
 
+  function openPrivilegeNoteUrl(event, url) {
+    if (event && typeof event.preventDefault === 'function') event.preventDefault()
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation()
+    const href = String(url || '').trim()
+    if (!/^https?:\/\//i.test(href)) return
+    try {
+      const opened = window.open(href, '_blank')
+      if (opened) opened.opener = null
+    } catch (_) {}
+  }
+
   function renderPrivilegeNoteHtml(note) {
     const text = String(note || '')
     if (!text.trim()) return ''
@@ -17842,7 +17853,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         url = url.slice(0, -1)
       }
       if (url) {
-        html += `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>`
+        html += `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" onclick="App.openPrivilegeNoteUrl(event, this.href)">${esc(url)}</a>`
       }
       html += esc(trailing)
       lastIndex = offset + match.length
@@ -18239,6 +18250,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   App.openPrivilegeDetail = function(privilegeId) {
     openPrivilegeDetailSheet(privilegeId)
   }
+
+  App.openPrivilegeNoteUrl = openPrivilegeNoteUrl
 
   App.confirmPrivilegeUsed = function(privilegeId) {
     ensurePrivilegesState()

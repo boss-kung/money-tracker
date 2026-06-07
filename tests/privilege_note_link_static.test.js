@@ -29,6 +29,18 @@ test('privilege detail note uses a dedicated linkified renderer', () => {
   assert.match(noteRenderer, /esc\s*\(/)
 })
 
+test('privilege note links force an external browser window from the tap handler', () => {
+  const noteRenderer = namedFunctionSource('renderPrivilegeNoteHtml')
+  const openHandler = namedFunctionSource('openPrivilegeNoteUrl')
+
+  assert.match(noteRenderer, /onclick="App\.openPrivilegeNoteUrl\(event,\s*this\.href\)"/)
+  assert.match(openHandler, /preventDefault\s*\(\s*\)/)
+  assert.match(openHandler, /stopPropagation\s*\(\s*\)/)
+  assert.match(openHandler, /window\.open\s*\(\s*href\s*,\s*'_blank'\s*\)/)
+  assert.match(openHandler, /\.opener\s*=\s*null/)
+  assert.match(openHandler, /^function openPrivilegeNoteUrl[\s\S]*https\?:\\\/\\\//)
+})
+
 test('privilege detail note has multiline and long-url layout rules', () => {
   assert.match(cssSource, /\.privilege-detail-row-note\s+/)
   assert.match(cssSource, /\.privilege-detail-note-value\s+/)
