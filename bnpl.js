@@ -172,8 +172,8 @@
   // ── BNPLui ─────────────────────────────────────────────────────────────────
   const BNPLui = {
 
-    // ── Wallet card HTML ──
-    walletCard(w) {
+    // ── Wallet card HTML (structure mirrors CC card in app_v2.js _walletCard) ──
+    walletCard(w, ctx = {}) {
       const used = BNPLCalc.getUsedCredit(w)
       const avail = BNPLCalc.getAvailableCredit(w)
       const pct = BNPLCalc.getUsagePct(w)
@@ -191,48 +191,48 @@
       const bgColor = w.color || '#6c48c5'
       const colorStyle = `--wallet-color:${bgColor};--wallet-color-2:${bgColor}BB`
 
-      const progressSection = w.creditLimit
-        ? `<div class="wc-prog-bar" style="margin-top:8px"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : 'rgba(255,255,255,0.75)'}"></div></div>
-           <div class="wc-prog-info"><span>ค้าง ${money(used)}</span><span>วงเงินเหลือ ${money(avail)}</span></div>`
-        : `<div style="margin-top:8px;font-size:14px;font-weight:600;color:rgba(255,255,255,.9)">${money(used)}<span style="font-size:11px;font-weight:400;opacity:.7;margin-left:4px">ค้างชำระ</span></div>`
+      const name = `${w.icon || '🛍️'} ${w.name || ''}`.trim()
+      const planBadge = activePlans.length > 0 ? ` · ${activePlans.length} แผน` : ''
+      const typeLabel = `BNPL${w.provider ? ` · ${esc(w.provider)}` : ''}${planBadge}`
 
-      const dueStrip = nextDueItem
-        ? `<div class="cc-due-strip" style="margin-top:8px${isOverdue ? ';color:#fca5a5' : isDueSoon ? ';color:#fde68a' : ''}">
-            <span>${money(nextDueItem.amount)}</span>
-            <span>งวด ${nextDueItem.no}/${nextDueItem.installments} ${fmtDate(nextDueItem.dueDate)}</span>
-            <span class="wc-days-left${isOverdue ? ' overdue' : isDueSoon ? ' soon' : ''}">${isOverdue ? 'เกินกำหนด' : daysLeft === 0 ? 'วันนี้' : daysLeft + ' วัน'}</span>
-           </div>`
-        : ''
-
-      const btnPlans = `<button type="button" class="wallet-chip-btn" onclick="event.stopPropagation();BNPL.ui.openPlanList('${esc(w.id)}')">แผนผ่อน${activePlans.length > 0 ? ` (${activePlans.length})` : ''}</button>`
-      const btnPay = nextDueItem
+      const payBtn = nextDueItem && !ctx.reorderMode
         ? `<button type="button" class="wallet-chip-btn wc-card-pay-btn" onclick="event.stopPropagation();BNPL.ui.openPayModal('${esc(nextDueItem.planId)}',${nextDueItem.no})">จ่ายงวด</button>`
         : ''
 
-      return `<div class="wallet-card wallet-card-colored" style="${colorStyle};cursor:pointer" onclick="BNPL.ui.openPlanList('${esc(w.id)}')">
+      const limitSection = w.creditLimit
+        ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ค้าง ${money(used)}</span><span>คงเหลือ ${money(avail)}</span></div></div>`
+        : ''
+
+      const dueStrip = nextDueItem
+        ? `<div class="cc-due-strip${isOverdue ? ' urgent' : isDueSoon ? ' soon' : ''}"><span>${money(nextDueItem.amount)}</span><span>งวด ${nextDueItem.no}/${nextDueItem.installments} ${fmtDate(nextDueItem.dueDate)}</span><span class="wc-days-left${isOverdue ? ' overdue' : isDueSoon ? ' soon' : ''}">${isOverdue ? 'เกินกำหนด' : daysLeft === 0 ? 'วันนี้' : daysLeft + ' วัน'}</span></div>`
+        : ''
+
+      return `<div ${ctx.dataAttrs || ''} class="wallet-card wallet-card-colored wallet-card-bnpl${ctx.dragCls || ''}" style="${colorStyle}"${ctx.reorderMode ? '' : ` onclick="BNPL.ui.openPlanList('${esc(w.id)}')"`}>
+        ${ctx.dragHandle || ''}
         <div class="wc-header">
-          <span class="wc-icon">${esc(w.icon || '🛍️')}</span>
-          <div class="wc-title-wrap">
-            <span class="wc-name">${esc(w.name)}</span>
-            <span class="wc-type-label">BNPL${w.provider ? ` · ${esc(w.provider)}` : ''}</span>
-          </div>
+          <div><div class="wc-name">${esc(name)}</div><div class="wc-type">${typeLabel}</div></div>
+          <div class="wc-card-actions">${payBtn}${ctx.editBtn || ''}</div>
         </div>
-        ${progressSection}
+        <div class="wc-balance">-${money(used)}</div>
+        ${limitSection}
         ${dueStrip}
-        <div class="wc-chip-row" style="margin-top:8px">${btnPlans}${btnPay}</div>
       </div>`
     },
 
-    // ── Plan list sheet ──
+    // ── Plan list sub-screen ──
     openPlanList(walletId) {
-      const overlay = document.getElementById('overlay-bnpl-plans')
-      if (!overlay) return
-      const wallet = (typeof S !== 'undefined' ? S.wallets : [])?.find(w => w.id === walletId) || {}
-      const titleEl = overlay.querySelector('.sheet-title')
-      if (titleEl) titleEl.textContent = `แผนผ่อน — ${wallet.name || 'BNPL'}`
-      const content = document.getElementById('bnpl-plans-content')
-      if (content) content.innerHTML = BNPLui._planListHtml(walletId)
-      overlay.classList.add('open')
+      if (typeof App === 'undefined' || typeof S === 'undefined') return
+      S._bnplPlanListWalletId = walletId
+      const wallet = S.wallets?.find(w => w.id === walletId) || {}
+      App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(wallet.icon || '🛍️')} ${esc(wallet.name || 'BNPL')}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(walletId)}')" style="width:auto">แก้ไข</button></div><div class="sub-scroll"><div id="bnpl-plan-hero">${BNPLui._heroHtml(wallet)}</div><div id="bnpl-plans-content" style="padding:12px 16px 40px">${BNPLui._planListHtml(walletId)}</div></div>`)
+    },
+
+    _heroHtml(wallet) {
+      const used = BNPLCalc.getUsedCredit(wallet)
+      const avail = BNPLCalc.getAvailableCredit(wallet)
+      const pct = BNPLCalc.getUsagePct(wallet)
+      const color = wallet.color || '#6c48c5'
+      return `<div class="cc-hero" style="background:linear-gradient(135deg,${color},${color}BB);color:#fff;border:0"><div style="font-size:13px;opacity:.75;margin-bottom:4px">ยอดค้างชำระ</div><div class="big">${money(used)}</div>${wallet.creditLimit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:12px 0 6px"><div style="height:100%;width:${pct}%;background:${pct > 80 ? '#FCA5A5' : 'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${pct.toFixed(0)}% · คงเหลือ ${money(avail)}</div>` : `<div style="font-size:12px;opacity:.65;margin-top:6px">ไม่ได้ตั้งวงเงิน</div>`}</div>`
     },
 
     _planListHtml(walletId) {
@@ -252,14 +252,11 @@
         const scheduleRows = plan.schedule.map(s => {
           const isPaid = !!s.paidTxId
           const isOver = !isPaid && s.dueDate < t
-          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:13px;border-bottom:1px solid var(--border-soft,rgba(0,0,0,.06));${isPaid ? 'opacity:.45' : ''}${isOver ? 'color:#ef4444' : ''}">
-            <span>${isPaid ? '✓' : isOver ? '⚠️' : '○'} งวด ${s.no}/${plan.installments} &nbsp;·&nbsp; ${fmtDate(s.dueDate)}</span>
-            <span style="font-weight:500">${money(s.amount)}</span>
-          </div>`
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:13px;border-bottom:1px solid var(--border-soft,rgba(0,0,0,.06))${isPaid ? ';opacity:.45' : isOver ? ';color:#ef4444' : ''}"><span>${isPaid ? '✓' : isOver ? '⚠️' : '○'} งวด ${s.no}/${plan.installments} · ${fmtDate(s.dueDate)}</span><span style="font-weight:500">${money(s.amount)}</span></div>`
         }).join('')
 
         const payBtn = next && plan.status === 'active'
-          ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="BNPL.ui.openPayModal('${esc(plan.id)}',${next.no});BNPL.ui.closePlanList()">จ่ายงวด ${next.no}/${plan.installments}</button>`
+          ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="BNPL.ui.openPayModal('${esc(plan.id)}',${next.no})">จ่ายงวด ${next.no}/${plan.installments}</button>`
           : ''
 
         return `<div class="card card-pad" style="margin-bottom:10px">
@@ -272,9 +269,7 @@
           </div>
           <div class="wc-prog-bar" style="margin:8px 0 2px"><div class="wc-prog-fill" style="width:${pct}%;background:${pct >= 100 ? '#22c55e' : 'var(--accent,#6c48c5)'}"></div></div>
           ${nextLabel}
-          <details style="margin-top:10px"><summary style="font-size:12px;cursor:pointer;opacity:.6;list-style:none;display:flex;align-items:center;gap:4px"><span>▸</span> รายละเอียดงวด</summary>
-            <div style="margin-top:6px">${scheduleRows}</div>
-          </details>
+          <details style="margin-top:10px"><summary style="font-size:12px;cursor:pointer;opacity:.6;list-style:none;display:flex;align-items:center;gap:4px"><span>▸</span> รายละเอียดงวด</summary><div style="margin-top:6px">${scheduleRows}</div></details>
           ${payBtn}
         </div>`
       }
@@ -283,14 +278,12 @@
         return '<div style="text-align:center;padding:48px 16px;opacity:.5;font-size:14px">ยังไม่มีแผนผ่อน<br><small>บันทึกรายจ่ายผ่าน BNPL แล้วเลือกจำนวนงวด</small></div>'
       }
 
-      return `
-        ${active.map(planCard).join('')}
-        ${done.length > 0 ? `<details style="margin-top:4px"><summary style="font-size:13px;opacity:.55;cursor:pointer;padding:8px 0">ชำระแล้ว (${done.length})</summary><div style="margin-top:8px">${done.map(planCard).join('')}</div></details>` : ''}
-      `
+      return `${active.map(planCard).join('')}${done.length > 0 ? `<details style="margin-top:4px"><summary style="font-size:13px;opacity:.55;cursor:pointer;padding:8px 0">ชำระแล้ว (${done.length})</summary><div style="margin-top:8px">${done.map(planCard).join('')}</div></details>` : ''}`
     },
 
     closePlanList() {
-      document.getElementById('overlay-bnpl-plans')?.classList.remove('open')
+      if (typeof App !== 'undefined') App.closeSubScreen?.()
+      if (typeof S !== 'undefined') S._bnplPlanListWalletId = null
     },
 
     // ── Pay installment modal ──
@@ -316,21 +309,15 @@
       const t = todayStr()
       const isOverdue = item.dueDate < t
       const dueLabel = isOverdue
-        ? `<span style="color:#ef4444;font-size:12px">เกินกำหนด ${fmtDate(item.dueDate)}</span>`
-        : `<span style="font-size:12px;opacity:.65">ครบกำหนด ${fmtDate(item.dueDate)}</span>`
+        ? `<div style="margin-top:4px;font-size:12px;color:#ef4444">⚠️ เกินกำหนด ${fmtDate(item.dueDate)}</div>`
+        : `<div style="margin-top:4px;font-size:12px;opacity:.65">ครบกำหนด ${fmtDate(item.dueDate)}</div>`
 
       return `<div style="padding:4px 0">
-        <div class="form-group">
-          <label class="form-label">แผนผ่อน</label>
-          <div style="font-weight:600;font-size:15px">${esc(plan.merchant || 'BNPL')}</div>
-          <div style="margin-top:3px;display:flex;align-items:center;gap:6px">
-            <span style="font-size:13px;opacity:.65">งวด ${item.no} จาก ${plan.installments} งวด</span>
-            ${dueLabel}
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">ยอดที่ต้องจ่าย</label>
-          <div style="font-size:24px;font-weight:700;color:var(--accent,#6c48c5)">${money(item.amount)}</div>
+        <div style="text-align:center;padding:20px 0 16px">
+          <div style="font-size:14px;font-weight:600">${esc(plan.merchant || 'BNPL')}</div>
+          <div style="font-size:13px;opacity:.65;margin-top:2px">งวด ${item.no} จาก ${plan.installments} งวด</div>
+          ${dueLabel}
+          <div class="big" style="margin-top:10px">${money(item.amount)}</div>
         </div>
         <div class="form-group">
           <label class="form-label">จากบัญชี</label>
@@ -357,6 +344,15 @@
       const tx = BNPLStore.payInstallment(planId, no, { walletId: sourceWalletId, date })
       if (tx) {
         BNPLui.closePayModal()
+        // Refresh plan list + hero in-place without closing sub-screen
+        const walletId = typeof S !== 'undefined' ? S._bnplPlanListWalletId : null
+        if (walletId) {
+          const plansEl = document.getElementById('bnpl-plans-content')
+          if (plansEl) plansEl.innerHTML = BNPLui._planListHtml(walletId)
+          const heroEl = document.getElementById('bnpl-plan-hero')
+          const w = typeof S !== 'undefined' ? S.wallets?.find(x => x.id === walletId) : null
+          if (heroEl && w) heroEl.innerHTML = BNPLui._heroHtml(w)
+        }
         try { App?.render?.() } catch (_) {}
         try { App?.toast?.('บันทึกการชำระงวดแล้ว ✓', 'success') } catch (_) {}
       }
@@ -366,21 +362,10 @@
       document.getElementById('overlay-bnpl-pay')?.classList.remove('open')
     },
 
-    // ── Inject overlay HTML into DOM ──
+    // ── Inject overlay HTML into DOM (pay modal only — plan list uses sub-screen) ──
     injectOverlays() {
-      if (document.getElementById('overlay-bnpl-plans')) return
+      if (document.getElementById('overlay-bnpl-pay')) return
       document.body.insertAdjacentHTML('beforeend', `
-        <div class="overlay" id="overlay-bnpl-plans" onclick="if(event.target===this||event.target.classList.contains('overlay-backdrop'))BNPL.ui.closePlanList()">
-          <div class="overlay-backdrop"></div>
-          <div class="sheet">
-            <div class="sheet-handle"></div>
-            <div class="sheet-header">
-              <span class="sheet-title">แผนผ่อน BNPL</span>
-              <button class="sheet-close" onclick="BNPL.ui.closePlanList()">✕</button>
-            </div>
-            <div class="sheet-body" id="bnpl-plans-content"></div>
-          </div>
-        </div>
         <div class="overlay" id="overlay-bnpl-pay" onclick="if(event.target===this||event.target.classList.contains('overlay-backdrop'))BNPL.ui.closePayModal()">
           <div class="overlay-backdrop"></div>
           <div class="sheet">

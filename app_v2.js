@@ -4722,10 +4722,16 @@ Calc.getUsableMoney = function(wallets, state = null) {
         ? `<div class="wallet-drag-handle" ontouchstart="App._walletDragStart(event,'${ESC(w.id)}')" onmousedown="App._walletDragStart(event,'${ESC(w.id)}')">⠿</div>`
         : ''
       const editBtn = `<button class="wc-edit-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')" aria-label="แก้ไข">✏️</button>`
-      const cardHtml = typeof BNPL !== 'undefined' ? BNPL.ui.walletCard(w) : `<div class="wallet-card">BNPL: ${ESC(w.name)}</div>`
-      return `<div data-wallet-id="${ESC(w.id)}" data-wallet-type="bnpl" class="${_reorderMode ? 'wallet-drag-item' : ''}" style="position:relative">
-        ${_dragHandle}${editBtn}${cardHtml}
-      </div>`
+      const ctx = {
+        editBtn,
+        dragHandle: _dragHandle,
+        dataAttrs: `data-wallet-id="${ESC(w.id)}" data-wallet-type="bnpl"`,
+        dragCls: _reorderMode ? ' wallet-drag-item' : '',
+        reorderMode: _reorderMode,
+      }
+      return typeof BNPL !== 'undefined'
+        ? BNPL.ui.walletCard(w, ctx)
+        : `<div class="wallet-card">BNPL: ${ESC(w.name)}</div>`
     }
     const isCC = w.type === 'credit'
     const invest = isInvest(w)
