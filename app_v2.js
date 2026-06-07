@@ -17827,6 +17827,31 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return ok
   }
 
+  function renderPrivilegeNoteHtml(note) {
+    const text = String(note || '')
+    if (!text.trim()) return ''
+    const urlPattern = /https?:\/\/[^\s<>"']+/gi
+    let html = ''
+    let lastIndex = 0
+    text.replace(urlPattern, (match, offset) => {
+      html += esc(text.slice(lastIndex, offset))
+      let url = match
+      let trailing = ''
+      while (/[.,!?;:)\]}]+$/.test(url)) {
+        trailing = url.slice(-1) + trailing
+        url = url.slice(0, -1)
+      }
+      if (url) {
+        html += `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>`
+      }
+      html += esc(trailing)
+      lastIndex = offset + match.length
+      return match
+    })
+    html += esc(text.slice(lastIndex))
+    return `<div class="privilege-detail-row privilege-detail-row-note"><span>หมายเหตุ</span><div class="privilege-detail-note-value">${html}</div></div>`
+  }
+
   function openPrivilegeUsedDialog(privilegeId) {
     ensurePrivilegesState()
     const privilege = (S.privileges || []).find(row => row.id === privilegeId)
@@ -17928,7 +17953,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       privilege.type === 'free_item' && privilege.freeItemName ? ['ชื่อของฟรี', privilege.freeItemName] : null,
       expiryLabel ? ['วันหมดอายุ', expiryLabel] : null,
       usedLabel ? ['ใช้ล่าสุด', usedLabel] : null,
-      privilege.note ? ['หมายเหตุ', privilege.note] : null,
     ].filter(Boolean)
     const el = document.createElement('div')
     el.id = 'privilege-detail-overlay'
@@ -17966,6 +17990,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
               </div>
             </div>` : ''}
             ${rows.map(([label, value]) => `<div class="privilege-detail-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}
+            ${renderPrivilegeNoteHtml(privilege.note)}
           </div>
           <div class="privilege-sheet-actions-stack" style="margin-top:12px">
             ${privilegeSupportsCopy(privilege) ? `<button class="btn btn-secondary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอกโค้ด</button>` : ''}

@@ -6085,6 +6085,27 @@ html.dark .crypto-summary-item {
   line-height: 1.35;
 }
 
+.privilege-detail-row-note {
+  align-items: flex-start;
+}
+
+.privilege-detail-note-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.privilege-detail-note-value a {
+  color: var(--primary);
+  font-weight: 800;
+  text-decoration: none;
+}
+
 .privilege-detail-row-codes {
   align-items: flex-start;
 }

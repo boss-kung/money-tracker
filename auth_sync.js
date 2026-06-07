@@ -449,6 +449,39 @@
       : false
   }
 
+  function vaultVersion(value) {
+    const raw = typeof value === 'number' ? value : value?.data_version
+    const version = Number(raw || 0)
+    return Number.isFinite(version) && version > 0 ? version : 0
+  }
+
+  function rememberAppliedVaultVersion(value) {
+    const version = vaultVersion(value)
+    if (version > 0) storageSave({ lastAppliedVaultVersion: version })
+    return version
+  }
+
+  function localPayloadHasUserContent() {
+    let payload = null
+    try { payload = currentPayload() } catch (_) { return false }
+    const arrayKeys = [
+      'wallets', 'transactions', 'upcomingBills', 'budgets',
+      'incomeBudgets', 'merchants', 'rewardAccounts', 'privileges',
+      'goals', 'loans', 'sharedExpenses',
+    ]
+    if (arrayKeys.some(key => Array.isArray(payload?.[key]) && payload[key].length > 0)) return true
+    return Boolean(payload?.ccBenefits && Object.keys(payload.ccBenefits).length > 0)
+  }
+
+  function effectiveLastAppliedVaultVersion(remoteVersion, { freshStart = false, localIsDemo = false, localHasUserContent = false } = {}) {
+    const stored = Number(storageLoad().lastAppliedVaultVersion || 0)
+    if (Number.isFinite(stored) && stored > 0) return stored
+    if (!freshStart && !localIsDemo && localHasUserContent && vaultVersion(remoteVersion) > 0) {
+      return rememberAppliedVaultVersion(remoteVersion)
+    }
+    return 0
+  }
+
   async function ensureFirstRunBackup() {
     if (!state.session?.access_token || !state.user?.id) return null
 
@@ -468,10 +501,11 @@
         // Apply vault data when: (a) fresh start after logout, OR (b) local data is still demo,
         // OR (c) remote has a newer version than what this device last applied (another device pushed changes).
         const localIsDemo = currentDataLooksLikeDemo()
-        const lastApplied = Number(storageLoad().lastAppliedVaultVersion || 0)
+        const localHasUserContent = localPayloadHasUserContent()
         const remoteVersion = Number(state.vaultMeta?.data_version || 0)
+        const lastApplied = effectiveLastAppliedVaultVersion(remoteVersion, { freshStart, localIsDemo, localHasUserContent })
         const skipApply = !freshStart && !localIsDemo && remoteVersion <= lastApplied
-        console.debug('[MTAuthSync] unlocking vault', { skipApply, freshStart, localIsDemo, remoteVersion, lastApplied })
+        console.debug('[MTAuthSync] unlocking vault', { skipApply, freshStart, localIsDemo, localHasUserContent, remoteVersion, lastApplied })
         try {
           await unlockVault(savedKey, { skipApply, silent: true })
           console.debug('[MTAuthSync] vault unlocked', { stillDemo: currentDataLooksLikeDemo() })
@@ -630,6 +664,7 @@
     state.vaultMeta = Array.isArray(saved) ? saved[0] : row
     state.locked = false
     state.dirty = false
+    rememberAppliedVaultVersion(state.vaultMeta)
     render()
     if (!options.silent) toastSafe('บันทึกข้อมูลไว้แล้ว', 'success')
     return state.vaultMeta
@@ -849,6 +884,7 @@
     const saved = await vaultRequest('POST', row)
     state.vaultMeta = Array.isArray(saved) ? saved[0] : row
     state.dirty = false
+    rememberAppliedVaultVersion(state.vaultMeta)
     render()
     return state.vaultMeta
   }
@@ -892,8 +928,8 @@
           await unlockVault(recoveryKey)
         } else if (remote && state.dataKey) {
           // Already unlocked — apply remote data if it's newer than what we last applied
-          const lastApplied = Number(storageLoad().lastAppliedVaultVersion || 0)
           const remoteVersion = Number(remote.data_version || 0)
+          const lastApplied = effectiveLastAppliedVaultVersion(remoteVersion, { localIsDemo: currentDataLooksLikeDemo(), localHasUserContent: localPayloadHasUserContent() })
           if (remoteVersion > lastApplied) {
             console.debug('[MTAuthSync] pull: applying newer remote version', { remoteVersion, lastApplied })
             await restoreRemoteWithCurrentKey(remote)

@@ -94,3 +94,15 @@ test('auth restore waits for app storage bridge before creating or restoring vau
   assert.doesNotMatch(source, /root\.Storage\?\.normalizeBackupPayload/)
   assert.doesNotMatch(source, /root\.Storage\?\.reset/)
 })
+
+test('legacy devices bootstrap applied vault version before pulling remote over local data', () => {
+  const source = fs.readFileSync(path.join(root, 'auth_sync.js'), 'utf8')
+
+  assert.match(source, /function effectiveLastAppliedVaultVersion\(/)
+  assert.match(source, /function localPayloadHasUserContent\(/)
+  assert.match(source, /rememberAppliedVaultVersion\(remoteVersion\)/)
+  assert.match(source, /const localHasUserContent = localPayloadHasUserContent\(\)/)
+  assert.match(source, /const lastApplied = effectiveLastAppliedVaultVersion\(remoteVersion, \{ freshStart, localIsDemo, localHasUserContent \}\)/)
+  assert.match(source, /const lastApplied = effectiveLastAppliedVaultVersion\(remoteVersion, \{ localIsDemo: currentDataLooksLikeDemo\(\), localHasUserContent: localPayloadHasUserContent\(\) \}\)/)
+  assert.match(source, /rememberAppliedVaultVersion\(state\.vaultMeta\)/)
+})
