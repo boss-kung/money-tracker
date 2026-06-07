@@ -252,7 +252,7 @@
         const scheduleRows = plan.schedule.map(s => {
           const isPaid = !!s.paidTxId
           const isOver = !isPaid && s.dueDate < t
-          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:13px;border-bottom:1px solid var(--border-soft,rgba(0,0,0,.06))${isPaid ? ';opacity:.45' : isOver ? ';color:#ef4444' : ''}"><span>${isPaid ? '✓' : isOver ? '⚠️' : '○'} งวด ${s.no}/${plan.installments} · ${fmtDate(s.dueDate)}</span><span style="font-weight:500">${money(s.amount)}</span></div>`
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:13px;border-bottom:1px solid var(--border)${isPaid ? ';opacity:.45' : isOver ? ';color:#ef4444' : ''}"><span>${isPaid ? '✓' : isOver ? '⚠️' : '○'} งวด ${s.no}/${plan.installments} · ${fmtDate(s.dueDate)}</span><span style="font-weight:500">${money(s.amount)}</span></div>`
         }).join('')
 
         const payBtn = next && plan.status === 'active'
@@ -265,7 +265,7 @@
               <div style="font-weight:600;font-size:15px">${esc(plan.merchant || 'ไม่ระบุร้าน')}</div>
               <div style="font-size:12px;opacity:.6;margin-top:2px">${fmtDate(plan.purchaseDate)} · ${money(plan.totalAmount)}</div>
             </div>
-            <span style="font-size:11px;background:var(--surface2,#f3f4f6);padding:3px 8px;border-radius:20px;white-space:nowrap">${paidCount}/${plan.installments} งวด</span>
+            <span style="font-size:11px;background:var(--surface-soft,#F8FAFC);padding:3px 8px;border-radius:20px;white-space:nowrap">${paidCount}/${plan.installments} งวด</span>
           </div>
           <div class="wc-prog-bar" style="margin:8px 0 2px"><div class="wc-prog-fill" style="width:${pct}%;background:${pct >= 100 ? '#22c55e' : 'var(--accent,#6c48c5)'}"></div></div>
           ${nextLabel}
