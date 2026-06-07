@@ -156,7 +156,7 @@
   function debugSnapshot() {
     const saved = storageLoad()
     return {
-      version: '2026.06.04-secure-sync18',
+      version: '2026.06.07-multidevice-sync-fix',
       configured: configured(),
       hasSession: Boolean(state.session?.access_token),
       hasRefreshToken: Boolean(saved.refreshToken),
@@ -465,11 +465,13 @@
       if (state.vaultMeta && savedKey && !state.dataKey) {
         const freshStart = isFreshStart()
         clearFreshStart()
-        // Apply vault data when: (a) fresh start after logout, OR (b) local data is still demo.
-        // Never skip-apply when local data is demo — that would leave the user staring at sample data.
+        // Apply vault data when: (a) fresh start after logout, OR (b) local data is still demo,
+        // OR (c) remote has a newer version than what this device last applied (another device pushed changes).
         const localIsDemo = currentDataLooksLikeDemo()
-        const skipApply = !freshStart && !localIsDemo
-        console.debug('[MTAuthSync] unlocking vault', { skipApply, freshStart, localIsDemo })
+        const lastApplied = Number(storageLoad().lastAppliedVaultVersion || 0)
+        const remoteVersion = Number(state.vaultMeta?.data_version || 0)
+        const skipApply = !freshStart && !localIsDemo && remoteVersion <= lastApplied
+        console.debug('[MTAuthSync] unlocking vault', { skipApply, freshStart, localIsDemo, remoteVersion, lastApplied })
         try {
           await unlockVault(savedKey, { skipApply, silent: true })
           console.debug('[MTAuthSync] vault unlocked', { stillDemo: currentDataLooksLikeDemo() })
@@ -815,7 +817,8 @@
       try { appStorage()?.createLocalBackup?.(root.App?._cloudState?.(), 'before-cloud-restore') } catch (_) {}
       try {
         applyPayload(payload)
-        console.debug('[MTAuthSync] applyPayload done', { stillDemo: currentDataLooksLikeDemo() })
+        storageSave({ lastAppliedVaultVersion: Number(row.data_version || 0) })
+        console.debug('[MTAuthSync] applyPayload done', { stillDemo: currentDataLooksLikeDemo(), appliedVersion: row.data_version })
       } catch (err) {
         console.warn('[MTAuthSync] applyPayload failed', err.message)
         throw err
@@ -832,6 +835,12 @@
   async function pushEncryptedVault(recoveryKey = '') {
     const remote = await pullRemoteVault({ silent: true })
     if (remote && state.vaultMeta && Number(remote.data_version || 0) > Number(state.vaultMeta.data_version || 0)) {
+      // Remote is newer — if we have no local pending changes, silently apply remote.
+      // Only show conflict dialog when both sides have unmerged changes.
+      if (!state.dirty) {
+        console.debug('[MTAuthSync] remote is newer, local is clean — applying remote silently', { remoteVersion: remote.data_version, localVersion: state.vaultMeta.data_version })
+        return restoreRemoteWithCurrentKey(remote)
+      }
       return handleRemoteConflict(remote)
     }
     if (!state.dataKey && !recoveryKey) throw new Error('ต้องกรอกรหัสกู้ข้อมูลก่อนบันทึก')
@@ -850,6 +859,7 @@
     const payload = await cryptoVault.decryptVault(remote.ciphertext, state.dataKey, remote.iv, remote.checksum)
     await waitForStorageBridge()
     applyPayload(payload)
+    storageSave({ lastAppliedVaultVersion: Number(remote.data_version || 0) })
     state.vaultMeta = remote
     state.dirty = false
     state.locked = false
@@ -876,10 +886,20 @@
     render()
     try {
       if (direction === 'pull') {
-        await pullRemoteVault({ silent: true })
+        const remote = await pullRemoteVault({ silent: true })
         if (state.locked) {
-              if (!recoveryKey) throw new Error('ต้องใส่รหัสกู้ข้อมูล')
-              await unlockVault(recoveryKey)
+          if (!recoveryKey) throw new Error('ต้องใส่รหัสกู้ข้อมูล')
+          await unlockVault(recoveryKey)
+        } else if (remote && state.dataKey) {
+          // Already unlocked — apply remote data if it's newer than what we last applied
+          const lastApplied = Number(storageLoad().lastAppliedVaultVersion || 0)
+          const remoteVersion = Number(remote.data_version || 0)
+          if (remoteVersion > lastApplied) {
+            console.debug('[MTAuthSync] pull: applying newer remote version', { remoteVersion, lastApplied })
+            await restoreRemoteWithCurrentKey(remote)
+          } else {
+            console.debug('[MTAuthSync] pull: already up to date', { remoteVersion, lastApplied })
+          }
         }
       } else {
         await pushEncryptedVault(recoveryKey)
@@ -894,8 +914,15 @@
 
   function autoSyncIfReady() {
     if (!state.session?.access_token || state.locked || !state.dataKey || state.syncing) return
-    syncNow({ direction: 'push', silent: true })
-      .catch(err => toastSafe(`บันทึกข้อมูลอัตโนมัติล้มเหลว: ${err.message}`, 'warn'))
+    if (state.dirty) {
+      // Have local changes — push them (internally checks for remote conflicts first)
+      syncNow({ direction: 'push', silent: true })
+        .catch(err => toastSafe(`บันทึกข้อมูลอัตโนมัติล้มเหลว: ${err.message}`, 'warn'))
+    } else {
+      // No local changes — pull to pick up any changes made on other devices
+      syncNow({ direction: 'pull', silent: true })
+        .catch(err => console.warn('[MTAuthSync] auto-pull failed:', err.message))
+    }
   }
 
   function markDirty() {
