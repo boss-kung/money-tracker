@@ -40,3 +40,12 @@ test('rule transaction sheet and diagnostics do not call private benefit amount 
   assert.match(sheetBody, /calcBenefitAmount\s*=/)
   assert.match(debugBody, /calcBenefitAmount\s*=/)
 })
+
+test('add transaction next-cycle benefit toggle uses the selected rule cycle with a five-day window', () => {
+  const body = functionBody('App.getBenefitCycleShiftOption')
+
+  assert.match(body, /resolveBenefitShiftRule\s*\(\s*txDraft\s*\)/)
+  assert.match(body, /getOpenCyclePeriodForDate\s*\(\s*cardId\s*,\s*txDate\s*,\s*rule\s*\)/)
+  assert.match(body, /shiftDateStr\s*\(\s*nextCycleStart\s*,\s*-5\s*\)/)
+  assert.doesNotMatch(body, /shiftDateStr\s*\(\s*nextCycleStart\s*,\s*-3\s*\)/)
+})

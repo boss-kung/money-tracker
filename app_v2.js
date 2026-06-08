@@ -14803,16 +14803,30 @@ App._pickMerchant = function(name, opts = {}) {
   App.getOpenCyclePeriodForDate = function(cardId, refDate, rule) {
     return getOpenCyclePeriodForDate(cardId, refDate || today(), rule || null)
   }
+  function resolveBenefitShiftRule(txDraft = {}) {
+    const cardId = String(txDraft.walletId || '')
+    if (!cardId) return null
+    ensureCCBenefitRulesState()
+    const rules = (S.ccBenefitRules || []).filter(rule => String(rule.cardId || '') === cardId && rule.active !== false)
+    const byId = new Map(rules.map(rule => [String(rule.id || ''), rule]))
+    const selectedIds = Array.isArray(txDraft.rewardRuleIds) ? txDraft.rewardRuleIds.map(id => String(id || '')).filter(Boolean) : []
+    for (const id of selectedIds) {
+      const rule = byId.get(id)
+      if (rule) return rule
+    }
+    return (App.getSuggestedBenefitRules?.(txDraft) || []).find(rule => rule.suggested && rule.active !== false) || null
+  }
   App.getBenefitCycleShiftOption = function(txDraft = {}) {
     const cardId = String(txDraft.walletId || '')
     const card = walletById(cardId)
     const txDate = String(txDraft.date || today()).slice(0, 10)
     if (!card || card.type !== 'credit' || txDraft.type !== 'expense' || !txDate) return { available: false }
-    const cycle = getOpenCyclePeriodForDate(cardId, txDate, null)
+    const rule = resolveBenefitShiftRule(txDraft)
+    const cycle = getOpenCyclePeriodForDate(cardId, txDate, rule)
     const nextCycleStart = shiftDateStr(cycle.end, 1)
-    const windowStart = shiftDateStr(nextCycleStart, -3)
+    const windowStart = shiftDateStr(nextCycleStart, -5)
     const windowEnd = shiftDateStr(nextCycleStart, -1)
-    const nextCycle = getOpenCyclePeriodForDate(cardId, nextCycleStart, null)
+    const nextCycle = getOpenCyclePeriodForDate(cardId, nextCycleStart, rule)
     const available = txDate >= windowStart && txDate <= windowEnd
     return {
       available,
