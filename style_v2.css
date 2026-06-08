@@ -2795,9 +2795,9 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 }
 .tx-row-modern .tx-title {
   font-size:16px !important;
-  line-height:1.16 !important;
+  line-height:1.38 !important;
   font-weight: 700 !important;
-  letter-spacing:-.025em !important;
+  letter-spacing:0 !important;
 }
 .tx-row-modern .tx-amount {
   font-size:17px !important;
