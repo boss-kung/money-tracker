@@ -49,3 +49,10 @@ test('add transaction next-cycle benefit toggle uses the selected rule cycle wit
   assert.match(body, /shiftDateStr\s*\(\s*nextCycleStart\s*,\s*-5\s*\)/)
   assert.doesNotMatch(body, /shiftDateStr\s*\(\s*nextCycleStart\s*,\s*-3\s*\)/)
 })
+
+test('selected benefit estimate starts its cycle from the effective benefit date override', () => {
+  const body = functionBody('App.calculateSelectedRewardEstimate')
+
+  assert.match(body, /getCyclePeriodForDate\s*\(\s*card\.id\s*,\s*resolveBenefitTxDate\s*\(\s*txDraft\s*\)\s*\|\|\s*today\(\)\s*,\s*rule\s*\)/)
+  assert.doesNotMatch(body, /getCyclePeriodForDate\s*\(\s*card\.id\s*,\s*txDraft\.date\s*\|\|\s*today\(\)\s*,\s*rule\s*\)/)
+})

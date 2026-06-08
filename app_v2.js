@@ -16017,7 +16017,7 @@ App._pickMerchant = function(name, opts = {}) {
     let unlockDeltaTotal = 0
     const confidenceReasons = []
     rules.forEach(rule => {
-      const cycle = getCyclePeriodForDate(card.id, txDraft.date || today(), rule)
+      const cycle = getCyclePeriodForDate(card.id, resolveBenefitTxDate(txDraft) || today(), rule)
       const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '', getTriggerTrackChannels(rule.rewardTrigger || {}), txDraft.merchant || '', txDraft.channel || '', rule)
       const result = App.applyBenefitRule(txDraft, rule, usage)
       result.cycleStart = cycle.start
