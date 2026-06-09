@@ -3,6 +3,66 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <style>
+    html {
+      min-height: 100%;
+      margin: 0;
+      background: #EEF6FF;
+    }
+    body {
+      min-height: 100%;
+      margin: 0;
+      background: #EEF6FF;
+    }
+    html:not(.mt-boot-dom-ready)::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 2147482999;
+      background:
+        linear-gradient(90deg, transparent 0 25%, rgba(255,255,255,.58) 45%, transparent 65%) -180px 0 / 180px 100% no-repeat,
+        radial-gradient(circle at calc(100% - 54px) 194px, rgba(255,255,255,.28) 0 36px, transparent 37px),
+        linear-gradient(135deg, rgba(37,99,235,.92), rgba(14,165,233,.86) 52%, rgba(34,197,94,.82)) 16px 110px / calc(100% - 32px) 126px no-repeat,
+        linear-gradient(rgba(148,163,184,.24), rgba(148,163,184,.24)) 62px 28px / 138px 17px no-repeat,
+        linear-gradient(rgba(148,163,184,.2), rgba(148,163,184,.2)) calc(100% - 92px) 26px / 76px 30px no-repeat,
+        linear-gradient(rgba(255,255,255,.72), rgba(255,255,255,.72)) 16px 252px / calc((100% - 42px) / 2) 72px no-repeat,
+        linear-gradient(rgba(255,255,255,.72), rgba(255,255,255,.72)) calc((100% + 10px) / 2) 252px / calc((100% - 42px) / 2) 72px no-repeat,
+        linear-gradient(rgba(255,255,255,.72), rgba(255,255,255,.72)) 16px 340px / calc(100% - 32px) 62px no-repeat,
+        linear-gradient(rgba(255,255,255,.72), rgba(255,255,255,.72)) 16px 416px / calc(100% - 32px) 62px no-repeat,
+        linear-gradient(#EEF6FF, #EEF6FF);
+      animation: mtBootPreBodyShimmer 1.18s ease-in-out infinite;
+    }
+    @keyframes mtBootPreBodyShimmer {
+      0% { background-position:
+        -180px 0, calc(100% - 54px) 194px, 16px 110px, 62px 28px, calc(100% - 92px) 26px, 16px 252px, calc((100% + 10px) / 2) 252px, 16px 340px, 16px 416px, 0 0;
+      }
+      100% { background-position:
+        calc(100% + 180px) 0, calc(100% - 54px) 194px, 16px 110px, 62px 28px, calc(100% - 92px) 26px, 16px 252px, calc((100% + 10px) / 2) 252px, 16px 340px, 16px 416px, 0 0;
+      }
+    }
+    @media (prefers-color-scheme: dark) {
+      html,
+      body {
+        background: #09111F;
+      }
+      html:not(.mt-boot-dom-ready)::before {
+        background:
+          linear-gradient(90deg, transparent 0 25%, rgba(255,255,255,.18) 45%, transparent 65%) -180px 0 / 180px 100% no-repeat,
+          radial-gradient(circle at calc(100% - 54px) 194px, rgba(255,255,255,.16) 0 36px, transparent 37px),
+          linear-gradient(135deg, rgba(37,99,235,.74), rgba(14,165,233,.62) 52%, rgba(34,197,94,.5)) 16px 110px / calc(100% - 32px) 126px no-repeat,
+          linear-gradient(rgba(148,163,184,.2), rgba(148,163,184,.2)) 62px 28px / 138px 17px no-repeat,
+          linear-gradient(rgba(148,163,184,.18), rgba(148,163,184,.18)) calc(100% - 92px) 26px / 76px 30px no-repeat,
+          linear-gradient(rgba(15,23,42,.78), rgba(15,23,42,.78)) 16px 252px / calc((100% - 42px) / 2) 72px no-repeat,
+          linear-gradient(rgba(15,23,42,.78), rgba(15,23,42,.78)) calc((100% + 10px) / 2) 252px / calc((100% - 42px) / 2) 72px no-repeat,
+          linear-gradient(rgba(15,23,42,.78), rgba(15,23,42,.78)) 16px 340px / calc(100% - 32px) 62px no-repeat,
+          linear-gradient(rgba(15,23,42,.78), rgba(15,23,42,.78)) 16px 416px / calc(100% - 32px) 62px no-repeat,
+          linear-gradient(#09111F, #09111F);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html:not(.mt-boot-dom-ready)::before { animation: none; }
+    }
+  </style>
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self' 'unsafe-inline' https://www.gstatic.com;
@@ -485,6 +545,7 @@
     </div>
   </div>
   <script>window.MTBoot?.mark?.('boot.dom.inserted')</script>
+  <script>document.documentElement.classList.add('mt-boot-dom-ready')</script>
 
   <!-- Toast (aria-live so screen readers announce new messages) -->
   <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>

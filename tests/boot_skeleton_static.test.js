@@ -25,6 +25,18 @@ test('boot screen renders an app-shell skeleton immediately', () => {
   }
 })
 
+test('pre-body skeleton paints before boot scripts can delay the body', () => {
+  const firstScriptIndex = index.indexOf('<script>')
+  const preBodyStyleIndex = index.indexOf('html:not(.mt-boot-dom-ready)::before')
+  const bootReadyScriptIndex = index.indexOf("document.documentElement.classList.add('mt-boot-dom-ready')")
+
+  assert.notEqual(firstScriptIndex, -1, 'missing first inline script')
+  assert.notEqual(preBodyStyleIndex, -1, 'missing pre-body skeleton style')
+  assert.notEqual(bootReadyScriptIndex, -1, 'missing boot DOM ready class script')
+  assert.ok(preBodyStyleIndex < firstScriptIndex, 'pre-body skeleton must be defined before the first boot script')
+  assert.ok(index.includes('@keyframes mtBootPreBodyShimmer'), 'missing pre-body shimmer animation')
+})
+
 test('boot screen does not show the old branded loading panel', () => {
   const forbiddenTokens = [
     'mt-boot-title',
