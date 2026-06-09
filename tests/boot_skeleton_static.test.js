@@ -25,16 +25,24 @@ test('boot screen renders an app-shell skeleton immediately', () => {
   }
 })
 
-test('pre-body skeleton paints before boot scripts can delay the body', () => {
-  const firstScriptIndex = index.indexOf('<script>')
-  const preBodyStyleIndex = index.indexOf('html:not(.mt-boot-dom-ready)::before')
-  const bootReadyScriptIndex = index.indexOf("document.documentElement.classList.add('mt-boot-dom-ready')")
+test('html/body paint the skeleton background colour so the WebView never flashes white', () => {
+  // The first <style> in the head must set the skeleton base colour on html/body
+  // before any boot script runs, and must NOT reintroduce a hardcoded pre-body
+  // fake skeleton (which mismatched the real #mt-boot-screen layout).
+  const headStyle = index.slice(0, index.indexOf('</head>'))
+  assert.ok(/html,\s*body\s*\{[^}]*background:\s*#EEF6FF/i.test(headStyle), 'missing light skeleton background on html/body')
+  assert.ok(index.includes('background: #09111F'), 'missing dark skeleton background')
+  assert.equal(index.includes('mt-boot-dom-ready'), false, 'removed pre-body skeleton class should not return')
+  assert.equal(index.includes('mtBootPreBodyShimmer'), false, 'removed pre-body shimmer should not return')
+})
 
-  assert.notEqual(firstScriptIndex, -1, 'missing first inline script')
-  assert.notEqual(preBodyStyleIndex, -1, 'missing pre-body skeleton style')
-  assert.notEqual(bootReadyScriptIndex, -1, 'missing boot DOM ready class script')
-  assert.ok(preBodyStyleIndex < firstScriptIndex, 'pre-body skeleton must be defined before the first boot script')
-  assert.ok(index.includes('@keyframes mtBootPreBodyShimmer'), 'missing pre-body shimmer animation')
+test('iOS cold-start launch screens are defined so there is no native white flash', () => {
+  // Without apple-touch-startup-image, iOS shows a white launch screen before the
+  // WebView paints. Require theme-aware startup images matching the skeleton bg.
+  assert.ok(index.includes('rel="apple-touch-startup-image"'), 'missing apple-touch-startup-image links')
+  assert.ok(index.includes('prefers-color-scheme: light) and (orientation: portrait)'), 'missing light launch image media query')
+  assert.ok(index.includes('prefers-color-scheme: dark) and (orientation: portrait)'), 'missing dark launch image media query')
+  assert.ok(index.includes('./assets/splash/splash-'), 'startup images should point at generated splash assets')
 })
 
 test('boot screen does not show the old branded loading panel', () => {
