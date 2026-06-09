@@ -3006,14 +3006,22 @@ App.render();
     return fmt(tx.amount)
   }
 
+  function findMerchantForTx(tx) {
+    const name = String(tx?.merchant || '').trim().toLowerCase()
+    if (!name) return null
+    return (S.merchants || []).find(m => String(m?.name || '').trim().toLowerCase() === name) || null
+  }
+
   function txVisual(tx) {
     const cat = App._findCat?.(tx.categoryId)
+    const merchant = findMerchantForTx(tx)
     const wallet = S.wallets.find(w => w.id === tx.walletId)
     const toWallet = S.wallets.find(w => w.id === tx.toWalletId)
     const isTransfer = tx.type === 'transfer'
     const isReimbursement = App.isReimbursementTx?.(tx)
     const title = isTransfer ? `${wallet?.name || 'ไม่ระบุ'} → ${toWallet?.name || 'ไม่ระบุ'}` : (isReimbursement ? (tx.merchant || 'คืนเงินจากเพื่อน') : (tx.merchant || tx.note || cat?.label || 'รายการ'))
-    const icon = isReimbursement ? '↩️' : (cat?.icon || (tx.type === 'income' ? '💰' : isTransfer ? '🔁' : tx.type === 'cc_payment' ? '💳' : tx.type === 'bnpl_payment' ? '🛍️' : '💸'))
+    const merchantIcon = merchant?.emoji && !isTransfer && !isReimbursement && !['cc_payment', 'bnpl_payment'].includes(tx.type) ? merchant.emoji : ''
+    const icon = merchantIcon || (isReimbursement ? '↩️' : (cat?.icon || (tx.type === 'income' ? '💰' : isTransfer ? '🔁' : tx.type === 'cc_payment' ? '💳' : tx.type === 'bnpl_payment' ? '🛍️' : '💸')))
     const meta = []
     if (isReimbursement) {
       const parent = tx.reimbursesSharedExpenseTxId ? (S.transactions || []).find(row => row.id === tx.reimbursesSharedExpenseTxId) : null
@@ -3032,7 +3040,7 @@ App.render();
     }
     if (tx.isRecurring) meta.push('🔁 ประจำ')
     if (tx.isInstallment) meta.push(`ผ่อน ${tx.installmentNo || 1}/${tx.installmentMonths || '?'}`)
-    return { cat, wallet, toWallet, title, icon, meta }
+    return { cat, merchant: merchantIcon ? merchant : null, wallet, toWallet, title, icon, meta }
   }
 
   function renderEditorEmoji(prefix, current, targetId) {
@@ -3125,7 +3133,7 @@ App.render();
 
   App._txRow = function(tx, opts = {}) {
     const v = txVisual(tx)
-    const bg = v.cat?.color ? `${v.cat.color}66` : 'rgba(37,99,235,.4)'
+    const bg = v.merchant?.color ? `${v.merchant.color}66` : (v.cat?.color ? `${v.cat.color}66` : 'rgba(37,99,235,.4)')
     // Show a clear "ตามแผน" badge for future-scheduled transactions so the user
     // always knows these rows have NOT yet reduced their real balance.
     const todayNow = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
@@ -7181,29 +7189,45 @@ App._pickMerchant = function(name, opts = {}) {
     }).sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
   }
 
-  // 1) Restore compact 2-column income/expense summary cards in Transactions.
-  App.renderTransactions = function() {
-    const months = Calc.getMonths(6)
-    const header = document.querySelector('#page-transactions .page-header')
-    if (!header) return
+  function txActiveFilterCount() {
+    return [S.txType && S.txType !== 'all', S.txWalletFilter, S.txCategoryFilter, S.txAmtMin, S.txAmtMax].filter(Boolean).length
+  }
+
+  function txStaticControlsHtml(months) {
     const walletOpts = `<option value="">ทุกกระเป๋า</option>` + (S.wallets || []).map(w => `<option value="${esc(w.id)}"${S.txWalletFilter===w.id?' selected':''}>${esc(w.icon || '')} ${esc(w.name)}</option>`).join('')
     const catOpts = `<option value="">ทุกหมวด</option>` + [...(S.categories.expense || []), ...(S.categories.income || [])].map(c => `<option value="${esc(c.id)}"${S.txCategoryFilter===c.id?' selected':''}>${esc(c.icon || '')} ${esc(c.label)}</option>`).join('')
     const typeChips = [['all','ทั้งหมด'],['expense','จ่าย'],['income','รับ'],['transfer','โอน'],['cc_payment','ชำระบัตร']].map(([v,l]) => `<button class="chip mini${S.txType===v?' active':''}" onclick="App.setTxType('${v}')">${l}</button>`).join('')
     const monthChips = [[ 'all','ทุกเดือน' ], ...months.map(m => [m, Calc.monthLabel(m)])].map(([m,l]) => `<button class="chip mini${S.txMonth===m?' active':''}" onclick="App.setTxMonth('${m}')">${esc(l)}</button>`).join('')
-    const activeCount = [S.txType && S.txType !== 'all', S.txWalletFilter, S.txCategoryFilter, S.txAmtMin, S.txAmtMax].filter(Boolean).length
-    header.innerHTML = `<div class="tx-compact-top"><div><h1>รายการ</h1><p id="tx-compact-summary">กำลังคำนวณ...</p></div><button class="btn btn-secondary btn-sm tx-filter-toggle" onclick="App.toggleTxFilterPanel()">ตัวกรอง${activeCount ? ` (${activeCount})` : ''}</button></div>
+    return `<div class="tx-list-static-head">
+      <div class="tx-compact-top"><div><h1>รายการ</h1><p id="tx-compact-summary">กำลังคำนวณ...</p></div></div>
       <div class="tx-summary-cards tx-summary-cards-compact"><div class="tx-summary-card income"><span>รายรับ</span><strong id="tx-income-total">${money(0)}</strong></div><div class="tx-summary-card expense"><span>รายจ่าย</span><strong id="tx-expense-total">${money(0)}</strong></div></div>
-      <div class="tx-compact-search">
-        <input class="form-input" id="tx-search" placeholder="🔍 ค้นหารายการ ร้านค้า หมวด จำนวนเงิน" value="${esc(S.txSearch || '')}">
-        <button type="button" class="mt-search-clear" aria-label="ล้างการค้นหา"${S.txSearch ? '' : ' hidden'}>×</button>
-      </div>
       <div class="chips tx-month-row tx-month-row-compact" id="tx-month-chips">${monthChips}</div>
       <div id="tx-filter-panel" class="tx-filter-panel${S.txFilterOpen ? ' open' : ''}">
         <div class="chips tx-filter-row" id="tx-type-chips">${typeChips}</div>
         <div class="tx-filter-grid"><select class="form-input" onchange="S.txWalletFilter=this.value;App.renderTransactionsList()">${walletOpts}</select><select class="form-input" onchange="S.txCategoryFilter=this.value;App.renderTransactionsList()">${catOpts}</select></div>
         <div class="tx-filter-grid"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ ต่ำสุด" value="${esc(S.txAmtMin || '')}" oninput="S.txAmtMin=this.value;App.renderTransactionsList()"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ สูงสุด" value="${esc(S.txAmtMax || '')}" oninput="S.txAmtMax=this.value;App.renderTransactionsList()"></div>
         <button class="btn btn-secondary btn-sm" onclick="App.clearTxFilters()">ล้างตัวกรอง</button>
-      </div>`
+      </div>
+    </div>`
+  }
+
+  function updateTxFilterToggleLabel() {
+    const btn = document.querySelector('#page-transactions .tx-filter-toggle')
+    if (!btn) return
+    const count = txActiveFilterCount()
+    btn.textContent = `ตัวกรอง${count ? ` (${count})` : ''}`
+  }
+
+  // 1) Restore compact 2-column income/expense summary cards in Transactions.
+  App.renderTransactions = function() {
+    const months = Calc.getMonths(6)
+    const header = document.querySelector('#page-transactions .page-header')
+    if (!header) return
+    const activeCount = txActiveFilterCount()
+    header.innerHTML = `<div class="tx-sticky-slim"><div class="tx-compact-search">
+        <input class="form-input" id="tx-search" placeholder="🔍 ค้นหารายการ ร้านค้า หมวด จำนวนเงิน" value="${esc(S.txSearch || '')}">
+        <button type="button" class="mt-search-clear" aria-label="ล้างการค้นหา"${S.txSearch ? '' : ' hidden'}>×</button>
+      </div><button class="btn btn-secondary btn-sm tx-filter-toggle" onclick="App.toggleTxFilterPanel()">ตัวกรอง${activeCount ? ` (${activeCount})` : ''}</button></div>`
     const search = document.getElementById('tx-search')
     const searchClear = header.querySelector('.mt-search-clear')
     if (search) search.oninput = e => {
@@ -7222,6 +7246,7 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   App.renderTransactionsList = function() {
+    const months = Calc.getMonths(6)
     const filtered = currentTxFilteredV42()
     const expenseAmountForList = tx => tx.type === 'expense'
       ? Number(Calc.getExpenseLedgerAmount?.(tx) || tx.amount || 0)
@@ -7230,14 +7255,11 @@ App._pickMerchant = function(name, opts = {}) {
     const expense = filtered
       .filter(t => t.type === 'expense')
       .reduce((s,t) => s + expenseAmountForList(t), 0)
-    const summary = document.getElementById('tx-compact-summary')
-    if (summary) summary.textContent = `${filtered.length} รายการ`
-    const incEl = document.getElementById('tx-income-total'), expEl = document.getElementById('tx-expense-total')
-    if (incEl) incEl.textContent = '+' + money(income)
-    if (expEl) expEl.textContent = '-' + money(expense)
+    updateTxFilterToggleLabel()
     const byDate = {}; filtered.forEach(t => { (byDate[t.date] ||= []).push(t) })
     const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a))
-    let html = dates.length ? '' : App._emptyState('📋','ไม่มีรายการ', S.txSearch ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีรายการในช่วงนี้')
+    let html = txStaticControlsHtml(months)
+    html += dates.length ? '' : App._emptyState('📋','ไม่มีรายการ', S.txSearch ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีรายการในช่วงนี้')
     dates.forEach(date => {
       const rows = byDate[date]
       const dayInc = rows.filter(t => t.type === 'income' && !(Calc.isReimbursementTx?.(t) || App.isReimbursementTx?.(t))).reduce((s,t) => s + Number(t.amount || 0), 0)
@@ -7253,6 +7275,11 @@ App._pickMerchant = function(name, opts = {}) {
       el.innerHTML = html
       if (saved > 0) el.scrollTop = saved
     }
+    const summary = document.getElementById('tx-compact-summary')
+    if (summary) summary.textContent = `${filtered.length} รายการ`
+    const incEl = document.getElementById('tx-income-total'), expEl = document.getElementById('tx-expense-total')
+    if (incEl) incEl.textContent = '+' + money(income)
+    if (expEl) expEl.textContent = '-' + money(expense)
     App._bindTxRows?.('tx-list-content')
   }
   App.setTxMonth = function(m) { S.txMonth = m; App.renderTransactions() }

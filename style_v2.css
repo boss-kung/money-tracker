@@ -2711,9 +2711,15 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
    due-date clarity, sticky actions, and AI insight spacing.
    ============================================================ */
 #page-transactions .page-header {
-  padding: max(10px, calc(var(--safe-t) + 8px)) var(--app-gutter) 7px !important;
+  position: static !important;
+  padding: max(8px, calc(var(--safe-t) + 6px)) var(--app-gutter) 6px !important;
   background: var(--bg) !important;
   border-bottom: 0 !important;
+}
+#page-transactions .tx-summary-cards,
+#page-transactions .tx-filter-panel,
+#page-transactions .tx-list-static-head {
+  position: static !important;
 }
 .tx-summary-cards {
   display:grid;
@@ -3707,7 +3713,7 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 8px;
+  margin: 6px 0 8px;
 }
 .tx-compact-top h1 {
   font-size: 21px;
@@ -3723,10 +3729,22 @@ body {
   width: auto !important;
   white-space: nowrap;
   padding: 8px 12px !important;
+  min-height: 42px !important;
+}
+.tx-sticky-slim {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  background: var(--bg);
+  padding: 0 0 2px;
 }
 .tx-compact-search {
   position: relative;
-  margin-bottom: 7px;
+  margin-bottom: 0;
 }
 .tx-compact-search .form-input {
   padding: 9px 38px 9px 12px;
@@ -3779,6 +3797,7 @@ body {
 }
 .tx-filter-panel {
   display: none;
+  position: static;
   margin-top: 8px;
   padding: 10px;
   border-radius: 14px;

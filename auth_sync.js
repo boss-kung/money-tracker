@@ -940,7 +940,8 @@
       } else {
         await pushEncryptedVault(recoveryKey)
       }
-      if (!silent) toastSafe('บันทึกข้อมูลแล้ว', 'success')
+      const shouldToastSuccess = !silent && direction !== 'pull'
+      if (shouldToastSuccess) toastSafe('บันทึกข้อมูลแล้ว', 'success')
       return true
     } finally {
       state.syncing = false
