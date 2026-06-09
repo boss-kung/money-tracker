@@ -119,3 +119,41 @@ test('saveWallet: retroactive plan rebuild code exists', () => {
     'buildSchedule call not found in retroactive rebuild block'
   )
 })
+
+// ── Cascade-delete: BNPL plan removed when source tx is deleted ───────────────
+
+test('deleteOnlyTx: cascades BNPL plan cleanup', () => {
+  const appSrc = fs.readFileSync(require('path').join(__dirname, '../app_v2.js'), 'utf8')
+  const m = appSrc.match(/function deleteOnlyTx\(tx\)\s*\{([\s\S]+?)\n  \}/)
+  assert.ok(m, 'deleteOnlyTx not found')
+  assert.ok(m[1].includes("S.bnplPlans = (S.bnplPlans || []).filter(p => p.txId !== tx.id)"),
+    'deleteOnlyTx is missing BNPL plan cascade-delete')
+})
+
+test('deleteTxOnly (shared expense path): cascades BNPL plan cleanup', () => {
+  const appSrc = fs.readFileSync(require('path').join(__dirname, '../app_v2.js'), 'utf8')
+  const m = appSrc.match(/function deleteTxOnly\(tx\)\s*\{([\s\S]+?)\n  \}/)
+  assert.ok(m, 'deleteTxOnly not found')
+  assert.ok(m[1].includes("S.bnplPlans = (S.bnplPlans || []).filter(p => p.txId !== tx.id)"),
+    'deleteTxOnly is missing BNPL plan cascade-delete')
+})
+
+test('confirmDeleteTx: captures removed plan before splice for undo support', () => {
+  const appSrc = fs.readFileSync(require('path').join(__dirname, '../app_v2.js'), 'utf8')
+  assert.ok(
+    appSrc.includes("const _removedBNPLPlan = typeof BNPL !== 'undefined' ? (S.bnplPlans || []).find(p => p.txId === removed.id) : null"),
+    'confirmDeleteTx missing _removedBNPLPlan capture'
+  )
+  assert.ok(
+    appSrc.includes("if (_removedBNPLPlan) S.bnplPlans = [_removedBNPLPlan, ...(S.bnplPlans || [])]"),
+    'confirmDeleteTx undo is not restoring the BNPL plan'
+  )
+})
+
+test('bulk shared-expense delete: cascades BNPL plan cleanup for all deleted ids', () => {
+  const appSrc = fs.readFileSync(require('path').join(__dirname, '../app_v2.js'), 'utf8')
+  assert.ok(
+    appSrc.includes("if (typeof BNPL !== 'undefined') S.bnplPlans = (S.bnplPlans || []).filter(p => !ids.has(p.txId))"),
+    'bulk shared-expense delete is missing BNPL plan cascade-delete'
+  )
+})

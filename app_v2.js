@@ -772,6 +772,7 @@ window.__mountUpcomingBillsFeature = function() {
         onConfirm() {
           App._rollbackUpcomingBillPayment(tx)
           S.transactions = (S.transactions || []).filter(t => t.id !== id)
+          if (typeof BNPL !== 'undefined') S.bnplPlans = (S.bnplPlans || []).filter(p => p.txId !== id)
           App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
           try {
             const directSaved = persistUpcomingPaymentKeys()
@@ -12162,6 +12163,7 @@ App._pickMerchant = function(name, opts = {}) {
   function deleteOnlyTx(tx) {
     cleanupRewardReceived(tx)
     S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
+    if (typeof BNPL !== 'undefined') S.bnplPlans = (S.bnplPlans || []).filter(p => p.txId !== tx.id)
   }
   function finalizeDelete({ tx, backType = '', backId = '', message = 'ลบรายการแล้ว' }) {
     const { recurring } = infoFromTx(tx)
@@ -12384,7 +12386,9 @@ App._pickMerchant = function(name, opts = {}) {
     if (idx < 0) return
     const removed = S.transactions[idx]
     const label = removed.merchant || removed.note || `฿${removed.amount}`
+    const _removedBNPLPlan = typeof BNPL !== 'undefined' ? (S.bnplPlans || []).find(p => p.txId === removed.id) : null
     S.transactions.splice(idx, 1)
+    if (_removedBNPLPlan) S.bnplPlans = (S.bnplPlans || []).filter(p => p !== _removedBNPLPlan)
     S.deleteConfirm = false
     App.refreshTransactionRewardEstimates?.()
     App.recalculateWalletBalances?.({ save:false })
@@ -12394,6 +12398,7 @@ App._pickMerchant = function(name, opts = {}) {
       `ลบ "${label}" แล้ว`,
       () => {
         S.transactions.splice(idx, 0, removed)
+        if (_removedBNPLPlan) S.bnplPlans = [_removedBNPLPlan, ...(S.bnplPlans || [])]
         App.refreshTransactionRewardEstimates?.()
         App.recalculateWalletBalances?.({ save:false })
         App.render?.()
@@ -12414,7 +12419,9 @@ App._pickMerchant = function(name, opts = {}) {
     const removed = S.transactions[idx]
     const label = removed.merchant || removed.note || `฿${removed.amount}`
     cleanupRewardReceived(removed)
+    const _removedBNPLPlan = typeof BNPL !== 'undefined' ? (S.bnplPlans || []).find(p => p.txId === removed.id) : null
     S.transactions.splice(idx, 1)
+    if (_removedBNPLPlan) S.bnplPlans = (S.bnplPlans || []).filter(p => p !== _removedBNPLPlan)
     App.refreshTransactionRewardEstimates?.()
     App.recalculateWalletBalances?.({ save:false })
     if (backType === 'cc' && backId) App.openCCDetail?.(backId)
@@ -12424,6 +12431,7 @@ App._pickMerchant = function(name, opts = {}) {
       `ลบ "${label}" แล้ว`,
       () => {
         S.transactions.splice(idx, 0, removed)
+        if (_removedBNPLPlan) S.bnplPlans = [_removedBNPLPlan, ...(S.bnplPlans || [])]
         App.refreshTransactionRewardEstimates?.()
         App.recalculateWalletBalances?.({ save:false })
         if (backType === 'cc' && backId) App.openCCDetail?.(backId)
@@ -24087,6 +24095,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   function deleteTxOnly(tx) {
     S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
+    if (typeof BNPL !== 'undefined') S.bnplPlans = (S.bnplPlans || []).filter(p => p.txId !== tx.id)
     S.deleteConfirm = false
   }
 
@@ -24119,6 +24128,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       el.remove()
       const ids = new Set([tx.id, ...reimbursements.map(t => t.id)])
       S.transactions = (S.transactions || []).filter(t => !ids.has(t.id))
+      if (typeof BNPL !== 'undefined') S.bnplPlans = (S.bnplPlans || []).filter(p => !ids.has(p.txId))
       S.deleteConfirm = false
       finalizeSharedDelete({ ...context, closeDetail:true })
       toast('ลบรายการพร้อมเงินคืนที่เกี่ยวข้องแล้ว', 'success')
