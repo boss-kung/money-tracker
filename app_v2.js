@@ -10999,7 +10999,7 @@ App._pickMerchant = function(name, opts = {}) {
       const creditLimit = parseFloat(document.getElementById('wf-bnpl-limit')?.value) || 0
       const payDayRaw   = parseInt(document.getElementById('wf-bnpl-payday')?.value) || 0
       const payDay      = payDayRaw >= 1 && payDayRaw <= 28 ? payDayRaw : null
-      Object.assign(data, { provider, creditLimit, ...(payDay ? { payDay } : {}) })
+      Object.assign(data, { provider, creditLimit, payDay })
     }
 
     if (isInv) {
@@ -11029,6 +11029,21 @@ App._pickMerchant = function(name, opts = {}) {
       if (idx >= 0) S.wallets[idx] = { ...S.wallets[idx], ...data }
     } else {
       S.wallets.push({ id:genId(), ...data })
+    }
+
+    // Retroactively rebuild active BNPL plan schedules when payDay changes
+    if (isBNPL && S.editingWalletId && typeof BNPL !== 'undefined' && (S.bnplPlans || []).length > 0) {
+      const _editedId = S.editingWalletId
+      const _savedWallet = (S.wallets || []).find(w => w.id === _editedId)
+      const _effectivePayDay = _savedWallet?.payDay || null
+      ;(S.bnplPlans || []).forEach(plan => {
+        if (plan.walletId !== _editedId || plan.status !== 'active') return
+        const rebuilt = BNPL.calc.buildSchedule(plan.totalAmount, plan.installments, plan.purchaseDate, _effectivePayDay)
+        plan.schedule = rebuilt.map(item => {
+          const old = plan.schedule.find(s => s.no === item.no)
+          return old?.paidTxId ? old : item   // keep paid installments unchanged
+        })
+      })
     }
 
     App.recalculateWalletBalances?.({ save:false, recordSnapshot:false })
