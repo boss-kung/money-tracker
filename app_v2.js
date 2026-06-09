@@ -1,4 +1,12 @@
 /* ============================================================
+   Feature flags
+   BNPL is temporarily hidden from the UI (workflow rework pending).
+   Flip BNPL_FEATURE_ENABLED back to true to restore every BNPL entry
+   point — all BNPL code and stored data are kept intact.
+   ============================================================ */
+const BNPL_FEATURE_ENABLED = false
+
+/* ============================================================
    V6.2 Hard mobile zoom lock
    Must run before the app boots: injects/updates viewport meta and
    blocks iOS Safari pinch/double-tap zoom at capture phase.
@@ -3269,7 +3277,7 @@ App.render();
 
     const pickableWallets = isTransfer
       ? transferWallets
-      : activeWallets.filter(w => !INVEST_TYPES.has(w.type) && (type !== 'income' || w.type !== 'bnpl'))
+      : activeWallets.filter(w => !INVEST_TYPES.has(w.type) && (BNPL_FEATURE_ENABLED ? (type !== 'income' || w.type !== 'bnpl') : w.type !== 'bnpl'))
     const walletOptions = pickableWallets.map(w => `<option value="${esc(w.id)}"${S.tx.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
     const toWalletOptions = transferWallets.filter(w => w.id !== S.tx.walletId).map(w => `<option value="${esc(w.id)}"${S.tx.toWalletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)}</option>`).join('')
     const isExpense = type === 'expense'
@@ -3315,7 +3323,7 @@ App.render();
           ${(() => {
             if (!isExpense) return ''
             const _selWallet = S.wallets.find(w => w.id === S.tx.walletId)
-            if (_selWallet?.type === 'bnpl') {
+            if (BNPL_FEATURE_ENABLED && _selWallet?.type === 'bnpl') {
               const _bi = Number(S.tx.bnplInstallments || 0)
               const _amt = Number(S.tx.amount || 0)
               const _schedulePreview = (_bi > 1 && _amt > 0)
@@ -10496,6 +10504,7 @@ App._pickMerchant = function(name, opts = {}) {
     }
     const COLORS = ['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#374151']
     const TYPES  = [['bank','🏦','ธนาคาร'],['cash','💵','เงินสด'],['ewallet','📱','E-Wallet'],['credit','💳','บัตรเครดิต'],['bnpl','🛍️','BNPL'],['gold','🥇','ทอง'],['fcd','💱','FCD']]
+      .filter(([value]) => BNPL_FEATURE_ENABLED || value !== 'bnpl')
     const walletFormTypes = new Set(TYPES.map(([value]) => value))
     const type   = walletFormTypes.has(w?.type) ? w.type : 'bank'
     const isCC   = type === 'credit'
@@ -13774,7 +13783,7 @@ App._pickMerchant = function(name, opts = {}) {
     const wallets = visibleWallets()
     const assets = wallets.filter(w => ['bank','cash','ewallet','saving'].includes(w.type))
     const credits = wallets.filter(w => w.type === 'credit')
-    const bnpls = wallets.filter(w => w.type === 'bnpl')
+    const bnpls = BNPL_FEATURE_ENABLED ? wallets.filter(w => w.type === 'bnpl') : []
     const invests = wallets.filter(w => ['gold','fcd'].includes(w.type))
     const cryptoSummary = App.getCryptoPortfolioSummary()
     const sumBase = assets.reduce((s, w) => s + Math.max(0, Number(w.balance || 0)), 0)
@@ -13839,7 +13848,7 @@ App._pickMerchant = function(name, opts = {}) {
       tabBar.innerHTML = [
         ['wallet-anchor-assets',  '🏦 สินทรัพย์'],
         ['wallet-anchor-credits', '💳 บัตร'],
-        ['wallet-anchor-bnpl',    '🛍️ BNPL'],
+        ...(BNPL_FEATURE_ENABLED ? [['wallet-anchor-bnpl', '🛍️ BNPL']] : []),
         ['wallet-anchor-invest',  '📈 ลงทุน'],
         ['wallet-anchor-crypto',  '🪙 Crypto'],
       ].map(([id, label]) =>
@@ -13884,7 +13893,7 @@ App._pickMerchant = function(name, opts = {}) {
     content.innerHTML = goldNote
       + section('สินทรัพย์', '🏦', assets, 'ยังไม่มีสินทรัพย์', true, '', 'wallet-anchor-assets')
       + section('บัตรเครดิต', '💳', credits, 'ยังไม่มีบัตรเครดิต', false, '', 'wallet-anchor-credits')
-      + section('BNPL', '🛍️', bnpls, 'ยังไม่มีกระเป๋า BNPL', false, '', 'wallet-anchor-bnpl')
+      + (BNPL_FEATURE_ENABLED ? section('BNPL', '🛍️', bnpls, 'ยังไม่มีกระเป๋า BNPL', false, '', 'wallet-anchor-bnpl') : '')
       + section('การลงทุน', '📈', invests, 'เพิ่มทอง / FCD เพื่อดูราคาอ้างอิง', true, '', 'wallet-anchor-invest')
       + cryptoSection
   }
@@ -16671,7 +16680,7 @@ App._pickMerchant = function(name, opts = {}) {
       if (p.remaining <= 0 || g.targetDate > end) return
       rows.push({ id:`goal-${g.id}`, date:g.targetDate, icon:g.icon || '🎯', title:`เป้าหมาย ${g.name}`, amount:p.remaining, type:'goal', status:String(g.targetDate) < t ? 'overdue' : 'upcoming', open:`App.openGoalForm('${esc(g.id)}')` })
     })
-    if (typeof BNPL !== 'undefined') {
+    if (BNPL_FEATURE_ENABLED && typeof BNPL !== 'undefined') {
       BNPL.store.getUpcomingInstallments(days).forEach(item => {
         rows.push({
           id: `bnpl-${item.planId}:${item.no}`,
