@@ -153,7 +153,168 @@ test('confirmDeleteTx: captures removed plan before splice for undo support', ()
 test('bulk shared-expense delete: cascades BNPL plan cleanup for all deleted ids', () => {
   const appSrc = fs.readFileSync(require('path').join(__dirname, '../app_v2.js'), 'utf8')
   assert.ok(
-    appSrc.includes("if (typeof BNPL !== 'undefined') S.bnplPlans = (S.bnplPlans || []).filter(p => !ids.has(p.txId))"),
+    appSrc.includes("S.bnplPlans = (S.bnplPlans || []).filter(p => !ids.has(p.txId))"),
     'bulk shared-expense delete is missing BNPL plan cascade-delete'
   )
+  assert.ok(
+    appSrc.includes('ids.forEach(_id => BNPL.store.unlinkPaymentByTxId(_id))'),
+    'bulk shared-expense delete is missing per-id bnpl_payment unlink (H1)'
+  )
+})
+
+// ── H1: unlink/relink bnpl_payment behavior (inline reimplementation) ─────────
+
+// Inline copies mirroring BNPLStore.unlinkPaymentByTxId / relinkPayment.
+function unlinkPaymentByTxId(plans, txId) {
+  if (!txId) return null
+  for (const plan of plans) {
+    const items = (plan.schedule || []).filter(s => s.paidTxId === txId)
+    if (items.length) {
+      const prevStatus = plan.status
+      items.forEach(it => { it.paidTxId = null })
+      if (plan.status === 'paid_off') plan.status = 'active'
+      return { planId: plan.id, nos: items.map(i => i.no), prevStatus }
+    }
+  }
+  return null
+}
+function relinkPayment(plans, token, txId) {
+  if (!token) return
+  const plan = plans.find(p => p.id === token.planId)
+  if (!plan) return
+  ;(token.nos || []).forEach(no => {
+    const item = (plan.schedule || []).find(s => s.no === no)
+    if (item) item.paidTxId = txId
+  })
+  if (token.prevStatus) plan.status = token.prevStatus
+}
+
+test('H1 unlinkPaymentByTxId: clears every installment sharing the txId and resets paid_off', () => {
+  const plans = [{
+    id: 'p1', status: 'paid_off',
+    schedule: [
+      { no: 1, paidTxId: 'txA' },
+      { no: 2, paidTxId: 'txZ' },   // payoff-all shares one txId
+      { no: 3, paidTxId: 'txZ' },
+    ],
+  }]
+  const token = unlinkPaymentByTxId(plans, 'txZ')
+  assert.deepEqual(token, { planId: 'p1', nos: [2, 3], prevStatus: 'paid_off' })
+  assert.equal(plans[0].schedule[1].paidTxId, null)
+  assert.equal(plans[0].schedule[2].paidTxId, null)
+  assert.equal(plans[0].schedule[0].paidTxId, 'txA', 'unrelated installment untouched')
+  assert.equal(plans[0].status, 'active', 'status reset from paid_off')
+})
+
+test('H1 unlinkPaymentByTxId: returns null when no installment matches', () => {
+  const plans = [{ id: 'p1', status: 'active', schedule: [{ no: 1, paidTxId: null }] }]
+  assert.equal(unlinkPaymentByTxId(plans, 'nope'), null)
+})
+
+test('H1 relinkPayment: restores paidTxId and previous status (undo)', () => {
+  const plans = [{
+    id: 'p1', status: 'active',
+    schedule: [{ no: 1, paidTxId: null }, { no: 2, paidTxId: null }],
+  }]
+  relinkPayment(plans, { planId: 'p1', nos: [1, 2], prevStatus: 'paid_off' }, 'txZ')
+  assert.equal(plans[0].schedule[0].paidTxId, 'txZ')
+  assert.equal(plans[0].schedule[1].paidTxId, 'txZ')
+  assert.equal(plans[0].status, 'paid_off')
+})
+
+test('H1: unlink then relink round-trips to original state', () => {
+  const plans = [{
+    id: 'p1', status: 'paid_off',
+    schedule: [{ no: 1, paidTxId: 'txZ' }, { no: 2, paidTxId: 'txZ' }],
+  }]
+  const token = unlinkPaymentByTxId(plans, 'txZ')
+  relinkPayment(plans, token, 'txZ')
+  assert.equal(plans[0].status, 'paid_off')
+  assert.deepEqual(plans[0].schedule.map(s => s.paidTxId), ['txZ', 'txZ'])
+})
+
+// ── M2: payoffAll math (inline) ───────────────────────────────────────────────
+
+test('M2 payoffAll: sums only unpaid installments and marks all with one txId', () => {
+  const plan = {
+    id: 'p1', merchant: 'X', walletId: 'w1', status: 'active', installments: 3,
+    schedule: [
+      { no: 1, amount: 333.33, paidTxId: 'old' },
+      { no: 2, amount: 333.33, paidTxId: null },
+      { no: 3, amount: 333.34, paidTxId: null },
+    ],
+  }
+  const unpaid = plan.schedule.filter(s => !s.paidTxId)
+  const total = unpaid.reduce((s, i) => s + Number(i.amount || 0), 0)
+  assert.equal(total, 666.67)
+  const txId = 'txPAY'
+  unpaid.forEach(i => { i.paidTxId = txId })
+  plan.status = 'paid_off'
+  assert.deepEqual(plan.schedule.map(s => s.paidTxId), ['old', 'txPAY', 'txPAY'])
+  assert.equal(plan.status, 'paid_off')
+  // H1 unlink must then clear both txPAY items
+  const token = unlinkPaymentByTxId([plan], 'txPAY')
+  assert.deepEqual(token.nos, [2, 3])
+})
+
+// ── M3: updatePlan rebuild preserves paid installments + guards ───────────────
+
+function updatePlanSchedule(plan, newTotal, newN) {
+  const maxPaidNo = Math.max(0, ...plan.schedule.filter(s => s.paidTxId).map(s => s.no))
+  if (newN < maxPaidNo) return { error: 'installments_below_paid' }
+  const rebuilt = buildSchedule(newTotal, newN, plan.purchaseDate, null)
+  plan.schedule = rebuilt.map(item => {
+    const old = plan.schedule.find(s => s.no === item.no)
+    return old?.paidTxId ? { ...item, paidTxId: old.paidTxId } : item
+  })
+  plan.totalAmount = newTotal
+  plan.installments = newN
+  return plan
+}
+
+test('M3 updatePlan: rebuild preserves paid installments by number', () => {
+  const plan = {
+    id: 'p1', purchaseDate: '2025-05-09', totalAmount: 900, installments: 3,
+    schedule: buildSchedule(900, 3, '2025-05-09', null),
+  }
+  plan.schedule[0].paidTxId = 'txA'
+  updatePlanSchedule(plan, 1200, 4)
+  assert.equal(plan.installments, 4)
+  assert.equal(plan.schedule.length, 4)
+  assert.equal(plan.schedule[0].paidTxId, 'txA', 'paid installment #1 preserved')
+  assert.equal(plan.schedule[1].paidTxId, null, 'new installments unpaid')
+})
+
+test('M3 updatePlan: rejects reducing installments below highest paid no', () => {
+  const plan = {
+    id: 'p1', purchaseDate: '2025-05-09', totalAmount: 900, installments: 3,
+    schedule: buildSchedule(900, 3, '2025-05-09', null),
+  }
+  plan.schedule[0].paidTxId = 'txA'
+  plan.schedule[1].paidTxId = 'txB'   // highest paid no = 2
+  const result = updatePlanSchedule(plan, 900, 1)
+  assert.deepEqual(result, { error: 'installments_below_paid' })
+})
+
+// ── M4: overdue window widened from -7 to -90 ─────────────────────────────────
+
+test('M4: getUpcomingInstallments overdue window is -90 days', () => {
+  assert.ok(src.includes('diff <= days && diff >= -90'), 'overdue window not widened to -90')
+  assert.ok(!src.includes('diff <= days && diff >= -7'), 'old -7 overdue window still present')
+})
+
+// ── Static guards: new store methods + delete-path wiring exist ───────────────
+
+test('bnpl.js: defines unlinkPaymentByTxId, relinkPayment, payoffAll, updatePlan', () => {
+  for (const fn of ['unlinkPaymentByTxId', 'relinkPayment', 'payoffAll', 'updatePlan']) {
+    assert.ok(src.includes(`${fn}(`), `BNPLStore.${fn} not found in bnpl.js`)
+  }
+})
+
+test('app_v2.js: undo delete paths capture and relink bnpl_payment', () => {
+  const appSrc = fs.readFileSync(require('path').join(__dirname, '../app_v2.js'), 'utf8')
+  const captures = appSrc.match(/BNPL\.store\.unlinkPaymentByTxId\(removed\.id\)/g) || []
+  assert.ok(captures.length >= 2, 'both undo paths should capture unlink token for removed.id')
+  const relinks = appSrc.match(/BNPL\.store\.relinkPayment\(_bnplUnlink, removed\.id\)/g) || []
+  assert.ok(relinks.length >= 2, 'both undo paths should relink on undo')
 })

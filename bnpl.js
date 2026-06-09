@@ -141,6 +141,108 @@
       if (typeof persist === 'function') persist()
     },
 
+    // ── H1: unlink installment(s) when their bnpl_payment tx is deleted ──
+    // Clears every schedule item whose paidTxId === txId (single pay OR payoff-all
+    // share one txId). Returns an undo token, or null if nothing matched.
+    unlinkPaymentByTxId(txId) {
+      if (typeof S === 'undefined' || !txId) return null
+      for (const plan of (S.bnplPlans || [])) {
+        const items = (plan.schedule || []).filter(s => s.paidTxId === txId)
+        if (items.length) {
+          const prevStatus = plan.status
+          items.forEach(it => { it.paidTxId = null })
+          if (plan.status === 'paid_off') plan.status = 'active'
+          return { planId: plan.id, nos: items.map(i => i.no), prevStatus }
+        }
+      }
+      return null
+    },
+
+    // Undo counterpart: re-link paidTxId on the captured installments + restore status.
+    relinkPayment(token, txId) {
+      if (!token || typeof S === 'undefined') return
+      const plan = (S.bnplPlans || []).find(p => p.id === token.planId)
+      if (!plan) return
+      ;(token.nos || []).forEach(no => {
+        const item = (plan.schedule || []).find(s => s.no === no)
+        if (item) item.paidTxId = txId
+      })
+      if (token.prevStatus) plan.status = token.prevStatus
+    },
+
+    // ── M2: pay off all remaining installments in one transaction ──
+    payoffAll(planId, { walletId: sourceWalletId, date } = {}) {
+      const plan = BNPLStore.getById(planId)
+      if (!plan) return null
+      const unpaid = plan.schedule.filter(s => !s.paidTxId)
+      if (!unpaid.length) return null
+
+      const sourceWallet = (typeof S !== 'undefined' ? S.wallets : [])?.find(w => w.id === sourceWalletId)
+      const validSourceTypes = new Set(['bank', 'cash', 'ewallet', 'saving'])
+      if (sourceWallet && !validSourceTypes.has(sourceWallet.type)) {
+        console.warn('[BNPL] payoffAll: invalid source wallet type', sourceWallet.type)
+        return null
+      }
+
+      const total = unpaid.reduce((s, i) => s + Number(i.amount || 0), 0)
+      const txId = 'tx_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
+      const tx = {
+        id: txId,
+        type: 'bnpl_payment',
+        amount: Number(total),
+        walletId: sourceWalletId,
+        toWalletId: plan.walletId,
+        bnplPlanId: planId,
+        bnplPayoffAll: true,
+        date: date || todayStr(),
+        note: `ปิดยอดทั้งหมด ${plan.merchant || 'BNPL'}`.trim(),
+      }
+      if (typeof S !== 'undefined') {
+        S.transactions = S.transactions || []
+        S.transactions.unshift(tx)
+      }
+      unpaid.forEach(i => { i.paidTxId = txId })
+      plan.status = 'paid_off'
+
+      try { App?.recalculateWalletBalances?.({ save: false }) } catch (_) {}
+      if (typeof persist === 'function') persist()
+      return tx
+    },
+
+    // ── M3: edit an existing plan (merchant / total / installments) ──
+    // Rebuilds the schedule when total or installment count changes, preserving
+    // already-paid installments, and syncs the source expense tx amount/merchant.
+    updatePlan(planId, { merchant, totalAmount, installments } = {}) {
+      const plan = BNPLStore.getById(planId)
+      if (!plan) return null
+      const srcTx = (typeof S !== 'undefined' ? S.transactions : [])?.find(t => t.id === plan.txId)
+      if (merchant !== undefined) {
+        plan.merchant = merchant
+        if (srcTx) srcTx.merchant = merchant
+      }
+      const newTotal = totalAmount != null && totalAmount !== '' ? Number(totalAmount) : plan.totalAmount
+      const newN = installments != null && installments !== '' ? Number(installments) : plan.installments
+      const structureChanged = newTotal !== plan.totalAmount || newN !== plan.installments
+      if (structureChanged) {
+        if (!(newTotal > 0) || !(newN >= 1)) return { error: 'invalid_values' }
+        const maxPaidNo = Math.max(0, ...plan.schedule.filter(s => s.paidTxId).map(s => s.no))
+        if (newN < maxPaidNo) return { error: 'installments_below_paid' }
+        const wallet = (typeof S !== 'undefined' ? S.wallets : [])?.find(w => w.id === plan.walletId)
+        const rebuilt = BNPLCalc.buildSchedule(newTotal, newN, plan.purchaseDate, wallet?.payDay || null)
+        plan.schedule = rebuilt.map(item => {
+          const old = plan.schedule.find(s => s.no === item.no)
+          return old?.paidTxId ? { ...item, paidTxId: old.paidTxId } : item
+        })
+        plan.totalAmount = newTotal
+        plan.installments = newN
+        plan.status = plan.schedule.every(s => s.paidTxId) ? 'paid_off' : 'active'
+        if (srcTx && newTotal !== Number(srcTx.amount)) srcTx.amount = newTotal
+      }
+      try { App?.recalculateWalletBalances?.({ save: false }) } catch (_) {}
+      if (typeof persist === 'function') persist()
+      return plan
+    },
+
     getUpcomingInstallments(days = 60) {
       const t = todayStr()
       const result = []
@@ -149,7 +251,7 @@
         plan.schedule.forEach(item => {
           if (item.paidTxId) return
           const diff = daysBetween(item.dueDate, t) // positive = future
-          if (diff <= days && diff >= -7) {
+          if (diff <= days && diff >= -90) {
             result.push({
               planId: plan.id,
               no: item.no,
@@ -224,7 +326,28 @@
       if (typeof App === 'undefined' || typeof S === 'undefined') return
       S._bnplPlanListWalletId = walletId
       const wallet = S.wallets?.find(w => w.id === walletId) || {}
-      App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(wallet.icon || '🛍️')} ${esc(wallet.name || 'BNPL')}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(walletId)}')" style="width:auto">แก้ไข</button></div><div class="sub-scroll"><div id="bnpl-plan-hero">${BNPLui._heroHtml(wallet)}</div><div id="bnpl-plans-content" style="padding:12px 16px 40px">${BNPLui._planListHtml(walletId)}</div></div>`)
+      App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(wallet.icon || '🛍️')} ${esc(wallet.name || 'BNPL')}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(walletId)}')" style="width:auto">แก้ไข</button></div><div class="sub-scroll"><div id="bnpl-plan-hero">${BNPLui._heroHtml(wallet)}</div><div id="bnpl-plans-content" style="padding:12px 16px 40px">${BNPLui._planListHtml(walletId)}${BNPLui._paymentHistoryHtml(walletId)}</div></div>`)
+    },
+
+    // Re-render plan list (+ history) and hero in-place without closing the sub-screen.
+    _refreshPlanScreen() {
+      const walletId = typeof S !== 'undefined' ? S._bnplPlanListWalletId : null
+      if (!walletId) return
+      const plansEl = document.getElementById('bnpl-plans-content')
+      if (plansEl) plansEl.innerHTML = BNPLui._planListHtml(walletId) + BNPLui._paymentHistoryHtml(walletId)
+      const heroEl = document.getElementById('bnpl-plan-hero')
+      const w = typeof S !== 'undefined' ? S.wallets?.find(x => x.id === walletId) : null
+      if (heroEl && w) heroEl.innerHTML = BNPLui._heroHtml(w)
+    },
+
+    // ── M6: payment history for this BNPL wallet ──
+    _paymentHistoryHtml(walletId) {
+      const txs = ((typeof S !== 'undefined' ? S.transactions : []) || [])
+        .filter(t => t.type === 'bnpl_payment' && t.toWalletId === walletId)
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+      if (!txs.length) return ''
+      const rows = txs.map(t => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="flex:1;min-width:0">${fmtDate(t.date)} · ${esc(t.note || 'จ่าย BNPL')}</span><span style="font-weight:500;white-space:nowrap;margin-left:8px">-${money(t.amount)}</span></div>`).join('')
+      return `<details style="margin-top:14px"><summary style="font-size:13px;opacity:.6;cursor:pointer;padding:8px 0;list-style:none">ประวัติการจ่าย (${txs.length})</summary><div style="margin-top:4px">${rows}</div></details>`
     },
 
     _heroHtml(wallet) {
@@ -258,6 +381,7 @@
         const payBtn = next && plan.status === 'active'
           ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="BNPL.ui.openPayModal('${esc(plan.id)}',${next.no})">จ่ายงวด ${next.no}/${plan.installments}</button>`
           : ''
+        const editBtn = `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;width:100%" onclick="BNPL.ui.openEditPlan('${esc(plan.id)}')">แก้ไขแผน</button>`
 
         return `<div class="card card-pad" style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
@@ -271,6 +395,7 @@
           ${nextLabel}
           <details style="margin-top:10px"><summary style="font-size:12px;cursor:pointer;opacity:.6;list-style:none;display:flex;align-items:center;gap:4px"><span>▸</span> รายละเอียดงวด</summary><div style="margin-top:6px">${scheduleRows}</div></details>
           ${payBtn}
+          ${editBtn}
         </div>`
       }
 
@@ -312,13 +437,24 @@
         ? `<div style="margin-top:4px;font-size:12px;color:#ef4444">⚠️ เกินกำหนด ${fmtDate(item.dueDate)}</div>`
         : `<div style="margin-top:4px;font-size:12px;opacity:.65">ครบกำหนด ${fmtDate(item.dueDate)}</div>`
 
+      // M2: offer pay-off-all when more than one installment remains
+      const remaining = plan.schedule.filter(s => !s.paidTxId)
+      const remainingTotal = remaining.reduce((s, i) => s + Number(i.amount || 0), 0)
+      const payoffOption = remaining.length > 1
+        ? `<label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface-soft,#F8FAFC);border-radius:10px;margin-bottom:12px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="bnpl-payoff-all" onchange="BNPL.ui._togglePayoff('${esc(plan.id)}',${item.no})" style="width:auto">
+            <span>ปิดยอดทั้งหมด (${remaining.length} งวดที่เหลือ · ${money(remainingTotal)})</span>
+          </label>`
+        : ''
+
       return `<div style="padding:4px 0">
         <div style="text-align:center;padding:20px 0 16px">
           <div style="font-size:14px;font-weight:600">${esc(plan.merchant || 'BNPL')}</div>
-          <div style="font-size:13px;opacity:.65;margin-top:2px">งวด ${item.no} จาก ${plan.installments} งวด</div>
+          <div style="font-size:13px;opacity:.65;margin-top:2px" id="bnpl-pay-sub">งวด ${item.no} จาก ${plan.installments} งวด</div>
           ${dueLabel}
-          <div class="big" style="margin-top:10px">${money(item.amount)}</div>
+          <div class="big" style="margin-top:10px" id="bnpl-pay-amount">${money(item.amount)}</div>
         </div>
+        ${payoffOption}
         <div class="form-group">
           <label class="form-label">จากบัญชี</label>
           <select class="form-input" id="bnpl-pay-wallet">${walletOpts}</select>
@@ -334,6 +470,20 @@
       </div>`
     },
 
+    // M2: live-update amount/subtitle when toggling pay-off-all
+    _togglePayoff(planId, no) {
+      const plan = BNPLStore.getById(planId)
+      if (!plan) return
+      const item = plan.schedule.find(s => s.no === no)
+      const payoff = document.getElementById('bnpl-payoff-all')?.checked
+      const remaining = plan.schedule.filter(s => !s.paidTxId)
+      const remainingTotal = remaining.reduce((s, i) => s + Number(i.amount || 0), 0)
+      const amountEl = document.getElementById('bnpl-pay-amount')
+      const subEl = document.getElementById('bnpl-pay-sub')
+      if (amountEl) amountEl.textContent = payoff ? money(remainingTotal) : money(item?.amount || 0)
+      if (subEl) subEl.textContent = payoff ? `ปิดยอดทั้งหมด ${remaining.length} งวด` : `งวด ${no} จาก ${plan.installments} งวด`
+    },
+
     _confirmPay(planId, no) {
       const sourceWalletId = document.getElementById('bnpl-pay-wallet')?.value
       const date = document.getElementById('bnpl-pay-date')?.value
@@ -341,20 +491,15 @@
         if (typeof App !== 'undefined') App.toast?.('กรุณาเลือกบัญชีที่จ่าย', 'error')
         return
       }
-      const tx = BNPLStore.payInstallment(planId, no, { walletId: sourceWalletId, date })
+      const payoff = document.getElementById('bnpl-payoff-all')?.checked
+      const tx = payoff
+        ? BNPLStore.payoffAll(planId, { walletId: sourceWalletId, date })
+        : BNPLStore.payInstallment(planId, no, { walletId: sourceWalletId, date })
       if (tx) {
         BNPLui.closePayModal()
-        // Refresh plan list + hero in-place without closing sub-screen
-        const walletId = typeof S !== 'undefined' ? S._bnplPlanListWalletId : null
-        if (walletId) {
-          const plansEl = document.getElementById('bnpl-plans-content')
-          if (plansEl) plansEl.innerHTML = BNPLui._planListHtml(walletId)
-          const heroEl = document.getElementById('bnpl-plan-hero')
-          const w = typeof S !== 'undefined' ? S.wallets?.find(x => x.id === walletId) : null
-          if (heroEl && w) heroEl.innerHTML = BNPLui._heroHtml(w)
-        }
+        BNPLui._refreshPlanScreen()
         try { App?.render?.() } catch (_) {}
-        try { App?.toast?.('บันทึกการชำระงวดแล้ว ✓', 'success') } catch (_) {}
+        try { App?.toast?.(payoff ? 'ปิดยอดทั้งหมดแล้ว ✓' : 'บันทึกการชำระงวดแล้ว ✓', 'success') } catch (_) {}
       }
     },
 
@@ -362,7 +507,70 @@
       document.getElementById('overlay-bnpl-pay')?.classList.remove('open')
     },
 
-    // ── Inject overlay HTML into DOM (pay modal only — plan list uses sub-screen) ──
+    // ── M3: edit plan modal ──
+    openEditPlan(planId) {
+      const plan = BNPLStore.getById(planId)
+      if (!plan) return
+      const overlay = document.getElementById('overlay-bnpl-edit')
+      if (!overlay) return
+      const content = document.getElementById('bnpl-edit-content')
+      if (content) content.innerHTML = BNPLui._editPlanHtml(plan)
+      overlay.classList.add('open')
+    },
+
+    _editPlanHtml(plan) {
+      const paidCount = plan.schedule.filter(s => s.paidTxId).length
+      const minInstallments = Math.max(1, paidCount)
+      const note = paidCount > 0
+        ? `<div style="font-size:12px;opacity:.6;margin-top:6px">จ่ายไปแล้ว ${paidCount} งวด — ลดจำนวนงวดต่ำกว่านี้ไม่ได้ และงวดที่จ่ายแล้วจะคงไว้</div>`
+        : ''
+      return `<div style="padding:4px 0">
+        <div class="form-group">
+          <label class="form-label">ชื่อร้าน / รายการ</label>
+          <input class="form-input" type="text" id="bnpl-edit-merchant" value="${esc(plan.merchant || '')}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">ยอดรวม</label>
+          <input class="form-input" type="number" min="0" inputmode="decimal" id="bnpl-edit-total" value="${Number(plan.totalAmount)}">
+          <div style="font-size:12px;opacity:.6;margin-top:6px">เปลี่ยนยอดรวมจะอัปเดตรายจ่ายต้นทางด้วย</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">จำนวนงวด</label>
+          <input class="form-input" type="number" min="${minInstallments}" inputmode="numeric" id="bnpl-edit-installments" value="${Number(plan.installments)}">
+          ${note}
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button type="button" class="btn btn-secondary" style="flex:1" onclick="BNPL.ui.closeEditModal()">ยกเลิก</button>
+          <button type="button" class="btn btn-primary" style="flex:1" onclick="BNPL.ui._confirmEdit('${esc(plan.id)}')">บันทึก</button>
+        </div>
+      </div>`
+    },
+
+    _confirmEdit(planId) {
+      const merchant = document.getElementById('bnpl-edit-merchant')?.value ?? ''
+      const totalAmount = document.getElementById('bnpl-edit-total')?.value
+      const installments = document.getElementById('bnpl-edit-installments')?.value
+      const result = BNPLStore.updatePlan(planId, { merchant, totalAmount, installments })
+      if (result && result.error) {
+        const msg = result.error === 'installments_below_paid'
+          ? 'ลดจำนวนงวดต่ำกว่างวดที่จ่ายแล้วไม่ได้'
+          : 'กรุณากรอกยอดรวมและจำนวนงวดให้ถูกต้อง'
+        try { App?.toast?.(msg, 'error') } catch (_) {}
+        return
+      }
+      if (result) {
+        BNPLui.closeEditModal()
+        BNPLui._refreshPlanScreen()
+        try { App?.render?.() } catch (_) {}
+        try { App?.toast?.('แก้ไขแผนแล้ว ✓', 'success') } catch (_) {}
+      }
+    },
+
+    closeEditModal() {
+      document.getElementById('overlay-bnpl-edit')?.classList.remove('open')
+    },
+
+    // ── Inject overlay HTML into DOM (pay + edit modals — plan list uses sub-screen) ──
     injectOverlays() {
       if (document.getElementById('overlay-bnpl-pay')) return
       document.body.insertAdjacentHTML('beforeend', `
@@ -375,6 +583,17 @@
               <button class="sheet-close" onclick="BNPL.ui.closePayModal()">✕</button>
             </div>
             <div class="sheet-body" id="bnpl-pay-content"></div>
+          </div>
+        </div>
+        <div class="overlay" id="overlay-bnpl-edit" onclick="if(event.target===this||event.target.classList.contains('overlay-backdrop'))BNPL.ui.closeEditModal()">
+          <div class="overlay-backdrop"></div>
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-header">
+              <span class="sheet-title">แก้ไขแผนผ่อน</span>
+              <button class="sheet-close" onclick="BNPL.ui.closeEditModal()">✕</button>
+            </div>
+            <div class="sheet-body" id="bnpl-edit-content"></div>
           </div>
         </div>
       `)

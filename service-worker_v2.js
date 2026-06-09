@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.06.07-r81'
+const APP_VERSION = '2026.06.09-bnpl-features-r82'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 const CORE_NETWORK_TIMEOUT_MS = 900
