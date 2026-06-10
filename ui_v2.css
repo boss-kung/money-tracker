@@ -217,19 +217,50 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
 .ui-v2 #dashboard-content > .mt-topbar    { order: -3; }
 .ui-v2 #dashboard-content > .mt-net-card  { order: -2; }
 .ui-v2 #dashboard-content > .mt-v2-actions{ order: -1; }
+.ui-v2 #dashboard-content > .mt-dash-stat-bento { order: -1; }
 .ui-v2 #dashboard-content > .dash-month-nav { order: 0; }
 
-/* Greeting bar (reuses .mt-topbar) */
-.ui-v2 .mt-topbar { padding-top: calc(6px + var(--safe-t)); margin-bottom: 4px; }
-.ui-v2 .mt-title { font-size: 16px; font-weight: 500; }
-.ui-v2 .mt-subtitle { font-size: 11px; }
+/* P1 — brand header card + sheet overlap.
+   The net-card becomes a full-bleed colored header band carrying the greeting
+   + hero number; a rounded --bg lip (::after) creates the "calm sheet" that the
+   body content sits on. net-card stays a direct child of #dashboard-content so
+   every afterend injector (upcoming/privilege/insights/setup) keeps working. */
+.ui-v2 #dashboard-content { padding-top: 0 !important; }
 
-/* Hero (reuses the existing blue .mt-net-card) — airy reflow */
-.ui-v2 .mt-net-card { border-radius: var(--radius-lg); padding: 18px 18px 16px; }
-.ui-v2 .mt-net-hero { grid-template-columns: 1fr auto; min-height: auto; gap: 10px; align-items: start; }
+.ui-v2 .mt-net-card {
+  margin: 0 calc(var(--app-gutter) * -1) 0 !important;
+  border-radius: 0;
+  padding: calc(var(--safe-t) + 14px) calc(var(--app-gutter) + 4px) 22px;
+  overflow: visible;
+}
+.ui-v2 .mt-net-card::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 18px;
+  background: var(--bg);
+  border-radius: 20px 20px 0 0;
+  z-index: 2;
+}
+
+/* Greeting row inside the header card */
+.ui-v2 .v2-dash-greet { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; position: relative; z-index: 3; }
+.ui-v2 .v2-dash-greet .g-hi { font-size: 15px; font-weight: 500; color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-v2 .v2-dash-greet .g-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.ui-v2 .v2-dash-greet .g-icon,
+.ui-v2 .v2-dash-greet .g-avatar { width: 36px; height: 36px; min-height: 36px; border-radius: 999px; border: 0; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #ffffff24; color: #fff; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ui-v2 .v2-dash-greet .g-avatar { background: #ffffff38; }
+.ui-v2 .v2-dash-greet .g-icon:active,
+.ui-v2 .v2-dash-greet .g-avatar:active { transform: scale(.94); }
+
+/* Hero — single column now that chart + status ring are out */
+.ui-v2 .mt-net-hero { grid-template-columns: 1fr; min-height: auto; gap: 10px; align-items: start; position: relative; z-index: 1; }
 .ui-v2 .mt-net-chart { display: none; }
 .ui-v2 .mt-net-value { font-size: 32px; line-height: 1.1; font-weight: 500; }
-.ui-v2 .mt-net-status { align-self: start; }
+
+/* Stat bento (health / debt / unpaid-bill) sits in the body sheet */
+.ui-v2 .mt-dash-stat-bento { margin: 12px 0 4px; }
+.ui-v2 .mt-dash-stat-bento .v2-bento-card:active { transform: scale(.97); }
 
 /* Net metrics → header bento (inside the blue card) */
 .ui-v2 .mt-net-split { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding: 0; border: 0; }

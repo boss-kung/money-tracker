@@ -4239,8 +4239,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
     // Month nav (last 6 months, newest first)
     const months = Calc.getMonths ? Calc.getMonths(6) : [thisMonth]
 
+    // v2 redesign (flag on): greeting moves INTO the brand header card below;
+    // the plain app-name topbar is dropped. Production path is untouched.
+    const v2 = document.documentElement.classList.contains('ui-v2')
+    const v2hour = new Date().getHours()
+    const v2greet = v2hour < 12 ? 'สวัสดีตอนเช้า' : v2hour < 17 ? 'สวัสดีตอนบ่าย' : 'สวัสดีตอนค่ำ'
+
     let html = `
-      <div class="mt-topbar">
+      ${v2 ? '' : `<div class="mt-topbar">
         <div>
           <div class="mt-title">Financial Tracker <span id="mt-offline-dot" class="mt-offline-dot"${S._isOffline ? '' : ' hidden'}>● ออฟไลน์</span></div>
           <div class="mt-subtitle">ศูนย์รวมการเงินและสิทธิพิเศษ</div>
@@ -4249,7 +4255,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
           <button class="mt-hide-btn" onclick="App.refreshDashboard()">↻</button>
           <button class="mt-hide-btn" onclick="App.toggleHideMoney()">${S.settings.hideMoney ? '👁' : '🙈'}</button>
         </div>
-      </div>
+      </div>`}
       ${S._ledgerIssues?.length ? `<div class="mt-integrity-warn" onclick="App._showLedgerIssues()">⚠ พบรายการ ${S._ledgerIssues.length} รายการอ้างถึงกระเป๋าที่ไม่มีอยู่แล้ว — แตะเพื่อดูรายละเอียด</div>` : ''}
       <div class="dash-month-nav">${months.map(m =>
         `<button class="chip${m === dm ? ' active' : ''}" onclick="App.setDashMonth('${ESC(m)}')">${ESC(mlabel(m))}</button>`
@@ -4451,6 +4457,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
     html += `
       <div class="mt-net-card" aria-label="สรุปการเงิน">
+        ${v2 ? `<div class="v2-dash-greet">
+          <div class="g-hi">${v2greet}</div>
+          <div class="g-actions">
+            <button class="g-icon" type="button" onclick="App.toggleHideMoney()" aria-label="ซ่อน/แสดงยอดเงิน">${S.settings.hideMoney ? '👁' : '🙈'}</button>
+            <button class="g-icon" type="button" onclick="App.openUpcomingScreen()" aria-label="รายการที่จะถึง"><i class="ti ti-bell" aria-hidden="true"></i></button>
+            <button class="g-avatar" type="button" onclick="App.showPage('more')" aria-label="โปรไฟล์และตั้งค่า"><i class="ti ti-user" aria-hidden="true"></i></button>
+          </div>
+        </div>` : ''}
         <div class="mt-net-hero">
           <div class="mt-net-main">
             <div class="mt-net-label">สินทรัพย์สุทธิ</div>
@@ -4464,23 +4478,23 @@ Calc.getUsableMoney = function(wallets, state = null) {
           <div class="mt-net-chart" aria-hidden="true">
             ${renderNetSparkline(sparkValues)}
           </div>
-          <div class="mt-net-status">
+          ${v2 ? '' : `<div class="mt-net-status">
             <div class="mt-net-status-label">สถานะการเงิน</div>
             ${renderNetRing(healthyPct)}
-          </div>
+          </div>`}
         </div>
         <div class="mt-net-split" aria-label="สรุปรายรับรายจ่ายและภาระ">
           ${renderNetMetric({ tone: 'income', icon: '↓', label: 'รายรับ', value: `+${FMT(stats.income)}`, sub: incomeCompareSub })}
           ${renderNetMetric({ tone: 'expense', icon: '↑', label: 'รายจ่าย', value: `-${FMT(stats.expense)}`, sub: expenseCompareSub })}
-          ${renderNetMetric({ tone: 'debt', icon: '▣', label: 'หนี้สิน', value: FMT(debtTotal)})}
-          ${renderNetMetric({ tone: 'bill', icon: '□', label: 'บิลค้างจ่าย', value: FMT(unpaidBillTotal)})}
+          ${v2 ? '' : `${renderNetMetric({ tone: 'debt', icon: '▣', label: 'หนี้สิน', value: FMT(debtTotal)})}
+          ${renderNetMetric({ tone: 'bill', icon: '□', label: 'บิลค้างจ่าย', value: FMT(unpaidBillTotal)})}`}
         </div>
       </div>`
 
     // v2 redesign (flag on): additive AI bar + quick actions, reordered via CSS.
     // Purely additive — the net-card markup above is untouched so all existing
     // dashboard behaviour (digit-roll, hide-money flip, net canvas) keeps working.
-    if (document.documentElement.classList.contains('ui-v2')) {
+    if (v2) {
       html += `<div class="mt-v2-actions">
         <div class="v2-ai-bar" onclick="App.openAskMyMoney&&App.openAskMyMoney()" role="button" tabindex="0" aria-label="ถามเรื่องเงินของคุณ">
           <span class="txt"><i class="ti ti-message-chatbot" aria-hidden="true"></i><span>ถามเรื่องเงินของคุณ</span></span>
@@ -4492,6 +4506,13 @@ Calc.getUsableMoney = function(wallets, state = null) {
           <button type="button" onclick="App.showPage('reports')"><div class="v2-qic"><i class="ti ti-chart-pie" aria-hidden="true"></i></div><div class="v2-qlbl">รายงาน</div></button>
           <button type="button" onclick="App.showPage('more')"><div class="v2-qic"><i class="ti ti-dots" aria-hidden="true"></i></div><div class="v2-qlbl">เพิ่มเติม</div></button>
         </div>
+      </div>`
+      // Density moved out of the hero (ref: calm header = balance + 2 bento):
+      // health ring / debt / unpaid-bill become a bento row in the body sheet.
+      html += `<div class="v2-bento mt-dash-stat-bento">
+        <div class="v2-bento-card" role="button" tabindex="0" onclick="App._showHealthyBreakdown&&App._showHealthyBreakdown()"><div class="lbl"><i class="ti ti-heart" aria-hidden="true"></i> สถานะการเงิน</div><div class="val big">${healthyPct == null ? '—' : healthyPct + '%'}</div></div>
+        <div class="v2-bento-card amber"><div class="lbl"><i class="ti ti-credit-card" aria-hidden="true"></i> หนี้สิน</div><div class="val big">${S.settings?.hideMoney ? '฿*****' : FMT(debtTotal)}</div></div>
+        <div class="v2-bento-card"><div class="lbl"><i class="ti ti-file-text" aria-hidden="true"></i> บิลค้างจ่าย</div><div class="val big">${S.settings?.hideMoney ? '฿*****' : FMT(unpaidBillTotal)}</div></div>
       </div>`
     }
 
