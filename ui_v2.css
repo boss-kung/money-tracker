@@ -356,3 +356,34 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
 .ui-v2 .reward-tile { background: var(--purple-soft); border-radius: 12px; border: 0; }
 .ui-v2 .reward-tile strong { color: var(--purple); }
 .ui-v2 .cc-cycle, .ui-v2 .wc-prog { border-radius: 12px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 3 — CC Benefits cluster (privileges · reward ledger · benefit rules ·
+   credit-limit groups). All are sub-screens via openSubScreen/.sub-scroll.
+   CSS-only reskin of the shared shell + bespoke card/chip classes.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Shared sub-screen content polish (benefits all cluster screens) */
+.ui-v2 .sub-scroll .sec-title { font-size: 11px !important; font-weight: 500 !important; color: var(--muted) !important; letter-spacing: .4px; margin: 16px 0 8px !important; }
+.ui-v2 .sub-scroll .chips .chip { background: var(--elevated); color: var(--muted); border: 0; border-radius: 999px; font-size: 11px; padding: 5px 12px; font-weight: 400; }
+.ui-v2 .sub-scroll .chips .chip.active { background: var(--primary); color: #fff; font-weight: 500; }
+
+/* Privileges screen — summary + privilege cards */
+.ui-v2 .privilege-summary-card { border-radius: 16px; }
+.ui-v2 .privilege-card { border-radius: 14px; box-shadow: var(--shadow-xs); border: 1px solid var(--border); }
+.ui-v2 .privilege-card-icon { width: 38px; height: 38px; border-radius: 12px; background: var(--purple-soft); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.ui-v2 .privilege-card-title { font-weight: 500; }
+.ui-v2 .privilege-card-actions .btn { border-radius: 10px; }
+
+/* Reward ledger / reward account rows */
+.ui-v2 .reward-account-card, .ui-v2 .ledger-row { border-radius: 14px; }
+
+/* CC benefit rule form (.ccbr-*) */
+.ui-v2 .ccbr-section-label { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: .3px; }
+.ui-v2 .ccbr-chip-scroll .chip, .ui-v2 .chip.mini { border-radius: 999px; }
+.ui-v2 .ccbr-chip-scroll .chip.active, .ui-v2 .chip.mini.active { background: var(--primary); color: #fff; }
+.ui-v2 .ccbr-type-grid > button, .ui-v2 .ccbr-type-icon { border-radius: 12px; }
+.ui-v2 .ccbr-type-grid > button.active { border-color: var(--primary); background: var(--primary-soft); }
+
+/* Credit-limit group cards */
+.ui-v2 .credit-limit-group-card, .ui-v2 .clg-card { border-radius: 14px; }

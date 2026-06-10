@@ -88,6 +88,7 @@
 - [ ] ซ่อมยอดคงเหลือ (S) · `openBalanceRepairScreen`
 
 ### C4. CC Benefits / Rewards / Privileges — เฟส 3
+> **สถานะเฟส 3 (r91):** CSS-only reskin ของ cluster (sub-screens). ครอบ **shared shell** (`.sub-scroll .sec-title`→v2 label, `.sub-scroll .chips .chip`→seg-pill) + **bespoke** (`.privilege-card`/`-icon`→purple icon chip, `.privilege-summary-card`, `.ccbr-*` rule form chips/type-grid, reward tiles→purple). Verify computed: `.privilege-card-icon` bg=#F5F3FF ✓, chips pill ✓. ⚠️ overlay sub-screens (`#sub-screen` absolute) transplant ดูภาพไม่ได้ → **ยืนยันภาพจริงบน live deploy** (`?uiv2=1`). flag-off ปลอดภัย (CSS-only)
 - [ ] สิทธิประโยชน์บัตร (S) · `openCCBenefitScreen`
 - [ ] ภาพรวมสิทธิประโยชน์ (S) · `openCCBenefitOverviewScreen`
 - [ ] ฟอร์มกฎสิทธิประโยชน์ (F) · `openCCBenefitRuleForm`
