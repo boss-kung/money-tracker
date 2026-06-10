@@ -208,6 +208,12 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
    actions) sit right under it. Every existing class is preserved.
    ════════════════════════════════════════════════════════════════════════════ */
 .ui-v2 #dashboard-content { display: flex; flex-direction: column; }
+/* #dashboard-content is the bounded .page-scroll flex item. Making it a column
+   flexbox (for the order: reorder below) means its children default to
+   flex-shrink:1 and get compressed to fit the viewport instead of keeping
+   natural height — which clips every card. Pin flex-shrink:0 so the container
+   scrolls normally and each section renders full-height. */
+.ui-v2 #dashboard-content > * { flex-shrink: 0; }
 .ui-v2 #dashboard-content > .mt-topbar    { order: -3; }
 .ui-v2 #dashboard-content > .mt-net-card  { order: -2; }
 .ui-v2 #dashboard-content > .mt-v2-actions{ order: -1; }
