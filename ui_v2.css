@@ -493,3 +493,111 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
 .ui-v2 .reports-coach-sheet   { border-radius: 24px 24px 0 0; }
 .ui-v2 .reports-coach-primary { border-radius: 14px; }
 .ui-v2 .ins-reports-list .ins-card { border-radius: 12px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 5 — Feature clusters
+   Goals · Budget · Recurring · Upcoming · Installments · Loans ·
+   Split Bill · Crypto · Wallet sections
+   CSS-only; no JS/logic change.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Wallets page — tab bar → v2 seg-pill ────────────────────────────── */
+/* Make the wallet-tab-bar look like the Phase 1 .v2-seg strip */
+.ui-v2 .wallet-tab-bar {
+  background: color-mix(in srgb, #fff 12%, rgba(0,0,0,.18));
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+}
+.ui-v2 .wallet-tab {
+  border: 0 !important;
+  background: transparent;
+  color: rgba(255,255,255,.78);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  transition: background .15s, color .15s;
+}
+.ui-v2 .wallet-tab.active,
+.ui-v2 .wallet-tab:active {
+  background: #fff !important;
+  color: var(--primary) !important;
+  font-weight: 700;
+}
+
+/* Wallet summary bento cards */
+.ui-v2 .wallet-summary-card { border-radius: 14px; }
+.ui-v2 .wallet-section-title { font-size: 13px !important; font-weight: 700 !important; }
+
+/* Wallet section block */
+.ui-v2 .wallet-section-block { margin-bottom: 4px; }
+
+/* ── Goals ───────────────────────────────────────────────────────────── */
+.ui-v2 .goal-card { border-radius: 16px; }
+/* Icon chip */
+.ui-v2 .goal-title > span {
+  width: 36px; height: 36px; border-radius: 12px; flex-shrink: 0;
+  background: var(--primary-soft);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+/* Progress bar already styled; just ensure radius */
+.ui-v2 .goal-progress { border-radius: 999px; }
+.ui-v2 .goal-progress .progress-fill { border-radius: 999px; }
+
+/* ── Budget ──────────────────────────────────────────────────────────── */
+/* Budget uses segmented-tabs inside sub-scroll */
+.ui-v2 .segmented-tabs { border-radius: 999px !important; padding: 4px !important; }
+.ui-v2 .segmented-tab  { border-radius: 999px !important; }
+/* Budget input rows */
+.ui-v2 .budget-row { padding: 10px 0; }
+.ui-v2 .budget-row .form-input { border-radius: 12px; }
+
+/* ── Recurring ───────────────────────────────────────────────────────── */
+.ui-v2 .recurring-item { border-radius: 12px; padding: 10px 12px; margin-bottom: 4px; border: 1px solid var(--border); background: var(--card); }
+.ui-v2 .recurring-item:last-child { margin-bottom: 0; }
+/* Icon chip inside recurring item */
+.ui-v2 .recurring-item .list-item-icon { border-radius: 10px; }
+/* Actions sheet */
+.ui-v2 .recurring-more-actions { display: grid; gap: 8px; }
+.ui-v2 .recurring-more-actions .btn { border-radius: 14px; }
+
+/* ── Upcoming (calendar / bills) ─────────────────────────────────────── */
+/* Upcoming items on openUpcomingScreen use .list-item */
+.ui-v2 .upcoming-item .list-item-icon { border-radius: 10px; }
+/* upcoming-bills screen */
+.ui-v2 .upcoming-summary-card   { border-radius: 16px; }
+.ui-v2 .upcoming-bill-card      { border-radius: 14px !important; }
+.ui-v2 .status-pill             { border-radius: 999px; }
+
+/* ── Installments ────────────────────────────────────────────────────── */
+.ui-v2 .installment-compact-screen .compact-card-list { border-radius: 16px; overflow: hidden; border: 1px solid var(--border); }
+.ui-v2 .installment-compact-row { border-radius: 0; }
+/* Give each row a subtle divider instead of full radius inside the grouped card */
+.ui-v2 .installment-compact-row:last-child { border-bottom: 0; }
+/* Install month picker buttons */
+.ui-v2 .installment-month-grid button { border-radius: 10px; }
+.ui-v2 .installment-mini-row { border-radius: 0; }
+/* Edit overlay sheet */
+.ui-v2 #installment-edit-overlay .sheet { border-radius: 24px 24px 0 0; }
+.ui-v2 .installment-edit-note { border-radius: 12px; background: var(--elevated); padding: 10px 12px; }
+
+/* ── Crypto ──────────────────────────────────────────────────────────── */
+/* Portfolio wallet card already has gradient; just polish inner grid */
+.ui-v2 .crypto-summary-item  { border-radius: 10px; }
+.ui-v2 .crypto-holding-row   { border-radius: 12px; }
+.ui-v2 .crypto-price-badge   { border-radius: 999px; }
+.ui-v2 .crypto-action-row .btn { border-radius: 14px; }
+/* Inner pills at bottom of crypto wallet card */
+.ui-v2 .crypto-portfolio-pill { border-radius: 8px; }
+/* Detail sub-screen accordion cards */
+.ui-v2 .crypto-portfolio-card { border-radius: 16px; }
+.ui-v2 .crypto-search-result  { border-radius: 12px; }
+.ui-v2 .crypto-selected-asset-card { border-radius: 14px; }
+
+/* ── Split Bill ──────────────────────────────────────────────────────── */
+/* Split bill screens reuse .card + .detail-row which are already reskinned */
+/* Just ensure toggle (on/off switch) and preview card look polished */
+.ui-v2 #sb-preview-card { border-radius: 14px !important; }
+.ui-v2 .toggle { border-radius: 999px; }
