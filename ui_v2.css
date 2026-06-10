@@ -387,3 +387,109 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
 
 /* Credit-limit group cards */
 .ui-v2 .credit-limit-group-card, .ui-v2 .clg-card { border-radius: 14px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 4 — Insight / Coaching cluster
+   (openCoachingHub · openFinanceSummary · openAskMyMoney · openProactiveBrief ·
+    openReportsCoach · openFinanceCoachProfile · openLifePlanning · openScenarioLab
+    + dashboard ins-cards + ai-coach strip on reports)
+   CSS-only reskin; no JS/logic change.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Finance hero card → solid colored bento header ────────────────────── */
+.ui-v2 .finance-hero-card {
+  border-left: 0 !important;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 72%, #7C3AED) 100%) !important;
+  color: #fff;
+}
+.ui-v2 .finance-hero-card.is-good  { background: linear-gradient(135deg, var(--income) 0%, color-mix(in srgb, var(--income) 75%, #0891B2) 100%) !important; }
+.ui-v2 .finance-hero-card.is-warn  { background: linear-gradient(135deg, #D97706 0%, color-mix(in srgb, #D97706 70%, #DC2626) 100%) !important; }
+.ui-v2 .finance-hero-card.is-danger{ background: linear-gradient(135deg, var(--expense) 0%, color-mix(in srgb, var(--expense) 70%, #7C3AED) 100%) !important; }
+.ui-v2 .finance-hero-card.is-info  { background: linear-gradient(135deg, #0891B2 0%, color-mix(in srgb, #0891B2 72%, var(--primary)) 100%) !important; }
+
+/* Text colours inside gradient hero card */
+.ui-v2 .finance-hero-card .finance-eyebrow  { color: rgba(255,255,255,.72); }
+.ui-v2 .finance-hero-card .finance-headline { color: #fff; }
+.ui-v2 .finance-hero-card .finance-action   { color: rgba(255,255,255,.78); }
+
+/* Page-cue icon inside hero card → frosted circle */
+.ui-v2 .finance-hero-card .finance-page-cue {
+  background: rgba(255,255,255,.22) !important;
+  color: #fff !important;
+  border-radius: 14px;
+  width: 44px; height: 44px;
+  font-size: 20px;
+}
+
+/* ── Finance sub-scroll card radii ─────────────────────────────────────── */
+.ui-v2 .finance-sub-scroll > .card     { border-radius: 16px; }
+.ui-v2 .finance-mini-stat              { border-radius: 14px; }
+.ui-v2 .finance-risk-strip             { border-radius: 12px; }
+.ui-v2 .finance-range-card             { border-radius: 14px; }
+.ui-v2 .finance-ring-card              { border-radius: 16px; }
+.ui-v2 .finance-visual-card            { border-radius: 16px; }
+.ui-v2 .finance-decision-card          { border-radius: 14px; }
+.ui-v2 .finance-scenario-pill          { border-radius: 12px; }
+.ui-v2 .finance-scenario-strip         { border-radius: 14px; overflow: hidden; }
+.ui-v2 .finance-compare-grid > .card  { border-radius: 14px; }
+.ui-v2 .finance-life-lane-track,
+.ui-v2 .finance-life-lane-track > span { border-radius: 6px; }
+
+/* Alert rows — slightly larger radius for v2 */
+.ui-v2 .finance-alert-row { border-radius: 14px; }
+
+/* Copilot steps */
+.ui-v2 .finance-copilot-step { border-radius: 14px; }
+.ui-v2 .finance-copilot-step > span { border-radius: 10px; }
+
+/* Check-list items */
+.ui-v2 .finance-check-item { border-radius: 12px; }
+.ui-v2 .finance-check-item > span { border-radius: 999px; }
+
+/* Journey links */
+.ui-v2 .finance-journey-links { border-radius: 16px; }
+.ui-v2 .finance-link-btn { border-radius: 12px; font-size: 13px; }
+
+/* Explain panel (details/summary) */
+.ui-v2 .finance-explain-panel { border-radius: 12px; }
+.ui-v2 .finance-source-chip   { border-radius: 999px; }
+.ui-v2 .finance-score-badge   { border-radius: 999px; }
+
+/* ── Ask My Money ─────────────────────────────────────────────────────── */
+/* Preset buttons → pill grid */
+.ui-v2 .finance-ask-presets button {
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--elevated));
+  border-color: color-mix(in srgb, var(--primary) 18%, var(--border));
+  font-weight: 500;
+}
+/* Answer bubble */
+.ui-v2 .finance-ask-bubble {
+  border-radius: 18px 18px 6px 18px;
+  background: color-mix(in srgb, var(--primary) 7%, var(--card));
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--border));
+}
+/* Animated answer blocks already have animation from style_v2.css — no override needed */
+
+/* ── Dashboard insight cards (.ins-*) ────────────────────────────────── */
+.ui-v2 .ins-card { border-radius: 14px; }
+.ui-v2 .ins-icon { border-radius: 10px; }
+.ui-v2 .ins-dismiss-btn { border-radius: 8px; }
+.ui-v2 .ins-action-primary { border-radius: 999px; }
+.ui-v2 .ins-snooze-select  { border-radius: 999px; }
+
+/* ── Reports AI Coach strip + sheet ─────────────────────────────────── */
+.ui-v2 .ai-coach-card  { border-radius: 16px !important; overflow: hidden; }
+.ui-v2 .ai-coach-strip { border-radius: 16px; }
+.ui-v2 .ai-coach-icon  {
+  width: 38px; height: 38px; border-radius: 12px;
+  background: var(--primary-soft); display: flex;
+  align-items: center; justify-content: center; font-size: 20px;
+}
+.ui-v2 .ai-coach-count { border-radius: 999px; }
+
+/* Reports coach bottom sheet */
+.ui-v2 .reports-coach-sheet   { border-radius: 24px 24px 0 0; }
+.ui-v2 .reports-coach-primary { border-radius: 14px; }
+.ui-v2 .ins-reports-list .ins-card { border-radius: 12px; }
