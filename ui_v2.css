@@ -356,3 +356,400 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
 .ui-v2 .reward-tile { background: var(--purple-soft); border-radius: 12px; border: 0; }
 .ui-v2 .reward-tile strong { color: var(--purple); }
 .ui-v2 .cc-cycle, .ui-v2 .wc-prog { border-radius: 12px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 3 — CC Benefits cluster (privileges · reward ledger · benefit rules ·
+   credit-limit groups). All are sub-screens via openSubScreen/.sub-scroll.
+   CSS-only reskin of the shared shell + bespoke card/chip classes.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Shared sub-screen content polish (benefits all cluster screens) */
+.ui-v2 .sub-scroll .sec-title { font-size: 11px !important; font-weight: 500 !important; color: var(--muted) !important; letter-spacing: .4px; margin: 16px 0 8px !important; }
+.ui-v2 .sub-scroll .chips .chip { background: var(--elevated); color: var(--muted); border: 0; border-radius: 999px; font-size: 11px; padding: 5px 12px; font-weight: 400; }
+.ui-v2 .sub-scroll .chips .chip.active { background: var(--primary); color: #fff; font-weight: 500; }
+
+/* Privileges screen — summary + privilege cards */
+.ui-v2 .privilege-summary-card { border-radius: 16px; }
+.ui-v2 .privilege-card { border-radius: 14px; box-shadow: var(--shadow-xs); border: 1px solid var(--border); }
+.ui-v2 .privilege-card-icon { width: 38px; height: 38px; border-radius: 12px; background: var(--purple-soft); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.ui-v2 .privilege-card-title { font-weight: 500; }
+.ui-v2 .privilege-card-actions .btn { border-radius: 10px; }
+
+/* Reward ledger / reward account rows */
+.ui-v2 .reward-account-card, .ui-v2 .ledger-row { border-radius: 14px; }
+
+/* CC benefit rule form (.ccbr-*) */
+.ui-v2 .ccbr-section-label { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: .3px; }
+.ui-v2 .ccbr-chip-scroll .chip, .ui-v2 .chip.mini { border-radius: 999px; }
+.ui-v2 .ccbr-chip-scroll .chip.active, .ui-v2 .chip.mini.active { background: var(--primary); color: #fff; }
+.ui-v2 .ccbr-type-grid > button, .ui-v2 .ccbr-type-icon { border-radius: 12px; }
+.ui-v2 .ccbr-type-grid > button.active { border-color: var(--primary); background: var(--primary-soft); }
+
+/* Credit-limit group cards */
+.ui-v2 .credit-limit-group-card, .ui-v2 .clg-card { border-radius: 14px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 4 — Insight / Coaching cluster
+   (openCoachingHub · openFinanceSummary · openAskMyMoney · openProactiveBrief ·
+    openReportsCoach · openFinanceCoachProfile · openLifePlanning · openScenarioLab
+    + dashboard ins-cards + ai-coach strip on reports)
+   CSS-only reskin; no JS/logic change.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Finance hero card → solid colored bento header ────────────────────── */
+.ui-v2 .finance-hero-card {
+  border-left: 0 !important;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 72%, #7C3AED) 100%) !important;
+  color: #fff;
+}
+.ui-v2 .finance-hero-card.is-good  { background: linear-gradient(135deg, var(--income) 0%, color-mix(in srgb, var(--income) 75%, #0891B2) 100%) !important; }
+.ui-v2 .finance-hero-card.is-warn  { background: linear-gradient(135deg, #D97706 0%, color-mix(in srgb, #D97706 70%, #DC2626) 100%) !important; }
+.ui-v2 .finance-hero-card.is-danger{ background: linear-gradient(135deg, var(--expense) 0%, color-mix(in srgb, var(--expense) 70%, #7C3AED) 100%) !important; }
+.ui-v2 .finance-hero-card.is-info  { background: linear-gradient(135deg, #0891B2 0%, color-mix(in srgb, #0891B2 72%, var(--primary)) 100%) !important; }
+
+/* Text colours inside gradient hero card */
+.ui-v2 .finance-hero-card .finance-eyebrow  { color: rgba(255,255,255,.72); }
+.ui-v2 .finance-hero-card .finance-headline { color: #fff; }
+.ui-v2 .finance-hero-card .finance-action   { color: rgba(255,255,255,.78); }
+
+/* Page-cue icon inside hero card → frosted circle */
+.ui-v2 .finance-hero-card .finance-page-cue {
+  background: rgba(255,255,255,.22) !important;
+  color: #fff !important;
+  border-radius: 14px;
+  width: 44px; height: 44px;
+  font-size: 20px;
+}
+
+/* ── Finance sub-scroll card radii ─────────────────────────────────────── */
+.ui-v2 .finance-sub-scroll > .card     { border-radius: 16px; }
+.ui-v2 .finance-mini-stat              { border-radius: 14px; }
+.ui-v2 .finance-risk-strip             { border-radius: 12px; }
+.ui-v2 .finance-range-card             { border-radius: 14px; }
+.ui-v2 .finance-ring-card              { border-radius: 16px; }
+.ui-v2 .finance-visual-card            { border-radius: 16px; }
+.ui-v2 .finance-decision-card          { border-radius: 14px; }
+.ui-v2 .finance-scenario-pill          { border-radius: 12px; }
+.ui-v2 .finance-scenario-strip         { border-radius: 14px; overflow: hidden; }
+.ui-v2 .finance-compare-grid > .card  { border-radius: 14px; }
+.ui-v2 .finance-life-lane-track,
+.ui-v2 .finance-life-lane-track > span { border-radius: 6px; }
+
+/* Alert rows — slightly larger radius for v2 */
+.ui-v2 .finance-alert-row { border-radius: 14px; }
+
+/* Copilot steps */
+.ui-v2 .finance-copilot-step { border-radius: 14px; }
+.ui-v2 .finance-copilot-step > span { border-radius: 10px; }
+
+/* Check-list items */
+.ui-v2 .finance-check-item { border-radius: 12px; }
+.ui-v2 .finance-check-item > span { border-radius: 999px; }
+
+/* Journey links */
+.ui-v2 .finance-journey-links { border-radius: 16px; }
+.ui-v2 .finance-link-btn { border-radius: 12px; font-size: 13px; }
+
+/* Explain panel (details/summary) */
+.ui-v2 .finance-explain-panel { border-radius: 12px; }
+.ui-v2 .finance-source-chip   { border-radius: 999px; }
+.ui-v2 .finance-score-badge   { border-radius: 999px; }
+
+/* ── Ask My Money ─────────────────────────────────────────────────────── */
+/* Preset buttons → pill grid */
+.ui-v2 .finance-ask-presets button {
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--elevated));
+  border-color: color-mix(in srgb, var(--primary) 18%, var(--border));
+  font-weight: 500;
+}
+/* Answer bubble */
+.ui-v2 .finance-ask-bubble {
+  border-radius: 18px 18px 6px 18px;
+  background: color-mix(in srgb, var(--primary) 7%, var(--card));
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--border));
+}
+/* Animated answer blocks already have animation from style_v2.css — no override needed */
+
+/* ── Dashboard insight cards (.ins-*) ────────────────────────────────── */
+.ui-v2 .ins-card { border-radius: 14px; }
+.ui-v2 .ins-icon { border-radius: 10px; }
+.ui-v2 .ins-dismiss-btn { border-radius: 8px; }
+.ui-v2 .ins-action-primary { border-radius: 999px; }
+.ui-v2 .ins-snooze-select  { border-radius: 999px; }
+
+/* ── Reports AI Coach strip + sheet ─────────────────────────────────── */
+.ui-v2 .ai-coach-card  { border-radius: 16px !important; overflow: hidden; }
+.ui-v2 .ai-coach-strip { border-radius: 16px; }
+.ui-v2 .ai-coach-icon  {
+  width: 38px; height: 38px; border-radius: 12px;
+  background: var(--primary-soft); display: flex;
+  align-items: center; justify-content: center; font-size: 20px;
+}
+.ui-v2 .ai-coach-count { border-radius: 999px; }
+
+/* Reports coach bottom sheet */
+.ui-v2 .reports-coach-sheet   { border-radius: 24px 24px 0 0; }
+.ui-v2 .reports-coach-primary { border-radius: 14px; }
+.ui-v2 .ins-reports-list .ins-card { border-radius: 12px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 5 — Feature clusters
+   Goals · Budget · Recurring · Upcoming · Installments · Loans ·
+   Split Bill · Crypto · Wallet sections
+   CSS-only; no JS/logic change.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Wallets page — tab bar → v2 seg-pill ────────────────────────────── */
+/* Make the wallet-tab-bar look like the Phase 1 .v2-seg strip */
+.ui-v2 .wallet-tab-bar {
+  background: color-mix(in srgb, #fff 12%, rgba(0,0,0,.18));
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+}
+.ui-v2 .wallet-tab {
+  border: 0 !important;
+  background: transparent;
+  color: rgba(255,255,255,.78);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  transition: background .15s, color .15s;
+}
+.ui-v2 .wallet-tab.active,
+.ui-v2 .wallet-tab:active {
+  background: #fff !important;
+  color: var(--primary) !important;
+  font-weight: 700;
+}
+
+/* Wallet summary bento cards */
+.ui-v2 .wallet-summary-card { border-radius: 14px; }
+.ui-v2 .wallet-section-title { font-size: 13px !important; font-weight: 700 !important; }
+
+/* Wallet section block */
+.ui-v2 .wallet-section-block { margin-bottom: 4px; }
+
+/* ── Goals ───────────────────────────────────────────────────────────── */
+.ui-v2 .goal-card { border-radius: 16px; }
+/* Icon chip */
+.ui-v2 .goal-title > span {
+  width: 36px; height: 36px; border-radius: 12px; flex-shrink: 0;
+  background: var(--primary-soft);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+/* Progress bar already styled; just ensure radius */
+.ui-v2 .goal-progress { border-radius: 999px; }
+.ui-v2 .goal-progress .progress-fill { border-radius: 999px; }
+
+/* ── Budget ──────────────────────────────────────────────────────────── */
+/* Budget uses segmented-tabs inside sub-scroll */
+.ui-v2 .segmented-tabs { border-radius: 999px !important; padding: 4px !important; }
+.ui-v2 .segmented-tab  { border-radius: 999px !important; }
+/* Budget input rows */
+.ui-v2 .budget-row { padding: 10px 0; }
+.ui-v2 .budget-row .form-input { border-radius: 12px; }
+
+/* ── Recurring ───────────────────────────────────────────────────────── */
+.ui-v2 .recurring-item { border-radius: 12px; padding: 10px 12px; margin-bottom: 4px; border: 1px solid var(--border); background: var(--card); }
+.ui-v2 .recurring-item:last-child { margin-bottom: 0; }
+/* Icon chip inside recurring item */
+.ui-v2 .recurring-item .list-item-icon { border-radius: 10px; }
+/* Actions sheet */
+.ui-v2 .recurring-more-actions { display: grid; gap: 8px; }
+.ui-v2 .recurring-more-actions .btn { border-radius: 14px; }
+
+/* ── Upcoming (calendar / bills) ─────────────────────────────────────── */
+/* Upcoming items on openUpcomingScreen use .list-item */
+.ui-v2 .upcoming-item .list-item-icon { border-radius: 10px; }
+/* upcoming-bills screen */
+.ui-v2 .upcoming-summary-card   { border-radius: 16px; }
+.ui-v2 .upcoming-bill-card      { border-radius: 14px !important; }
+.ui-v2 .status-pill             { border-radius: 999px; }
+
+/* ── Installments ────────────────────────────────────────────────────── */
+.ui-v2 .installment-compact-screen .compact-card-list { border-radius: 16px; overflow: hidden; border: 1px solid var(--border); }
+.ui-v2 .installment-compact-row { border-radius: 0; }
+/* Give each row a subtle divider instead of full radius inside the grouped card */
+.ui-v2 .installment-compact-row:last-child { border-bottom: 0; }
+/* Install month picker buttons */
+.ui-v2 .installment-month-grid button { border-radius: 10px; }
+.ui-v2 .installment-mini-row { border-radius: 0; }
+/* Edit overlay sheet */
+.ui-v2 #installment-edit-overlay .sheet { border-radius: 24px 24px 0 0; }
+.ui-v2 .installment-edit-note { border-radius: 12px; background: var(--elevated); padding: 10px 12px; }
+
+/* ── Crypto ──────────────────────────────────────────────────────────── */
+/* Portfolio wallet card already has gradient; just polish inner grid */
+.ui-v2 .crypto-summary-item  { border-radius: 10px; }
+.ui-v2 .crypto-holding-row   { border-radius: 12px; }
+.ui-v2 .crypto-price-badge   { border-radius: 999px; }
+.ui-v2 .crypto-action-row .btn { border-radius: 14px; }
+/* Inner pills at bottom of crypto wallet card */
+.ui-v2 .crypto-portfolio-pill { border-radius: 8px; }
+/* Detail sub-screen accordion cards */
+.ui-v2 .crypto-portfolio-card { border-radius: 16px; }
+.ui-v2 .crypto-search-result  { border-radius: 12px; }
+.ui-v2 .crypto-selected-asset-card { border-radius: 14px; }
+
+/* ── Split Bill ──────────────────────────────────────────────────────── */
+/* Split bill screens reuse .card + .detail-row which are already reskinned */
+/* Just ensure toggle (on/off switch) and preview card look polished */
+.ui-v2 #sb-preview-card { border-radius: 14px !important; }
+.ui-v2 .toggle { border-radius: 999px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 6 — Forms & Dialogs
+   All form inputs · sheets · overlays · tx-detail · wallet form tabs ·
+   confirm dialogs · button groups. CSS-only; no JS/logic change.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Form inputs — 16 px radius + richer focus ring ─────────────────── */
+.ui-v2 .form-input,
+.ui-v2 select.form-input,
+.ui-v2 textarea.form-input {
+  border-radius: 16px !important;
+  background: color-mix(in srgb, var(--primary) 3%, var(--surface-soft)) !important;
+  border-color: color-mix(in srgb, var(--primary) 10%, var(--border)) !important;
+}
+.ui-v2 .form-input:focus,
+.ui-v2 select.form-input:focus,
+.ui-v2 textarea.form-input:focus {
+  border-color: var(--primary) !important;
+  background: var(--card) !important;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 14%, transparent) !important;
+}
+/* Search inputs stay fully pill-shaped */
+.ui-v2 .search-input,
+.ui-v2 .more-search-input { border-radius: 999px !important; }
+
+/* ── Sheet overlays ──────────────────────────────────────────────────── */
+/* Backdrop: deeper scrim + more blur */
+.ui-v2 .overlay-backdrop {
+  background: rgba(10, 15, 30, .52) !important;
+  backdrop-filter: blur(12px) saturate(1.1) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.1) !important;
+}
+/* Sheet handle — slightly wider */
+.ui-v2 .sheet-handle { width: 44px !important; background: color-mix(in srgb, var(--border) 70%, transparent) !important; }
+/* Sheet header title */
+.ui-v2 .sheet-header h2 { letter-spacing: -.03em !important; }
+
+/* ── Wallet form — limit-mode tabs → seg-pill ────────────────────────── */
+.ui-v2 .v5-limit-mode-tabs {
+  padding: 4px;
+  background: var(--elevated);
+  border-radius: 999px;
+  gap: 4px;
+}
+.ui-v2 .v5-lm-tab {
+  border-radius: 999px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  transition: background .15s, color .15s;
+}
+.ui-v2 .v5-lm-tab.active {
+  background: var(--primary) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 28%, transparent) !important;
+}
+
+/* ── Transaction detail sheet ────────────────────────────────────────── */
+/* Hero area: type-tinted soft card */
+.ui-v2 .tx-detail-hero {
+  border-radius: 18px;
+  margin: 4px 0 0;
+  padding: 16px 12px 18px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--elevated));
+}
+/* Amount colour follows tx type via inline style already — just ensure radius on hero */
+.ui-v2 .tx-detail-section  { border-radius: 16px; }
+.ui-v2 .tx-detail-alert    { border-radius: 12px; }
+.ui-v2 .tx-detail-badge    { border-radius: 999px; }
+/* Danger zone (delete confirm buttons) — red-tinted card */
+.ui-v2 .tx-detail-danger {
+  background: color-mix(in srgb, var(--expense) 7%, var(--elevated));
+  border: 1px solid color-mix(in srgb, var(--expense) 22%, var(--border));
+  border-radius: 14px;
+  padding: 12px;
+}
+.ui-v2 .tx-detail-danger .btn-danger { border-radius: 12px; }
+
+/* ── Button groups & flex-rows in forms ──────────────────────────────── */
+.ui-v2 .flex-row .btn     { border-radius: 14px; }
+.ui-v2 .form-inline-row .btn { border-radius: 12px; }
+/* Save button at bottom of any sheet */
+.ui-v2 .sheet-body .btn-primary { border-radius: 16px; }
+.ui-v2 .sheet-body .btn-secondary,
+.ui-v2 .sheet-body .btn-outline  { border-radius: 14px; }
+
+/* ── Category / merchant emoji pickers ───────────────────────────────── */
+.ui-v2 .emoji-current  { border-radius: 16px; }
+.ui-v2 .emoji-grid button { border-radius: 12px; }
+
+/* ── More page search bar ────────────────────────────────────────────── */
+.ui-v2 .more-search-input + .search-clear-btn { border-radius: 999px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 7 — Standalone screens
+   App-lock · Toast · FAB · Quick-capture sheet
+   (Boot skeleton runs pre-flag; privacy/rescue have no ui_v2.css — skipped)
+   CSS-only; no JS/logic change.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── App-lock screen ─────────────────────────────────────────────────── */
+/* Panel card — 26 px radius (matches confirm dialog) */
+.ui-v2 .mt-lock-panel {
+  border-radius: 26px !important;
+  background: rgba(10, 18, 36, .70) !important;
+  border-color: rgba(255,255,255,.14) !important;
+  box-shadow: 0 32px 90px rgba(0,0,0,.42) !important;
+}
+
+/* Keypad buttons — 18 px; ghost (cancel/del) pill-shaped */
+.ui-v2 .mt-lock-keypad button        { border-radius: 18px !important; }
+.ui-v2 .mt-lock-keypad button.ghost  { border-radius: 999px !important; }
+
+/* Biometric button — pill */
+.ui-v2 .mt-lock-biometric-btn { border-radius: 999px !important; }
+
+/* PIN dots — slightly larger, gap reduced */
+.ui-v2 .mt-lock-dots span {
+  width: 22px !important;
+  height: 22px !important;
+  border-width: 1.5px !important;
+}
+
+/* Error pill */
+.ui-v2 .mt-lock-error { border-radius: 14px !important; }
+
+/* Action buttons in lock settings */
+.ui-v2 .mt-lock-actions .btn { border-radius: 14px !important; }
+
+/* ── Toast notifications ─────────────────────────────────────────────── */
+.ui-v2 .toast {
+  border-radius: 18px !important;
+  box-shadow: 0 18px 42px rgba(15,23,42,.28), 0 1px 0 rgba(255,255,255,.12) inset !important;
+}
+
+/* ── FAB — round circle for Calm Banking look ────────────────────────── */
+.ui-v2 #fab {
+  border-radius: 999px !important;
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--primary) 40%, transparent) !important;
+}
+
+/* ── Quick-capture sheet ─────────────────────────────────────────────── */
+/* Already uses .sheet (Phase 6); just give the NLP input a pill border */
+.ui-v2 #qc-sheet .form-input {
+  border-radius: 999px !important;
+  padding-left: 18px !important;
+}
+
+/* QC recording dot + waveform bars */
+.ui-v2 .qc-rec-dot  { border-radius: 999px; }
+.ui-v2 .qc-wave-bar { border-radius: 4px; }
