@@ -694,3 +694,62 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
 
 /* ── More page search bar ────────────────────────────────────────────── */
 .ui-v2 .more-search-input + .search-clear-btn { border-radius: 999px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 7 — Standalone screens
+   App-lock · Toast · FAB · Quick-capture sheet
+   (Boot skeleton runs pre-flag; privacy/rescue have no ui_v2.css — skipped)
+   CSS-only; no JS/logic change.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── App-lock screen ─────────────────────────────────────────────────── */
+/* Panel card — 26 px radius (matches confirm dialog) */
+.ui-v2 .mt-lock-panel {
+  border-radius: 26px !important;
+  background: rgba(10, 18, 36, .70) !important;
+  border-color: rgba(255,255,255,.14) !important;
+  box-shadow: 0 32px 90px rgba(0,0,0,.42) !important;
+}
+
+/* Keypad buttons — 18 px; ghost (cancel/del) pill-shaped */
+.ui-v2 .mt-lock-keypad button        { border-radius: 18px !important; }
+.ui-v2 .mt-lock-keypad button.ghost  { border-radius: 999px !important; }
+
+/* Biometric button — pill */
+.ui-v2 .mt-lock-biometric-btn { border-radius: 999px !important; }
+
+/* PIN dots — slightly larger, gap reduced */
+.ui-v2 .mt-lock-dots span {
+  width: 22px !important;
+  height: 22px !important;
+  border-width: 1.5px !important;
+}
+
+/* Error pill */
+.ui-v2 .mt-lock-error { border-radius: 14px !important; }
+
+/* Action buttons in lock settings */
+.ui-v2 .mt-lock-actions .btn { border-radius: 14px !important; }
+
+/* ── Toast notifications ─────────────────────────────────────────────── */
+.ui-v2 .toast {
+  border-radius: 18px !important;
+  box-shadow: 0 18px 42px rgba(15,23,42,.28), 0 1px 0 rgba(255,255,255,.12) inset !important;
+}
+
+/* ── FAB — round circle for Calm Banking look ────────────────────────── */
+.ui-v2 #fab {
+  border-radius: 999px !important;
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--primary) 40%, transparent) !important;
+}
+
+/* ── Quick-capture sheet ─────────────────────────────────────────────── */
+/* Already uses .sheet (Phase 6); just give the NLP input a pill border */
+.ui-v2 #qc-sheet .form-input {
+  border-radius: 999px !important;
+  padding-left: 18px !important;
+}
+
+/* QC recording dot + waveform bars */
+.ui-v2 .qc-rec-dot  { border-radius: 999px; }
+.ui-v2 .qc-wave-bar { border-radius: 4px; }
