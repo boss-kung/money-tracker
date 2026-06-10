@@ -790,3 +790,133 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
 /* QC recording dot + waveform bars */
 .ui-v2 .qc-rec-dot  { border-radius: 999px; }
 .ui-v2 .qc-wave-bar { border-radius: 4px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DASHBOARD P2–P4  (items 5–24)
+   Quick circles · mini stats bento · privilege bento · insight density ·
+   section labels · hide-money blur · shadow reduction · micro-interactions ·
+   motion stagger · empty state · a11y · dark-mode surface
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* P2-6  Quick action icon circles */
+.ui-v2 .v2-qa .v2-qic { border-radius: 999px !important; }
+
+/* P2-8  Privilege promo → purple bento */
+.ui-v2 .dashboard-privilege-alerts {
+  border-radius: 14px !important;
+  border: 0 !important;
+  background: var(--purple-soft) !important;
+  box-shadow: none !important;
+  padding: 10px 12px !important;
+}
+.ui-v2 .dashboard-privilege-alert-head {
+  background: none; border: 0; padding: 0; width: 100%;
+  display: flex; align-items: center; justify-content: space-between; cursor: pointer;
+}
+.ui-v2 .dashboard-privilege-alert-title { font-size: 12px; font-weight: 500; color: var(--purple); }
+.ui-v2 .dashboard-privilege-alert-arrow { color: var(--purple); opacity: .7; font-size: 16px; }
+.ui-v2 .dashboard-privilege-alert-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.ui-v2 .dashboard-privilege-row {
+  background: none !important; border: 0 !important;
+  padding: 4px 0 !important; width: 100%;
+  display: flex; align-items: center; justify-content: space-between;
+  text-align: left; cursor: pointer;
+}
+.ui-v2 .dashboard-privilege-row-name { font-size: 12px; color: var(--text); }
+.ui-v2 .dashboard-privilege-row-sub  { font-size: 10px; color: var(--muted); }
+.ui-v2 .dashboard-privilege-row strong { font-size: 12px; color: var(--purple); flex-shrink: 0; margin-left: 8px; }
+
+/* P2-9  Mini wallet cards → bento layout */
+.ui-v2 .mt-wallet-mini-grid { display: flex; gap: 8px; margin: 10px 0; }
+.ui-v2 .mt-wallet-mini {
+  flex: 1; min-width: 0;
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  transition: transform .12s;
+}
+.ui-v2 .mt-wallet-mini:active { transform: scale(.96); }
+.ui-v2 .mt-wallet-mini .icon {
+  font-size: 18px; color: var(--primary); line-height: 1; margin-bottom: 2px;
+}
+.ui-v2 .mt-wallet-mini .icon .ti { font-size: 18px; }
+.ui-v2 .mt-wallet-mini .value {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%;
+}
+.ui-v2 .mt-wallet-mini .name { font-size: 10px; color: var(--muted); }
+
+/* P2-10  Month nav tightening */
+.ui-v2 .dash-month-nav { margin-top: 2px; margin-bottom: 10px; }
+
+/* P3-11  Section header label tokens */
+.ui-v2 #dashboard-content .section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 14px 0 8px;
+}
+.ui-v2 #dashboard-content .section-header h3 {
+  font-size: 11px !important; font-weight: 500 !important;
+  color: var(--muted) !important; letter-spacing: .4px; margin: 0;
+}
+.ui-v2 #dashboard-content .section-header button {
+  font-size: 11px !important; color: var(--primary) !important; background: none; border: 0; padding: 0;
+}
+
+/* P3-12  Day label for grouped recent transactions */
+.ui-v2 .v2-day-label {
+  font-size: 10px; font-weight: 500; color: var(--muted);
+  letter-spacing: .3px; margin: 10px 4px 4px;
+}
+
+/* P4-16  hide-money blur — net-value and mini wallet values */
+.ui-v2.hide-money .mt-net-value          { filter: blur(7px); }
+.ui-v2.hide-money .mt-wallet-mini .value { filter: blur(7px); }
+/* Stat bento already covered: .v2-bento-card .val.big (line ~191) */
+
+/* P4-17  Shadow reduction — lighter, calmer surfaces */
+.ui-v2 .mt-wallet-mini { box-shadow: none; }
+.ui-v2 #dashboard-content .card { box-shadow: none !important; border: 1px solid var(--border) !important; }
+
+/* P4-18  Spacing rhythm tweaks */
+.ui-v2 .mt-v2-actions      { margin-top: 16px; margin-bottom: 8px; }
+.ui-v2 .mt-dash-stat-bento { margin: 0 0 12px; }
+
+/* P4-19  Micro-interactions — tap feedback */
+.ui-v2 .v2-ai-bar:active          { transform: scale(.99); transition: transform .1s; }
+.ui-v2 .dash-month-nav .chip      { transition: transform .1s, background .15s; }
+.ui-v2 .dash-month-nav .chip:active { transform: scale(.93); }
+.ui-v2 .mt-net-metric              { transition: transform .1s; }
+.ui-v2 .mt-net-metric:active       { transform: scale(.97); }
+.ui-v2 .v2-bento-card              { transition: transform .12s; }
+.ui-v2 .v2-bento-card:active       { transform: scale(.97); }
+
+/* P4-20  Motion stagger — sections slide up on dashboard load */
+@keyframes v2-fade-up {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: none; }
+}
+.ui-v2 #dashboard-content > .mt-v2-actions      { animation: v2-fade-up .25s ease both .06s; }
+.ui-v2 #dashboard-content > .mt-dash-stat-bento { animation: v2-fade-up .25s ease both .12s; }
+@media (prefers-reduced-motion: reduce) {
+  .ui-v2 #dashboard-content > * { animation: none !important; transition: none !important; }
+}
+
+/* P4-21  Empty state for new layout */
+.ui-v2 .empty-state { padding: 28px 16px; text-align: center; color: var(--muted); font-size: 13px; }
+
+/* P4-23  A11y — alert cards keep red bg but get higher text contrast */
+.ui-v2 .ins-card.sev-danger { background: var(--expense-soft); border-left: 3px solid var(--expense); }
+.ui-v2 .ins-card.sev-warn   { background: var(--amber-soft);   border-left: 3px solid var(--amber); }
+
+/* P4-24  Dark mode — brand header stays vivid, not washed out */
+html.dark.ui-v2 .mt-net-card {
+  background:
+    radial-gradient(circle at 84% 16%, rgba(45,212,191,.18), transparent 30%),
+    radial-gradient(circle at 18% 0%,  rgba(37,99,235,.28),  transparent 34%),
+    linear-gradient(135deg, #1355c9 0%, #0a3d99 48%, #072a70 100%) !important;
+}
+html.dark.ui-v2 .mt-net-card::after { background: var(--bg); }

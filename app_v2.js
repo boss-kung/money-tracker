@@ -4541,9 +4541,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
       .filter(w => investmentWalletTypes.has(w.type))
       .reduce((sum, w) => sum + Number(App._investmentValueTHB ? App._investmentValueTHB(w) : (w.balance || 0)), 0)
     const miniCards = [
-      { icon:'💵', value: cashTotal, name:'เงินสด', onclick:"App.showPage('wallets');requestAnimationFrame(()=>requestAnimationFrame(()=>App._scrollToWalletSection?.('wallet-anchor-assets')))" },
-      { icon:'📈', value: investmentTotal, name:'การลงทุน', onclick:"App.showPage('wallets');requestAnimationFrame(()=>requestAnimationFrame(()=>App._scrollToWalletSection?.('wallet-anchor-invest')))" },
-      { icon:'🪙', value: cryptoSummary.totalValueTHB, name:'Crypto', onclick:'App.openCryptoPortfolioDetail()' },
+      { icon: v2 ? '<i class="ti ti-cash" aria-hidden="true"></i>' : '💵', value: cashTotal, name:'เงินสด', onclick:"App.showPage('wallets');requestAnimationFrame(()=>requestAnimationFrame(()=>App._scrollToWalletSection?.('wallet-anchor-assets')))" },
+      { icon: v2 ? '<i class="ti ti-chart-line" aria-hidden="true"></i>' : '📈', value: investmentTotal, name:'การลงทุน', onclick:"App.showPage('wallets');requestAnimationFrame(()=>requestAnimationFrame(()=>App._scrollToWalletSection?.('wallet-anchor-invest')))" },
+      { icon: v2 ? '<i class="ti ti-coin" aria-hidden="true"></i>' : '🪙', value: cryptoSummary.totalValueTHB, name:'Crypto', onclick:'App.openCryptoPortfolioDetail()' },
     ]
     html += `<div class="mt-wallet-mini-grid">${miniCards.map(card => `
         <div class="mt-wallet-mini" onclick="${card.onclick}">
@@ -4588,15 +4588,38 @@ Calc.getUsableMoney = function(wallets, state = null) {
     }
 
     html += secHdr('รายการล่าสุด', 'ดูทั้งหมด', "App.showPage('transactions')")
-    html += `<div class="card" style="margin-bottom:22px"><div style="padding:0 16px">${
-      recent.length
-        ? recent.map(t => App._txRow(t)).join('')
-        : (App._emptyState ? App._emptyState('📋','ยังไม่มีรายการ','แตะ + เพื่อเพิ่มรายการแรก') : '<div class="empty-state">ยังไม่มีรายการ</div>')
-    }</div></div>`
+    if (v2 && recent.length) {
+      // v2: group by calendar day with day labels
+      const todayStr2 = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10)
+      const yestStr = (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10) })()
+      const seenDays = {}; const dayGroups = []
+      recent.forEach(t => {
+        const day = (t.date || '').slice(0,10)
+        if (!seenDays[day]) { seenDays[day] = []; dayGroups.push(day) }
+        seenDays[day].push(t)
+      })
+      dayGroups.forEach(day => {
+        const dayLabel = day === todayStr2 ? 'วันนี้' : day === yestStr ? 'เมื่อวาน' : (Calc.shortDate ? Calc.shortDate(day) : day)
+        html += `<div class="v2-day-label">${ESC(dayLabel)}</div>`
+        html += `<div class="card" style="margin-bottom:8px"><div style="padding:0 16px">${seenDays[day].map(t => App._txRow(t)).join('')}</div></div>`
+      })
+      html += '<div style="height:22px"></div>'
+    } else {
+      html += `<div class="card" style="margin-bottom:22px"><div style="padding:0 16px">${
+        recent.length
+          ? recent.map(t => App._txRow(t)).join('')
+          : (App._emptyState ? App._emptyState('📋','ยังไม่มีรายการ','แตะ + เพิ่มรายการแรก') : '<div class="empty-state">ยังไม่มีรายการ</div>')
+      }</div></div>`
+    }
 
     const target = document.getElementById('dashboard-content')
     if (target) target.innerHTML = html
     App._bindTxRows?.('dashboard-content')
+    // Item 22: sync browser chrome colour to brand header when v2 is on
+    if (v2) {
+      const isDark = document.documentElement.classList.contains('dark')
+      document.getElementById('meta-theme')?.setAttribute('content', isDark ? '#0b3a88' : '#1065dc')
+    }
     window.MTBoot?.mark?.('app.renderDashboard.done', { duration: Math.round((performance.now() - dashboardRenderStart) * 10) / 10 })
   }
 
@@ -18996,9 +19019,26 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
     if (!insights.length) return
 
+    const v2 = document.documentElement.classList.contains('ui-v2')
+
+    // Item 5: push top insight title into the AI bar text in v2 mode
+    if (v2 && insights[0]) {
+      const aiBarSpan = content.querySelector('.v2-ai-bar .txt span')
+      if (aiBarSpan && (insights[0].title || insights[0].message)) {
+        aiBarSpan.textContent = insights[0].title || insights[0].message
+      }
+    }
+
+    // Item 7: in v2 show max 1 card below (insight #2); #1 is already in the AI bar
+    const displayInsights = v2 ? insights.slice(1, 2) : insights
+    if (!displayInsights.length) return
+
     const section = document.createElement('div')
     section.className = 'ins-dashboard-section'
-    section.innerHTML = `<div class="sec-title" style="margin-top:14px">💡 วันนี้ต้องรู้</div>${insights.map(insightCardHtml).join('')}`
+    const headerHtml = v2
+      ? `<div class="sec-title" style="margin-top:14px"><i class="ti ti-sparkles" style="margin-right:4px;vertical-align:-.1em"></i> วันนี้ต้องรู้</div>`
+      : `<div class="sec-title" style="margin-top:14px">💡 วันนี้ต้องรู้</div>`
+    section.innerHTML = headerHtml + displayInsights.map(insightCardHtml).join('')
 
     const statRow = content.querySelector('.mt-stat-row')
     if (statRow) statRow.insertAdjacentElement('afterend', section)
