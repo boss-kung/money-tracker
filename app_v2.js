@@ -1141,8 +1141,15 @@ function writeAppHashRoute(page) {
 }
 
 // ── Apply theme ───────────────────────────────────────────────
+// Dev/QA override for the v2 redesign flag: ?uiv2=1 (force on) / ?uiv2=0 (off)
+let _uiV2Force = null
+try {
+  const _p = new URLSearchParams(location.search)
+  if (_p.has('uiv2')) { const v = _p.get('uiv2'); _uiV2Force = !(v === '0' || v === 'false') }
+} catch (_) {}
 function applyTheme() {
   document.documentElement.classList.toggle('dark', Boolean(S.settings?.darkMode))
+  document.documentElement.classList.toggle('ui-v2', _uiV2Force !== null ? _uiV2Force : Boolean(S.settings?.uiV2))
   document.documentElement.style.setProperty('--primary', S.settings?.accentColor || '#2563EB')
   document.getElementById('meta-theme')?.setAttribute('content', S.settings?.darkMode ? '#0F172A' : '#1E293B')
 }
@@ -2100,6 +2107,18 @@ setTimeout(() => {
     field.addEventListener('input', () => { field.classList.remove('input-error'); errEl.remove() }, { once: true })
   }
 })()
+
+// v2 redesign feature flag (gate-then-flip): OFF in production until the whole
+// redesign lands, then flipped on for everyone. Dev/QA: App.setUIV2(true) or ?uiv2=1
+App.setUIV2 = function(on) {
+  S.settings = S.settings || {}
+  S.settings.uiV2 = !!on
+  _uiV2Force = null
+  try { persist() } catch (_) {}
+  applyTheme()
+  try { App.render?.() } catch (_) {}
+  return S.settings.uiV2
+}
 
 /* Core finance primitives */
 ;(function(){
@@ -4457,6 +4476,24 @@ Calc.getUsableMoney = function(wallets, state = null) {
           ${renderNetMetric({ tone: 'bill', icon: '□', label: 'บิลค้างจ่าย', value: FMT(unpaidBillTotal)})}
         </div>
       </div>`
+
+    // v2 redesign (flag on): additive AI bar + quick actions, reordered via CSS.
+    // Purely additive — the net-card markup above is untouched so all existing
+    // dashboard behaviour (digit-roll, hide-money flip, net canvas) keeps working.
+    if (document.documentElement.classList.contains('ui-v2')) {
+      html += `<div class="mt-v2-actions">
+        <div class="v2-ai-bar" onclick="App.openAskMyMoney&&App.openAskMyMoney()" role="button" tabindex="0" aria-label="ถามเรื่องเงินของคุณ">
+          <span class="txt"><i class="ti ti-message-chatbot" aria-hidden="true"></i><span>ถามเรื่องเงินของคุณ</span></span>
+          <i class="ti ti-microphone" aria-hidden="true"></i>
+        </div>
+        <div class="v2-qa">
+          <button type="button" onclick="App.openAddTx()"><div class="v2-qic"><i class="ti ti-plus" aria-hidden="true"></i></div><div class="v2-qlbl">เพิ่มรายการ</div></button>
+          <button type="button" onclick="App.showPage('wallets')"><div class="v2-qic"><i class="ti ti-wallet" aria-hidden="true"></i></div><div class="v2-qlbl">กระเป๋า</div></button>
+          <button type="button" onclick="App.showPage('reports')"><div class="v2-qic"><i class="ti ti-chart-pie" aria-hidden="true"></i></div><div class="v2-qlbl">รายงาน</div></button>
+          <button type="button" onclick="App.showPage('more')"><div class="v2-qic"><i class="ti ti-dots" aria-hidden="true"></i></div><div class="v2-qlbl">เพิ่มเติม</div></button>
+        </div>
+      </div>`
+    }
 
     if (nearDueCards.length) {
       const nearDueTotal = nearDueCards.reduce((sum, card) => sum + Number(card.used || 0), 0)

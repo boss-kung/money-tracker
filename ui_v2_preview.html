@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="th" class="ui-v2">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>UI v2 — Component Gallery (QA)</title>
+<link rel="stylesheet" href="style_v2.css?v=2026.06.10-uiv2-r86">
+<link rel="stylesheet" href="ui_v2.css?v=2026.06.10-uiv2-r86">
+<style>
+  body { position: static; overflow: auto !important; height: auto; background: var(--bg); padding: 16px; }
+  .gal { max-width: 430px; margin: 0 auto; }
+  .gal > h3 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 20px 0 8px; }
+  .qa-toolbar { position: sticky; top: 0; display: flex; gap: 8px; padding: 8px 0; background: var(--bg); z-index: 9; }
+  .qa-toolbar button { font-size: 13px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+  .phone { background: var(--surface-soft); border-radius: 20px; padding: 14px; }
+</style>
+</head>
+<body>
+<div class="gal">
+  <div class="qa-toolbar">
+    <button onclick="document.documentElement.classList.toggle('dark')">Toggle dark</button>
+    <button onclick="document.documentElement.classList.toggle('ui-v2')">Toggle ui-v2</button>
+    <button onclick="document.documentElement.classList.toggle('hide-money')">Toggle hide-money</button>
+  </div>
+
+  <h3>Brand header + overlap sheet + header bento</h3>
+  <div class="v2-header">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="font-size:13px;font-weight:500">สวัสดีตอนเช้า, Boss</span>
+      <i class="ti ti-bell" style="font-size:20px"></i>
+    </div>
+    <div class="v2-h-sub">ยอดเงินรวมทุกกระเป๋า</div>
+    <div class="v2-h-amount">฿127,450<small>.50</small></div>
+    <div class="v2-hbento">
+      <div><div class="lbl"><i class="ti ti-arrow-down-left"></i> รายรับ</div><div class="val">+฿35,300</div></div>
+      <div><div class="lbl"><i class="ti ti-arrow-up-right"></i> รายจ่าย</div><div class="val">-฿22,500</div></div>
+    </div>
+  </div>
+  <div class="v2-sheet">
+
+    <h3 style="margin-top:6px">Bento cards</h3>
+    <div class="v2-bento">
+      <div class="v2-bento-card"><div class="lbl"><i class="ti ti-sparkles"></i> AI Insight</div><div class="val">ค่ากาแฟเดือนนี้ +18%</div></div>
+      <div class="v2-bento-card income"><div class="lbl"><i class="ti ti-target"></i> เป้าออม</div><div class="val">ถึงเป้า 72%</div></div>
+    </div>
+
+    <h3>AI bar</h3>
+    <div class="v2-ai-bar"><span class="txt"><i class="ti ti-message-chatbot"></i><span>ถามเรื่องเงินของคุณ</span></span><i class="ti ti-microphone" style="font-size:18px"></i></div>
+
+    <h3>Quick actions</h3>
+    <div class="v2-qa">
+      <button><div class="v2-qic"><i class="ti ti-plus"></i></div><div class="v2-qlbl">เพิ่มรายการ</div></button>
+      <button><div class="v2-qic"><i class="ti ti-arrow-up-right"></i></div><div class="v2-qlbl">โอนเงิน</div></button>
+      <button><div class="v2-qic"><i class="ti ti-credit-card"></i></div><div class="v2-qlbl">บัตร</div></button>
+      <button><div class="v2-qic"><i class="ti ti-dots"></i></div><div class="v2-qlbl">เพิ่มเติม</div></button>
+    </div>
+
+    <h3>Segmented pills</h3>
+    <div class="v2-seg">
+      <button class="pill active">ทั้งหมด</button>
+      <button class="pill income">รายรับ</button>
+      <button class="pill expense">รายจ่าย</button>
+      <button class="pill">โอน</button>
+    </div>
+
+    <div class="v2-seclabel">วันนี้</div>
+    <h3 style="margin-top:0">List card + rows (+ user-color dot)</h3>
+    <div class="v2-list-card">
+      <div class="v2-row"><div class="v2-ic">☕</div><div class="v2-rmid"><div class="v2-rname"><span class="v2-catdot" style="background:#7C3AED;margin-right:6px"></span>Starbucks</div><div class="v2-rsub">กาแฟ · KBank</div></div><div class="v2-ramt expense">-฿180</div></div>
+      <div class="v2-row"><div class="v2-ic income">💰</div><div class="v2-rmid"><div class="v2-rname">เงินเดือน</div><div class="v2-rsub">รายได้ · เมื่อวาน</div></div><div class="v2-ramt income">+฿35,000</div></div>
+      <div class="v2-row"><div class="v2-ic">🔄</div><div class="v2-rmid"><div class="v2-rname">โอนเข้าออมทรัพย์ชื่อยาวมากเพื่อทดสอบการตัดข้อความ</div><div class="v2-rsub">KBank → SCB</div></div><div class="v2-ramt transfer">฿5,000</div></div>
+    </div>
+
+    <h3>Settings group (More)</h3>
+    <div class="v2-group">
+      <div class="v2-grow"><div class="v2-gic"><i class="ti ti-target"></i></div><div class="v2-glabel">เป้าหมายการออม</div><i class="ti ti-chevron-right"></i></div>
+      <div class="v2-grow"><div class="v2-gic income"><i class="ti ti-repeat"></i></div><div class="v2-glabel">รายการประจำ</div><i class="ti ti-chevron-right"></i></div>
+      <div class="v2-grow"><div class="v2-gic amber"><i class="ti ti-wallet"></i></div><div class="v2-glabel">งบประมาณ</div><i class="ti ti-chevron-right"></i></div>
+    </div>
+
+    <h3>Badges + progress</h3>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <span class="v2-badge income">เงินคืน 5%</span>
+      <span class="v2-badge purple">x3 แต้ม</span>
+      <span class="v2-badge primary">ส่วนลด 10%</span>
+      <span class="v2-badge alert">ครบ 5 วัน</span>
+    </div>
+    <div class="v2-prog" style="margin-bottom:8px"><i style="width:62%"></i></div>
+    <div class="v2-prog income"><i style="width:72%"></i></div>
+
+    <h3>Primary dark button</h3>
+    <button class="v2-btn-dark">บันทึกรายการ</button>
+
+    <h3>Income header contrast check</h3>
+    <div class="v2-header brand-income" style="border-radius:16px">
+      <div class="v2-h-sub">🏦 ออมทรัพย์</div>
+      <div class="v2-h-amount">฿62,400</div>
+    </div>
+
+    <div style="height:30px"></div>
+  </div>
+</div>
+</body>
+</html>

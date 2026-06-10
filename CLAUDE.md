@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## UI / Design (READ BEFORE TOUCHING ANY UI)
+
+The app is mid-redesign toward a single, consistent visual language ("Calm Banking + AI Bento"). **[`docs/UI_DESIGN_SPEC.md`](docs/UI_DESIGN_SPEC.md) is the controlling source of truth** — read it before editing any screen, card, or style. It defines the design tokens (bound to `:root` in `style_v2.css`), the shared component library (`.bento-card`, `.list-card`, `.ai-bar`, `.seg-pill`, …), per-screen anatomy with code touchpoints, and a per-PR implementation checklist. Rules: use only tokens/components from the spec (no new colors or hardcoded hex), every change must pass light **and** dark mode, and redesign one screen per PR (scope discipline). The full screen-by-screen rollout plan and checklist (every page/sub-screen/sheet/form/dialog, in sequence, with bug-prevention rules) lives in [`docs/UI_REDESIGN_PLAN.md`](docs/UI_REDESIGN_PLAN.md).
+
 ## Running the App
 
 ```bash

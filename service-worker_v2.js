@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.06.09-ios-splash-r84'
+const APP_VERSION = '2026.06.10-uiv2-r90'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 const CORE_NETWORK_TIMEOUT_MS = 900
@@ -7,6 +7,7 @@ const STATIC_ASSETS = [
   './',
   './index.html',
   './style_v2.css',
+  './ui_v2.css',
   './app_v2.js',
   './storage_v2.js',
   './app_lock.js',
@@ -31,6 +32,7 @@ const STATIC_ASSETS = [
   './assets/fonts/LINESeedSansTH_Rg.ttf',
   './assets/fonts/LINESeedSansTH_Bd.ttf',
   './assets/fonts/LINESeedSansTH_XBd.ttf',
+  './assets/fonts/tabler-icons-subset.woff2',
 ]
 
 self.addEventListener('push', event => {

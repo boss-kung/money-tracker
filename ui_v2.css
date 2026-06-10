@@ -1,0 +1,358 @@
+/* ============================================================================
+   ui_v2.css — "Calm Banking + AI Bento" redesign (Phase 0: shared shell)
+   ----------------------------------------------------------------------------
+   EVERY rule is scoped under `.ui-v2` (feature flag on <html>). When the flag
+   is OFF, production renders exactly as before — this file adds nothing.
+   Toggle:  App.setUIV2(true)   ·   spec: docs/UI_DESIGN_SPEC.md
+   Tokens come from style_v2.css :root — DO NOT hardcode hex (brand-on-brand
+   overlays like #ffffff1f are the only allowed exception).
+   ============================================================================ */
+
+/* ── Icon font: Tabler subset (95 glyphs, self-hosted, 17.7KB) ────────────── */
+@font-face {
+  font-family: "tabler-icons";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("./assets/fonts/tabler-icons-subset.woff2") format("woff2");
+}
+.ui-v2 .ti {
+  font-family: "tabler-icons" !important;
+  font-weight: 400;
+  font-style: normal;
+  speak: none;
+  display: inline-block;
+  line-height: 1;
+  vertical-align: -.125em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.ui-v2 .ti::before { content: ""; }
+.ui-v2 .ti-home::before{content:"\eac1"}.ui-v2 .ti-home-2::before{content:"\eac0"}.ui-v2 .ti-chart-pie::before{content:"\ea5d"}.ui-v2 .ti-chart-bar::before{content:"\ea59"}
+.ui-v2 .ti-chart-line::before{content:"\ea5c"}.ui-v2 .ti-wallet::before{content:"\eb75"}.ui-v2 .ti-user::before{content:"\eb4d"}.ui-v2 .ti-user-circle::before{content:"\ef68"}
+.ui-v2 .ti-settings::before{content:"\eb20"}.ui-v2 .ti-bell::before{content:"\ea35"}.ui-v2 .ti-bell-ringing::before{content:"\ed07"}.ui-v2 .ti-search::before{content:"\eb1c"}
+.ui-v2 .ti-plus::before{content:"\eb0b"}.ui-v2 .ti-minus::before{content:"\eaf2"}.ui-v2 .ti-x::before{content:"\eb55"}.ui-v2 .ti-check::before{content:"\ea5e"}
+.ui-v2 .ti-checks::before{content:"\ebaa"}.ui-v2 .ti-arrow-left::before{content:"\ea19"}.ui-v2 .ti-arrow-right::before{content:"\ea1f"}.ui-v2 .ti-arrow-up::before{content:"\ea25"}
+.ui-v2 .ti-arrow-down::before{content:"\ea16"}.ui-v2 .ti-arrow-up-right::before{content:"\ea24"}.ui-v2 .ti-arrow-down-left::before{content:"\ea13"}.ui-v2 .ti-arrow-narrow-right::before{content:"\ea1c"}
+.ui-v2 .ti-chevron-left::before{content:"\ea60"}.ui-v2 .ti-chevron-right::before{content:"\ea61"}.ui-v2 .ti-chevron-down::before{content:"\ea5f"}.ui-v2 .ti-chevron-up::before{content:"\ea62"}
+.ui-v2 .ti-chevrons-right::before{content:"\ea65"}.ui-v2 .ti-credit-card::before{content:"\ea84"}.ui-v2 .ti-cash::before{content:"\ea55"}.ui-v2 .ti-building-bank::before{content:"\ebe2"}
+.ui-v2 .ti-coin::before{content:"\eb82"}.ui-v2 .ti-pig-money::before{content:"\f38c"}.ui-v2 .ti-transfer::before{content:"\fc1f"}.ui-v2 .ti-arrows-exchange::before{content:"\f1f4"}
+.ui-v2 .ti-send::before{content:"\eb1e"}.ui-v2 .ti-receipt-2::before{content:"\edfa"}.ui-v2 .ti-dots::before{content:"\ea95"}.ui-v2 .ti-dots-vertical::before{content:"\ea94"}
+.ui-v2 .ti-menu-2::before{content:"\ec42"}.ui-v2 .ti-adjustments-horizontal::before{content:"\ec38"}.ui-v2 .ti-filter::before{content:"\eaa5"}.ui-v2 .ti-microphone::before{content:"\eaf0"}
+.ui-v2 .ti-message-chatbot::before{content:"\f38a"}.ui-v2 .ti-message-circle::before{content:"\eaed"}.ui-v2 .ti-sparkles::before{content:"\f6d7"}.ui-v2 .ti-target::before{content:"\eb35"}
+.ui-v2 .ti-repeat::before{content:"\eb72"}.ui-v2 .ti-tag::before{content:"\10096"}.ui-v2 .ti-tags::before{content:"\ef86"}.ui-v2 .ti-moon::before{content:"\eaf8"}
+.ui-v2 .ti-sun::before{content:"\eb30"}.ui-v2 .ti-cloud-upload::before{content:"\ea75"}.ui-v2 .ti-cloud-download::before{content:"\ea71"}.ui-v2 .ti-download::before{content:"\ea96"}
+.ui-v2 .ti-upload::before{content:"\eb47"}.ui-v2 .ti-calendar::before{content:"\ea53"}.ui-v2 .ti-calendar-event::before{content:"\ea52"}.ui-v2 .ti-clock::before{content:"\ea70"}
+.ui-v2 .ti-history::before{content:"\ebea"}.ui-v2 .ti-trash::before{content:"\eb41"}.ui-v2 .ti-edit::before{content:"\ea98"}.ui-v2 .ti-pencil::before{content:"\eb04"}
+.ui-v2 .ti-copy::before{content:"\ea7a"}.ui-v2 .ti-eye::before{content:"\ea9a"}.ui-v2 .ti-eye-off::before{content:"\ecf0"}.ui-v2 .ti-refresh::before{content:"\eb13"}
+.ui-v2 .ti-external-link::before{content:"\ea99"}.ui-v2 .ti-link::before{content:"\eade"}.ui-v2 .ti-alert-triangle::before{content:"\ea06"}.ui-v2 .ti-info-circle::before{content:"\eac5"}
+.ui-v2 .ti-circle-check::before{content:"\ea67"}.ui-v2 .ti-lock::before{content:"\eae2"}.ui-v2 .ti-lock-open::before{content:"\eae1"}.ui-v2 .ti-shield::before{content:"\eb24"}
+.ui-v2 .ti-star::before{content:"\eb2e"}.ui-v2 .ti-bookmark::before{content:"\ea3a"}.ui-v2 .ti-heart::before{content:"\eabe"}.ui-v2 .ti-gift::before{content:"\eb68"}
+.ui-v2 .ti-percentage::before{content:"\ecf4"}.ui-v2 .ti-flame::before{content:"\ec2c"}.ui-v2 .ti-bolt::before{content:"\ea38"}.ui-v2 .ti-droplet::before{content:"\ea97"}
+.ui-v2 .ti-report::before{content:"\eece"}.ui-v2 .ti-file-text::before{content:"\eaa2"}.ui-v2 .ti-qrcode::before{content:"\eb11"}.ui-v2 .ti-scan::before{content:"\ebc8"}
+.ui-v2 .ti-camera::before{content:"\ea54"}.ui-v2 .ti-photo::before{content:"\eb0a"}.ui-v2 .ti-dots-circle-horizontal::before{content:"\ea91"}.ui-v2 .ti-plus-minus::before{content:"\f7ae"}
+.ui-v2 .ti-wallet-off::before{content:"\f1c4"}.ui-v2 .ti-chart-dots::before{content:"\ee2f"}.ui-v2 .ti-currency-baht::before{content:"\f08a"}
+
+/* ── Brand header (route pages) — §2.3 ────────────────────────────────────── */
+.ui-v2 .v2-header {
+  background: var(--primary);
+  color: #fff;
+  padding: calc(16px + var(--safe-t)) var(--app-gutter) 16px;
+  border-radius: 0;
+}
+.ui-v2 .v2-header.brand-income { background: #15803D; }   /* darker than --income for white-text contrast (WCAG) */
+.ui-v2 .v2-header.brand-dark   { background: var(--dark-card); }
+.ui-v2 .v2-header .v2-h-sub    { font-size: 12px; opacity: .8; }
+.ui-v2 .v2-header .v2-h-amount { font-size: 30px; font-weight: 500; letter-spacing: -.5px; line-height: 1.15; }
+.ui-v2 .v2-header .v2-h-amount small { font-size: 18px; opacity: .7; font-weight: 500; }
+/* sheet that overlaps the header */
+.ui-v2 .v2-sheet { background: var(--bg); margin-top: -12px; border-radius: 20px 20px 0 0; padding: 14px var(--app-gutter) 8px; position: relative; }
+
+/* ── Header overlay bento (inside brand header) ───────────────────────────── */
+.ui-v2 .v2-hbento { display: flex; gap: 8px; margin-top: 12px; }
+.ui-v2 .v2-hbento > div { flex: 1; background: #ffffff1f; border-radius: 10px; padding: 8px 10px; }
+.ui-v2 .v2-hbento .lbl { font-size: 10px; opacity: .85; }
+.ui-v2 .v2-hbento .val { font-size: 14px; font-weight: 500; }
+
+/* ── Bento card — §3.1 ────────────────────────────────────────────────────── */
+.ui-v2 .v2-bento { display: flex; gap: 8px; }
+.ui-v2 .v2-bento-card {
+  flex: 1;
+  background: var(--primary-soft);
+  border-radius: 14px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+.ui-v2 .v2-bento-card.income  { background: var(--income-soft); }
+.ui-v2 .v2-bento-card.expense { background: var(--expense-soft); }
+.ui-v2 .v2-bento-card.purple  { background: var(--purple-soft); }
+.ui-v2 .v2-bento-card.amber   { background: var(--amber-soft); }
+.ui-v2 .v2-bento-card .lbl { font-size: 10px; font-weight: 500; color: var(--primary); display: flex; align-items: center; gap: 4px; }
+.ui-v2 .v2-bento-card.income  .lbl { color: var(--income); }
+.ui-v2 .v2-bento-card.expense .lbl { color: var(--expense); }
+.ui-v2 .v2-bento-card.purple  .lbl { color: var(--purple); }
+.ui-v2 .v2-bento-card.amber   .lbl { color: var(--amber); }
+.ui-v2 .v2-bento-card .val { font-size: 14px; color: var(--text); margin-top: 3px; line-height: 1.35; }
+.ui-v2 .v2-bento-card .val.big { font-size: 22px; font-weight: 500; }
+
+/* ── AI bar — §3.2 ────────────────────────────────────────────────────────── */
+.ui-v2 .v2-ai-bar {
+  background: var(--dark-card);
+  color: #fff;
+  border-radius: 14px;
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+}
+.ui-v2 .v2-ai-bar .txt { font-size: 13px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ui-v2 .v2-ai-bar .txt .ti { font-size: 17px; flex-shrink: 0; }
+.ui-v2 .v2-ai-bar .txt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── List card + rows — §3.3 ──────────────────────────────────────────────── */
+.ui-v2 .v2-list-card { background: var(--surface); border-radius: 14px; padding: 2px 12px; box-shadow: var(--shadow-xs); }
+.ui-v2 .v2-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.ui-v2 .v2-row:last-child { border-bottom: 0; }
+.ui-v2 .v2-row .v2-ic { width: 36px; height: 36px; border-radius: 12px; background: var(--primary-soft); display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+.ui-v2 .v2-row .v2-ic.income  { background: var(--income-soft); }
+.ui-v2 .v2-row .v2-ic.expense { background: var(--expense-soft); }
+.ui-v2 .v2-row .v2-ic.purple  { background: var(--purple-soft); }
+.ui-v2 .v2-row .v2-rmid { flex: 1; min-width: 0; }
+.ui-v2 .v2-row .v2-rname { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-v2 .v2-row .v2-rsub  { font-size: 10px; color: var(--muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-v2 .v2-row .v2-ramt  { font-size: 13px; font-weight: 500; flex-shrink: 0; }
+.ui-v2 .v2-row .v2-ramt.income  { color: var(--income); }
+.ui-v2 .v2-row .v2-ramt.expense { color: var(--expense); }
+.ui-v2 .v2-row .v2-ramt.transfer{ color: var(--primary); }
+
+/* ── Segmented pill chips — §3.4 ──────────────────────────────────────────── */
+.ui-v2 .v2-seg { display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.ui-v2 .v2-seg::-webkit-scrollbar { display: none; }
+.ui-v2 .v2-seg .pill {
+  flex: 0 0 auto;
+  font-size: 11px;
+  background: var(--elevated);
+  color: var(--muted);
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: none;
+  white-space: nowrap;
+}
+.ui-v2 .v2-seg .pill.active { background: var(--primary); color: #fff; font-weight: 500; }
+.ui-v2 .v2-seg .pill.income.active  { background: var(--income); }
+.ui-v2 .v2-seg .pill.expense.active { background: var(--expense); }
+
+/* ── Section label — §3.7 ─────────────────────────────────────────────────── */
+.ui-v2 .v2-seclabel { font-size: 10px; font-weight: 500; color: var(--muted); letter-spacing: .5px; margin: 10px 0 6px; }
+
+/* ── Settings group rows (More) ───────────────────────────────────────────── */
+.ui-v2 .v2-group { background: var(--surface); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-xs); }
+.ui-v2 .v2-grow { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.ui-v2 .v2-grow:last-child { border-bottom: 0; }
+.ui-v2 .v2-grow .v2-gic { width: 30px; height: 30px; border-radius: 9px; background: var(--primary-soft); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.ui-v2 .v2-grow .v2-gic.income { background: var(--income-soft); color: var(--income); }
+.ui-v2 .v2-grow .v2-gic.amber  { background: var(--amber-soft); color: var(--amber); }
+.ui-v2 .v2-grow .v2-gic.purple { background: var(--purple-soft); color: var(--purple); }
+.ui-v2 .v2-grow .v2-glabel { flex: 1; font-size: 13px; color: var(--text); }
+.ui-v2 .v2-grow .ti-chevron-right { color: var(--muted); opacity: .6; font-size: 16px; }
+
+/* ── Quick-action grid (icon circles) ─────────────────────────────────────── */
+.ui-v2 .v2-qa { display: flex; justify-content: space-between; gap: 8px; text-align: center; }
+.ui-v2 .v2-qa > button { flex: 1; background: none; border: none; padding: 0; color: var(--text); }
+.ui-v2 .v2-qa .v2-qic { width: 44px; height: 44px; margin: 0 auto 4px; background: var(--surface); border-radius: 14px; display: flex; align-items: center; justify-content: center; color: var(--primary); font-size: 19px; box-shadow: var(--shadow-xs); }
+.ui-v2 .v2-qa .v2-qlbl { font-size: 10px; color: var(--text); }
+
+/* ── Pills / badges ───────────────────────────────────────────────────────── */
+.ui-v2 .v2-badge { font-size: 10px; font-weight: 500; padding: 3px 9px; border-radius: 8px; }
+.ui-v2 .v2-badge.income  { background: var(--income-soft); color: var(--income); }
+.ui-v2 .v2-badge.expense { background: var(--expense-soft); color: var(--expense); }
+.ui-v2 .v2-badge.purple  { background: var(--purple-soft); color: var(--purple); }
+.ui-v2 .v2-badge.primary { background: var(--primary-soft); color: var(--primary); }
+.ui-v2 .v2-badge.alert   { background: var(--expense); color: #fff; border-radius: 6px; }
+
+/* ── Progress bar — §3.7 ──────────────────────────────────────────────────── */
+.ui-v2 .v2-prog { height: 6px; background: var(--elevated); border-radius: 4px; overflow: hidden; }
+.ui-v2 .v2-prog > i { display: block; height: 100%; background: var(--primary); }
+.ui-v2 .v2-prog.income > i  { background: var(--income); }
+.ui-v2 .v2-prog.expense > i { background: var(--expense); }
+
+/* ── Primary dark button (sheets/forms) — §3.6 ────────────────────────────── */
+.ui-v2 .v2-btn-dark { background: var(--dark-card); color: #fff; width: 100%; border: none; border-radius: 14px; padding: 13px; font-size: 15px; font-weight: 500; }
+.ui-v2 .v2-btn-dark:active { transform: scale(.99); }
+
+/* ── User-defined category color: dot ONLY — §3.8 ─────────────────────────── */
+.ui-v2 .v2-catdot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+
+/* ── hideMoney: keep privacy blur working on new amount elements ───────────── */
+.ui-v2.hide-money .v2-h-amount,
+.ui-v2.hide-money .v2-bento-card .val.big,
+.ui-v2.hide-money .v2-ramt { filter: blur(7px); }
+
+/* ── Archetype shells (sub-screen / sheet) restyle when v2 is on ──────────── */
+.ui-v2 .sub-header { padding: calc(12px + var(--safe-t)) var(--app-gutter) 12px; }
+.ui-v2 .sub-header h2 { font-size: 18px; font-weight: 500; }
+
+/* ── Dark-mode adaptations for "dark by design" surfaces ──────────────────── */
+/* On a near-black page, --dark-card fills blend into --bg. Give them definition:
+   the primary action button switches to --primary; the AI bar gets a hairline. */
+html.dark.ui-v2 .v2-btn-dark { background: var(--primary); }
+html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 1 — Dashboard (route page)
+   Restructure to the mockup hierarchy WITHOUT touching renderDashboard logic:
+   reorder existing blocks via flex `order`, reskin the (already-blue) net-card
+   into an airy hero, and let the JS-injected .mt-v2-actions (AI bar + quick
+   actions) sit right under it. Every existing class is preserved.
+   ════════════════════════════════════════════════════════════════════════════ */
+.ui-v2 #dashboard-content { display: flex; flex-direction: column; }
+.ui-v2 #dashboard-content > .mt-topbar    { order: -3; }
+.ui-v2 #dashboard-content > .mt-net-card  { order: -2; }
+.ui-v2 #dashboard-content > .mt-v2-actions{ order: -1; }
+.ui-v2 #dashboard-content > .dash-month-nav { order: 0; }
+
+/* Greeting bar (reuses .mt-topbar) */
+.ui-v2 .mt-topbar { padding-top: calc(6px + var(--safe-t)); margin-bottom: 4px; }
+.ui-v2 .mt-title { font-size: 16px; font-weight: 500; }
+.ui-v2 .mt-subtitle { font-size: 11px; }
+
+/* Hero (reuses the existing blue .mt-net-card) — airy reflow */
+.ui-v2 .mt-net-card { border-radius: var(--radius-lg); padding: 18px 18px 16px; }
+.ui-v2 .mt-net-hero { grid-template-columns: 1fr auto; min-height: auto; gap: 10px; align-items: start; }
+.ui-v2 .mt-net-chart { display: none; }
+.ui-v2 .mt-net-value { font-size: 32px; line-height: 1.1; font-weight: 500; }
+.ui-v2 .mt-net-status { align-self: start; }
+
+/* Net metrics → header bento (inside the blue card) */
+.ui-v2 .mt-net-split { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding: 0; border: 0; }
+.ui-v2 .mt-net-metric { flex: 1 1 calc(50% - 4px); background: #ffffff1f; border-radius: 10px; padding: 8px 10px; margin: 0; border: 0; }
+.ui-v2 .mt-net-metric::before, .ui-v2 .mt-net-metric::after { display: none; }
+.ui-v2 .mt-net-metric small { color: rgba(255,255,255,.82); }
+.ui-v2 .mt-net-metric strong { color: #fff; }
+.ui-v2 .mt-net-metric em { color: rgba(255,255,255,.72); font-style: normal; }
+.ui-v2 .mt-net-metric-icon { color: rgba(255,255,255,.85); }
+
+/* AI bar + quick actions block (JS-injected) */
+.ui-v2 .mt-v2-actions { display: flex; flex-direction: column; gap: 12px; margin: 14px 0 6px; }
+
+/* Month nav → seg-pill */
+.ui-v2 .dash-month-nav { margin: 6px 0 10px; }
+.ui-v2 .dash-month-nav .chip { background: var(--elevated); color: var(--muted); border: none; border-radius: 999px; font-size: 11px; padding: 5px 12px; font-weight: 400; }
+.ui-v2 .dash-month-nav .chip.active { background: var(--primary); color: #fff; font-weight: 500; }
+
+/* Section headers */
+.ui-v2 .section-header h3 { font-size: 14px; font-weight: 500; }
+.ui-v2 .section-header button { color: var(--primary); font-weight: 500; }
+
+/* Transaction rows (shared _txRow) — v2 icon treatment, user-color stays as emoji only */
+.ui-v2 .tx-icon { border-radius: 12px !important; background: var(--primary-soft) !important; }
+.ui-v2 .tx-title { font-weight: 400; }
+
+/* Mini wallet grid + budget card radii */
+.ui-v2 .mt-wallet-mini { border-radius: 14px; }
+.ui-v2 #dashboard-content .card { border-radius: 16px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 1 — Wallets (route page) — CSS-only reskin (no JS change)
+   .page-header bundles h1 + #wallets-summary + .wallet-tab-bar → one blue header.
+   Wallet cards already use the gradient system (.wallet-card-colored).
+   ════════════════════════════════════════════════════════════════════════════ */
+.ui-v2 #page-wallets .page-header {
+  background: var(--primary) !important;  /* beats .page-header{background:var(--bg)!important} (dark) — higher specificity */
+  padding: calc(10px + var(--safe-t)) var(--app-gutter) 12px !important;
+  border-radius: 0 0 20px 20px;
+  border-bottom: 0 !important;
+  backdrop-filter: none;
+}
+.ui-v2 #page-wallets .page-header h1 { color: #fff; font-size: 19px; font-weight: 500; }
+/* header action buttons → translucent white; add-btn → solid white */
+.ui-v2 #page-wallets .page-header .btn { background: #ffffff26 !important; color: #fff !important; border-color: transparent !important; box-shadow: none !important; }
+.ui-v2 #page-wallets .page-header .wallets-header-add-btn { background: #fff !important; color: var(--primary) !important; }
+
+/* Summary → bento on blue */
+.ui-v2 #wallets-summary .wallet-summary-card { background: #ffffff1f; border: 0; box-shadow: none; border-radius: 12px; padding: 9px 12px; }
+.ui-v2 #wallets-summary .wallet-summary-card span { color: rgba(255,255,255,.82); opacity: 1; }
+.ui-v2 #wallets-summary .wallet-summary-card strong { color: #fff !important; }
+
+/* Tab bar → seg-pill on blue */
+.ui-v2 .wallet-tab-bar { margin-top: 12px; gap: 6px; }
+.ui-v2 .wallet-tab { background: #ffffff24; color: #fff; border: 0; border-radius: 999px; font-size: 11px; padding: 5px 12px; opacity: 1; font-weight: 400; }
+.ui-v2 .wallet-tab.active { background: #fff; color: var(--primary); font-weight: 500; }
+
+/* Content + section labels */
+.ui-v2 #wallets-content { padding-top: 14px; }
+.ui-v2 .wallet-section-title { font-size: 11px !important; font-weight: 500 !important; color: var(--muted) !important; letter-spacing: .4px; margin: 16px 0 8px !important; }
+
+/* Wallet cards (already gradient) — v2 radius/shadow polish */
+.ui-v2 .wallet-card { border-radius: 16px; box-shadow: var(--shadow-sm); }
+.ui-v2 .wallet-empty-card { border-radius: 14px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 1 — More (route page) — CSS-only reskin
+   .more-sticky-header (title+search) + .more-tab-strip + .sec-title/.card.card-pad
+   /.settings-row(.s-icon/.s-label/.s-arrow). Utility page → light header, v2 groups.
+   ════════════════════════════════════════════════════════════════════════════ */
+.ui-v2 .more-title { font-size: 19px; font-weight: 500; }
+.ui-v2 .more-tab-strip { gap: 6px; }
+.ui-v2 .more-tab-btn { background: var(--elevated); color: var(--muted); border: 0; border-radius: 999px; font-size: 12px; padding: 6px 14px; font-weight: 400; }
+.ui-v2 .more-tab-btn.active { background: var(--primary); color: #fff; font-weight: 500; }
+.ui-v2 #more-content .sec-title { font-size: 11px !important; font-weight: 500 !important; color: var(--muted) !important; letter-spacing: .4px; margin: 16px 0 8px !important; }
+.ui-v2 #more-content .card.card-pad { border-radius: 14px; box-shadow: var(--shadow-xs); padding: 2px 12px; }
+.ui-v2 #more-content .settings-row { padding: 11px 2px; border-bottom: 1px solid var(--border); gap: 12px; }
+.ui-v2 #more-content .card.card-pad > .settings-row:last-child { border-bottom: 0; }
+.ui-v2 #more-content .s-icon { width: 30px; height: 30px; border-radius: 9px; background: var(--primary-soft); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.ui-v2 #more-content .s-arrow { color: var(--muted); opacity: .55; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 1 — Transactions (route page) — CSS-only reskin
+   .tx-sticky-slim (search+filter) + chips + .tx-summary-card + .tx-date-header
+   + .tx-group-card + .tx-row (shared, styled in Dashboard section).
+   ════════════════════════════════════════════════════════════════════════════ */
+.ui-v2 #tx-list-content .chips .chip { background: var(--elevated); color: var(--muted); border: 0; border-radius: 999px; font-size: 11px; padding: 5px 12px; font-weight: 400; }
+.ui-v2 #tx-list-content .chips .chip.active { background: var(--primary); color: #fff; font-weight: 500; }
+.ui-v2 .tx-summary-card { border-radius: 12px; }
+.ui-v2 .tx-summary-card.income { background: var(--income-soft); }
+.ui-v2 .tx-summary-card.expense { background: var(--expense-soft); }
+.ui-v2 .tx-date-header { font-size: 11px; color: var(--muted); font-weight: 500; letter-spacing: .3px; margin: 14px 4px 6px; }
+.ui-v2 .tx-group-card { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-xs); overflow: hidden; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 1 — Reports (route page) — CSS-only reskin
+   #report-view-chips / #report-month-chips (.chip) → seg-pill;
+   .report-category-title + .card.card-pad in #reports-content.
+   ════════════════════════════════════════════════════════════════════════════ */
+.ui-v2 #report-view-chips .chip, .ui-v2 #report-month-chips .chip { background: var(--elevated); color: var(--muted); border: 0; border-radius: 999px; font-size: 11px; padding: 5px 12px; font-weight: 400; }
+.ui-v2 #report-view-chips .chip.active, .ui-v2 #report-month-chips .chip.active { background: var(--primary); color: #fff; font-weight: 500; }
+.ui-v2 #reports-content .card.card-pad { border-radius: 16px; box-shadow: var(--shadow-xs); }
+.ui-v2 #reports-content .report-category-title { font-size: 13px !important; font-weight: 500 !important; color: var(--text) !important; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 2 — Core flows (add-tx · tx/wallet/CC detail · CC pay)
+   CSS-only polish: existing flows already use semantic type colours + big amount.
+   Align radii, icon chips, reward bento; no JS/logic change.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Generic sub-screen content — wallet detail / tx detail / CC detail / CC pay
+   are built via openSubScreen/.sub-scroll. */
+.ui-v2 .sub-scroll .card { border-radius: 16px; }
+.ui-v2 .sub-scroll .card-pad { border-radius: 16px; }
+.ui-v2 .detail-row { padding: 11px 0; }
+.ui-v2 .list-item-icon { border-radius: 12px; }
+.ui-v2 .list-item { border-radius: 0; }
+
+/* Add-tx sheet (#add-tx-content) — type tabs already coloured by type */
+.ui-v2 #add-tx-content .type-tab { border-radius: 12px; }
+.ui-v2 #add-tx-content .numpad-key { border-radius: 14px; }
+.ui-v2 #add-tx-content .cat-btn { border-radius: 12px; }
+.ui-v2 #add-tx-content .cat-btn.active { font-weight: 500; }
+.ui-v2 #add-tx-content .flag-pill { border-radius: 999px; }
+.ui-v2 #add-tx-content .amount-summary-card { border-radius: 16px; }
+.ui-v2 #add-tx-content .add-detail-actions .btn { border-radius: 14px; }
+
+/* CC detail / benefits reward tiles → purple bento */
+.ui-v2 .reward-grid { gap: 8px; }
+.ui-v2 .reward-tile { background: var(--purple-soft); border-radius: 12px; border: 0; }
+.ui-v2 .reward-tile strong { color: var(--purple); }
+.ui-v2 .cc-cycle, .ui-v2 .wc-prog { border-radius: 12px; }
