@@ -908,9 +908,57 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
 /* P4-21  Empty state for new layout */
 .ui-v2 .empty-state { padding: 28px 16px; text-align: center; color: var(--muted); font-size: 13px; }
 
-/* P4-23  A11y — alert cards keep red bg but get higher text contrast */
-.ui-v2 .ins-card.sev-danger { background: var(--expense-soft); border-left: 3px solid var(--expense); }
-.ui-v2 .ins-card.sev-warn   { background: var(--amber-soft);   border-left: 3px solid var(--amber); }
+/* P4-23  Insight card severity — correct class names from ai_insights.js */
+.ui-v2 .ins-card.severity-critical { background: var(--expense-soft) !important; border-left: 3px solid var(--expense) !important; border-top: 0; border-right: 0; border-bottom: 0; border-radius: 12px; }
+.ui-v2 .ins-card.severity-warning  { background: var(--amber-soft)   !important; border-left: 3px solid var(--amber)   !important; border-top: 0; border-right: 0; border-bottom: 0; border-radius: 12px; }
+.ui-v2 .ins-card.severity-info     { background: var(--primary-soft)  !important; border-left: 3px solid var(--primary)  !important; border-top: 0; border-right: 0; border-bottom: 0; border-radius: 12px; }
+.ui-v2 .ins-card.severity-positive { background: var(--income-soft)   !important; border-left: 3px solid var(--income)   !important; border-top: 0; border-right: 0; border-bottom: 0; border-radius: 12px; }
+html.dark.ui-v2 .ins-card.severity-critical { background: rgba(220,38,38,.13)  !important; }
+html.dark.ui-v2 .ins-card.severity-warning  { background: rgba(245,158,11,.12) !important; }
+html.dark.ui-v2 .ins-card.severity-info     { background: rgba(37,99,235,.12)  !important; }
+html.dark.ui-v2 .ins-card.severity-positive { background: rgba(5,150,105,.12)  !important; }
+
+/* Fix 4 — Alert cards (.mt-alert-card): tone down the alarm-red, use amber bento */
+.ui-v2 .mt-alert-card {
+  background: var(--amber-soft) !important;
+  border-color: color-mix(in srgb, var(--amber) 30%, var(--border)) !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+}
+.ui-v2 .mt-alert-title { color: var(--amber) !important; font-size: 13px !important; font-weight: 600 !important; }
+.ui-v2 .mt-alert-title em  { background: var(--amber)   !important; color: #fff !important; border-radius: 999px; font-size: 10px !important; padding: 2px 7px !important; }
+.ui-v2 .mt-alert-badge-total { background: var(--primary) !important; border-radius: 999px; font-size: 10px !important; padding: 2px 7px !important; }
+.ui-v2 .mt-alert-row-name { font-size: 13px !important; font-weight: 500 !important; }
+.ui-v2 .mt-alert-row-amt  { font-size: 14px !important; font-weight: 600 !important; }
+html.dark.ui-v2 .mt-alert-title { color: var(--amber) !important; }
+
+/* Recurring alert — same amber bento treatment */
+.ui-v2 .mt-recurring-alert {
+  background: var(--amber-soft);
+  border-color: color-mix(in srgb, var(--amber) 28%, var(--border));
+  border-radius: 14px;
+  box-shadow: none;
+}
+.ui-v2 .mt-recurring-alert-icon { border-radius: 10px; background: color-mix(in srgb, var(--amber) 15%, var(--bg)); }
+.ui-v2 .mt-recurring-overdue-badge { border-radius: 999px; font-size: 10px; padding: 2px 7px; }
+
+/* Fix 5 — Offline dot in v2 greeting */
+.ui-v2 .v2-offline-dot {
+  display: inline-block;
+  font-size: 10px;
+  background: color-mix(in srgb, var(--expense) 15%, transparent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-left: 7px;
+  vertical-align: middle;
+  font-weight: 500;
+}
+
+/* Fix 3 — Budget rows: radius on progress + card tightening */
+.ui-v2 #dashboard-content .progress-bar  { border-radius: 999px; overflow: hidden; height: 5px; background: var(--elevated); }
+.ui-v2 #dashboard-content .progress-fill { border-radius: 999px; }
+.ui-v2 #dashboard-content .daily-budget-chip { border-radius: 999px; font-size: 10px; padding: 2px 7px; }
 
 /* P4-24  Dark mode — brand header stays vivid, not washed out */
 html.dark.ui-v2 .mt-net-card {

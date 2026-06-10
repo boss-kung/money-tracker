@@ -4458,9 +4458,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
     html += `
       <div class="mt-net-card" aria-label="สรุปการเงิน">
         ${v2 ? `<div class="v2-dash-greet">
-          <div class="g-hi">${v2greet}</div>
+          <div class="g-hi">${v2greet}<span id="mt-offline-dot" class="mt-offline-dot v2-offline-dot"${S._isOffline ? '' : ' hidden'}>● ออฟไลน์</span></div>
           <div class="g-actions">
-            <button class="g-icon" type="button" onclick="App.toggleHideMoney()" aria-label="ซ่อน/แสดงยอดเงิน">${S.settings.hideMoney ? '👁' : '🙈'}</button>
+            <button class="g-icon" type="button" onclick="App.toggleHideMoney()" aria-label="ซ่อน/แสดงยอดเงิน"><i class="ti ${S.settings.hideMoney ? 'ti-eye-off' : 'ti-eye'}" aria-hidden="true"></i></button>
             <button class="g-icon" type="button" onclick="App.openUpcomingScreen()" aria-label="รายการที่จะถึง"><i class="ti ti-bell" aria-hidden="true"></i></button>
             <button class="g-avatar" type="button" onclick="App.showPage('more')" aria-label="โปรไฟล์และตั้งค่า"><i class="ti ti-user" aria-hidden="true"></i></button>
           </div>
