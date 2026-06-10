@@ -601,3 +601,96 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
 /* Just ensure toggle (on/off switch) and preview card look polished */
 .ui-v2 #sb-preview-card { border-radius: 14px !important; }
 .ui-v2 .toggle { border-radius: 999px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PHASE 6 — Forms & Dialogs
+   All form inputs · sheets · overlays · tx-detail · wallet form tabs ·
+   confirm dialogs · button groups. CSS-only; no JS/logic change.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Form inputs — 16 px radius + richer focus ring ─────────────────── */
+.ui-v2 .form-input,
+.ui-v2 select.form-input,
+.ui-v2 textarea.form-input {
+  border-radius: 16px !important;
+  background: color-mix(in srgb, var(--primary) 3%, var(--surface-soft)) !important;
+  border-color: color-mix(in srgb, var(--primary) 10%, var(--border)) !important;
+}
+.ui-v2 .form-input:focus,
+.ui-v2 select.form-input:focus,
+.ui-v2 textarea.form-input:focus {
+  border-color: var(--primary) !important;
+  background: var(--card) !important;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 14%, transparent) !important;
+}
+/* Search inputs stay fully pill-shaped */
+.ui-v2 .search-input,
+.ui-v2 .more-search-input { border-radius: 999px !important; }
+
+/* ── Sheet overlays ──────────────────────────────────────────────────── */
+/* Backdrop: deeper scrim + more blur */
+.ui-v2 .overlay-backdrop {
+  background: rgba(10, 15, 30, .52) !important;
+  backdrop-filter: blur(12px) saturate(1.1) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.1) !important;
+}
+/* Sheet handle — slightly wider */
+.ui-v2 .sheet-handle { width: 44px !important; background: color-mix(in srgb, var(--border) 70%, transparent) !important; }
+/* Sheet header title */
+.ui-v2 .sheet-header h2 { letter-spacing: -.03em !important; }
+
+/* ── Wallet form — limit-mode tabs → seg-pill ────────────────────────── */
+.ui-v2 .v5-limit-mode-tabs {
+  padding: 4px;
+  background: var(--elevated);
+  border-radius: 999px;
+  gap: 4px;
+}
+.ui-v2 .v5-lm-tab {
+  border-radius: 999px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  transition: background .15s, color .15s;
+}
+.ui-v2 .v5-lm-tab.active {
+  background: var(--primary) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 28%, transparent) !important;
+}
+
+/* ── Transaction detail sheet ────────────────────────────────────────── */
+/* Hero area: type-tinted soft card */
+.ui-v2 .tx-detail-hero {
+  border-radius: 18px;
+  margin: 4px 0 0;
+  padding: 16px 12px 18px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--elevated));
+}
+/* Amount colour follows tx type via inline style already — just ensure radius on hero */
+.ui-v2 .tx-detail-section  { border-radius: 16px; }
+.ui-v2 .tx-detail-alert    { border-radius: 12px; }
+.ui-v2 .tx-detail-badge    { border-radius: 999px; }
+/* Danger zone (delete confirm buttons) — red-tinted card */
+.ui-v2 .tx-detail-danger {
+  background: color-mix(in srgb, var(--expense) 7%, var(--elevated));
+  border: 1px solid color-mix(in srgb, var(--expense) 22%, var(--border));
+  border-radius: 14px;
+  padding: 12px;
+}
+.ui-v2 .tx-detail-danger .btn-danger { border-radius: 12px; }
+
+/* ── Button groups & flex-rows in forms ──────────────────────────────── */
+.ui-v2 .flex-row .btn     { border-radius: 14px; }
+.ui-v2 .form-inline-row .btn { border-radius: 12px; }
+/* Save button at bottom of any sheet */
+.ui-v2 .sheet-body .btn-primary { border-radius: 16px; }
+.ui-v2 .sheet-body .btn-secondary,
+.ui-v2 .sheet-body .btn-outline  { border-radius: 14px; }
+
+/* ── Category / merchant emoji pickers ───────────────────────────────── */
+.ui-v2 .emoji-current  { border-radius: 16px; }
+.ui-v2 .emoji-grid button { border-radius: 12px; }
+
+/* ── More page search bar ────────────────────────────────────────────── */
+.ui-v2 .more-search-input + .search-clear-btn { border-radius: 999px; }
