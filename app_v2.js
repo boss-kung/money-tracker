@@ -4244,6 +4244,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const v2 = document.documentElement.classList.contains('ui-v2')
     const v2hour = new Date().getHours()
     const v2greet = v2hour < 12 ? 'สวัสดีตอนเช้า' : v2hour < 17 ? 'สวัสดีตอนบ่าย' : 'สวัสดีตอนค่ำ'
+    // Inline SVG icons for eye / eye-off (Tabler paths, stroke="currentColor" → white on header)
+    const _svgAttr = 'xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"'
+    const v2SvgEye    = `<svg ${_svgAttr}><path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0"/><path d="M21 12c-2.4 4-5.4 6-9 6c-3.6 0-6.6-2-9-6c2.4-4 5.4-6 9-6c3.6 0 6.6 2 9 6"/></svg>`
+    const v2SvgEyeOff = `<svg ${_svgAttr}><path d="M10.585 10.587a2 2 0 0 0 2.829 2.828"/><path d="M16.681 16.673a8.717 8.717 0 0 1-4.681 1.327c-3.6 0-6.6-2-9-6 1.272-2.12 2.712-3.678 4.32-4.674m2.86-1.146a9.055 9.055 0 0 1 1.82-.18c3.6 0 6.6 2 9 6-.666 1.11-1.379 2.067-2.138 2.87"/><path d="M3 3l18 18"/></svg>`
 
     let html = `
       ${v2 ? '' : `<div class="mt-topbar">
@@ -4460,7 +4464,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         ${v2 ? `<div class="v2-dash-greet">
           <div class="g-hi">${v2greet}<span id="mt-offline-dot" class="mt-offline-dot v2-offline-dot"${S._isOffline ? '' : ' hidden'}>● ออฟไลน์</span></div>
           <div class="g-actions">
-            <button class="g-icon" type="button" onclick="App.toggleHideMoney()" aria-label="ซ่อน/แสดงยอดเงิน"><i class="ti ${S.settings.hideMoney ? 'ti-eye-off' : 'ti-eye'}" aria-hidden="true"></i></button>
+            <button class="g-icon" type="button" onclick="App.toggleHideMoney()" aria-label="ซ่อน/แสดงยอดเงิน">${S.settings.hideMoney ? v2SvgEyeOff : v2SvgEye}</button>
             <button class="g-icon" type="button" onclick="App.openUpcomingScreen()" aria-label="รายการที่จะถึง"><i class="ti ti-bell" aria-hidden="true"></i></button>
             <button class="g-avatar" type="button" onclick="App.showPage('more')" aria-label="โปรไฟล์และตั้งค่า"><i class="ti ti-user" aria-hidden="true"></i></button>
           </div>
