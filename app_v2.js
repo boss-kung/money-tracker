@@ -4261,9 +4261,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
         </div>
       </div>`}
       ${S._ledgerIssues?.length ? `<div class="mt-integrity-warn" onclick="App._showLedgerIssues()">⚠ พบรายการ ${S._ledgerIssues.length} รายการอ้างถึงกระเป๋าที่ไม่มีอยู่แล้ว — แตะเพื่อดูรายละเอียด</div>` : ''}
-      <div class="dash-month-nav">${months.map(m =>
+      ${v2 ? '' : `<div class="dash-month-nav">${months.map(m =>
         `<button class="chip${m === dm ? ' active' : ''}" onclick="App.setDashMonth('${ESC(m)}')">${ESC(mlabel(m))}</button>`
-      ).join('')}</div>`
+      ).join('')}</div>`}`
 
     // Recurring due alerts (current month only)
     if (isCurrentMonth) {
@@ -4469,6 +4469,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
             <button class="g-avatar" type="button" onclick="App.showPage('more')" aria-label="โปรไฟล์และตั้งค่า"><i class="ti ti-user" aria-hidden="true"></i></button>
           </div>
         </div>` : ''}
+        ${v2 ? `<div class="v2-month-nav">${months.map(m =>
+          `<button class="chip${m === dm ? ' active' : ''}" onclick="App.setDashMonth('${ESC(m)}')">${ESC(mlabel(m))}</button>`
+        ).join('')}</div>` : ''}
         <div class="mt-net-hero">
           <div class="mt-net-main">
             <div class="mt-net-label">สินทรัพย์สุทธิ</div>
@@ -4513,6 +4516,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
       </div>`
       // Density moved out of the hero (ref: calm header = balance + 2 bento):
       // health ring / debt / unpaid-bill become a bento row in the body sheet.
+      // Overview group label — ties the two bento rows (stats + wallet buckets)
+      // into one intentional "ภาพรวม" section (both share order:-8 in CSS).
+      html += `<div class="v2-overview-label">ภาพรวม</div>`
       html += `<div class="v2-bento mt-dash-stat-bento">
         <div class="v2-bento-card" role="button" tabindex="0" onclick="App._showHealthyBreakdown&&App._showHealthyBreakdown()"><div class="lbl"><i class="ti ti-heart" aria-hidden="true"></i> สถานะการเงิน</div><div class="val big">${healthyPct == null ? '—' : healthyPct + '%'}</div></div>
         <div class="v2-bento-card amber"><div class="lbl"><i class="ti ti-credit-card" aria-hidden="true"></i> หนี้สิน</div><div class="val big">${S.settings?.hideMoney ? '฿*****' : FMT(debtTotal)}</div></div>
@@ -4567,19 +4573,19 @@ Calc.getUsableMoney = function(wallets, state = null) {
       html += `<div class="card card-pad">`
       budgetRows.forEach(b => {
         const barColor = b.over ? 'var(--expense)' : b.pct > 80 ? 'var(--amber)' : 'var(--income)'
-        html += `<div style="margin-bottom:12px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px;gap:8px">
-            <span style="font-weight:600">${ESC(b.icon)} ${ESC(b.label)}</span>
-            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        html += `<div class="v2-budget-row" style="margin-bottom:12px">
+          <div class="v2-budget-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px;gap:8px">
+            <span class="v2-budget-name" style="font-weight:600">${ESC(b.icon)} ${ESC(b.label)}</span>
+            <div class="v2-budget-meta" style="display:flex;align-items:center;gap:6px;flex-shrink:0">
               ${dailyChip(b)}
-              <span style="color:${b.over ? 'var(--expense)' : 'var(--muted)'};font-weight:600">${FMT(b.spent)} / ${FMT(b.monthlyLimit)}</span>
+              <span class="v2-budget-amt" style="color:${b.over ? 'var(--expense)' : 'var(--muted)'};font-weight:600">${FMT(b.spent)} / ${FMT(b.monthlyLimit)}</span>
             </div>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,Math.max(0,b.pct))}%;background:${barColor}"></div></div>
           ${b.over
-            ? `<div style="font-size:11px;color:var(--expense);margin-top:3px;font-weight:600">เกิน ${FMT(b.spent - b.monthlyLimit)} <span style="font-weight:400;opacity:.8">(${Math.round(b.rawPct ?? b.pct)}%)</span></div>`
+            ? `<div class="v2-budget-note over" style="font-size:11px;color:var(--expense);margin-top:3px;font-weight:600">เกิน ${FMT(b.spent - b.monthlyLimit)} <span style="font-weight:400;opacity:.8">(${Math.round(b.rawPct ?? b.pct)}%)</span></div>`
             : b.pct > 80
-              ? `<div style="font-size:11px;color:var(--amber);margin-top:3px">เหลือ ${FMT(b.monthlyLimit - b.spent)}</div>`
+              ? `<div class="v2-budget-note warn" style="font-size:11px;color:var(--amber);margin-top:3px">เหลือ ${FMT(b.monthlyLimit - b.spent)}</div>`
               : ''}
         </div>`
       })
@@ -17245,9 +17251,9 @@ App._pickMerchant = function(name, opts = {}) {
         banner.className = 'card card-pad p2-setup-banner'
         banner.style.cssText = 'text-align:center;padding:24px 16px;margin-bottom:16px'
         banner.innerHTML = `
-          <div style="font-size:36px;margin-bottom:8px">👛</div>
-          <div style="font-size:15px;font-weight:700;margin-bottom:6px">เริ่มต้นใช้งาน Financial Tracker</div>
-          <div style="font-size:13px;color:var(--muted);margin-bottom:16px">เพิ่มกระเป๋าเงินก่อน แล้วค่อยบันทึกรายการแรก</div>
+          <div class="p2-setup-emoji" style="font-size:36px;margin-bottom:8px">👛</div>
+          <div class="p2-setup-title" style="font-size:15px;font-weight:700;margin-bottom:6px">เริ่มต้นใช้งาน Financial Tracker</div>
+          <div class="p2-setup-sub" style="font-size:13px;color:var(--muted);margin-bottom:16px">เพิ่มกระเป๋าเงินก่อน แล้วค่อยบันทึกรายการแรก</div>
           <button class="btn btn-primary" onclick="App.showPage('wallets')" style="width:auto;padding:10px 28px">+ เพิ่มกระเป๋าเงิน</button>`
         netCard.insertAdjacentElement('afterend', banner)
       }

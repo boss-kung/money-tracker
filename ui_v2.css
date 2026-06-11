@@ -214,17 +214,25 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
    natural height — which clips every card. Pin flex-shrink:0 so the container
    scrolls normally and each section renders full-height. */
 .ui-v2 #dashboard-content > * { flex-shrink: 0; }
-.ui-v2 #dashboard-content > .mt-topbar    { order: -3; }
-.ui-v2 #dashboard-content > .mt-net-card  { order: -2; }
-.ui-v2 #dashboard-content > .mt-v2-actions{ order: -1; }
-.ui-v2 #dashboard-content > .mt-dash-stat-bento { order: -1; }
-.ui-v2 #dashboard-content > .dash-month-nav { order: 0; }
+/* Deterministic vertical IA (r103): header → actions → overview(2 bento rows)
+   → attention cluster (everything at default order 0, in DOM order) → budgets
+   → recent. Only the top blocks need explicit negative order; the attention
+   cards, budgets and recent already fall in the right DOM sequence at order 0. */
+.ui-v2 #dashboard-content > .mt-topbar         { order: -12; }
+.ui-v2 #dashboard-content > .mt-net-card       { order: -11; }
+.ui-v2 #dashboard-content > .mt-v2-actions     { order: -10; }
+.ui-v2 #dashboard-content > .v2-overview-label    { order: -9; }
+.ui-v2 #dashboard-content > .mt-dash-stat-bento   { order: -9; }
+.ui-v2 #dashboard-content > .mt-wallet-mini-grid  { order: -9; }
 
 /* P1 — brand header card + sheet overlap.
    The net-card becomes a full-bleed colored header band carrying the greeting
    + hero number; a rounded --bg lip (::after) creates the "calm sheet" that the
    body content sits on. net-card stays a direct child of #dashboard-content so
    every afterend injector (upcoming/privilege/insights/setup) keeps working. */
+/* body.is-dashboard #dashboard-content has specificity (1,1,1) and would win over
+   .ui-v2 #dashboard-content (1,1,0) — add html to raise to (1,2,2) and win back. */
+html.ui-v2 body.is-dashboard #dashboard-content,
 .ui-v2 #dashboard-content { padding-top: 0 !important; }
 
 .ui-v2 .mt-net-card {
@@ -232,6 +240,8 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
   border-radius: 0;
   padding: calc(var(--safe-t) + 14px) calc(var(--app-gutter) + 4px) 22px;
   overflow: visible;
+  box-shadow: none !important;
+  border: 0 !important;
 }
 .ui-v2 .mt-net-card::after {
   content: '';
@@ -244,7 +254,14 @@ html.dark.ui-v2 .v2-ai-bar { border: 1px solid var(--border); }
 }
 
 /* Greeting row inside the header card */
-.ui-v2 .v2-dash-greet { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; position: relative; z-index: 3; }
+.ui-v2 .v2-dash-greet { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; position: relative; z-index: 3; }
+
+/* Month nav chips inside header card (v2) */
+.ui-v2 .v2-month-nav { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 12px; position: relative; z-index: 3; }
+.ui-v2 .v2-month-nav::-webkit-scrollbar { display: none; }
+.ui-v2 .v2-month-nav .chip { background: rgba(255,255,255,.15); color: rgba(255,255,255,.85); border: 1px solid rgba(255,255,255,.2); border-radius: 999px; font-size: 11px; padding: 4px 12px; font-weight: 400; white-space: nowrap; flex-shrink: 0; transition: background .15s, transform .1s; }
+.ui-v2 .v2-month-nav .chip.active { background: rgba(255,255,255,.9); color: var(--primary); font-weight: 600; border-color: transparent; }
+.ui-v2 .v2-month-nav .chip:active { transform: scale(.93); }
 .ui-v2 .v2-dash-greet .g-hi { font-size: 15px; font-weight: 500; color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-v2 .v2-dash-greet .g-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .ui-v2 .v2-dash-greet .g-icon,
@@ -959,6 +976,131 @@ html.dark.ui-v2 .mt-alert-title { color: var(--amber) !important; }
 .ui-v2 #dashboard-content .progress-bar  { border-radius: 999px; overflow: hidden; height: 5px; background: var(--elevated); }
 .ui-v2 #dashboard-content .progress-fill { border-radius: 999px; }
 .ui-v2 #dashboard-content .daily-budget-chip { border-radius: 999px; font-size: 10px; padding: 2px 7px; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DASHBOARD REDESIGN r103 — Calm Banking pass over every element
+   One visual language: weights 400/500, tighter type scale, two unified bento
+   rows under "ภาพรวม", one attention-card chrome, consistent headers & rhythm.
+   Everything scoped under .ui-v2 #dashboard-content so other screens are safe.
+   style_v2.css forces font-weight:800 / oversized clamps with !important on
+   .mt-net-value / .tx-amount / .tx-title — these rules out-specify + !important.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── A. Weight & type discipline ──────────────────────────────────────────── */
+.ui-v2 #dashboard-content .mt-net-value {
+  font-size: clamp(28px, 8.2vw, 32px) !important;
+  font-weight: 500 !important;
+  line-height: 1.08 !important;
+  letter-spacing: -.5px !important;
+  text-shadow: none !important;
+}
+.ui-v2 #dashboard-content .tx-title  { font-size: 14px !important; font-weight: 500 !important; letter-spacing: 0 !important; }
+.ui-v2 #dashboard-content .tx-amount { font-size: 15px !important; font-weight: 600 !important; }
+.ui-v2 #dashboard-content .tx-icon {
+  width: 36px !important; height: 36px !important; min-width: 36px;
+  flex: 0 0 36px !important; /* tx-icon is a flex item; basis overrides width */
+  font-size: 17px !important; border-radius: 11px !important;
+}
+.ui-v2 #dashboard-content .tx-sub,
+.ui-v2 #dashboard-content .tx-row .list-item-sub { font-size: 11px !important; }
+
+/* ── B. Overview — two unified bento rows under one "ภาพรวม" label ─────────── */
+.ui-v2 #dashboard-content .v2-overview-label {
+  font-size: 11px; font-weight: 500; color: var(--muted);
+  letter-spacing: .4px; margin: 18px 4px 8px;
+}
+/* Both rows share one chrome: surface + hairline border, value 20/500, small
+   label. Colour lives only in the label/icon — calm, banking-like, consistent. */
+.ui-v2 #dashboard-content .mt-dash-stat-bento { margin: 0 0 8px !important; }
+.ui-v2 #dashboard-content .mt-dash-stat-bento .v2-bento-card {
+  background: var(--surface) !important;
+  border: 1px solid var(--border);
+}
+.ui-v2 #dashboard-content .v2-bento-card { padding: 11px 12px; }
+.ui-v2 #dashboard-content .v2-bento-card .lbl { font-size: 10px; font-weight: 500; }
+.ui-v2 #dashboard-content .v2-bento-card .val.big { font-size: 20px !important; font-weight: 500 !important; margin-top: 5px; }
+
+.ui-v2 #dashboard-content .mt-wallet-mini-grid { margin: 0 0 4px !important; gap: 8px; }
+.ui-v2 #dashboard-content .mt-wallet-mini {
+  display: flex; flex-direction: row !important; flex-wrap: wrap;
+  align-items: center; gap: 3px 6px;
+  padding: 11px 12px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.ui-v2 #dashboard-content .mt-wallet-mini .icon  { order: 0; margin: 0 !important; font-size: 14px !important; line-height: 1; color: var(--primary); }
+.ui-v2 #dashboard-content .mt-wallet-mini .icon .ti { font-size: 14px; }
+.ui-v2 #dashboard-content .mt-wallet-mini .name  { order: 1; font-size: 10px !important; font-weight: 500; color: var(--muted); }
+.ui-v2 #dashboard-content .mt-wallet-mini .value { order: 2; flex: 1 0 100%; font-size: 20px !important; font-weight: 500 !important; margin-top: 4px; }
+
+/* ── C. Attention cluster — ONE card chrome (soft tint + 3px semantic edge) ── */
+/* Shared shell for every "needs attention" surface, whatever injector made it. */
+.ui-v2 #dashboard-content .mt-integrity-warn,
+.ui-v2 #dashboard-content .mt-summary-banner,
+.ui-v2 #dashboard-content .mt-recurring-alert,
+.ui-v2 #dashboard-content .mt-alert-card,
+.ui-v2 #dashboard-content .dashboard-upcoming-alerts,
+.ui-v2 #dashboard-content .dashboard-privilege-alerts,
+.ui-v2 #dashboard-content .ins-card {
+  border-radius: 14px !important;
+  border: 0 !important;
+  border-left: 3px solid var(--border) !important;
+  box-shadow: none !important;
+  padding: 11px 14px !important;
+  margin-bottom: 8px;
+}
+/* semantic edge + soft tint per type */
+.ui-v2 #dashboard-content .mt-integrity-warn        { background: var(--expense-soft) !important; border-left-color: var(--expense) !important; }
+.ui-v2 #dashboard-content .mt-summary-banner        { background: var(--income-soft)  !important; border-left-color: var(--income)  !important; }
+.ui-v2 #dashboard-content .mt-recurring-alert,
+.ui-v2 #dashboard-content .mt-alert-card,
+.ui-v2 #dashboard-content .dashboard-upcoming-alerts{ background: var(--amber-soft)   !important; border-left-color: var(--amber)   !important; }
+.ui-v2 #dashboard-content .dashboard-privilege-alerts{ background: var(--purple-soft) !important; border-left-color: var(--purple) !important; }
+.ui-v2 #dashboard-content .ins-card.severity-critical { background: var(--expense-soft) !important; border-left-color: var(--expense) !important; }
+.ui-v2 #dashboard-content .ins-card.severity-warning  { background: var(--amber-soft)   !important; border-left-color: var(--amber)   !important; }
+.ui-v2 #dashboard-content .ins-card.severity-info     { background: var(--primary-soft) !important; border-left-color: var(--primary) !important; }
+.ui-v2 #dashboard-content .ins-card.severity-positive { background: var(--income-soft)  !important; border-left-color: var(--income)  !important; }
+/* unified inner type — calm text titles, semantic carried by the edge */
+.ui-v2 #dashboard-content .mt-alert-title,
+.ui-v2 #dashboard-content .dashboard-privilege-alert-title,
+.ui-v2 #dashboard-content .ins-title {
+  font-size: 13.5px !important; font-weight: 500 !important; color: var(--text) !important;
+}
+.ui-v2 #dashboard-content .mt-alert-row-name,
+.ui-v2 #dashboard-content .dashboard-privilege-row-name { font-size: 13px !important; font-weight: 500 !important; color: var(--text) !important; }
+.ui-v2 #dashboard-content .mt-alert-row-amt,
+.ui-v2 #dashboard-content .dashboard-privilege-row strong { font-size: 14px !important; font-weight: 600 !important; }
+.ui-v2 #dashboard-content .ins-body,
+.ui-v2 #dashboard-content .dashboard-privilege-row-sub { font-size: 11px !important; color: var(--muted) !important; }
+/* keep the count/total pills readable but quiet */
+.ui-v2 #dashboard-content .mt-alert-title em,
+.ui-v2 #dashboard-content .mt-alert-badge-total { font-weight: 500 !important; }
+
+/* ── D. Section headers & vertical rhythm ─────────────────────────────────── */
+.ui-v2 #dashboard-content .section-header { margin: 18px 0 8px; }
+/* The injected insight/recurring use .sec-title — make it the same quiet label */
+.ui-v2 #dashboard-content .sec-title {
+  font-size: 11px !important; font-weight: 500 !important;
+  color: var(--muted) !important; letter-spacing: .4px;
+  margin: 18px 0 8px !important;
+}
+.ui-v2 #dashboard-content .ins-dashboard-section .sec-title { margin-top: 18px !important; }
+
+/* ── E. Budget rows — tokenized, no crowding ──────────────────────────────── */
+.ui-v2 #dashboard-content .v2-budget-name {
+  font-weight: 500 !important; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ui-v2 #dashboard-content .v2-budget-amt  { font-weight: 500 !important; white-space: nowrap; }
+.ui-v2 #dashboard-content .v2-budget-note.over { font-weight: 500 !important; }
+
+/* ── F. Recent list + new-user / empty states ─────────────────────────────── */
+.ui-v2 #dashboard-content .p2-setup-title { font-weight: 500 !important; }
+.ui-v2 #dashboard-content .p2-setup-banner { border-radius: 16px; }
+
+/* ── G. Header polish — normalize action-icon optical size ────────────────── */
+.ui-v2 .v2-dash-greet .g-icon svg,
+.ui-v2 .v2-dash-greet .g-icon .ti,
+.ui-v2 .v2-dash-greet .g-avatar .ti { width: 18px; height: 18px; font-size: 18px; }
 
 /* P4-24  Dark mode — brand header stays vivid, not washed out */
 html.dark.ui-v2 .mt-net-card {
