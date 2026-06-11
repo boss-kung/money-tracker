@@ -348,11 +348,11 @@ html.ui-v2 body.is-dashboard #dashboard-content,
    .more-sticky-header (title+search) + .more-tab-strip + .sec-title/.card.card-pad
    /.settings-row(.s-icon/.s-label/.s-arrow). Utility page → light header, v2 groups.
    ════════════════════════════════════════════════════════════════════════════ */
-.ui-v2 .more-title { font-size: 19px; font-weight: 500; }
+.ui-v2 .more-title { font-size: 20px; font-weight: 700; }
 .ui-v2 .more-tab-strip { gap: 6px; }
-.ui-v2 .more-tab-btn { background: var(--elevated); color: var(--muted); border: 0; border-radius: 999px; font-size: 12px; padding: 6px 14px; font-weight: 400; }
-.ui-v2 .more-tab-btn.active { background: var(--primary); color: #fff; font-weight: 500; }
-.ui-v2 #more-content .sec-title { font-size: 11px !important; font-weight: 500 !important; color: var(--muted) !important; letter-spacing: .4px; margin: 16px 0 8px !important; }
+.ui-v2 .more-tab-btn { background: var(--elevated); color: var(--muted); border: 0; border-radius: 999px; font-size: 12px; padding: 6px 14px; font-weight: 500; }
+.ui-v2 .more-tab-btn.active { background: var(--primary); color: #fff; font-weight: 600; }
+.ui-v2 #more-content .sec-title { font-size: 11px !important; font-weight: 600 !important; color: var(--muted) !important; letter-spacing: .4px; margin: 16px 0 8px !important; }
 .ui-v2 #more-content .card.card-pad { border-radius: 14px; box-shadow: var(--shadow-xs); padding: 2px 12px; }
 .ui-v2 #more-content .settings-row { padding: 11px 2px; border-bottom: 1px solid var(--border); gap: 12px; }
 .ui-v2 #more-content .card.card-pad > .settings-row:last-child { border-bottom: 0; }
