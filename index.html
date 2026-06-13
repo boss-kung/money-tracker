@@ -19,7 +19,7 @@
   </style>
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline' https://www.gstatic.com;
+    script-src 'self' 'unsafe-inline' https://www.gstatic.com https://script.google.com https://script.googleusercontent.com;
     style-src 'self' 'unsafe-inline';
     img-src 'self' data: https:;
     font-src 'self';
@@ -694,6 +694,8 @@
   // Optional but recommended for reliable Thai gold-price sync.
   // Paste your Google Apps Script Web App URL here after deploying the Gold Traders proxy.
   window.MT_GOLD_PROXY_URL = "";
+  // Optional direct Aurora HTML proxy. If empty, the app tries public proxies before cache fallback.
+  window.MT_GOLD_AURORA_PROXY_URL = "";
   // AI Credit Card Promo Search backend (Google Apps Script).
   // Source: promo-search-appscript.js — deployed at script.google.com
   // To update: re-deploy the script and paste the new Web App URL here.
@@ -721,7 +723,8 @@
 <script defer src="bnpl.js?v=2026.06.09-bnpl-features-r7"></script>
 <script defer src="crypto_vault.js?v=2026.06.04-secure-sync1"></script>
 <script defer src="auth_sync.js?v=2026.06.13-bugfix-r104"></script>
-<script defer src="app_v2.js?v=2026.06.13-bugfix-r104"></script>
+<script defer src="gold_market.js?v=2026.06.13-gold-r106"></script>
+<script defer src="app_v2.js?v=2026.06.13-gold-r106"></script>
 <script defer src="split_bill.js?v=2026.05.15-r1"></script>
 <script defer src="loans_v2.js?v=2026.06.05-r1"></script>
 <script defer src="quick_capture.js?v=2026.05.18-r13"></script>

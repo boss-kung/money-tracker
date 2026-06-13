@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline' https://www.gstatic.com;
+    script-src 'self' 'unsafe-inline' https://www.gstatic.com https://script.google.com https://script.googleusercontent.com;
     style-src 'self' 'unsafe-inline';
     img-src 'self' data: https:;
     font-src 'self';
@@ -247,6 +247,8 @@
   // Optional but recommended for reliable Thai gold-price sync.
   // Paste your Google Apps Script Web App URL here after deploying the Gold Traders proxy.
   window.MT_GOLD_PROXY_URL = "";
+  // Optional direct Aurora HTML proxy. If empty, the app tries public proxies before cache fallback.
+  window.MT_GOLD_AURORA_PROXY_URL = "";
   // AI Credit Card Promo Search backend (Google Apps Script).
   // Source: promo-search-appscript.js — deployed at script.google.com
   // To update: re-deploy the script and paste the new Web App URL here.
@@ -261,7 +263,8 @@
   }
 </script>
 <script src="../app_lock.js?v=2026.05.20-r40"></script>
-<script src="../app_v2.js?v=2026.06.04-rule-sheet-clean-r72"></script>
+<script src="../gold_market.js?v=2026.06.13-gold-r106"></script>
+<script src="../app_v2.js?v=2026.06.13-gold-r106"></script>
 <script src="../split_bill.js?v=2026.05.15-r1"></script>
 <script src="../quick_capture.js?v=2026.05.18-r13"></script>
 <script src="../notifications_v2.js?v=2026.05.20-r33"></script>

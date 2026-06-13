@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.06.13-dupfix-r105'
+const APP_VERSION = '2026.06.13-gold-r106'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 const CORE_NETWORK_TIMEOUT_MS = 900
@@ -9,6 +9,7 @@ const STATIC_ASSETS = [
   './style_v2.css',
   './ui_v2.css',
   './app_v2.js',
+  './gold_market.js',
   './storage_v2.js',
   './app_lock.js',
   './calculations.js',
@@ -208,7 +209,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url)
   const path = url.pathname.split('/').pop()
   const acceptsHtml = request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html')
-  const isCoreCode = ['app_v2.js', 'storage_v2.js', 'calculations.js', 'sample-data_v2.js', 'ai_insights.js', 'finance_intelligence.js', 'ask_my_money_core.js', 'notification_config.js', 'notifications_v2.js', 'onboarding.js', 'loans_v2.js', 'auth_sync.js', 'app_lock.js', 'credit_card_cycles.js', 'crypto_vault.js', 'split_bill.js', 'quick_capture.js', 'thai_bank_holidays.js', 'style_v2.css', 'LINESeedSansTH_Rg.ttf', 'LINESeedSansTH_Bd.ttf', 'LINESeedSansTH_XBd.ttf', 'icon-180.png'].includes(path)
+  const isCoreCode = ['app_v2.js', 'gold_market.js', 'storage_v2.js', 'calculations.js', 'sample-data_v2.js', 'ai_insights.js', 'finance_intelligence.js', 'ask_my_money_core.js', 'notification_config.js', 'notifications_v2.js', 'onboarding.js', 'loans_v2.js', 'auth_sync.js', 'app_lock.js', 'credit_card_cycles.js', 'crypto_vault.js', 'split_bill.js', 'quick_capture.js', 'thai_bank_holidays.js', 'style_v2.css', 'LINESeedSansTH_Rg.ttf', 'LINESeedSansTH_Bd.ttf', 'LINESeedSansTH_XBd.ttf', 'icon-180.png'].includes(path)
 
   if (acceptsHtml) {
     event.respondWith(cacheFirstNavigation(request))

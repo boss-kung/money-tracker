@@ -3551,6 +3551,8 @@ App.render();
   // Aurora HTML has a current intraday table row:
   // time / round / bar buy / bar sell / Aurora jewelry buy / change.
   App._parseAuroraGold = function(html) {
+    const shared = window.MTGoldMarket?.parseAuroraGold?.(html)
+    if (shared?.jewelryBuy) return shared
     const raw = String(html || '')
     const clean = raw
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -3649,10 +3651,10 @@ App.render();
 ;(function(){
   const AURORA_GOLD_URL = 'https://www.aurora.co.th/price/gold_pricelist'
   const toastSafe = (msg, type='info') => { try { toast(msg, type) } catch { console.log(msg) } }
-  const toNumber = (s) => Number(String(s || '').replace(/,/g, '').replace(/[^d.-]/g, '')) || 0
+  const toNumber = (s) => Number(String(s || '').replace(/,/g, '').replace(/[^\d.-]/g, '')) || 0
   const normaliseGoldData = (payload) => {
     if (!payload) return null
-    if (typeof payload === 'string') return App._parseAuroraGold?.(payload) || null
+    if (typeof payload === 'string') return window.MTGoldMarket?.parseAuroraGold?.(payload) || App._parseAuroraGold?.(payload) || null
     const jewelryBuy = toNumber(payload.jewelryBuy ?? payload.auroraJewelryBuy ?? payload.buyJewelry ?? payload.price)
     const barBuy = toNumber(payload.barBuy ?? payload.goldBarBuy ?? payload.buy)
     const barSell = toNumber(payload.barSell ?? payload.goldBarSell ?? payload.sell)
@@ -3802,6 +3804,7 @@ App.render();
   Calc.getWalletGroups = () => netWorthGroups();
 
   function normaliseGoldPayload(raw){
+    if (window.MTGoldMarket?.normaliseGoldPayload) return window.MTGoldMarket.normaliseGoldPayload(raw)
     let json = raw; if (typeof raw === 'string') { const trimmed = raw.trim(); try { json = JSON.parse(trimmed); } catch { const m = trimmed.match(/^[^(]+\((.*)\);?$/s); if (m) json = JSON.parse(m[1]); else return null; } }
     const root = json?.response || json?.data || json || {}; const price = root.price || root.prices || {}; const gold = price.gold || root.gold || {}; const goldBar = price.gold_bar || price.goldBar || root.gold_bar || root.goldBar || {}; const n = v => Number(String(v ?? '').replace(/,/g,'').replace(/[^\d.\-]/g,'')) || 0;
     const jewelryBuy = n(root.jewelryBuy || root.jewelry_buy || gold.buy || gold.bid || root.gold_buy); const jewelrySell = n(root.jewelrySell || root.jewelry_sell || gold.sell || gold.ask || root.gold_sell); const barBuy = n(root.barBuy || root.bar_buy || goldBar.buy || goldBar.bid); const barSell = n(root.barSell || root.bar_sell || goldBar.sell || goldBar.ask); if (!jewelryBuy && !barBuy) return null;
@@ -3816,6 +3819,13 @@ App.render();
   function _readGoldCache(){ try { const o = JSON.parse(localStorage.getItem(GOLD_CACHE_KEY) || 'null'); return (o && o.data?.jewelryBuy) ? o : null; } catch { return null; } }
   function _writeGoldCache(data){ try { localStorage.setItem(GOLD_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), data })); } catch (_) {} }
   App._fetchThaiGoldViaSource = async function(){
+    if (window.MTGoldMarket?.fetchThaiGoldViaSource) {
+      return window.MTGoldMarket.fetchThaiGoldViaSource({
+        fetchImpl: window.fetch?.bind(window),
+        fetchJsonp: App._fetchJsonp,
+        storage: window.localStorage,
+      })
+    }
     const customProxy = String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '').trim();
     if (customProxy) { try { const payload = await App._fetchJsonp(customProxy); const data = normaliseGoldPayload(payload); if (data?.jewelryBuy) { _writeGoldCache(data); return { ...data, fetchedVia:'apps-script-proxy' }; } } catch (_) {} }
     // Primary: direct fetch. api.chnwt.dev now sends `access-control-allow-origin: *`, so no proxy needed.
