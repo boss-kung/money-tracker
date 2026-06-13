@@ -123,10 +123,10 @@
   // ════════════════════════════════════════════════════════════
 
   const _prevSaveTxOB = App.saveTx?.bind(App)
-  App.saveTx = function () {
+  App.saveTx = function (...args) {
     const txCountBefore = (S.transactions || []).length
     const isEdit        = S.txMode === 'edit' && !!S.editingTxId
-    if (_prevSaveTxOB) _prevSaveTxOB()
+    if (_prevSaveTxOB) _prevSaveTxOB(...args)
     if (!isEdit && txCountBefore === 0 && (S.transactions || []).length > 0) {
       if (!_obGet().firstTxNudgeSeen) {
         _obPatch({ firstTxNudgeSeen: true })
