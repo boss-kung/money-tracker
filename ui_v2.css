@@ -1018,7 +1018,7 @@ html.dark.ui-v2 .mt-alert-title { color: var(--amber) !important; }
 }
 .ui-v2 #dashboard-content .v2-bento-card { padding: 11px 12px; }
 .ui-v2 #dashboard-content .v2-bento-card .lbl { font-size: 10px; font-weight: 500; }
-.ui-v2 #dashboard-content .v2-bento-card .val.big { font-size: 18px !important; font-weight: 500 !important; margin-top: 5px; }
+.ui-v2 #dashboard-content .v2-bento-card .val.big { font-size: 16px !important; font-weight: 500 !important; margin-top: 5px; }
 
 .ui-v2 #dashboard-content .mt-wallet-mini-grid { margin: 0 0 4px !important; gap: 8px; }
 .ui-v2 #dashboard-content .mt-wallet-mini {
@@ -1030,7 +1030,7 @@ html.dark.ui-v2 .mt-alert-title { color: var(--amber) !important; }
 .ui-v2 #dashboard-content .mt-wallet-mini .icon  { order: 0; margin: 0 !important; font-size: 14px !important; line-height: 1; color: var(--primary); }
 .ui-v2 #dashboard-content .mt-wallet-mini .icon .ti { font-size: 14px; }
 .ui-v2 #dashboard-content .mt-wallet-mini .name  { order: 1; font-size: 10px !important; font-weight: 500; color: var(--muted); }
-.ui-v2 #dashboard-content .mt-wallet-mini .value { order: 2; flex: 1 0 100%; font-size: 20px !important; font-weight: 500 !important; margin-top: 4px; }
+.ui-v2 #dashboard-content .mt-wallet-mini .value { order: 2; flex: 1 0 100%; font-size: 16px !important; font-weight: 500 !important; margin-top: 4px; }
 
 /* ── C. Attention cluster — ONE card chrome (soft tint + 3px semantic edge) ── */
 /* Shared shell for every "needs attention" surface, whatever injector made it. */
