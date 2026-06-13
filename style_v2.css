@@ -271,7 +271,7 @@ select.form-input  { appearance: none; cursor: pointer; }
 .tx-row-delete-action {
   position: absolute;
   right: 0; top: 0; bottom: 0;
-  width: 72px;
+  width: 60px;
   display: flex; align-items: center; justify-content: center;
   background: var(--expense, #DC2626);
   color: #fff;
@@ -933,6 +933,7 @@ html.dark .nw-chart-zero-line { stroke: #334155; }
   grid-template-columns: auto auto auto;
   align-items: center;
   margin-top: 10px;
+  margin-bottom: 6px;
   padding: 0;
   text-align: left;
   cursor: pointer;
@@ -2788,7 +2789,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 }
 .tx-row-modern {
   min-height:62px !important;
-  padding:10px 0 !important;
+  padding:10px !important;
   border-bottom:1px solid var(--border);
 }
 .tx-group-card .tx-row-modern:last-child { border-bottom:0; }
@@ -2802,13 +2803,13 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 .tx-row-modern .tx-title {
   font-size:16px !important;
   line-height:1.38 !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
   letter-spacing:0 !important;
 }
 .tx-row-modern .tx-amount {
   font-size:17px !important;
   line-height:1.1 !important;
-  font-weight: 800 !important;
+  font-weight: 600 !important;
   letter-spacing:-.045em !important;
 }
 .tx-row-modern .tx-sub {

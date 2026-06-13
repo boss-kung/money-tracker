@@ -597,7 +597,10 @@
       const rows = await vaultRequest('GET')
       const row = Array.isArray(rows) ? rows[0] : null
       state.vaultMeta = row || null
-      state.locked = row ? true : !state.dataKey
+      // Don't re-lock a device that's already unlocked (has a dataKey) — re-locking on
+      // every pull made the "already unlocked, apply if newer" branch in syncNow unreachable
+      // and forced auto-pull to throw "ต้องใส่รหัสกู้ข้อมูล".
+      state.locked = !state.dataKey
       // Mark that we have a confirmed network answer — safe to create a new vault if row is null.
       state.vaultConfirmedEmpty = !row
       console.debug('[MTAuthSync] pullRemoteVault', { hasVault: !!row, vaultConfirmedEmpty: state.vaultConfirmedEmpty, version: row?.data_version })
@@ -924,7 +927,8 @@
       if (direction === 'pull') {
         const remote = await pullRemoteVault({ silent: true })
         if (state.locked) {
-          if (!recoveryKey) throw new Error('ต้องใส่รหัสกู้ข้อมูล')
+          // In silent auto-pull we have no recovery key to offer — skip quietly instead of throwing.
+          if (!recoveryKey) { if (silent) return false; throw new Error('ต้องใส่รหัสกู้ข้อมูล') }
           await unlockVault(recoveryKey)
         } else if (remote && state.dataKey) {
           // Already unlocked — apply remote data if it's newer than what we last applied

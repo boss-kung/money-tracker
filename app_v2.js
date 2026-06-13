@@ -3808,14 +3808,27 @@ App.render();
     return { ok:true, source: root.source || json.source || 'Thai Gold API / Gold Traders Association', url: root.url || json.url || GOLD_API_URL, fetchedAt: root.fetchedAt || json.fetchedAt || new Date().toISOString(), latestDate: root.update_date || root.latestDate || json.latestDate || '', latestTime: root.update_time || root.latestTime || json.latestTime || '', jewelryBuy: jewelryBuy || barBuy, jewelrySell, barBuy, barSell };
   }
   App._normaliseThaiGoldPayload = normaliseGoldPayload;
+  // Cache the last good gold payload so a temporarily-empty upstream (the API crawls
+  // goldtraders.or.th and sometimes returns blank prices) doesn't force a fall-through to
+  // flaky public CORS proxies. Fresh cache also lets us skip the proxies entirely → clean console.
+  const GOLD_CACHE_KEY = 'MT_GOLD_LAST';
+  const GOLD_CACHE_FRESH_MS = 12 * 60 * 60 * 1000; // 12h
+  function _readGoldCache(){ try { const o = JSON.parse(localStorage.getItem(GOLD_CACHE_KEY) || 'null'); return (o && o.data?.jewelryBuy) ? o : null; } catch { return null; } }
+  function _writeGoldCache(data){ try { localStorage.setItem(GOLD_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), data })); } catch (_) {} }
   App._fetchThaiGoldViaSource = async function(){
     const customProxy = String(window.MT_GOLD_PROXY_URL || localStorage.getItem('MT_GOLD_PROXY_URL') || '').trim();
-    if (customProxy) { const payload = await App._fetchJsonp(customProxy); const data = normaliseGoldPayload(payload); if (data?.jewelryBuy) return { ...data, fetchedVia:'apps-script-proxy' }; }
-    try { const r = await fetch(GOLD_API_URL, { cache:'no-store' }); if (r.ok) { const data = normaliseGoldPayload(await r.json()); if (data?.jewelryBuy) return { ...data, fetchedVia:'direct-api' }; } } catch (_) {}
-    // Fallback: public CORS proxies — used only when direct API and custom proxy both fail.
-    // Only public gold price data (no personal/financial data) passes through these services.
-    // To avoid public proxies entirely, set window.MT_GOLD_PROXY_URL to your own Apps Script proxy.
-    for (const url of ['https://api.allorigins.win/raw?url=' + encodeURIComponent(GOLD_API_URL), 'https://corsproxy.io/?' + encodeURIComponent(GOLD_API_URL)]) { try { const r = await fetch(url, { cache:'no-store' }); if (r.ok) { const data = normaliseGoldPayload(await r.text()); if (data?.jewelryBuy) return { ...data, fetchedVia:'public-proxy' }; } } catch (_) {} }
+    if (customProxy) { try { const payload = await App._fetchJsonp(customProxy); const data = normaliseGoldPayload(payload); if (data?.jewelryBuy) { _writeGoldCache(data); return { ...data, fetchedVia:'apps-script-proxy' }; } } catch (_) {} }
+    // Primary: direct fetch. api.chnwt.dev now sends `access-control-allow-origin: *`, so no proxy needed.
+    try { const r = await fetch(GOLD_API_URL, { cache:'no-store' }); if (r.ok) { const data = normaliseGoldPayload(await r.json()); if (data?.jewelryBuy) { _writeGoldCache(data); return { ...data, fetchedVia:'direct-api' }; } } } catch (_) {}
+    // Direct fetch reachable but returned blank prices (upstream crawl empty). If we have a recent
+    // cached price, serve it and skip the public proxies — avoids needless console errors.
+    const cached = _readGoldCache();
+    if (cached && (Date.now() - cached.savedAt) < GOLD_CACHE_FRESH_MS) return { ...cached.data, fetchedVia:'cache' };
+    // Last resort: public CORS proxies (only public gold data passes through — no personal/financial data).
+    // To avoid these entirely, set window.MT_GOLD_PROXY_URL to your own Apps Script proxy.
+    for (const url of ['https://api.allorigins.win/raw?url=' + encodeURIComponent(GOLD_API_URL), 'https://corsproxy.io/?' + encodeURIComponent(GOLD_API_URL)]) { try { const r = await fetch(url, { cache:'no-store' }); if (r.ok) { const data = normaliseGoldPayload(await r.text()); if (data?.jewelryBuy) { _writeGoldCache(data); return { ...data, fetchedVia:'public-proxy' }; } } } catch (_) {} }
+    // Everything failed — fall back to any cached value regardless of age rather than returning nothing.
+    if (cached) return { ...cached.data, fetchedVia:'cache-stale' };
     return null;
   };
   App._fetchAuroraGoldViaProxy = App._fetchThaiGoldViaSource;
@@ -4506,12 +4519,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
         <div class="v2-ai-bar" onclick="App.openAskMyMoney&&App.openAskMyMoney()" role="button" tabindex="0" aria-label="ถามเรื่องเงินของคุณ">
           <span class="txt"><i class="ti ti-message-chatbot" aria-hidden="true"></i><span>ถามเรื่องเงินของคุณ</span></span>
           <i class="ti ti-microphone" aria-hidden="true"></i>
-        </div>
-        <div class="v2-qa">
-          <button type="button" onclick="App.openAddTx()"><div class="v2-qic"><i class="ti ti-plus" aria-hidden="true"></i></div><div class="v2-qlbl">เพิ่มรายการ</div></button>
-          <button type="button" onclick="App.showPage('wallets')"><div class="v2-qic"><i class="ti ti-wallet" aria-hidden="true"></i></div><div class="v2-qlbl">กระเป๋า</div></button>
-          <button type="button" onclick="App.showPage('reports')"><div class="v2-qic"><i class="ti ti-chart-pie" aria-hidden="true"></i></div><div class="v2-qlbl">รายงาน</div></button>
-          <button type="button" onclick="App.showPage('more')"><div class="v2-qic"><i class="ti ti-dots" aria-hidden="true"></i></div><div class="v2-qlbl">เพิ่มเติม</div></button>
         </div>
       </div>`
       // Density moved out of the hero (ref: calm header = balance + 2 bento):
