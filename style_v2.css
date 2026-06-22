@@ -1465,6 +1465,11 @@ html.dark .mt-alert-row-name { color: var(--text); }
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.shared-expense-share-input {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 .shared-expense-preview {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

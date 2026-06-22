@@ -5679,10 +5679,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const enabled = draft.type === 'expense' && raw.enabled === true && draft.isInstallment !== true && amount > 0
     if (!enabled) return { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }
     const peopleCount = Math.max(1, Math.min(99, Math.round(Number(raw.peopleCount || 2))))
-    const myShare = peopleCount > 1 ? round2(amount / peopleCount) : 0
+    const equalShare = peopleCount > 1 ? round2(amount / peopleCount) : 0
+    const rawMyShare = Number(raw.myShare)
+    const myShare = Number.isFinite(rawMyShare)
+      ? round2(Math.max(0, Math.min(amount, rawMyShare)))
+      : equalShare
     return {
       enabled:true,
-      mode: 'equal',
+      mode: Math.abs(myShare - equalShare) > 0.005 ? 'custom' : 'equal',
       peopleCount,
       myShare,
       reimbursableAmount: round2(Math.max(0, amount - myShare)),
@@ -24017,8 +24021,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const raw = S.tx.sharedExpense || {}
     if (!raw.enabled || S.tx.type !== 'expense' || S.tx.isInstallment) return defaultShared()
     const peopleCount = Math.max(1, Math.round(Number(raw.peopleCount || 2)))
-    const myShare = peopleCount > 1 ? round2(amount / peopleCount) : 0
-    return { enabled:true, mode:'equal', peopleCount, myShare, reimbursableAmount:round2(amount - myShare), status:raw.status || 'pending' }
+    const equalShare = peopleCount > 1 ? round2(amount / peopleCount) : 0
+    const rawMyShare = Number(raw.myShare)
+    const myShare = Number.isFinite(rawMyShare) ? round2(Math.max(0, Math.min(amount, rawMyShare))) : equalShare
+    return { enabled:true, mode:Math.abs(myShare - equalShare) > 0.005 ? 'custom' : 'equal', peopleCount, myShare, reimbursableAmount:round2(amount - myShare), status:raw.status || 'pending' }
   }
 
   App.setSharedExpenseEnabled = function(enabled) {
@@ -24045,11 +24051,15 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     S.tx ||= {}
     S.tx.sharedExpense ||= defaultShared()
     const amount = txAmount()
+    const toNumber = v => Number(String(v ?? '').replace(/,/g, '')) || 0
     if (field === 'peopleCount') {
       S.tx.sharedExpense.peopleCount = Math.max(1, Math.min(99, Math.round(Number(value || 2))))
+      S.tx.sharedExpense.myShare = S.tx.sharedExpense.peopleCount > 1 ? round2(amount / S.tx.sharedExpense.peopleCount) : 0
+      S.tx.sharedExpense.mode = 'equal'
+    } else if (field === 'myShare') {
+      S.tx.sharedExpense.myShare = round2(Math.max(0, Math.min(amount, toNumber(value))))
+      S.tx.sharedExpense.mode = 'custom'
     }
-    S.tx.sharedExpense.mode = 'equal'
-    S.tx.sharedExpense.myShare = S.tx.sharedExpense.peopleCount > 1 ? round2(amount / S.tx.sharedExpense.peopleCount) : 0
     S.tx.sharedExpense.reimbursableAmount = round2(Math.max(0, amount - Number(S.tx.sharedExpense.myShare || 0)))
     App._renderAddTxDetail?.()
   }
@@ -24199,7 +24209,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         ${enabled ? `
           <div class="shared-expense-grid">
             <div><label class="form-label">จำนวนคนทั้งหมด</label><input class="form-input" type="number" min="1" max="99" inputmode="numeric" value="${esc(shared.peopleCount || 2)}" onchange="App.setSharedExpenseField('peopleCount', this.value)"></div>
-            <div><label class="form-label">ส่วนของเรา</label><div class="shared-expense-readonly">${money(shared.myShare || 0)}</div></div>
+            <div><label class="form-label">ส่วนของเรา</label><input class="form-input shared-expense-share-input" type="number" min="0" max="${esc(gross)}" step="0.01" inputmode="decimal" value="${esc(shared.myShare || '')}" onchange="App.setSharedExpenseField('myShare', this.value)"></div>
           </div>
           <div class="shared-expense-preview">
             <span>หักกระเป๋า <strong>${money(gross)}</strong></span>
