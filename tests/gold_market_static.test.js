@@ -26,7 +26,7 @@ test('CSP allows Apps Script JSONP gold proxy hosts', () => {
 test('service worker treats gold_market.js as core cached code', () => {
   assert.ok(sw.includes("'./gold_market.js'"), 'service worker missing gold_market.js precache asset')
   assert.ok(sw.includes("'gold_market.js'"), 'service worker missing gold_market.js core code marker')
-  assert.ok(sw.includes("2026.06.13-gold-r106"), 'service worker cache version was not bumped')
+  assert.ok(sw.includes("2026.06.23-credit-due-r107"), 'service worker cache version was not bumped')
 })
 
 test('app delegates Thai gold sync to shared helper', () => {
