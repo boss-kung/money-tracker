@@ -54,6 +54,40 @@ test('partial payment leaves only remaining balance payable', () => {
   assert.equal(rows[0].balanceDue, 3000)
 })
 
+test('fixed-day payment uses fixedDueDay saved by the wallet form', () => {
+  const fixedCard = {
+    ...card,
+    dueDateMode: 'fixedDay',
+    fixedDueDay: 23,
+    dueAfterCycleDays: 30,
+  }
+  const st = CC.getCardStatement({
+    card: fixedCard,
+    transactions:[{ id:'old', type:'expense', walletId:'ktc', amount:5000, date:'2026-05-10' }],
+    refDate:'2026-06-23',
+  })
+  assert.equal(st.start, '2026-04-26')
+  assert.equal(st.end, '2026-05-25')
+  assert.equal(st.dueDate, '2026-06-23')
+})
+
+test('fixed-day payment shifts backward when the configured date is not a business day', () => {
+  const fixedCard = {
+    ...card,
+    dueDateMode: 'fixedDay',
+    fixedDueDay: 23,
+    holidayShiftEnabled: true,
+    includeDefaultHolidays: false,
+    customHolidays: ['2026-06-23'],
+  }
+  const st = CC.getCardStatement({
+    card: fixedCard,
+    transactions:[{ id:'old', type:'expense', walletId:'ktc', amount:5000, date:'2026-05-10' }],
+    refDate:'2026-06-23',
+  })
+  assert.equal(st.dueDate, '2026-06-22')
+})
+
 test('notification rows include statement id and honor hidden amount', () => {
   const txs = [
     { id:'old', type:'expense', walletId:'ktc', amount:5000, date:'2026-05-10' },

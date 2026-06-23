@@ -36,7 +36,24 @@
 
   function clampCycleDay(day) { return Math.min(31, Math.max(1, Number(day || 25))) }
   function clampDueAfter(days) { return Math.min(60, Math.max(1, Number(days || 10))) }
+  function clampFixedDueDay(day) { return Math.min(31, Math.max(1, Number(day || 23))) }
   function statementId(cardId, start, end) { return `${cardId}:${start}:${end}` }
+
+  const DEFAULT_THAI_BANK_HOLIDAYS_MMDD = [
+    '01-01',
+    '04-06',
+    '04-13', '04-14', '04-15',
+    '05-01',
+    '05-05',
+    '06-03',
+    '07-28',
+    '08-12',
+    '10-13',
+    '10-23',
+    '12-05',
+    '12-10',
+    '12-31',
+  ]
 
   function getStatementPeriod(card, refDate, opts = {}) {
     const ref = parseDate(refDate)
@@ -59,17 +76,88 @@
     return { start: dateStr(start), end: dateStr(end) }
   }
 
+  function isWeekendDateStr(value) {
+    const d = parseDate(value)
+    if (!d) return false
+    const dow = d.getDay()
+    return dow === 0 || dow === 6
+  }
+
+  function normalizeHolidayEntries(input) {
+    const list = Array.isArray(input)
+      ? input
+      : String(input || '').split(/[\n,;]+/)
+    return [...new Set(list
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+      .map(v => {
+        const ymd = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+        if (ymd) return `${ymd[1]}-${pad2(ymd[2])}-${pad2(ymd[3])}`
+        const mmdd = v.match(/^(\d{1,2})-(\d{1,2})$/)
+        if (mmdd) return `${pad2(mmdd[1])}-${pad2(mmdd[2])}`
+        const slash = v.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/)
+        if (slash) {
+          if (slash[3]) {
+            let year = Number(slash[3])
+            if (year < 100) year += 2000
+            return `${year}-${pad2(slash[2])}-${pad2(slash[1])}`
+          }
+          return `${pad2(slash[2])}-${pad2(slash[1])}`
+        }
+        return null
+      })
+      .filter(Boolean)
+    )]
+  }
+
+  function isHolidayDateStr(value, customHolidays = [], includeDefaults = true) {
+    if (!value) return false
+    const holidayApi = typeof globalThis !== 'undefined' ? globalThis.ThaiBankHolidays : null
+    if (includeDefaults && holidayApi?.has?.(value)) return true
+    const pool = new Set(normalizeHolidayEntries(customHolidays))
+    if (includeDefaults) DEFAULT_THAI_BANK_HOLIDAYS_MMDD.forEach(day => pool.add(day))
+    const mmdd = String(value).slice(5)
+    return pool.has(value) || pool.has(mmdd)
+  }
+
+  function shiftBackwardsToBusinessDay(value, opts = {}) {
+    const {
+      customHolidays = [],
+      includeDefaultHolidays = true,
+      maxIterations = 20,
+    } = opts
+    let cursor = value
+    for (let i = 0; i < maxIterations; i++) {
+      if (!isWeekendDateStr(cursor) && !isHolidayDateStr(cursor, customHolidays, includeDefaultHolidays)) return cursor
+      const prev = addDays(cursor, -1)
+      if (!prev || prev === cursor) break
+      cursor = prev
+    }
+    return cursor
+  }
+
+  function buildFixedDueDateForCycleEnd(statementEnd, cycleDay, fixedDueDay) {
+    const end = parseDate(statementEnd)
+    if (!end) return ''
+    const cycle = clampCycleDay(cycleDay)
+    const fixedDay = clampFixedDueDay(fixedDueDay)
+    const monthOffset = fixedDay <= cycle ? 1 : 0
+    const dueBase = new Date(end.getFullYear(), end.getMonth() + monthOffset, 1)
+    const dueDay = clampDay(dueBase.getFullYear(), dueBase.getMonth(), fixedDay)
+    return dateStr(new Date(dueBase.getFullYear(), dueBase.getMonth(), dueDay))
+  }
+
   function resolveDueDate(card, statementEnd) {
     if (!statementEnd) return ''
-    if (String(card?.dueDateMode || 'afterCycle') === 'fixedDay' && Number(card?.dueDay || 0) > 0) {
-      const end = parseDate(statementEnd)
-      if (!end) return ''
-      let due = new Date(end.getFullYear(), end.getMonth(), clampDay(end.getFullYear(), end.getMonth(), Number(card.dueDay)))
-      if (dateStr(due) <= statementEnd) {
-        const next = new Date(end.getFullYear(), end.getMonth() + 1, 1)
-        due = new Date(next.getFullYear(), next.getMonth(), clampDay(next.getFullYear(), next.getMonth(), Number(card.dueDay)))
-      }
-      return dateStr(due)
+    if (String(card?.dueDateMode || 'afterCycle') === 'fixedDay') {
+      const fixedDay = clampFixedDueDay(card?.fixedDueDay || card?.dueDay || 23)
+      const raw = buildFixedDueDateForCycleEnd(statementEnd, card?.cycleDay || 25, fixedDay)
+      if (!raw) return ''
+      if (card?.holidayShiftEnabled === false) return raw
+      return shiftBackwardsToBusinessDay(raw, {
+        customHolidays: card?.customHolidays || [],
+        includeDefaultHolidays: card?.includeDefaultHolidays !== false,
+      })
     }
     return addDays(statementEnd, clampDueAfter(card?.dueAfterCycleDays || 10))
   }
@@ -162,7 +250,10 @@
   return {
     addDays,
     daysBetween,
+    buildFixedDueDateForCycleEnd,
     getStatementPeriod,
+    resolveDueDate,
+    shiftBackwardsToBusinessDay,
     getCardStatement,
     getStatementHistory,
     getPayableStatements,

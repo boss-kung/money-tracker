@@ -14421,8 +14421,11 @@ App._pickMerchant = function(name, opts = {}) {
     if (!card || !endStr) return ''
     const mode = String(card.dueDateMode || 'afterCycle')
     if (mode === 'fixedDay') {
+      if (typeof CreditCardCycles !== 'undefined' && typeof CreditCardCycles.resolveDueDate === 'function') {
+        return CreditCardCycles.resolveDueDate(card, endStr)
+      }
       const cycleDay = clampCycleDay(card.cycleDay || 25)
-      const fixedDay = clampFixedDueDay(card.fixedDueDay || 23)
+      const fixedDay = clampFixedDueDay(card.fixedDueDay || card.dueDay || 23)
       const raw = buildFixedDueDateForCycleEnd(endStr, cycleDay, fixedDay)
       if (!raw) return ''
       if (card.holidayShiftEnabled === false) return raw
@@ -16460,7 +16463,9 @@ App._pickMerchant = function(name, opts = {}) {
     const usedPct = limit ? Math.min((owed/limit)*100, 100) : 0
     const due = App.getCreditCardDueInfo(card)
     const installments = (App.getInstallmentGroups?.() || []).filter(g => g.walletId===cardId).slice(0,3)
-    const statementText = `${card.cycleDay||25} · ชำระหลังตัดยอด ${clampDueAfter(card.dueAfterCycleDays || 10)} วัน`
+    const statementText = card.dueDateMode === 'fixedDay'
+      ? `${card.cycleDay||25} · ชำระวันที่ ${clampFixedDueDay(card.fixedDueDay || card.dueDay || 23)} ของรอบถัดไป`
+      : `${card.cycleDay||25} · ชำระหลังตัดยอด ${clampDueAfter(card.dueAfterCycleDays || 10)} วัน`
     const cycleContentHtml = App._renderCCCycleContent(cardId)
     // Hero section: show total owed (posted + committed installments).
     // When there are committed installments, show a sub-line with breakdown.
