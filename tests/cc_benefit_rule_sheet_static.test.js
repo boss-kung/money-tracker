@@ -14,6 +14,15 @@ function functionBody(name) {
   return appSource.slice(start, next)
 }
 
+function namedFunctionBody(name) {
+  const marker = `function ${name}`
+  const start = appSource.indexOf(marker)
+  assert.notEqual(start, -1, `${name} should exist`)
+  const next = appSource.indexOf('\n  function ', start + marker.length)
+  assert.notEqual(next, -1, `${name} body should be bounded by the next function`)
+  return appSource.slice(start, next)
+}
+
 test('rule transaction sheet uses calendar-month cycles when a benefit rule is calendar based', () => {
   const body = functionBody('App._openRuleTransactionsSheetImpl')
 
@@ -55,4 +64,18 @@ test('selected benefit estimate starts its cycle from the effective benefit date
 
   assert.match(body, /getCyclePeriodForDate\s*\(\s*card\.id\s*,\s*resolveBenefitTxDate\s*\(\s*txDraft\s*\)\s*\|\|\s*today\(\)\s*,\s*rule\s*\)/)
   assert.doesNotMatch(body, /getCyclePeriodForDate\s*\(\s*card\.id\s*,\s*txDraft\.date\s*\|\|\s*today\(\)\s*,\s*rule\s*\)/)
+})
+
+test('cashback benefit rules can round eligible spend down to every-Baht blocks', () => {
+  const normalizeBody = namedFunctionBody('normalizeBenefitRule')
+  const formBody = functionBody('App._ccbrStep1Html')
+  const readBody = functionBody('App._ccbrReadStep')
+  const applyBody = functionBody('App.applyBenefitRule')
+
+  assert.match(normalizeBody, /everyBaht:\s*parseRuleNumber\(cashback\.everyBaht,\s*null\)/)
+  assert.match(formBody, /id="ccbr-val-every"/)
+  assert.match(readBody, /everyBaht:\s*readNum\('ccbr-val-every'\)/)
+  assert.match(applyBody, /cashbackBaseAmount\s*=/)
+  assert.match(applyBody, /Math\.floor\(eligibleAmount\s*\/\s*cashbackEveryBaht\)\s*\*\s*cashbackEveryBaht/)
+  assert.match(applyBody, /cashbackBaseAmount\s*\*\s*\(Number\(cashbackCfg\.rate\s*\|\|\s*0\)\s*\/\s*100\)/)
 })
