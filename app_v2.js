@@ -7839,7 +7839,7 @@ App._pickMerchant = function(name, opts = {}) {
       const activeEl = document.getElementById('ccbr-active')
       if (activeEl) d.active = activeEl.classList.contains('on')
       const dt = d.type === 'cashback' && d._cashbackMode === 'fixed' ? 'cashback_fixed' : d.type === 'cashback' ? 'cashback' : d.type
-      if (dt === 'cashback')       d.cashback  = { ...(d.cashback  || {}), mode: 'percent', rate: readNum('ccbr-val-rate') }
+      if (dt === 'cashback')       d.cashback  = { ...(d.cashback  || {}), mode: 'percent', rate: readNum('ccbr-val-rate'), everyBaht: readNum('ccbr-val-every') }
       else if (dt === 'cashback_fixed') d.cashback = { ...(d.cashback || {}), mode: 'fixed', fixedAmount: readNum('ccbr-val-fixed') }
       else if (dt === 'points')    d.points    = { ...(d.points    || {}), bahtPerPoint: readNum('ccbr-val-baht'), multiplier: readNum('ccbr-val-multi') || 1, multiplierMode: 'total' }
       else if (dt === 'discount') {
@@ -7875,7 +7875,7 @@ App._pickMerchant = function(name, opts = {}) {
     const typeGrid = types.map(t => `<button type="button" class="ccbr-type-card${dt===t.id?' active':''}" onclick="App._ccbrSetType('${t.id}')"><span class="ccbr-type-icon">${t.icon}</span><span>${esc(t.label)}</span></button>`).join('')
     let rewardInput = ''
     if (dt === 'cashback') {
-      rewardInput = `<div class="form-group"><label class="form-label">อัตราเงินคืน</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="0.01" id="ccbr-val-rate" value="${esc(v(d.cashback?.rate))}" placeholder="เช่น 5"><span class="ccbr-input-unit">% ของยอดใช้จ่าย</span></div></div>`
+      rewardInput = `<div class="form-group"><label class="form-label">อัตราเงินคืน</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="0.01" id="ccbr-val-rate" value="${esc(v(d.cashback?.rate))}" placeholder="เช่น 5"><span class="ccbr-input-unit">%</span></div></div><div class="form-group"><label class="form-label">คืนทุกๆ <span style="color:var(--muted);font-size:12px;font-weight:400">ว่าง = คำนวณจากยอดเต็ม</span></label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-val-every" value="${esc(v(d.cashback?.everyBaht))}" placeholder="เช่น 500"><span class="ccbr-input-unit">บาท</span></div></div>`
     } else if (dt === 'cashback_fixed') {
       rewardInput = `<div class="form-group"><label class="form-label">เงินคืนคงที่</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-val-fixed" value="${esc(v(d.cashback?.fixedAmount))}" placeholder="เช่น 100"><span class="ccbr-input-unit">บาท เมื่อครบเงื่อนไข</span></div></div>`
     } else if (dt === 'points') {
@@ -14854,6 +14854,7 @@ App._pickMerchant = function(name, opts = {}) {
         mode: cashback.mode === 'fixed' ? 'fixed' : 'percent',
         rate: parseRuleNumber(cashback.rate, null),
         fixedAmount: parseRuleNumber(cashback.fixedAmount, null),
+        everyBaht: parseRuleNumber(cashback.everyBaht, null),
       },
       discount: {
         mode: discount.mode === 'fixed' ? 'fixed' : 'percent',
@@ -15961,7 +15962,11 @@ App._pickMerchant = function(name, opts = {}) {
         potentialCashback = cashbackCfg.mode === 'fixed' ? Number(cashbackCfg.fixedAmount || 0) : eligibleAmount * (Number(cashbackCfg.rate || 0) / 100)
         if (triggerCount > 0) rawCashback = potentialCashback
       } else if (cashbackCfg.mode === 'fixed') rawCashback = Number(cashbackCfg.fixedAmount || 0)
-      else rawCashback = eligibleAmount * (Number(cashbackCfg.rate || 0) / 100)
+      else {
+        const cashbackEveryBaht = Number(cashbackCfg.everyBaht || 0)
+        const cashbackBaseAmount = cashbackEveryBaht > 0 ? Math.floor(eligibleAmount / cashbackEveryBaht) * cashbackEveryBaht : eligibleAmount
+        rawCashback = cashbackBaseAmount * (Number(cashbackCfg.rate || 0) / 100)
+      }
     }
     if (eligibleAmount > 0 && rule.type === 'discount') {
       const raw = rule.discount?.mode === 'fixed' ? Number(rule.discount.fixedAmount || 0) : eligibleAmount * (Number(rule.discount?.rate || 0) / 100)
