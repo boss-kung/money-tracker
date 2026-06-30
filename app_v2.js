@@ -11198,8 +11198,15 @@ App._pickMerchant = function(name, opts = {}) {
     }
 
     App.recalculateWalletBalances?.({ save:false, recordSnapshot:false })
-    persist(); App.closeOverlay('overlay-wallet-form'); App.render()
-    notify(S.editingWalletId ? 'แก้ไขกระเป๋าแล้ว' : 'เพิ่มกระเป๋าแล้ว', 'success')
+    persist()
+    const _savedEditId = S.editingWalletId
+    const _ccDetailCardId = document.querySelector('.cc-detail-screen')?.dataset.cardId || ''
+    App.closeOverlay('overlay-wallet-form')
+    if (isCC && _savedEditId && _ccDetailCardId === _savedEditId) {
+      App.openCCDetail(_savedEditId)
+    }
+    App.render()
+    notify(_savedEditId ? 'แก้ไขกระเป๋าแล้ว' : 'เพิ่มกระเป๋าแล้ว', 'success')
   }
 
   // ── Updated saveCCBenefit — saves cycleDay/dueDay too ────────
