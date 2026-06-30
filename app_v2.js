@@ -6097,9 +6097,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (cashAmount > amount + 0.01) { App._showFieldError('cc-pay-cash-amount', 'เงินที่จ่ายจริงต้องไม่เกินยอดที่ตัดจากบัตร'); return }
     if (hasDiscount && Math.abs((amount - cashAmount) - discountAmount) > 0.01) { App._showFieldError('cc-pay-discount', 'ส่วนลดต้องตรงกับยอดตัดบัตรลบเงินที่จ่ายจริง'); return }
     const due = App.getCreditCardDueInfo?.(card)
-    const owed = Math.max(0, Number(due?.amount || due?.statement?.balanceDue || Math.abs(card.balance || 0)))
     if (source.type !== 'credit' && Number(source.balance || 0) < cashAmount) { App._showFieldError('cc-pay-cash-amount', 'ยอดเงินในกระเป๋าไม่เพียงพอ'); return }
-    if (owed > 0 && amount > owed + 0.01) { App._showFieldError('cc-pay-amount', `ค้างชำระอยู่ ${money(owed)} ไม่ควรชำระเกิน`); return }
+    // อนุญาตให้ชำระเกินหรือน้อยกว่ายอดที่ระบบแจ้งได้ (ยอดจริงอาจมากกว่าที่ระบบคำนวณ)
     const st = due?.statement || App.getCardStatement(card.id)
     const tx = { id:Calc.genId(), type:'cc_payment', amount, walletId:sourceId, toWalletId:card.id, date:today(), note:`ชำระ ${card.name}`, statementId:st?.id }
     if (hasDiscount && discountAmount > 0) {

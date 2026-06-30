@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.06.23-credit-due-r107'
+const APP_VERSION = '2026.06.30-cc-pay-allow-overpay'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 const CORE_NETWORK_TIMEOUT_MS = 900
