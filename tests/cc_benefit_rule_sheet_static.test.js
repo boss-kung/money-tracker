@@ -79,3 +79,18 @@ test('cashback benefit rules can round eligible spend down to every-Baht blocks'
   assert.match(applyBody, /Math\.floor\(eligibleAmount\s*\/\s*cashbackEveryBaht\)\s*\*\s*cashbackEveryBaht/)
   assert.match(applyBody, /cashbackBaseAmount\s*\*\s*\(Number\(cashbackCfg\.rate\s*\|\|\s*0\)\s*\/\s*100\)/)
 })
+
+test('cycle-spend-threshold cashback only rewards newly crossed blocks, not every tx after the first crossing', () => {
+  const applyBody = functionBody('App.applyBenefitRule')
+
+  // "every_threshold" must count only the NEW blocks crossed by this tx (delta), not the
+  // cumulative total — otherwise every later tx keeps re-earning the reward once cumulative
+  // spend first passes the threshold (e.g. a "5,000 per 10,000 baht, max 2,000 per cycle" rule
+  // would hit its cap after ~20,000 baht of spend instead of the intended 100,000 baht).
+  assert.match(applyBody, /Math\.floor\(cycleSpendAfter\s*\/\s*thresholdAmount\)\s*-\s*Math\.floor\(cycleSpendBefore\s*\/\s*thresholdAmount\)/)
+  // "once_per_cycle" must only fire on the tx that actually crosses the threshold, not on
+  // every subsequent tx once cumulative spend is already above it.
+  assert.match(applyBody, /cycleSpendBefore\s*<\s*thresholdAmount\s*&&\s*cycleSpendAfter\s*>=\s*thresholdAmount/)
+  // Fixed cashback must scale with the number of blocks this tx actually crossed.
+  assert.match(applyBody, /Number\(cashbackCfg\.fixedAmount\s*\|\|\s*0\)\s*\*\s*triggerCount/)
+})

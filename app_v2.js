@@ -15944,9 +15944,9 @@ App._pickMerchant = function(name, opts = {}) {
     let triggerCount = 0
     if (triggerMode === 'cycle_spend_threshold') {
       if (trigger.grantMode === 'every_threshold') {
-        triggerCount = Math.max(0, Math.floor(cycleSpendAfter / thresholdAmount))
+        triggerCount = Math.max(0, Math.floor(cycleSpendAfter / thresholdAmount) - Math.floor(cycleSpendBefore / thresholdAmount))
       } else {
-        triggerCount = cycleSpendAfter >= thresholdAmount ? 1 : 0
+        triggerCount = (cycleSpendBefore < thresholdAmount && cycleSpendAfter >= thresholdAmount) ? 1 : 0
       }
       if (triggerCount <= 0) {
         const remaining = normalizeBenefitCompareValue('', Math.max(0, thresholdAmount - cycleSpendAfter))
@@ -15965,8 +15965,8 @@ App._pickMerchant = function(name, opts = {}) {
     let potentialPoints = 0
     if (eligibleAmount > 0 && (rule.type === 'cashback' || rule.type === 'both')) {
       if (triggerMode === 'cycle_spend_threshold') {
-        potentialCashback = cashbackCfg.mode === 'fixed' ? Number(cashbackCfg.fixedAmount || 0) : eligibleAmount * (Number(cashbackCfg.rate || 0) / 100)
-        if (triggerCount > 0) rawCashback = potentialCashback
+        potentialCashback = cashbackCfg.mode === 'fixed' ? Number(cashbackCfg.fixedAmount || 0) * Math.max(triggerCount, 1) : eligibleAmount * (Number(cashbackCfg.rate || 0) / 100)
+        if (triggerCount > 0) rawCashback = cashbackCfg.mode === 'fixed' ? Number(cashbackCfg.fixedAmount || 0) * triggerCount : potentialCashback
       } else if (cashbackCfg.mode === 'fixed') rawCashback = Number(cashbackCfg.fixedAmount || 0)
       else {
         const cashbackEveryBaht = Number(cashbackCfg.everyBaht || 0)
