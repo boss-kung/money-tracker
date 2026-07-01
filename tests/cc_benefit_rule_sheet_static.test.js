@@ -94,3 +94,23 @@ test('cycle-spend-threshold cashback only rewards newly crossed blocks, not ever
   // Fixed cashback must scale with the number of blocks this tx actually crossed.
   assert.match(applyBody, /Number\(cashbackCfg\.fixedAmount\s*\|\|\s*0\)\s*\*\s*triggerCount/)
 })
+
+test('rule cycle usage only counts transactions strictly before the reference tx (no symmetric double count)', () => {
+  const usageBody = functionBody('App.getRuleCycleUsage')
+
+  // Two same-day (or same-block) transactions must not each see the OTHER as "before" them —
+  // that symmetric view is what let two 7,090-baht transactions (14,180 total, crossing one
+  // 10,000-baht block) each independently claim the 200-baht threshold reward, paying out 400.
+  assert.match(usageBody, /refDate\s*=\s*''/)
+  assert.match(usageBody, /isBeforeRef\s*=\s*tx\s*=>/)
+  assert.match(usageBody, /idx\s*!=\s*null\s*&&\s*idx\s*<\s*excludeIndex/)
+  assert.match(usageBody, /isBeforeRef\(tx\)/)
+
+  // Every caller that evaluates a specific draft/existing transaction's own reward must pass
+  // that transaction's date so "before" can be resolved chronologically.
+  const callSites = appSource.split('\n').filter(line => line.includes('App.getRuleCycleUsage(') && line.includes('txDraft.id'))
+  assert.ok(callSites.length >= 3, 'expected getRuleCycleUsage to be called with a txDraft-scoped excludeTxId in at least 3 places')
+  callSites.forEach(call => {
+    assert.match(call, /resolveBenefitTxDate\(txDraft\)/, `call site missing refDate: ${call}`)
+  })
+})

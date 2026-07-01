@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.07.01-cc-benefit-threshold-fix'
+const APP_VERSION = '2026.07.01-cc-benefit-threshold-order-fix'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 const CORE_NETWORK_TIMEOUT_MS = 900

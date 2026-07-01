@@ -15446,7 +15446,7 @@ App._pickMerchant = function(name, opts = {}) {
         if (trig.mode === 'cycle_spend_threshold' && Number(trig.thresholdAmount || 0) > 0) {
           const trackChannels = getTriggerTrackChannels(trig)
           const cycle = getCyclePeriodForDate(cardId, txDraft.date || today(), rule)
-          const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', trackChannels, '', '', rule)
+          const usage = App.getRuleCycleUsage(rule.id, cardId, cycle.start, cycle.end, txDraft.id || '', trackChannels, '', '', rule, resolveBenefitTxDate(txDraft) || txDraft.date || today())
           const spent = Number(usage.trackChannelSpendBefore || 0)
           const comparableSpent = normalizeBenefitCompareValue('', spent)
           const comparableThreshold = normalizeBenefitCompareValue('', trig.thresholdAmount)
@@ -15464,7 +15464,7 @@ App._pickMerchant = function(name, opts = {}) {
         const hasMerchantCap = Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0 || Number(ruleLimits.maxEligibleSpendPerMerchantPerCycle || 0) > 0
         const hasChannelCap = Number(ruleLimits.maxRewardAmountPerChannelPerCycle || 0) > 0 || Number(ruleLimits.maxEligibleSpendPerChannelPerCycle || 0) > 0
         const cycleForRule = getCyclePeriodForDate(cardId, txDraft.date || today(), rule)
-        const cycleUsage = App.getRuleCycleUsage(rule.id, cardId, cycleForRule.start, cycleForRule.end, txDraft.id || '', getTriggerTrackChannels(rule.rewardTrigger || {}), txDraft.merchant || '', txDraft.channel || '', rule)
+        const cycleUsage = App.getRuleCycleUsage(rule.id, cardId, cycleForRule.start, cycleForRule.end, txDraft.id || '', getTriggerTrackChannels(rule.rewardTrigger || {}), txDraft.merchant || '', txDraft.channel || '', rule, resolveBenefitTxDate(txDraft) || txDraft.date || today())
         if (eligibility.matched && (hasMerchantCap || hasChannelCap)) {
           // Only show merchant cap hint when the merchant field itself matched (not just channel)
           if (eligibility.merchantMatch && Number(ruleLimits.maxRewardAmountPerMerchantPerCycle || 0) > 0) {
@@ -15490,7 +15490,7 @@ App._pickMerchant = function(name, opts = {}) {
       .sort((a, b) => Number(b.suggested) - Number(a.suggested) || Number(b.suggestionScore || 0) - Number(a.suggestionScore || 0) || String(a.name || '').localeCompare(String(b.name || '')))
   }
 
-  App.getRuleCycleUsage = function(ruleId, cardId, cycleStart, cycleEnd, excludeTxId = '', trackChannels = [], txMerchant = '', txChannel = '', rule = null) {
+  App.getRuleCycleUsage = function(ruleId, cardId, cycleStart, cycleEnd, excludeTxId = '', trackChannels = [], txMerchant = '', txChannel = '', rule = null, refDate = '') {
     let eligibleSpendUsed = 0
     let cashbackUsed = 0
     let discountUsed = 0
@@ -15524,13 +15524,30 @@ App._pickMerchant = function(name, opts = {}) {
       const merchantElgAccum  = {}
       const channelRewAccum   = {}
       const channelElgAccum   = {}
-      const txsInCycle = (S.transactions || [])
+      // "Usage before" must only count transactions that occurred strictly earlier than the
+      // reference transaction (excludeTxId), otherwise two same-block transactions each see the
+      // other as "before" them and both independently claim the threshold-crossing reward.
+      const allCardTxs = S.transactions || []
+      const indexById = new Map(allCardTxs.map((tx, i) => [String(tx.id || ''), i]))
+      const excludeIndex = excludeTxId ? (indexById.has(String(excludeTxId)) ? indexById.get(String(excludeTxId)) : -1) : -1
+      const effectiveRefDate = refDate || (excludeIndex > -1 ? resolveBenefitTxDate(allCardTxs[excludeIndex]) : '')
+      const isBeforeRef = tx => {
+        if (!effectiveRefDate) return true
+        const d = resolveBenefitTxDate(tx)
+        if (d < effectiveRefDate) return true
+        if (d > effectiveRefDate) return false
+        if (excludeIndex === -1) return true // new/unsaved draft: same-day existing txs count as prior
+        const idx = indexById.get(String(tx.id || ''))
+        return idx != null && idx < excludeIndex
+      }
+      const txsInCycle = allCardTxs
         .filter(tx => {
           if (String(tx.id || '') === String(excludeTxId || '')) return false
           if (tx.type !== 'expense' || String(tx.walletId || '') !== String(cardId || '')) return false
           if (typeof App._isPostedTx === 'function' && !App._isPostedTx(tx)) return false
           const d = resolveBenefitTxDate(tx)
-          return d >= cycleStart && d <= cycleEnd
+          if (d < cycleStart || d > cycleEnd) return false
+          return isBeforeRef(tx)
         })
         .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
       if (isThresholdMode) {
@@ -16213,7 +16230,7 @@ App._pickMerchant = function(name, opts = {}) {
     const confidenceReasons = []
     rules.forEach(rule => {
       const cycle = getCyclePeriodForDate(card.id, resolveBenefitTxDate(txDraft) || today(), rule)
-      const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '', getTriggerTrackChannels(rule.rewardTrigger || {}), txDraft.merchant || '', txDraft.channel || '', rule)
+      const usage = App.getRuleCycleUsage(rule.id, card.id, cycle.start, cycle.end, txDraft.id || txDraft.editingTxId || '', getTriggerTrackChannels(rule.rewardTrigger || {}), txDraft.merchant || '', txDraft.channel || '', rule, resolveBenefitTxDate(txDraft) || txDraft.date || today())
       const result = App.applyBenefitRule(txDraft, rule, usage)
       result.cycleStart = cycle.start
       result.cycleEnd = cycle.end
