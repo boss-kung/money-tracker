@@ -40,7 +40,7 @@ const KEYS = {
 
 const BACKUP_SCHEMA_VERSION = 3
 const LOCAL_BACKUP_KEY = 'mt_local_backup_snapshots'
-const LOCAL_BACKUP_LIMIT = 5
+const LOCAL_BACKUP_LIMIT = 3
 const BACKUP_SCHEMA_KEYS = [
   'transactions',
   'wallets',
@@ -214,7 +214,7 @@ const Storage = {
     }
   },
 
-  save(key, data) {
+  save(key, data, _retried = false) {
     if (!Storage.isLocalStorageAvailable()) {
       Storage.lastSaveError = { key, message: 'localStorage unavailable', at: new Date().toISOString() }
       setTimeout(() => {
@@ -234,9 +234,18 @@ const Storage = {
       if (Storage.lastVerifyError?.key === key) Storage.lastVerifyError = null
       return true
     } catch (e) {
+      const isQuotaError = e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+      // Local backup snapshots + the standalone pre-import backup each embed a full
+      // dataset copy — they're the most likely reason routine saves start hitting
+      // the quota. Free them once and retry before surfacing failure to the user.
+      if (isQuotaError && !_retried && key !== LOCAL_BACKUP_KEY) {
+        try { localStorage.removeItem('mt_pre_import_backup') } catch (_) {}
+        const freed = Storage.pruneLocalBackups(1)
+        if (freed) return Storage.save(key, data, true)
+      }
       Storage.lastSaveError = { key, message: e?.message || 'save failed', at: new Date().toISOString() }
       const canToast = Date.now() - Number(Storage._lastStorageToastAt || 0) > 1200
-      if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+      if (isQuotaError) {
         // Defer toast call — Storage may be loaded before App
         setTimeout(() => {
           if (canToast && typeof toast === 'function') {
@@ -295,6 +304,10 @@ const Storage = {
 
   // Load all app data, seeding defaults on first run
   init() {
+    // Stale standalone pre-import backup — superseded by the createLocalBackup
+    // rotation (mt_local_backup_snapshots). It duplicated the full dataset and
+    // was never cleaned up, contributing to localStorage quota exhaustion.
+    try { localStorage.removeItem('mt_pre_import_backup') } catch (_) {}
     const data = {}
     const hasExistingPrimaryData = typeof localStorage !== 'undefined' && [
       KEYS.transactions,
@@ -488,6 +501,63 @@ const Storage = {
       }, 0)
       return null
     }
+  },
+
+  getLatestLocalBackup(reasons = null) {
+    let rows = []
+    try { rows = JSON.parse(localStorage.getItem(LOCAL_BACKUP_KEY) || '[]') } catch (_) { rows = [] }
+    if (!Array.isArray(rows)) return null
+    const match = reasons ? rows.find(r => reasons.includes(r?.reason)) : rows[0]
+    return match || null
+  },
+
+  // Frees space by dropping older local backup snapshots. Each snapshot embeds
+  // a full copy of the dataset, so the rotating array (LOCAL_BACKUP_LIMIT) can
+  // itself be a major contributor to hitting the localStorage quota.
+  pruneLocalBackups(keep = 1) {
+    try {
+      let rows = []
+      try { rows = JSON.parse(localStorage.getItem(LOCAL_BACKUP_KEY) || '[]') } catch (_) { rows = [] }
+      if (!Array.isArray(rows) || rows.length <= keep) return false
+      localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(rows.slice(0, keep)))
+      return true
+    } catch (_) {
+      try { localStorage.removeItem(LOCAL_BACKUP_KEY) } catch (_) {}
+      return true
+    }
+  },
+
+  // Byte size of every key this app owns in localStorage, sorted largest first.
+  // Lets the UI show the user what's actually consuming their quota instead of
+  // guessing, and drives the emergency "free up space" action.
+  getUsageReport() {
+    const rows = []
+    let total = 0
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key === null) continue
+        const value = localStorage.getItem(key) || ''
+        const bytes = key.length + value.length
+        total += bytes
+        rows.push({ key, bytes })
+      }
+    } catch (_) {}
+    rows.sort((a, b) => b.bytes - a.bytes)
+    return { totalBytes: total, rows }
+  },
+
+  // Emergency relief when the quota is already full: drops every rotating local
+  // backup snapshot (each one embeds a full dataset copy) plus any leftover
+  // one-off backup keys. Does NOT touch live app data (transactions, wallets, etc).
+  freeUpEmergencySpace() {
+    let freedKeys = []
+    try {
+      if (localStorage.getItem(LOCAL_BACKUP_KEY) !== null) { localStorage.removeItem(LOCAL_BACKUP_KEY); freedKeys.push(LOCAL_BACKUP_KEY) }
+      if (localStorage.getItem('mt_pre_import_backup') !== null) { localStorage.removeItem('mt_pre_import_backup'); freedKeys.push('mt_pre_import_backup') }
+      if (localStorage.getItem('mt_boot_last_log') !== null) { localStorage.removeItem('mt_boot_last_log'); freedKeys.push('mt_boot_last_log') }
+    } catch (_) {}
+    return freedKeys
   },
 
   importJSON(file, onSuccess, onError) {

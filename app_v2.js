@@ -5349,6 +5349,52 @@ Calc.getUsableMoney = function(wallets, state = null) {
       </div>`)
   }
 
+  App.openStorageDiagnostics = function() {
+    const report = Storage.getUsageReport()
+    const fmtKB = n => `${(n / 1024).toFixed(1)} KB`
+    const KEY_LABELS = {
+      mt_transactions: 'ประวัติธุรกรรม',
+      mt_local_backup_snapshots: 'Backup อัตโนมัติในเครื่อง (สำเนาเต็มของข้อมูลทั้งหมด)',
+      mt_pre_import_backup: 'Backup ก่อน Import (ค้างจากเวอร์ชันเก่า)',
+      mt_wallets: 'กระเป๋าเงิน',
+      mt_reward_ledger: 'ประวัติคะแนน/แคชแบ็กบัตรเครดิต',
+      mt_ai_insight_store: 'ข้อมูลผู้ช่วย AI',
+    }
+    const rowsHtml = report.rows.slice(0, 12).map(r => `
+      <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(KEY_LABELS[r.key] || r.key)}</div>
+        <div style="font-size:13px;font-weight:600;white-space:nowrap">${fmtKB(r.bytes)}</div>
+      </div>`).join('')
+    App.openSubScreen(`
+      <div class="sub-header">
+        <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
+        <h2>พื้นที่จัดเก็บ</h2>
+      </div>
+      <div class="sub-scroll" style="padding:12px 16px 40px">
+        <div class="card card-pad" style="margin-bottom:14px">
+          <div style="font-size:13px;color:var(--muted)">ใช้พื้นที่ทั้งหมด</div>
+          <div style="font-size:22px;font-weight:700;margin-top:2px">${fmtKB(report.totalBytes)}</div>
+        </div>
+        <div class="card card-pad" style="margin-bottom:14px">${rowsHtml}</div>
+        <button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="App._freeUpStorageNow()">ล้าง Backup ในเครื่องเพื่อคืนพื้นที่</button>
+        <div style="font-size:12px;color:var(--muted);text-align:center">ไม่ลบข้อมูลการเงินของคุณ · แนะนำให้ส่งออกข้อมูล (JSON) ไว้ก่อน</div>
+      </div>`)
+  }
+
+  App._freeUpStorageNow = function() {
+    App.showConfirm?.({
+      title: 'ล้าง Backup ในเครื่อง',
+      body: 'จะลบสำเนา backup อัตโนมัติที่เก็บไว้ในเครื่อง (ไม่ใช่ข้อมูลการเงินจริง) เพื่อคืนพื้นที่ว่าง แนะนำให้ส่งออกข้อมูล JSON ไว้ก่อน',
+      confirmLabel: 'ล้างเลย',
+      danger: true,
+      onConfirm() {
+        const freed = Storage.freeUpEmergencySpace?.() || []
+        toast(freed.length ? `คืนพื้นที่แล้ว (ลบ ${freed.length} รายการ)` : 'ไม่มีอะไรให้ล้างเพิ่มแล้ว', freed.length ? 'success' : 'warn')
+        App.openStorageDiagnostics()
+      },
+    })
+  }
+
   App.deleteMerchant = function(id) {
     const idx = (S.merchants || []).findIndex(x => x.id === id)
     if (idx < 0) return
@@ -16613,7 +16659,6 @@ App._pickMerchant = function(name, opts = {}) {
         body:`Wallets: ${(payload.wallets||[]).length} · Transactions: ${(payload.transactions||[]).length} · ข้อมูลเดิมจะถูกสำรองไว้ก่อนนำเข้า`,
         onConfirm() {
           try { Storage.createLocalBackup?.(S, 'before-import') } catch (_) {}
-          try { localStorage.setItem('mt_pre_import_backup', JSON.stringify(Storage.buildExportPayload(S))) } catch (_) {}
           App._applyBackupPayload(payload)
           notify(`นำเข้าสำเร็จ${(checked.warnings || []).length ? ` · มีคำเตือน ${(checked.warnings || []).length} จุด` : ''}`, 'success')
           if (input) input.value = ''
@@ -16972,7 +17017,6 @@ App._pickMerchant = function(name, opts = {}) {
       body: replace ? 'จะแทนที่ข้อมูลปัจจุบันทั้งหมด แต่จะสร้าง local backup ก่อน' : 'จะเพิ่มเฉพาะรายการ id ใหม่ และข้าม conflict ที่ id ซ้ำ',
       onConfirm() {
         try { Storage.createLocalBackup?.(S, replace ? 'before-import-replace' : 'before-import-merge') } catch (_) {}
-        try { localStorage.setItem('mt_pre_import_backup', JSON.stringify(Storage.buildExportPayload(S))) } catch (_) {}
         const stats = replace ? null : App._applyImportMergePayload(payload)
         if (replace) App._applyBackupPayload(payload)
         App._pendingImportPayload = null
@@ -17061,8 +17105,8 @@ App._pickMerchant = function(name, opts = {}) {
   App.exportCSVCanonical = App.exportCSV
 
   App.restorePreImportBackup = function() {
-    let backup = null
-    try { backup = JSON.parse(localStorage.getItem('mt_pre_import_backup') || 'null') } catch (_) {}
+    const snapshot = Storage.getLatestLocalBackup?.(['before-import', 'before-import-merge', 'before-import-replace'])
+    const backup = snapshot?.payload
     if (!backup) return notify('ยังไม่มี backup ก่อนนำเข้า', 'warn')
     App.showConfirm?.({
       title:'กู้คืน Backup ก่อนนำเข้า',
@@ -23696,6 +23740,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>
       <div class="sec-title">ระบบ</div>
       <div class="card card-pad">
+        ${row({ icon: '💾', label: 'พื้นที่จัดเก็บ', desc: 'ดูว่าอะไรใช้พื้นที่ + คืนพื้นที่เมื่อเต็ม', onclick: 'App.openStorageDiagnostics?.()' })}
         ${row({ icon: '🧹', label: 'ล้างแคชแอป', value: 'ไม่ลบข้อมูลการเงิน', onclick: 'App.resetAppCache?.()' })}
         ${row({ icon: '🔄', label: 'รีเซ็ตข้อมูลทั้งหมด', danger: true, onclick: 'App.resetData()' })}
       </div>
