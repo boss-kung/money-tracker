@@ -304,10 +304,12 @@ const Storage = {
 
   // Load all app data, seeding defaults on first run
   init() {
-    // Stale standalone pre-import backup — superseded by the createLocalBackup
-    // rotation (mt_local_backup_snapshots). It duplicated the full dataset and
-    // was never cleaned up, contributing to localStorage quota exhaustion.
+    // Stale one-shot backup keys that each duplicated the full dataset and were
+    // never cleaned up, contributing to localStorage quota exhaustion:
+    //   mt_pre_import_backup    — superseded by the createLocalBackup rotation
+    //   mt_pre_migration_backup — one-time safety net for the statusNormV1 migration
     try { localStorage.removeItem('mt_pre_import_backup') } catch (_) {}
+    try { localStorage.removeItem('mt_pre_migration_backup') } catch (_) {}
     const data = {}
     const hasExistingPrimaryData = typeof localStorage !== 'undefined' && [
       KEYS.transactions,

@@ -1921,6 +1921,47 @@ function init() {
   syncStandaloneBodyClass()
   applyTheme()
 
+  // Persisted reward estimates only need the fields that display + cycle-usage
+  // accounting (getRuleCycleUsage) actually read back. applyBenefitRule returns
+  // ~50 diagnostic fields per rule; storing all of them on every credit-card tx
+  // was the dominant driver of localStorage growth (~1.8KB/tx). Slim to the
+  // consumed subset before writing to a tx. Keep this in sync with the readers
+  // at getRuleCycleUsage and the reward display paths.
+  App._slimRewardEstimate = function(est) {
+    if (!est || typeof est !== 'object') return est
+    const rules = Array.isArray(est.rules) ? est.rules.map(r => ({
+      ruleId: r.ruleId,
+      ruleName: r.ruleName,
+      type: r.type,
+      eligibleAmount: r.eligibleAmount,
+      cashback: r.cashback,
+      finalCashback: r.finalCashback,
+      discount: r.discount,
+      finalDiscount: r.finalDiscount,
+      points: r.points,
+      finalPoints: r.finalPoints,
+      triggerCount: r.triggerCount,
+      capApplied: r.capApplied,
+      rewardPending: r.rewardPending,
+    })) : []
+    const slim = {
+      cashback: est.cashback,
+      discount: est.discount,
+      points: est.points,
+      potentialCashback: est.potentialCashback,
+      potentialDiscount: est.potentialDiscount,
+      potentialPoints: est.potentialPoints,
+      rewardPending: est.rewardPending,
+      source: est.source,
+      status: est.status,
+      calculatedAt: est.calculatedAt,
+      rules,
+    }
+    // Drop undefined top-level keys so JSON stays compact
+    Object.keys(slim).forEach(k => { if (slim[k] === undefined) delete slim[k] })
+    return slim
+  }
+
   // ── Safe migration: normalize transaction status fields ──────
   // This is idempotent — running it multiple times produces the same result.
   // It ensures the `scheduled` flag is set consistently on installment rows.
@@ -1953,6 +1994,31 @@ function init() {
     if (changed > 0) {
       try { Storage.save('mt_transactions', S.transactions) } catch (_) {}
       console.log(`[Migration statusNormV1] Marked ${changed} future installment rows as scheduled.`)
+    }
+    // The pre-migration backup is a one-shot safety net; the migration succeeded,
+    // so drop the full-dataset duplicate instead of leaving it in localStorage forever.
+    try { localStorage.removeItem('mt_pre_migration_backup') } catch (_) {}
+  })()
+
+  // ── One-time: compact bloated reward estimates on already-stored txs ─────────
+  // Older builds persisted the full ~50-field-per-rule applyBenefitRule output on
+  // every credit-card tx. Slim existing rows to reclaim localStorage immediately.
+  ;(function slimStoredRewardEstimatesV1() {
+    const migrationKey = 'rewardEstimateSlimV1'
+    if (S.migrations && S.migrations[migrationKey]) return
+    let changed = 0
+    ;(S.transactions || []).forEach(t => {
+      const est = t.rewardEstimate
+      if (est && Array.isArray(est.rules) && est.rules.some(r => r && ('cycleEligibleSpendUsedBefore' in r || 'warnings' in r || 'triggerMode' in r))) {
+        t.rewardEstimate = App._slimRewardEstimate(est)
+        changed++
+      }
+    })
+    if (S.migrations) S.migrations[migrationKey] = true
+    try { Storage.save('mt_migrations', S.migrations) } catch (_) {}
+    if (changed > 0) {
+      try { Storage.save('mt_transactions', S.transactions) } catch (_) {}
+      console.log(`[Migration rewardEstimateSlimV1] Slimmed reward estimates on ${changed} transactions.`)
     }
   })()
 
@@ -5666,22 +5732,24 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const card = walletById(tx.walletId)
     if (!card || card.type !== 'credit' || tx.type !== 'expense') return null
     const rewardTx = { ...tx, amount: App.getBenefitCalculationAmount?.(tx) ?? Number(tx.amount || 0) }
+    // This value is written onto the tx and persisted — always slim it (single
+    // choke point for all _rewardEstimateForTx callers) to keep localStorage small.
     if (Array.isArray(tx.rewardRuleIds) && App.calculateSelectedRewardEstimate) {
       const estimate = App.calculateSelectedRewardEstimate(rewardTx, tx.rewardRuleIds)
       return estimate && (estimate.points || estimate.cashback || estimate.rules?.length)
-        ? (App.decorateRewardEstimateValues?.(card.id, estimate) || estimate)
+        ? App._slimRewardEstimate(App.decorateRewardEstimateValues?.(card.id, estimate) || estimate)
         : null
     }
     const benefit = App._benefit?.(card.id) || S.ccBenefits?.[card.id] || {}
     const reward = Calc.getCardRewards ? Calc.getCardRewards([rewardTx], benefit) : { points:0, cashback:0 }
     if (!reward.points && !reward.cashback) return null
-    return App.decorateRewardEstimateValues?.(card.id, {
+    return App._slimRewardEstimate(App.decorateRewardEstimateValues?.(card.id, {
       points: Number(reward.points || 0),
       cashback: Math.round(Number(reward.cashback || 0) * 100) / 100,
       status:'estimated',
       calculatedAt: localNow(),
       source:'legacy',
-    }) || null
+    }) || null)
   }
 
   App._applyInstantDiscountToTx = function(tx, grossAmount = null) {
