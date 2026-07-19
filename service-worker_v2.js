@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.07.06-reward-estimate-slim'
+const APP_VERSION = '2026.07.19-recurring-credit-wallet'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 const CORE_NETWORK_TIMEOUT_MS = 900

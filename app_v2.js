@@ -6269,7 +6269,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App.openRecurringForm = function(id) {
     const r = id ? (S.recurring || []).find(x => x.id === id) : null
     const cats = [...(S.categories?.expense || []), ...(S.categories?.income || [])]
-    const walletOpts = (S.wallets || []).filter(w => w.type !== 'credit' && !isInvestWallet(w) && !w.archived)
+    const walletOpts = (S.wallets || []).filter(w => !isInvestWallet(w) && !w.archived)
       .map(w => `<option value="${esc(w.id)}"${r?.walletId===w.id?' selected':''}>${esc(w.icon||'')} ${esc(w.name)}</option>`).join('')
     const isMonthly = r?.recurrenceType === 'monthly'
     const typeOpts = ['expense','income'].map(t =>
@@ -12170,7 +12170,7 @@ App._pickMerchant = function(name, opts = {}) {
 
     const cat = catById(draft.categoryId)
     const wallet = walletByIdLocal(draft.walletId)
-    if (!wallet || wallet.type === 'credit') return
+    if (!wallet) return
 
     const recType = draft.recurrenceType === 'days' ? 'days' : 'monthly'
     const durationMonths = parseInt(draft.durationMonths || 0, 10) || null
