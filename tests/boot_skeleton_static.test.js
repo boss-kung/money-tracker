@@ -6,10 +6,9 @@ const path = require('node:path')
 const root = path.join(__dirname, '..')
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8')
 
-test('boot screen renders an app-shell skeleton immediately', () => {
-  const requiredTokens = [
+test('boot screen skeleton has been removed', () => {
+  const removedTokens = [
     'id="mt-boot-screen"',
-    'aria-label="กำลังเปิดแอป"',
     'mt-boot-shell',
     'mt-boot-hero',
     'mt-boot-metrics',
@@ -20,15 +19,15 @@ test('boot screen renders an app-shell skeleton immediately', () => {
     '@keyframes mtBootShimmer',
   ]
 
-  for (const token of requiredTokens) {
-    assert.ok(index.includes(token), `missing boot skeleton token: ${token}`)
+  for (const token of removedTokens) {
+    assert.equal(index.includes(token), false, `boot skeleton token should be removed: ${token}`)
   }
 })
 
 test('html/body paint the skeleton background colour so the WebView never flashes white', () => {
   // The first <style> in the head must set the skeleton base colour on html/body
   // before any boot script runs, and must NOT reintroduce a hardcoded pre-body
-  // fake skeleton (which mismatched the real #mt-boot-screen layout).
+  // fake skeleton.
   const headStyle = index.slice(0, index.indexOf('</head>'))
   assert.ok(/html,\s*body\s*\{[^}]*background:\s*#EEF6FF/i.test(headStyle), 'missing light skeleton background on html/body')
   assert.ok(index.includes('background: #09111F'), 'missing dark skeleton background')

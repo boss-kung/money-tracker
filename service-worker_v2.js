@@ -1,4 +1,4 @@
-const APP_VERSION = '2026.07.20-phase1-xss-fix-r119'
+const APP_VERSION = '2026.07.23-remove-boot-skeleton-r120'
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 const CORE_NETWORK_TIMEOUT_MS = 900

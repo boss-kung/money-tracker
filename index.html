@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <style>
-    /* Paint the skeleton background colour immediately so there is never a
-       white frame inside the WebView before #mt-boot-screen parses. The native
-       iOS cold-start launch screen is handled by the apple-touch-startup-image
+    /* Paint the background colour immediately so there is never a white
+       frame inside the WebView before the app renders. The native iOS
+       cold-start launch screen is handled by the apple-touch-startup-image
        links below (it cannot be painted by CSS). */
     html, body {
       min-height: 100%;
@@ -51,7 +51,7 @@
   <link rel="apple-touch-icon" sizes="120x120" href="./assets/icon-120.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./assets/icon-512.png">
-  <!-- iOS PWA cold-start launch screens (solid skeleton-background colour, light/dark) so there is no white flash before the in-app skeleton. Regenerate with: node scripts/gen-splash.js -->
+  <!-- iOS PWA cold-start launch screens (solid background colour, light/dark) so there is no white flash before the app renders. Regenerate with: node scripts/gen-splash.js -->
   <link rel="apple-touch-startup-image" media="screen and (device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (prefers-color-scheme: light) and (orientation: portrait)" href="./assets/splash/splash-640x1136-light.png">
   <link rel="apple-touch-startup-image" media="screen and (device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (prefers-color-scheme: dark) and (orientation: portrait)" href="./assets/splash/splash-640x1136-dark.png">
   <link rel="apple-touch-startup-image" media="screen and (device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (prefers-color-scheme: light) and (orientation: portrait)" href="./assets/splash/splash-750x1334-light.png">
@@ -145,297 +145,18 @@
     @media (prefers-color-scheme: dark) {
       html, body { background: #09111F; }
     }
-    #mt-boot-screen {
-      position: fixed;
-      inset: 0;
-      z-index: 2147483000;
-      display: flex;
-      flex-direction: column;
-      padding: max(18px, env(safe-area-inset-top)) 16px max(82px, calc(env(safe-area-inset-bottom) + 82px));
-      box-sizing: border-box;
-      background: #EEF6FF;
-      color: #0F172A;
-      font-family: "LINE Seed Sans TH", "LINESeedSansTH", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      opacity: 1;
-      transition: opacity 180ms ease;
-      overflow: hidden;
-    }
-    @media (prefers-color-scheme: dark) {
-      #mt-boot-screen {
-        background: #09111F;
-        color: #F8FAFC;
-      }
-    }
-    #mt-boot-screen.mt-boot-hide {
-      opacity: 0;
-      pointer-events: none;
-    }
-    .mt-boot-shell {
-      width: min(100%, 560px);
-      margin: 0 auto;
-      display: flex;
-      flex: 1;
-      min-height: 0;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .mt-boot-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 2px 2px 0;
-    }
-    .mt-boot-brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-    .mt-boot-logo {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      display: block;
-      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.18);
-    }
-    .mt-boot-kicker {
-      width: 92px;
-      height: 10px;
-      margin-bottom: 7px;
-    }
-    .mt-boot-heading {
-      width: 142px;
-      height: 18px;
-    }
-    .mt-boot-chip {
-      width: 76px;
-      height: 30px;
-      border-radius: 999px;
-    }
-    .mt-boot-hero,
-    .mt-boot-card,
-    .mt-boot-row,
-    .mt-boot-nav,
-    .mt-boot-actions {
-      border: 1px solid rgba(148, 163, 184, 0.22);
-      background: rgba(255, 255, 255, 0.74);
-      box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08);
-      backdrop-filter: blur(14px);
-    }
-    .mt-boot-hero {
-      padding: 18px;
-      border-radius: 22px;
-      background:
-        linear-gradient(135deg, rgba(37, 99, 235, 0.92), rgba(14, 165, 233, 0.86) 52%, rgba(34, 197, 94, 0.82)),
-        #2563EB;
-      color: #fff;
-      box-shadow: 0 18px 44px rgba(37, 99, 235, 0.2);
-    }
-    .mt-boot-hero .mt-boot-line,
-    .mt-boot-hero .mt-boot-pill,
-    .mt-boot-hero .mt-boot-ring {
-      background: rgba(255, 255, 255, 0.28);
-    }
-    .mt-boot-hero-main {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 74px;
-      gap: 16px;
-      align-items: center;
-      margin-top: 14px;
-    }
-    .mt-boot-amount {
-      width: min(210px, 100%);
-      height: 34px;
-      border-radius: 11px;
-    }
-    .mt-boot-subline {
-      width: 124px;
-      height: 12px;
-      margin-top: 12px;
-    }
-    .mt-boot-ring {
-      width: 72px;
-      height: 72px;
-      border-radius: 50%;
-      position: relative;
-    }
-    .mt-boot-ring::after {
-      content: "";
-      position: absolute;
-      inset: 16px;
-      border-radius: inherit;
-      background: rgba(37, 99, 235, 0.9);
-    }
-    .mt-boot-metrics {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-    }
-    .mt-boot-card {
-      border-radius: 18px;
-      padding: 14px;
-    }
-    .mt-boot-card .mt-boot-line + .mt-boot-line {
-      margin-top: 10px;
-    }
-    .mt-boot-list {
-      display: grid;
-      gap: 10px;
-      min-height: 0;
-      overflow: hidden;
-    }
-    .mt-boot-row {
-      display: grid;
-      grid-template-columns: 38px minmax(0, 1fr) 82px;
-      gap: 12px;
-      align-items: center;
-      padding: 12px;
-      border-radius: 16px;
-    }
-    .mt-boot-dot {
-      width: 38px;
-      height: 38px;
-      border-radius: 13px;
-    }
-    .mt-boot-lines {
-      min-width: 0;
-    }
-    .mt-boot-line {
-      height: 12px;
-      border-radius: 999px;
-    }
-    .mt-boot-line.short { width: 48%; }
-    .mt-boot-line.mid { width: 70%; }
-    .mt-boot-line.long { width: 100%; }
-    .mt-boot-line.value { width: 82px; justify-self: end; }
-    .mt-boot-line + .mt-boot-line {
-      margin-top: 8px;
-    }
-    .mt-boot-pill,
-    .mt-boot-line,
-    .mt-boot-dot,
-    .mt-boot-chip {
-      position: relative;
-      overflow: hidden;
-      background: rgba(148, 163, 184, 0.22);
-    }
-    .mt-boot-pill::after,
-    .mt-boot-line::after,
-    .mt-boot-dot::after,
-    .mt-boot-chip::after,
-    .mt-boot-ring::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
-      transform: translateX(-110%);
-      animation: mtBootShimmer 1.18s ease-in-out infinite;
-    }
-    .mt-boot-actions {
-      display: none;
-      border-radius: 14px;
-      padding: 12px;
-      color: #475569;
-      font-size: 13px;
-    }
-    .mt-boot-nav {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: calc(62px + env(safe-area-inset-bottom));
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 8px;
-      padding: 10px 16px max(10px, env(safe-area-inset-bottom));
-      border-width: 1px 0 0;
-      border-radius: 0;
-    }
-    .mt-boot-nav-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-    }
-    .mt-boot-nav-icon {
-      width: 22px;
-      height: 22px;
-      border-radius: 8px;
-    }
-    .mt-boot-nav-text {
-      width: 32px;
-      height: 7px;
-      border-radius: 999px;
-    }
-    .mt-boot-fab {
-      position: fixed;
-      right: 20px;
-      bottom: calc(82px + env(safe-area-inset-bottom));
-      width: 58px;
-      height: 58px;
-      border-radius: 50%;
-      background: rgba(37, 99, 235, 0.86);
-      box-shadow: 0 12px 28px rgba(37, 99, 235, 0.32);
-    }
-    .mt-boot-fab::before,
-    .mt-boot-fab::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 22px;
-      height: 3px;
-      border-radius: 999px;
-      background: rgba(255,255,255,.86);
-      transform: translate(-50%, -50%);
-    }
-    .mt-boot-fab::after {
-      transform: translate(-50%, -50%) rotate(90deg);
-    }
-    @media (prefers-color-scheme: dark) {
-      .mt-boot-hero,
-      .mt-boot-card,
-      .mt-boot-row,
-      .mt-boot-nav,
-      .mt-boot-actions {
-        border-color: rgba(148, 163, 184, 0.18);
-        background: rgba(15, 23, 42, 0.78);
-        box-shadow: 0 16px 38px rgba(0, 0, 0, 0.28);
-      }
-      .mt-boot-pill,
-      .mt-boot-line,
-      .mt-boot-dot,
-      .mt-boot-chip {
-        background: rgba(148, 163, 184, 0.18);
-      }
-      .mt-boot-actions { color: #CBD5E1; }
-    }
-    @keyframes mtBootShimmer {
-      0% { transform: translateX(-110%); }
-      100% { transform: translateX(110%); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      #mt-boot-screen { transition: none; }
-      .mt-boot-pill::after,
-      .mt-boot-line::after,
-      .mt-boot-dot::after,
-      .mt-boot-chip::after,
-      .mt-boot-ring::before { animation: none; transform: none; opacity: 0; }
-    }
   </style>
   <link rel="preload" href="./assets/icon-180.png" as="image">
-  <link rel="preload" href="style_v2.css?v=2026.07.20-phase1-xss-fix-r119" as="style">
+  <link rel="preload" href="style_v2.css?v=2026.07.23-remove-boot-skeleton-r120" as="style">
   <link
     id="mt-main-css"
     rel="stylesheet"
-    href="style_v2.css?v=2026.07.20-phase1-xss-fix-r119"
+    href="style_v2.css?v=2026.07.23-remove-boot-skeleton-r120"
     media="print"
     onload="this.media='all';window.MTBootCssReady=true;window.MTBoot?.mark?.('css.main.loaded')"
     onerror="window.MTBootCssReady=true;window.MTBoot?.mark?.('css.main.error')"
   >
-  <noscript><link rel="stylesheet" href="style_v2.css?v=2026.07.20-phase1-xss-fix-r119"></noscript>
+  <noscript><link rel="stylesheet" href="style_v2.css?v=2026.07.23-remove-boot-skeleton-r120"></noscript>
   <link rel="stylesheet" href="ui_v2.css?v=2026.06.11-uiv2-r104">
   <style>
     /* Active tab dot indicator */
@@ -463,66 +184,6 @@
 </head>
 <body>
 <div id="app">
-  <div id="mt-boot-screen" role="status" aria-live="polite" aria-label="กำลังเปิดแอป">
-    <div class="mt-boot-shell" aria-hidden="true">
-      <div class="mt-boot-top">
-        <div class="mt-boot-brand">
-          <img class="mt-boot-logo" src="./assets/icon-180.png" alt="" draggable="false">
-          <div>
-            <div class="mt-boot-line mt-boot-kicker"></div>
-            <div class="mt-boot-line mt-boot-heading"></div>
-          </div>
-        </div>
-        <div class="mt-boot-chip"></div>
-      </div>
-      <div class="mt-boot-hero">
-        <div class="mt-boot-line short"></div>
-        <div class="mt-boot-hero-main">
-          <div>
-            <div class="mt-boot-line mt-boot-amount"></div>
-            <div class="mt-boot-line mt-boot-subline"></div>
-          </div>
-          <div class="mt-boot-ring"></div>
-        </div>
-      </div>
-      <div class="mt-boot-metrics">
-        <div class="mt-boot-card">
-          <div class="mt-boot-line mid"></div>
-          <div class="mt-boot-line long"></div>
-        </div>
-        <div class="mt-boot-card">
-          <div class="mt-boot-line short"></div>
-          <div class="mt-boot-line long"></div>
-        </div>
-      </div>
-      <div class="mt-boot-list">
-        <div class="mt-boot-row">
-          <div class="mt-boot-dot"></div>
-          <div class="mt-boot-lines"><div class="mt-boot-line long"></div><div class="mt-boot-line mid"></div></div>
-          <div class="mt-boot-line value"></div>
-        </div>
-        <div class="mt-boot-row">
-          <div class="mt-boot-dot"></div>
-          <div class="mt-boot-lines"><div class="mt-boot-line mid"></div><div class="mt-boot-line short"></div></div>
-          <div class="mt-boot-line value"></div>
-        </div>
-        <div class="mt-boot-row">
-          <div class="mt-boot-dot"></div>
-          <div class="mt-boot-lines"><div class="mt-boot-line long"></div><div class="mt-boot-line mid"></div></div>
-          <div class="mt-boot-line value"></div>
-        </div>
-      </div>
-      <div id="mt-boot-actions" class="mt-boot-actions"></div>
-      <div class="mt-boot-fab"></div>
-      <div class="mt-boot-nav">
-        <div class="mt-boot-nav-item"><div class="mt-boot-dot mt-boot-nav-icon"></div><div class="mt-boot-line mt-boot-nav-text"></div></div>
-        <div class="mt-boot-nav-item"><div class="mt-boot-dot mt-boot-nav-icon"></div><div class="mt-boot-line mt-boot-nav-text"></div></div>
-        <div class="mt-boot-nav-item"><div class="mt-boot-dot mt-boot-nav-icon"></div><div class="mt-boot-line mt-boot-nav-text"></div></div>
-        <div class="mt-boot-nav-item"><div class="mt-boot-dot mt-boot-nav-icon"></div><div class="mt-boot-line mt-boot-nav-text"></div></div>
-        <div class="mt-boot-nav-item"><div class="mt-boot-dot mt-boot-nav-icon"></div><div class="mt-boot-line mt-boot-nav-text"></div></div>
-      </div>
-    </div>
-  </div>
   <script>window.MTBoot?.mark?.('boot.dom.inserted')</script>
 
   <!-- Toast (aria-live so screen readers announce new messages) -->
@@ -722,9 +383,9 @@
 <script defer src="credit_card_cycles.js?v=2026.06.23-credit-due-r107"></script>
 <script defer src="bnpl.js?v=2026.06.09-bnpl-features-r7"></script>
 <script defer src="crypto_vault.js?v=2026.06.04-secure-sync1"></script>
-<script defer src="auth_sync.js?v=2026.07.20-phase1-xss-fix-r119"></script>
+<script defer src="auth_sync.js?v=2026.07.23-remove-boot-skeleton-r120"></script>
 <script defer src="gold_market.js?v=2026.06.13-gold-r106"></script>
-<script defer src="app_v2.js?v=2026.07.20-phase1-xss-fix-r119"></script>
+<script defer src="app_v2.js?v=2026.07.23-remove-boot-skeleton-r120"></script>
 <script defer src="split_bill.js?v=2026.05.15-r1"></script>
 <script defer src="loans_v2.js?v=2026.06.05-r1"></script>
 <script defer src="quick_capture.js?v=2026.05.18-r13"></script>
