@@ -1453,17 +1453,18 @@ const App = {
     const due     = App.getCreditCardDueInfo?.(card)
     const owed    = Math.max(0, Number(due?.amount || due?.statement?.balanceDue || Math.abs(card.balance || 0)))
     const sources = S.wallets.filter(w => w.id !== cardId && w.type !== 'credit' && w.type !== 'bnpl')
+    const esc     = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch])))
 
     document.getElementById('cc-pay-content').innerHTML = `
       <div style="text-align:center;margin-bottom:20px">
-        <div style="font-size:14px;color:var(--muted)">${card.icon} ${card.name} · ยอดค้างชำระ</div>
+        <div style="font-size:14px;color:var(--muted)">${esc(card.icon)} ${esc(card.name)} · ยอดค้างชำระ</div>
         <div style="font-size:40px;font-weight:800;color:var(--expense);margin-top:4px">${Calc.fmt(owed)}</div>
       </div>
       <div class="form-group">
         <label class="form-label">จ่ายจากกระเป๋า</label>
         <select class="form-input" id="cc-pay-wallet">
           <option value="">เลือกกระเป๋า</option>
-          ${sources.map(w => `<option value="${w.id}">${w.icon} ${w.name} (${Calc.fmt(w.balance)})</option>`).join('')}
+          ${sources.map(w => `<option value="${esc(w.id)}">${esc(w.icon)} ${esc(w.name)} (${Calc.fmt(w.balance)})</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
@@ -2142,7 +2143,8 @@ setTimeout(() => {
     const bar = document.createElement('div')
     bar.id = 'mt-undo-bar'
     bar.className = 'mt-undo-bar'
-    bar.innerHTML = `<span class="mt-undo-bar-label">${label}</span><button class="mt-undo-bar-btn" onclick="App._doUndo()">ยกเลิก</button>`
+    const escLabel = App._esc ? App._esc(label) : String(label ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch]))
+    bar.innerHTML = `<span class="mt-undo-bar-label">${escLabel}</span><button class="mt-undo-bar-btn" onclick="App._doUndo()">ยกเลิก</button>`
     document.body.appendChild(bar)
     App._undoState = {
       _undo: undoFn,
@@ -4002,10 +4004,7 @@ App.render();
   const FMT = n => moneyFmt(Number(n) || 0)
 
   function mlabel(ym) {
-    if (!ym) return ''
-    const [y, m] = ym.split('-').map(Number)
-    const names = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
-    return `${names[m-1]} ${y}`
+    return Calc.monthLabel ? Calc.monthLabel(ym) : ''
   }
 
   function secHdr(title, actionLabel, action) {
@@ -6190,7 +6189,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       if (t.toWalletId && !walletIds.has(t.toWalletId)) { warnings.push('ข้ามรายการที่อ้างอิงปลายทางไม่พบ'); return false }
       return true
     })
-    return { ok:true, errors, warnings, data:{ ...data, transactions } }
+    return { ok:true, errors, warnings, originalTransactionCount: data.transactions.length, data:{ ...data, transactions } }
   }
 
   App.saveCCPay = function() {
@@ -6654,7 +6653,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const monthEl = document.getElementById('report-month-chips')
     const viewEl = document.getElementById('report-view-chips')
     if (monthEl) monthEl.innerHTML =
-      `<div class="chips" style="padding:0;margin-bottom:4px">${years.map(y => `<button class="chip${y === selectedYear ? ' active' : ''}" onclick="App._setRptYear(${y})">${y}</button>`).join('')}</div>` +
+      `<div class="chips" style="padding:0;margin-bottom:4px">${years.map(y => `<button class="chip${y === selectedYear ? ' active' : ''}" onclick="App._setRptYear(${y})">${y + 543}</button>`).join('')}</div>` +
       `<div class="chips" style="padding:0">${months.map(m => `<button class="chip${m === S.rptMonth ? ' active' : ''}" onclick="App.setRptMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`).join('')}</div>`
     if (viewEl) viewEl.innerHTML = [
       ['assets','สินทรัพย์'],
@@ -17064,10 +17063,30 @@ App._pickMerchant = function(name, opts = {}) {
       ['ผ่อนชำระ', 'installments'], ['บัญชีคะแนน', 'rewardAccounts'], ['Crypto holdings', 'cryptoHoldings'],
       ['กฎสิทธิประโยชน์', 'ccBenefitRules'], ['หารบิล', 'splitBills'], ['คนหารบิล', 'splitPeople'],
     ]
-    const counts = rows.map(([label, key]) => `<div class="reward-tile"><span>${esc(label)}</span><strong>${previewCount(payload, key).toLocaleString('en-US')}</strong></div>`).join('')
+    const droppedCount = (checked.warnings || []).length
+    const counts = rows.map(([label, key]) => {
+      const n = previewCount(payload, key)
+      // Flag the discrepancy right where the count is shown, not only in a
+      // hint further down — the count alone otherwise looks like the full
+      // file total, with no clue that rows were silently excluded from it.
+      const droppedNote = (key === 'transactions' && droppedCount)
+        ? ` <span style="color:var(--expense);font-weight:400;font-size:11px">(ข้าม ${droppedCount})</span>`
+        : ''
+      return `<div class="reward-tile"><span>${esc(label)}</span><strong>${n.toLocaleString('en-US')}${droppedNote}</strong></div>`
+    }).join('')
+    // Group by message so repeated reasons collapse into one line with a
+    // count instead of truncating to the first 3 raw warning strings.
+    const warningGroups = new Map()
+    ;(checked.warnings || []).forEach(w => warningGroups.set(w, (warningGroups.get(w) || 0) + 1))
+    const warningList = [...warningGroups.entries()]
+      .map(([msg, n]) => `${esc(msg)}${n > 1 ? ` ×${n}` : ''}`)
+      .join('<br>')
+    const warningBlock = droppedCount
+      ? `<div class="mt-integrity-warn" style="cursor:default">⚠ ข้าม ${droppedCount} รายการที่นำเข้าไม่ได้${checked.originalTransactionCount ? ` (จากทั้งหมด ${checked.originalTransactionCount.toLocaleString('en-US')} รายการในไฟล์)` : ''}:<br>${warningList}</div>`
+      : ''
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen();${input ? "document.getElementById('import-file-v5').value=''" : ''}">←</button><h2>Preview นำเข้า</h2></div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
-        <div class="card card-pad" style="margin-bottom:12px"><div class="report-category-title">ข้อมูลในไฟล์สำรอง</div><div class="reward-grid" style="margin-top:10px">${counts}</div>${(checked.warnings || []).length ? `<div class="form-hint" style="margin-top:10px">คำเตือน ${checked.warnings.length} จุด: ${esc(checked.warnings.slice(0,3).join(' · '))}</div>` : ''}</div>
+        <div class="card card-pad" style="margin-bottom:12px"><div class="report-category-title">ข้อมูลในไฟล์สำรอง</div><div class="reward-grid" style="margin-top:10px">${counts}</div>${warningBlock ? `<div style="margin-top:10px">${warningBlock}</div>` : ''}</div>
         <div class="card card-pad"><button class="btn btn-primary" onclick="App.confirmImportPayload('merge')">Merge: เพิ่มเฉพาะข้อมูลใหม่</button><button class="btn btn-outline mt-8" onclick="App.confirmImportPayload('replace')">Replace: แทนที่ข้อมูลทั้งหมด</button><div class="form-hint" style="margin-top:10px">แอปจะสำรองข้อมูลเดิมไว้เสมอก่อนนำเข้า Merge จะไม่เขียนทับรายการที่มีอยู่แล้ว</div></div>
       </div>`)
     App._pendingImportPayload = payload
@@ -22417,14 +22436,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       _prev?.(...args)
       try {
         const content = document.getElementById('reports-content')
-        // N13: fade in new content
+        // N13: fade in new content (declarative CSS animation — always completes on
+        // its own, so it can't be left mid-transition by a re-entrant renderReports() call)
         if (content) {
-          content.style.opacity = '0'
-          content.style.transition = 'opacity .22s ease'
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            content.style.opacity = '1'
-            setTimeout(() => { content.style.transition = ''; content.style.opacity = '' }, 260)
-          }))
+          content.classList.remove('mt-reports-fade-in')
+          void content.offsetWidth // force reflow so the animation restarts every call
+          content.classList.add('mt-reports-fade-in')
         }
         // N24: insight rows use flip-in instead of card-in
         setTimeout(() => {
@@ -24541,4 +24558,131 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   try { App.repairSharedExpenseData?.({ save:true }) } catch (err) { console.warn('shared expense repair failed', err) }
+})()
+
+/* ============================================================
+   Hardware/OS back-button support for overlays, sub-screens,
+   and confirm dialogs
+   ============================================================
+   Problem: none of these ever touch browser history, so pressing the
+   Android back button (or a browser/PWA swipe-back gesture) while any
+   of them is open exits the whole app instead of closing just that
+   layer.
+
+   Fix: push one history entry per layer opened, and consume one via
+   history.back() per layer closed through the existing UI (backdrop
+   tap, X, ←, cancel/confirm) — so browser history depth always tracks
+   real layer depth, including nested cases (e.g. an edit-wallet overlay
+   opened from within the wallet-detail sub-screen). A single popstate
+   listener closes whichever layer is currently on top when the hardware
+   back button is pressed, by calling the very same close function /
+   clicking the very same on-screen control the user would — so behavior
+   always matches what tapping the visible close control already does.
+   The poppingOurs flag distinguishes "browser already popped this for
+   us" (via popstate) from "user closed via UI, we still owe a pop" (via
+   history.back()), so the two paths never double-consume history.
+
+   Scope: openOverlay/closeOverlay (which openDynamicSheet delegates to),
+   openSubScreen/closeSubScreen, and showConfirm — the shared primitives
+   behind the app's overlays, sub-screens, and confirm dialogs. A handful
+   of one-off dialogs that build/remove() their own DOM node directly
+   (privilege actions, etc.) are not covered here.
+
+   Note on "is this open?" checks: closeOverlay/closeSubScreen animate out
+   over ~280-380ms before their .open CSS class is actually removed, so a
+   classList check done right after calling them still reads as "open" —
+   an unreliable signal if open/close happen faster than that animation
+   (e.g. rapid re-taps). We track "was this asked to open/close" ourselves
+   instead, synchronously, independent of the animation.
+   ============================================================ */
+;(function _patchHistoryBackNav() {
+  if (typeof App === 'undefined') return
+
+  let depth = 0            // history entries pushed by us that browser history still holds
+  let poppingOurs = false  // true while our own popstate handler is closing a layer
+  const openOverlayIds = new Set()
+  let subScreenRequestedOpen = false
+
+  function pushLayer() {
+    depth++
+    if (!poppingOurs) {
+      try { history.pushState({ mtBackLayer: depth }, '', location.href) } catch (_) {}
+    }
+  }
+
+  function popLayer() {
+    if (depth <= 0) return // never consume history we didn't push
+    depth--
+    if (!poppingOurs) {
+      try { history.back() } catch (_) {}
+    }
+  }
+
+  function closeTopLayer() {
+    const confirmEl = document.getElementById('v23-confirm-overlay')
+    if (confirmEl) { confirmEl.querySelector('.v23-cancel-btn')?.click(); return }
+
+    const overlays = [...document.querySelectorAll('.overlay.open:not(.mt-closing)')]
+    if (overlays.length) {
+      const top = overlays[overlays.length - 1]
+      if (top.id === 'overlay-add-tx') App.closeAddTx?.()
+      else App.closeOverlay?.(top.id)
+      return
+    }
+
+    const ss = document.getElementById('sub-screen')
+    if (ss?.classList.contains('open')) {
+      const backBtn = ss.querySelector('.sub-header .btn-icon')
+      if (backBtn) backBtn.click()
+      else App.closeSubScreen?.()
+    }
+  }
+
+  window.addEventListener('popstate', () => {
+    if (depth <= 0) return // nothing of ours was open — let default back navigation proceed
+    poppingOurs = true
+    try { closeTopLayer() } finally { poppingOurs = false }
+  })
+
+  const _openOverlay = App.openOverlay.bind(App)
+  App.openOverlay = function (id) {
+    const wasOpen = openOverlayIds.has(id)
+    _openOverlay(id)
+    openOverlayIds.add(id)
+    if (!wasOpen) pushLayer()
+  }
+
+  const _closeOverlay = App.closeOverlay.bind(App)
+  App.closeOverlay = function (id) {
+    const wasOpen = openOverlayIds.has(id)
+    _closeOverlay(id)
+    openOverlayIds.delete(id)
+    if (wasOpen) popLayer()
+  }
+
+  const _openSubScreen = App.openSubScreen.bind(App)
+  App.openSubScreen = function (html, opts) {
+    const wasOpen = subScreenRequestedOpen
+    _openSubScreen(html, opts)
+    subScreenRequestedOpen = true
+    if (!wasOpen) pushLayer()
+  }
+
+  const _closeSubScreen = App.closeSubScreen.bind(App)
+  App.closeSubScreen = function () {
+    const wasOpen = subScreenRequestedOpen
+    _closeSubScreen()
+    subScreenRequestedOpen = false
+    if (wasOpen) popLayer()
+  }
+
+  const _showConfirm = App.showConfirm.bind(App)
+  App.showConfirm = function (opts) {
+    pushLayer()
+    _showConfirm(opts)
+    const el = document.getElementById('v23-confirm-overlay')
+    el?.querySelector('.v23-cancel-btn')?.addEventListener('click', () => popLayer())
+    el?.querySelector('.v23-ok-btn')?.addEventListener('click', () => popLayer())
+    el?.addEventListener('click', e => { if (e.target === el) popLayer() })
+  }
 })()

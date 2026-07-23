@@ -1091,9 +1091,11 @@
       innerHtml = `
         <div class="mt-auth-gate-panel" role="dialog" aria-modal="true" aria-labelledby="mt-auth-gate-title">
           <img class="mt-auth-gate-mark" src="./assets/icon-180.png" alt="" draggable="false">
-          <h1 id="mt-auth-gate-title">Financial Tracker</h1></br><h1 id="mt-auth-gate-title">กรุณาเข้าสู่ระบบ</h1>
-          <p>ข้อมูลการเงินของคุณจะถูกซ่อนไว้</br>จนกว่าจะเข้าสู่ระบบด้วยบัญชี Google</p>
+          <h1 id="mt-auth-gate-title">กรุณาเข้าสู่ระบบ</h1>
+          <p>ข้อมูลการเงินของคุณจะถูกซ่อนไว้<br>จนกว่าจะเข้าสู่ระบบด้วยบัญชี Google</p>
           <button class="btn btn-primary" type="button" data-mt-auth-action="login">Sign in with Google</button>
+          <button class="btn btn-secondary" type="button" data-mt-auth-action="try-demo" style="margin-top:8px">ลองดูตัวอย่างแอป (โหมดเดโม)</button>
+          <p style="margin-top:12px;font-size:12px">ข้อมูลตัวอย่างเท่านั้น ไม่กระทบบัญชีจริงของคุณ</p>
         </div>`
     }
 
@@ -1257,6 +1259,14 @@
         return
       }
       if (action === 'login') signInWithGoogle().catch(error => toastSafe(`เริ่ม Google login ไม่สำเร็จ: ${error.message}`, 'error'))
+      if (action === 'try-demo') {
+        // Mirrors App's demo-navigation helper, inlined: auth_sync.js loads and
+        // can show this gate before app_v2.js has finished executing.
+        try {
+          const target = new URL(root.MT_DEMO_MODE ? 'index.html' : 'demo/index.html', location.href)
+          location.href = target.href
+        } catch (_) {}
+      }
       if (action === 'retry-restore') {
         state.restoring = true
         state.restoreError = null

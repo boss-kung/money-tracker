@@ -447,7 +447,15 @@ html.dark .nw-chart-zero-line { stroke: #334155; }
 .wallet-tab-bar::-webkit-scrollbar { display: none; }
 .wallet-tab {
   flex-shrink: 0;
-  padding: 6px 14px;
+  /* Real padding, not a hit-area pseudo-element: .wallet-tab-bar has
+     overflow-x:auto, which computes overflow-y to auto too, so an
+     absolutely-positioned ::before expanding past the tab's own box
+     would get clipped by the scroll container. */
+  padding: 10px 14px;
+  min-height: 44px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
   border-radius: 999px;
   border: 1.5px solid var(--border);
   background: var(--elevated);
@@ -1591,6 +1599,12 @@ html.dark .mt-alert-row-name { color: var(--text); }
   --nav-h: 64px;
   --fab-size: 54px;
 
+  /* Scroll-content clearance so the floating FAB (and, on dashboard/transactions,
+     the quick-capture mic button above it) never overlaps the last row of a list.
+     Keep these in sync with the #fab / #fab-mic bottom/height rules below. */
+  --fab-clearance: calc(var(--nav-h) + var(--safe-b) + var(--app-bottom-gap) + 6px + var(--fab-size) + 20px);
+  --fab-mic-clearance: calc(var(--nav-h) + var(--safe-b) + var(--app-bottom-gap) + 6px + var(--fab-size) + 12px + 46px + 20px);
+
   /* Radii */
   --radius: 16px;
   --radius-lg: 22px;
@@ -2375,14 +2389,22 @@ textarea {
   padding-left: max(var(--app-gutter), var(--safe-l)) !important;
   padding-right: max(var(--app-gutter), var(--safe-r)) !important;
   padding-top: 8px !important;
-  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 4px) !important;
-  scroll-padding-bottom: calc(var(--nav-h) + var(--safe-b) + 4px) !important;
+  /* Clear the floating FAB (present on every page) so it never overlaps the
+     last row of a list. */
+  padding-bottom: var(--fab-clearance) !important;
+  scroll-padding-bottom: var(--fab-clearance) !important;
+}
+
+/* Dashboard and transactions also show the quick-capture mic button floating
+   above the FAB — reserve enough space to clear both. */
+body.is-dashboard #dashboard-content,
+body.is-transactions #tx-list-content {
+  padding-bottom: var(--fab-mic-clearance) !important;
+  scroll-padding-bottom: var(--fab-mic-clearance) !important;
 }
 
 body.is-dashboard #dashboard-content {
   padding-top: max(10px, calc(var(--safe-t) + 8px)) !important;
-  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 36px) !important;
-  scroll-padding-bottom: calc(var(--nav-h) + var(--safe-b) + 36px) !important;
 }
 
 .page-header {
@@ -2774,7 +2796,7 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
   font-size:11px !important;
 }
 #tx-list-content {
-  padding: 2px var(--app-gutter) calc(var(--nav-h) + var(--safe-b) + 18px) !important;
+  padding: 2px var(--app-gutter) var(--fab-mic-clearance) !important;
 }
 .tx-date-header {
   display:flex;
@@ -3221,7 +3243,7 @@ label.color-swatch {
    Wallet visibility and colored card surfaces
    ============================================================ */
 #page-wallets.active { display:flex !important; flex-direction:column !important; }
-#wallets-content { display:block !important; visibility:visible !important; flex:1 1 auto !important; min-height:0 !important; overflow-y:auto !important; padding-bottom:calc(var(--nav-h) + var(--safe-b) + 22px) !important; }
+#wallets-content { display:block !important; visibility:visible !important; flex:1 1 auto !important; min-height:0 !important; overflow-y:auto !important; padding-bottom:var(--fab-clearance) !important; }
 .wallet-summary-grid-fixed, .wallet-summary-grid { display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:10px !important; width:100% !important; }
 .wallet-empty-card { color:var(--muted) !important; font-size:13px !important; margin-bottom:12px !important; }
 .wallet-card.wallet-card-colored { color:#fff !important; background:linear-gradient(135deg, var(--wallet-color, #2563EB), var(--wallet-color-2, #1D4ED8)) !important; border:0 !important; box-shadow:0 12px 28px rgba(15,23,42,.13) !important; overflow:hidden !important; }
@@ -3247,6 +3269,12 @@ label.color-swatch {
   min-height:32px !important;
   min-width:48px !important;
   font-weight: 800 !important;
+}
+/* Touch-target minimum for the pay button specifically (regular chip
+   buttons on colored cards stay 32px — this is the only one that's a
+   primary tappable action, not a label/badge). */
+.wallet-card.wallet-card-colored .wc-card-pay-btn {
+  min-height: 44px !important;
 }
 .wallet-market-note.compact { margin-top:10px !important; margin-bottom:0 !important; }
 
@@ -3327,6 +3355,7 @@ label.color-swatch {
 
 /* ── Wallet card edit button ───────────────────────────────── */
 .wc-edit-btn {
+  position: relative;
   background: rgba(255,255,255,.18);
   border: 1px solid rgba(255,255,255,.25);
   border-radius: 8px;
@@ -3339,6 +3368,16 @@ label.color-swatch {
   transition: background .15s;
 }
 .wc-edit-btn:active { background: rgba(255,255,255,.32); }
+/* Visible box stays small (fits the tight wallet-card header); expand the
+   tap target to the 44px touch-size minimum via an invisible hit area.
+   Asymmetric: on credit-card wallets a "ชำระ" button sits only 6px to the
+   left, so that side only grows 3px (leaving 3px clearance) while the
+   other sides — which border empty card padding — grow more. */
+.wc-edit-btn::before {
+  content: '';
+  position: absolute;
+  inset: -6px -10px -5px -3px;
+}
 .wc-invest-units { opacity: .82; font-size: 12px; }
 
 
@@ -3350,7 +3389,7 @@ label.color-swatch {
   flex-shrink: 0 !important;
 }
 .wc-card-pay-btn {
-  min-height: 28px !important;
+  min-height: 44px !important; /* touch-target minimum; width (48px) was already sufficient */
   padding: 5px 9px !important;
   font-size: 12px !important;
 }
@@ -4046,7 +4085,11 @@ body {
 
 /* Wallet section title row with right-aligned button */
 .wallet-section-title-row{display:flex!important;justify-content:space-between;align-items:center}
-.wallet-section-refresh-btn{width:auto!important;flex-shrink:0;padding:5px 10px!important;font-size:12px!important;height:auto!important}
+.wallet-section-refresh-btn{width:auto!important;flex-shrink:0;padding:5px 10px!important;font-size:12px!important;height:auto!important;position:relative}
+/* Visible button stays compact; expand the tap target to the 44px minimum.
+   Asymmetric: ~8px gap to the "จัดเรียง" button on the right keeps that
+   side smaller than the others, which only border page-header padding. */
+.wallet-section-refresh-btn::before{content:'';position:absolute;inset:-6px -6px -6px -8px}
 
 /* Wallet page h1 row */
 .wallets-h1-row{display:flex;justify-content:space-between;align-items:center}
@@ -6909,6 +6952,18 @@ h6,
 }
 .mt-card-in {
   animation: mt-card-in .45s ease both !important;
+}
+
+/* ── N13: Reports content fade-in on filter change ─────────────
+   Declarative CSS animation (not inline-style + rAF/setTimeout) so it
+   always completes on its own and can never be left mid-transition if
+   renderReports() is re-invoked before the previous run finished. */
+@keyframes mt-reports-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.mt-reports-fade-in {
+  animation: mt-reports-fade-in .22s ease both;
 }
 
 /* ── P3: Empty state icon gentle float ───────────────────────── */
