@@ -24603,10 +24603,41 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   const openOverlayIds = new Set()
   let subScreenRequestedOpen = false
 
+  // Real browser navigation (pushState / back()) is deferred to a microtask and netted
+  // out, rather than issued immediately inside pushLayer/popLayer. Reason: a same-tick
+  // "close A, open B" swap (e.g. duplicate/edit-tx replacing the detail overlay with the
+  // add-tx sheet) nets to zero depth change, but history.back() only *fires* its popstate
+  // asynchronously — so an immediate back() followed by an immediate pushState() races:
+  // the queued popstate for the back() lands after the pushState, sees a layer still open,
+  // and closes it right back out. Netting to zero and skipping navigation entirely avoids
+  // the race; a net non-zero change still performs exactly that many push/back calls.
+  let pendingDelta = 0
+  let flushScheduled = false
+
+  function scheduleFlush() {
+    if (flushScheduled) return
+    flushScheduled = true
+    queueMicrotask(() => {
+      flushScheduled = false
+      const delta = pendingDelta
+      pendingDelta = 0
+      if (delta > 0) {
+        for (let i = 0; i < delta; i++) {
+          try { history.pushState({ mtBackLayer: depth - delta + i + 1 }, '', location.href) } catch (_) {}
+        }
+      } else if (delta < 0) {
+        for (let i = 0; i < -delta; i++) {
+          try { history.back() } catch (_) {}
+        }
+      }
+    })
+  }
+
   function pushLayer() {
     depth++
     if (!poppingOurs) {
-      try { history.pushState({ mtBackLayer: depth }, '', location.href) } catch (_) {}
+      pendingDelta++
+      scheduleFlush()
     }
   }
 
@@ -24614,7 +24645,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (depth <= 0) return // never consume history we didn't push
     depth--
     if (!poppingOurs) {
-      try { history.back() } catch (_) {}
+      pendingDelta--
+      scheduleFlush()
     }
   }
 
