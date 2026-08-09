@@ -8,7 +8,8 @@
 
   // ── Utilities ─────────────────────────────────────────────
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
-  const esc   = v  => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))
+  const SafeRender = globalThis.MTSafeRender || (typeof require === 'function' ? require('./safe_render.js') : null)
+  const esc   = SafeRender.escapeHtml
   const money = n  => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : `฿${(Number(n)||0).toLocaleString('en-US')}`)
   const primaryWallet = () =>
     (S.wallets || []).find(w => w.type !== 'credit' && !w.archived)?.id ||

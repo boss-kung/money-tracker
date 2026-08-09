@@ -45,11 +45,18 @@ const FinanceIntelligence = (() => {
   }
 
   function loadJson(key, fallback) {
-    try { return JSON.parse(localStorage.getItem(key) || '') || fallback } catch(_) { return fallback }
+    try {
+      if (globalThis.MTStorage?.loadCollection) return globalThis.MTStorage.loadCollection(key, fallback)
+      return JSON.parse(localStorage.getItem(key) || '') || fallback
+    } catch(_) { return fallback }
   }
 
   function saveJson(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)) } catch(_) {}
+    try {
+      if (globalThis.MTStorage?.saveCollection) return globalThis.MTStorage.saveCollection(key, value)
+      localStorage.setItem(key, JSON.stringify(value))
+      return true
+    } catch(_) { return false }
   }
 
   function recurringMonthlyAmount(r) {

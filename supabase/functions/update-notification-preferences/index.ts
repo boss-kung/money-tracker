@@ -1,4 +1,4 @@
-import { adminClient, getAuthenticatedUserId } from '../_shared/supabase.ts'
+import { adminClient, requestErrorStatus, requireAuthenticatedUserId, requireInstallOwnership } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
 const BOOL_KEYS = [
@@ -22,10 +22,14 @@ Deno.serve(async req => {
     const installId = String(body.installId || '').trim()
     if (!installId) return jsonResponse({ error: 'installId is required' }, 400, req)
 
+    const userId = await requireAuthenticatedUserId(req)
+    const supabase = adminClient()
+    await requireInstallOwnership(supabase, installId, userId)
+
     const prefs = body.preferences && typeof body.preferences === 'object' ? body.preferences : {}
     const row: Record<string, unknown> = {
       install_id: installId,
-      user_id: await getAuthenticatedUserId(req),
+      user_id: userId,
       timezone: String(prefs.timezone || body.timezone || 'Asia/Bangkok').slice(0, 64),
     }
     BOOL_KEYS.forEach(key => {
@@ -35,13 +39,13 @@ Deno.serve(async req => {
       row.daily_expense_time = String(prefs.daily_expense_time)
     }
 
-    const { error } = await adminClient()
+    const { error } = await supabase
       .from('mt_notification_preferences')
       .upsert(row, { onConflict: 'install_id' })
     if (error) throw error
 
     return jsonResponse({ ok: true }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 500, req)
+    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, requestErrorStatus(error), req)
   }
 })

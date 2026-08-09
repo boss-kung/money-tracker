@@ -1,4 +1,4 @@
-import { adminClient, getAuthenticatedUserId } from '../_shared/supabase.ts'
+import { adminClient, requestErrorStatus, requireAuthenticatedUserId, requireInstallOwnership } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
 type CustomRule = {
@@ -67,7 +67,7 @@ function shouldUseTriggerDefaultRoute(route: string, triggerType: string) {
   return false
 }
 
-function normalizeRule(rule: CustomRule, installId: string, userId: string | null, appVersion = '') {
+function normalizeRule(rule: CustomRule, installId: string, userId: string, appVersion = '') {
   const id = cleanText(rule.id, 80) || crypto.randomUUID()
   const title = cleanText(rule.title, 120)
   if (!title) return null
@@ -106,7 +106,7 @@ Deno.serve(async req => {
     const body = await req.json()
     const installId = cleanText(body.installId, 120)
     if (!installId) return jsonResponse({ error: 'installId is required' }, 400, req)
-    const userId = await getAuthenticatedUserId(req)
+    const userId = await requireAuthenticatedUserId(req)
 
     const rules = Array.isArray(body.rules) ? body.rules : []
     const rows: Array<NonNullable<ReturnType<typeof normalizeRule>>> = rules
@@ -114,6 +114,7 @@ Deno.serve(async req => {
       .filter((row: ReturnType<typeof normalizeRule>): row is NonNullable<ReturnType<typeof normalizeRule>> => Boolean(row))
 
     const supabase = adminClient()
+    await requireInstallOwnership(supabase, installId, userId)
     const { error: deleteError } = await supabase
       .from('mt_notification_rules')
       .delete()
@@ -129,6 +130,6 @@ Deno.serve(async req => {
 
     return jsonResponse({ ok: true, synced: rows.length }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, 500, req)
+    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, requestErrorStatus(error), req)
   }
 })

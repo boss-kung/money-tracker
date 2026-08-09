@@ -1,127 +1,62 @@
-const KEYS = {
-  transactions:        'mt_transactions',
-  wallets:             'mt_wallets',
-  categories:          'mt_categories',
-  budgets:             'mt_budgets',
-  settings:            'mt_settings',
-  recurring:           'mt_recurring',
-  upcomingBills:       'mt_upcoming_bills',
-  merchants:           'mt_merchants',
-  ccBenefits:          'mt_cc_benefits',
-  ccBenefitRules:      'mt_cc_benefit_rules',
-  incomeBudgets:       'mt_income_budgets',
-  marketPrices:        'mt_market_prices',
-  rewardLedger:        'mt_reward_ledger',
-  netWorthSnapshots:   'mt_net_worth_snapshots',
-  investmentSnapshots: 'mt_investment_snapshots',
-  creditLimitGroups:   'mt_credit_limit_groups',
-  rewardAccounts:      'mt_reward_accounts',
-  cryptoAssets:        'mt_crypto_assets',
-  cryptoHoldings:      'mt_crypto_holdings',
-  cryptoTransactions:  'mt_crypto_transactions',
-  cryptoSyncMeta:      'mt_crypto_sync_meta',
-  goals:               'mt_goals',
-  privileges:          'mt_privileges',
-  creditCardPromoSearches: 'mt_credit_card_promo_searches',
-  creditCardPromotions:    'mt_credit_card_promotions',
-  splitBills:          'mt_split_bills',
-  splitPeople:         'mt_split_people',
-  splitBillDraft:      'mt_split_bill_draft',
-  migrations:          'mt_migrations',
-  aiInsightStore:      'mt_ai_insight_store',
-  financialMemory:     'mt_financial_memory',
-  monthlyFinancialFeatures: 'mt_monthly_financial_features',
-  financialRecommendationFeedback: 'mt_financial_recommendation_feedback',
-  financialActionLog: 'mt_financial_action_log',
-  financialLifePlans: 'mt_financial_life_plans',
-  loans:              'mt_loans',
-  bnplPlans:          'mt_bnpl_plans',
+function cloneStorageDefault(value) {
+  if (value === null || value === undefined) return value
+  return JSON.parse(JSON.stringify(value))
 }
 
-const BACKUP_SCHEMA_VERSION = 3
+// One schema owns local keys, defaults, State hydration, backup inclusion, and reset.
+// Collections with state:false keep their own in-memory models but still cross the
+// same Storage Interface for local persistence and encrypted Vault export.
+const COLLECTIONS = Object.freeze({
+  transactions:        { key:'mt_transactions', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_TRANSACTIONS !== 'undefined' ? DEFAULT_TRANSACTIONS : []) },
+  wallets:             { key:'mt_wallets', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_WALLETS !== 'undefined' ? DEFAULT_WALLETS : []) },
+  categories:          { key:'mt_categories', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_CATEGORIES !== 'undefined' ? DEFAULT_CATEGORIES : { expense:[], income:[] }) },
+  budgets:             { key:'mt_budgets', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_BUDGETS !== 'undefined' ? DEFAULT_BUDGETS : []) },
+  settings:            { key:'mt_settings', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_SETTINGS !== 'undefined' ? DEFAULT_SETTINGS : {}) },
+  recurring:           { key:'mt_recurring', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_RECURRING !== 'undefined' ? DEFAULT_RECURRING : []) },
+  upcomingBills:       { key:'mt_upcoming_bills', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_UPCOMING_BILLS !== 'undefined' ? DEFAULT_UPCOMING_BILLS : []) },
+  merchants:           { key:'mt_merchants', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_MERCHANTS !== 'undefined' ? DEFAULT_MERCHANTS : []) },
+  ccBenefits:          { key:'mt_cc_benefits', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_CC_BENEFITS !== 'undefined' ? DEFAULT_CC_BENEFITS : {}) },
+  ccBenefitRules:      { key:'mt_cc_benefit_rules', state:true,  defaultValue:() => [] },
+  incomeBudgets:       { key:'mt_income_budgets', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_INCOME_BUDGETS !== 'undefined' ? DEFAULT_INCOME_BUDGETS : []) },
+  marketPrices:        { key:'mt_market_prices', state:true,  defaultValue:() => ({}) },
+  rewardLedger:        { key:'mt_reward_ledger', state:true,  defaultValue:() => [] },
+  netWorthSnapshots:   { key:'mt_net_worth_snapshots', state:true,  defaultValue:() => [] },
+  investmentSnapshots: { key:'mt_investment_snapshots', state:true,  defaultValue:() => [] },
+  creditLimitGroups:   { key:'mt_credit_limit_groups', state:true,  defaultValue:() => [] },
+  rewardAccounts:      { key:'mt_reward_accounts', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_REWARD_ACCOUNTS !== 'undefined' ? DEFAULT_REWARD_ACCOUNTS : []) },
+  cryptoAssets:        { key:'mt_crypto_assets', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_CRYPTO_ASSETS !== 'undefined' ? DEFAULT_CRYPTO_ASSETS : []) },
+  cryptoHoldings:      { key:'mt_crypto_holdings', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_CRYPTO_HOLDINGS !== 'undefined' ? DEFAULT_CRYPTO_HOLDINGS : []) },
+  cryptoTransactions:  { key:'mt_crypto_transactions', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_CRYPTO_TRANSACTIONS !== 'undefined' ? DEFAULT_CRYPTO_TRANSACTIONS : []) },
+  cryptoSyncMeta:      { key:'mt_crypto_sync_meta', state:true,  defaultValue:() => ({}) },
+  goals:               { key:'mt_goals', state:true,  defaultValue:() => [] },
+  privileges:          { key:'mt_privileges', state:true,  defaultValue:ctx => cloneStorageDefault(typeof DEFAULT_PRIVILEGES !== 'undefined' && !ctx?.hasExistingPrimaryData ? DEFAULT_PRIVILEGES : []) },
+  creditCardPromoSearches: { key:'mt_credit_card_promo_searches', state:true, defaultValue:() => [] },
+  creditCardPromotions:    { key:'mt_credit_card_promotions', state:true, defaultValue:() => [] },
+  splitBills:          { key:'mt_split_bills', state:true,  preferStoredForBackup:true, defaultValue:() => [] },
+  splitPeople:         { key:'mt_split_people', state:true,  preferStoredForBackup:true, defaultValue:() => [] },
+  splitBillDraft:      { key:'mt_split_bill_draft', state:true,  preferStoredForBackup:true, defaultValue:() => null },
+  loans:               { key:'mt_loans', state:true,  preferStoredForBackup:true, defaultValue:() => [] },
+  bnplPlans:           { key:'mt_bnpl_plans', state:true,  preferStoredForBackup:true, defaultValue:() => [] },
+  migrations:          { key:'mt_migrations', state:true,  defaultValue:() => cloneStorageDefault(typeof DEFAULT_MIGRATIONS !== 'undefined' ? DEFAULT_MIGRATIONS : { cryptoCentralizedV1:false }) },
+  aiInsightStore:      { key:'mt_ai_insight_store', state:false, defaultValue:() => ({ version:2, lastRefreshed:null, payloadHash:'', insights:[], hiddenTypes:[], feedback:[] }) },
+  financialProfile:    { key:'mt_financial_profile', state:false, defaultValue:() => ({}) },
+  financialMemory:     { key:'mt_financial_memory', state:false, defaultValue:() => [] },
+  monthlyFinancialFeatures: { key:'mt_monthly_financial_features', state:false, defaultValue:() => [] },
+  financeFeatureStoreMeta: { key:'mt_finance_feature_store_meta', state:false, defaultValue:() => ({}) },
+  financialRecommendationFeedback: { key:'mt_financial_recommendation_feedback', state:false, defaultValue:() => [] },
+  financialActionLog:  { key:'mt_financial_action_log', state:false, defaultValue:() => [] },
+  financialLifePlans:  { key:'mt_financial_life_plans', state:false, defaultValue:() => [] },
+})
+
+const KEYS = Object.freeze(Object.fromEntries(Object.entries(COLLECTIONS).map(([name, descriptor]) => [name, descriptor.key])))
+const BACKUP_SCHEMA_VERSION = 4
 const LOCAL_BACKUP_KEY = 'mt_local_backup_snapshots'
 const LOCAL_BACKUP_LIMIT = 3
-const BACKUP_SCHEMA_KEYS = [
-  'transactions',
-  'wallets',
-  'categories',
-  'budgets',
-  'incomeBudgets',
-  'recurring',
-  'upcomingBills',
-  'merchants',
-  'ccBenefits',
-  'ccBenefitRules',
-  'creditLimitGroups',
-  'rewardAccounts',
-  'rewardLedger',
-  'marketPrices',
-  'netWorthSnapshots',
-  'investmentSnapshots',
-  'cryptoAssets',
-  'cryptoHoldings',
-  'cryptoTransactions',
-  'cryptoSyncMeta',
-  'goals',
-  'privileges',
-  'creditCardPromoSearches',
-  'creditCardPromotions',
-  'splitBills',
-  'splitPeople',
-  'splitBillDraft',
-  'loans',
-  'bnplPlans',
-  'migrations',
-  'settings',
-  'aiInsightStore',
-  'financialMemory',
-  'monthlyFinancialFeatures',
-  'financialRecommendationFeedback',
-  'financialActionLog',
-  'financialLifePlans',
-]
-
-const BACKUP_DEFAULTS = {
-  transactions: [],
-  wallets: [],
-  categories: { expense: [], income: [] },
-  budgets: [],
-  incomeBudgets: [],
-  recurring: [],
-  upcomingBills: [],
-  merchants: [],
-  ccBenefits: {},
-  ccBenefitRules: [],
-  creditLimitGroups: [],
-  rewardAccounts: [],
-  rewardLedger: [],
-  marketPrices: {},
-  netWorthSnapshots: [],
-  investmentSnapshots: [],
-  cryptoAssets: [],
-  cryptoHoldings: [],
-  cryptoTransactions: [],
-  cryptoSyncMeta: {},
-  goals: [],
-  privileges: [],
-  creditCardPromoSearches: [],
-  creditCardPromotions: [],
-  splitBills: [],
-  splitPeople: [],
-  splitBillDraft: null,
-  loans: [],
-  bnplPlans: [],
-  migrations: { cryptoCentralizedV1: false },
-  settings: {},
-  aiInsightStore: { version: 1, lastRefreshed: null, payloadHash: '', insights: [], hiddenTypes: [], feedback: [] },
-  financialMemory: [],
-  monthlyFinancialFeatures: [],
-  financialRecommendationFeedback: [],
-  financialActionLog: [],
-  financialLifePlans: [],
-}
+const BACKUP_SCHEMA_KEYS = Object.freeze(Object.keys(COLLECTIONS))
+const BACKUP_DEFAULTS = Object.freeze(Object.fromEntries(BACKUP_SCHEMA_KEYS.map(name => [name, COLLECTIONS[name].defaultValue({ hasExistingPrimaryData:true })])))
 
 const Storage = {
+  collectionNames: BACKUP_SCHEMA_KEYS,
   lastLoadError: null,
   lastSaveError: null,
   lastVerifyError: null,
@@ -212,6 +147,25 @@ const Storage = {
       }, 0)
       return null
     }
+  },
+
+  loadCollection(nameOrKey, fallback) {
+    const entry = Object.entries(COLLECTIONS).find(([name, descriptor]) => name === nameOrKey || descriptor.key === nameOrKey)
+    if (!entry) return fallback
+    const [name, descriptor] = entry
+    const value = Storage.load(descriptor.key)
+    if (value !== null && value !== undefined) return value
+    return fallback !== undefined ? cloneStorageDefault(fallback) : descriptor.defaultValue({ hasExistingPrimaryData:true, name })
+  },
+
+  isStateCollection(name) {
+    return COLLECTIONS[name]?.state !== false
+  },
+
+  saveCollection(nameOrKey, value) {
+    const entry = Object.entries(COLLECTIONS).find(([name, descriptor]) => name === nameOrKey || descriptor.key === nameOrKey)
+    if (!entry) return false
+    return Storage.save(entry[1].key, value)
   },
 
   save(key, data, _retried = false) {
@@ -317,79 +271,26 @@ const Storage = {
       KEYS.categories,
       KEYS.settings,
     ].some(key => localStorage.getItem(key) !== null)
-    data.transactions  = Storage.load(KEYS.transactions)  || JSON.parse(JSON.stringify(DEFAULT_TRANSACTIONS))
-    data.wallets       = Storage.load(KEYS.wallets)        || JSON.parse(JSON.stringify(DEFAULT_WALLETS))
-    data.categories    = Storage.load(KEYS.categories)     || JSON.parse(JSON.stringify(DEFAULT_CATEGORIES))
-    data.budgets       = Storage.load(KEYS.budgets)        || JSON.parse(JSON.stringify(DEFAULT_BUDGETS))
-    data.settings      = Storage.load(KEYS.settings)       || JSON.parse(JSON.stringify(DEFAULT_SETTINGS))
-    data.recurring     = Storage.load(KEYS.recurring)      || JSON.parse(JSON.stringify(DEFAULT_RECURRING))
-    data.upcomingBills = Storage.load(KEYS.upcomingBills)  || JSON.parse(JSON.stringify(typeof DEFAULT_UPCOMING_BILLS !== 'undefined' ? DEFAULT_UPCOMING_BILLS : []))
-    data.merchants     = Storage.load(KEYS.merchants)      || JSON.parse(JSON.stringify(DEFAULT_MERCHANTS))
-    data.ccBenefits    = Storage.load(KEYS.ccBenefits)     || JSON.parse(JSON.stringify(typeof DEFAULT_CC_BENEFITS !== 'undefined' ? DEFAULT_CC_BENEFITS : {}))
-    data.ccBenefitRules = Storage.load(KEYS.ccBenefitRules) || []
-    data.incomeBudgets       = Storage.load(KEYS.incomeBudgets)       || JSON.parse(JSON.stringify(typeof DEFAULT_INCOME_BUDGETS !== 'undefined' ? DEFAULT_INCOME_BUDGETS : []))
-    data.marketPrices        = Storage.load(KEYS.marketPrices)        || {}
-    data.rewardLedger        = Storage.load(KEYS.rewardLedger)        || []
-    data.netWorthSnapshots   = Storage.load(KEYS.netWorthSnapshots)   || []
-    data.investmentSnapshots = Storage.load(KEYS.investmentSnapshots) || []
-    data.creditLimitGroups   = Storage.load(KEYS.creditLimitGroups)   || []
-    data.rewardAccounts      = Storage.load(KEYS.rewardAccounts)      || JSON.parse(JSON.stringify(typeof DEFAULT_REWARD_ACCOUNTS !== 'undefined' ? DEFAULT_REWARD_ACCOUNTS : []))
-    data.cryptoAssets        = Storage.load(KEYS.cryptoAssets)        || JSON.parse(JSON.stringify(typeof DEFAULT_CRYPTO_ASSETS !== 'undefined' ? DEFAULT_CRYPTO_ASSETS : []))
-    data.cryptoHoldings      = Storage.load(KEYS.cryptoHoldings)      || JSON.parse(JSON.stringify(typeof DEFAULT_CRYPTO_HOLDINGS !== 'undefined' ? DEFAULT_CRYPTO_HOLDINGS : []))
-    data.cryptoTransactions  = Storage.load(KEYS.cryptoTransactions)  || JSON.parse(JSON.stringify(typeof DEFAULT_CRYPTO_TRANSACTIONS !== 'undefined' ? DEFAULT_CRYPTO_TRANSACTIONS : []))
-    data.cryptoSyncMeta      = Storage.load(KEYS.cryptoSyncMeta)      || {}
-    data.goals               = Storage.load(KEYS.goals)               || JSON.parse(JSON.stringify(typeof DEFAULT_GOALS !== 'undefined' ? DEFAULT_GOALS : []))
-    data.creditCardPromoSearches = Storage.load(KEYS.creditCardPromoSearches) || []
-    data.creditCardPromotions    = Storage.load(KEYS.creditCardPromotions)    || []
-    data.splitBills              = Storage.load(KEYS.splitBills)              || []
-    data.splitPeople             = Storage.load(KEYS.splitPeople)             || []
-    data.splitBillDraft          = Storage.load(KEYS.splitBillDraft)          || null
-    data.loans                   = Storage.load(KEYS.loans)                   || []
-    data.bnplPlans               = Storage.load(KEYS.bnplPlans)               || []
-    const loadedPrivileges   = Storage.load(KEYS.privileges)
-    data.privileges          = loadedPrivileges || JSON.parse(JSON.stringify(
-      typeof DEFAULT_PRIVILEGES !== 'undefined'
-        ? (hasExistingPrimaryData ? [] : DEFAULT_PRIVILEGES)
-        : []
-    ))
-    data.migrations          = Storage.load(KEYS.migrations)          || JSON.parse(JSON.stringify(typeof DEFAULT_MIGRATIONS !== 'undefined' ? DEFAULT_MIGRATIONS : { cryptoCentralizedV1: false }))
+    Object.entries(COLLECTIONS).forEach(([name, descriptor]) => {
+      if (descriptor.state === false) return
+      const loaded = Storage.load(descriptor.key)
+      data[name] = loaded !== null && loaded !== undefined
+        ? loaded
+        : descriptor.defaultValue({ hasExistingPrimaryData, name })
+    })
     return data
   },
 
   saveAll(state) {
-    const results = [
-      Storage.save(KEYS.transactions,  state.transactions),
-      Storage.save(KEYS.wallets,       state.wallets),
-      Storage.save(KEYS.categories,    state.categories),
-      Storage.save(KEYS.budgets,       state.budgets),
-      Storage.save(KEYS.settings,      state.settings),
-      Storage.save(KEYS.recurring,     state.recurring),
-      Storage.save(KEYS.upcomingBills, state.upcomingBills || []),
-      Storage.save(KEYS.merchants,     state.merchants),
-      Storage.save(KEYS.ccBenefits,    state.ccBenefits),
-      Storage.save(KEYS.ccBenefitRules, state.ccBenefitRules || []),
-      Storage.save(KEYS.incomeBudgets,       state.incomeBudgets),
-      Storage.save(KEYS.marketPrices,        state.marketPrices        || {}),
-      Storage.save(KEYS.rewardLedger,        state.rewardLedger        || []),
-      Storage.save(KEYS.netWorthSnapshots,   state.netWorthSnapshots   || []),
-      Storage.save(KEYS.investmentSnapshots, state.investmentSnapshots || []),
-      Storage.save(KEYS.creditLimitGroups,   state.creditLimitGroups   || []),
-      Storage.save(KEYS.rewardAccounts,      state.rewardAccounts      || []),
-      Storage.save(KEYS.cryptoAssets,        state.cryptoAssets        || []),
-      Storage.save(KEYS.cryptoHoldings,      state.cryptoHoldings      || []),
-      Storage.save(KEYS.cryptoTransactions,  state.cryptoTransactions  || []),
-      Storage.save(KEYS.cryptoSyncMeta,      state.cryptoSyncMeta      || {}),
-      Storage.save(KEYS.goals,               state.goals               || []),
-      Storage.save(KEYS.privileges,          state.privileges          || []),
-      Storage.save(KEYS.creditCardPromoSearches, state.creditCardPromoSearches || []),
-      Storage.save(KEYS.creditCardPromotions,    state.creditCardPromotions    || []),
-      Storage.save(KEYS.splitBills,              state.splitBills              || []),
-      Storage.save(KEYS.splitPeople,             state.splitPeople             || []),
-      Storage.save(KEYS.splitBillDraft,          state.splitBillDraft          || null),
-      Storage.save(KEYS.loans,                   state.loans                   || []),
-      Storage.save(KEYS.bnplPlans,               state.bnplPlans               || []),
-      Storage.save(KEYS.migrations,          state.migrations          || { cryptoCentralizedV1: false }),
-    ]
+    if (!state || typeof state !== 'object') return false
+    const results = Object.entries(COLLECTIONS)
+      .filter(([, descriptor]) => descriptor.state !== false)
+      .map(([name, descriptor]) => {
+        const value = state[name] !== undefined
+          ? state[name]
+          : descriptor.defaultValue({ hasExistingPrimaryData:true, name })
+        return Storage.save(descriptor.key, value)
+      })
     if (!results.every(Boolean)) return false
     const verification = Storage.verifyState(state, ['transactions', 'wallets', 'settings', 'upcomingBills'])
     return verification.ok
@@ -404,13 +305,11 @@ const Storage = {
     }
     BACKUP_SCHEMA_KEYS.forEach(key => {
       const fallback = BACKUP_DEFAULTS[key]
+      const descriptor = COLLECTIONS[key]
       let value = state?.[key]
-      if (['splitBills', 'splitPeople', 'splitBillDraft', 'loans', 'bnplPlans'].includes(key)) {
-        value = Storage.load(KEYS[key])
+      if (descriptor.state === false || descriptor.preferStoredForBackup) {
+        value = Storage.load(descriptor.key)
         if (value === null) value = state?.[key]
-      }
-      if (value === undefined && key === 'aiInsightStore') {
-        try { value = JSON.parse(localStorage.getItem(KEYS.aiInsightStore) || 'null') } catch (_) { value = null }
       }
       payload[key] = value !== undefined && value !== null ? value : JSON.parse(JSON.stringify(fallback))
     })
@@ -582,4 +481,5 @@ const Storage = {
   },
 }
 
-window.MTStorage = Storage
+if (typeof window !== 'undefined') window.MTStorage = Storage
+if (typeof module !== 'undefined' && module.exports) module.exports = Storage

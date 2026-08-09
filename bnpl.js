@@ -5,7 +5,9 @@
   function genId() { return 'bnpl_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36) }
   function pad2(n) { return String(n).padStart(2, '0') }
   function todayStr() { return typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10) }
-  function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') }
+  const SafeRender = globalThis.MTSafeRender || (typeof require === 'function' ? require('./safe_render.js') : null)
+  const esc = SafeRender.escapeHtml
+  const jsArg = SafeRender.jsArg
   function money(n) {
     if (typeof Calc !== 'undefined' && Calc.fmt) return Calc.fmt(n)
     return '฿' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -298,7 +300,7 @@
       const typeLabel = `BNPL${w.provider ? ` · ${esc(w.provider)}` : ''}${planBadge}`
 
       const payBtn = nextDueItem && !ctx.reorderMode
-        ? `<button type="button" class="wallet-chip-btn wc-card-pay-btn" onclick="event.stopPropagation();BNPL.ui.openPayModal('${esc(nextDueItem.planId)}',${nextDueItem.no})">จ่ายงวด</button>`
+        ? `<button type="button" class="wallet-chip-btn wc-card-pay-btn" onclick="event.stopPropagation();BNPL.ui.openPayModal(${jsArg(nextDueItem.planId)},${nextDueItem.no})">จ่ายงวด</button>`
         : ''
 
       const limitSection = w.creditLimit
@@ -309,7 +311,7 @@
         ? `<div class="cc-due-strip${isOverdue ? ' urgent' : isDueSoon ? ' soon' : ''}"><span>${money(nextDueItem.amount)}</span><span>งวด ${nextDueItem.no}/${nextDueItem.installments} ${fmtDate(nextDueItem.dueDate)}</span><span class="wc-days-left${isOverdue ? ' overdue' : isDueSoon ? ' soon' : ''}">${isOverdue ? 'เกินกำหนด' : daysLeft === 0 ? 'วันนี้' : daysLeft + ' วัน'}</span></div>`
         : ''
 
-      return `<div ${ctx.dataAttrs || ''} class="wallet-card wallet-card-colored wallet-card-bnpl${ctx.dragCls || ''}" style="${colorStyle}"${ctx.reorderMode ? '' : ` onclick="BNPL.ui.openPlanList('${esc(w.id)}')"`}>
+      return `<div ${ctx.dataAttrs || ''} class="wallet-card wallet-card-colored wallet-card-bnpl${ctx.dragCls || ''}" style="${colorStyle}"${ctx.reorderMode ? '' : ` onclick="BNPL.ui.openPlanList(${jsArg(w.id)})"`}>
         ${ctx.dragHandle || ''}
         <div class="wc-header">
           <div><div class="wc-name">${esc(name)}</div><div class="wc-type">${typeLabel}</div></div>
@@ -326,7 +328,7 @@
       if (typeof App === 'undefined' || typeof S === 'undefined') return
       S._bnplPlanListWalletId = walletId
       const wallet = S.wallets?.find(w => w.id === walletId) || {}
-      App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(wallet.icon || '🛍️')} ${esc(wallet.name || 'BNPL')}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(walletId)}')" style="width:auto">แก้ไข</button></div><div class="sub-scroll"><div id="bnpl-plan-hero">${BNPLui._heroHtml(wallet)}</div><div id="bnpl-plans-content" style="padding:12px 16px 40px">${BNPLui._planListHtml(walletId)}${BNPLui._paymentHistoryHtml(walletId)}</div></div>`)
+      App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(wallet.icon || '🛍️')} ${esc(wallet.name || 'BNPL')}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm(${jsArg(walletId)})" style="width:auto">แก้ไข</button></div><div class="sub-scroll"><div id="bnpl-plan-hero">${BNPLui._heroHtml(wallet)}</div><div id="bnpl-plans-content" style="padding:12px 16px 40px">${BNPLui._planListHtml(walletId)}${BNPLui._paymentHistoryHtml(walletId)}</div></div>`)
     },
 
     // Re-render plan list (+ history) and hero in-place without closing the sub-screen.
@@ -379,9 +381,9 @@
         }).join('')
 
         const payBtn = next && plan.status === 'active'
-          ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="BNPL.ui.openPayModal('${esc(plan.id)}',${next.no})">จ่ายงวด ${next.no}/${plan.installments}</button>`
+          ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" onclick="BNPL.ui.openPayModal(${jsArg(plan.id)},${next.no})">จ่ายงวด ${next.no}/${plan.installments}</button>`
           : ''
-        const editBtn = `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;width:100%" onclick="BNPL.ui.openEditPlan('${esc(plan.id)}')">แก้ไขแผน</button>`
+        const editBtn = `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;width:100%" onclick="BNPL.ui.openEditPlan(${jsArg(plan.id)})">แก้ไขแผน</button>`
 
         return `<div class="card card-pad" style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
@@ -465,7 +467,7 @@
         </div>
         <div style="display:flex;gap:8px;margin-top:16px">
           <button type="button" class="btn btn-secondary" style="flex:1" onclick="BNPL.ui.closePayModal()">ยกเลิก</button>
-          <button type="button" class="btn btn-primary" style="flex:1" onclick="BNPL.ui._confirmPay('${esc(plan.id)}',${item.no})">ยืนยันจ่าย</button>
+          <button type="button" class="btn btn-primary" style="flex:1" onclick="BNPL.ui._confirmPay(${jsArg(plan.id)},${item.no})">ยืนยันจ่าย</button>
         </div>
       </div>`
     },
@@ -541,7 +543,7 @@
         </div>
         <div style="display:flex;gap:8px;margin-top:16px">
           <button type="button" class="btn btn-secondary" style="flex:1" onclick="BNPL.ui.closeEditModal()">ยกเลิก</button>
-          <button type="button" class="btn btn-primary" style="flex:1" onclick="BNPL.ui._confirmEdit('${esc(plan.id)}')">บันทึก</button>
+          <button type="button" class="btn btn-primary" style="flex:1" onclick="BNPL.ui._confirmEdit(${jsArg(plan.id)})">บันทึก</button>
         </div>
       </div>`
     },

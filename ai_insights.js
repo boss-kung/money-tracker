@@ -73,15 +73,20 @@ const InsightEngine = (() => {
 
   function loadStore() {
     try {
-      const raw = localStorage.getItem(STORE_KEY)
-      if (!raw) return emptyStore()
-      const s = JSON.parse(raw)
+      const s = globalThis.MTStorage?.loadCollection
+        ? globalThis.MTStorage.loadCollection('aiInsightStore', emptyStore())
+        : JSON.parse(localStorage.getItem(STORE_KEY) || 'null')
+      if (!s) return emptyStore()
       return (s && s.version === VERSION) ? s : emptyStore()
     } catch (_) { return emptyStore() }
   }
 
   function saveStore(store) {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(store)) } catch (_) {}
+    try {
+      if (globalThis.MTStorage?.saveCollection) return globalThis.MTStorage.saveCollection('aiInsightStore', store)
+      localStorage.setItem(STORE_KEY, JSON.stringify(store))
+      return true
+    } catch (_) { return false }
   }
 
   function shouldRefresh(store, newHash) {

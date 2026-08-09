@@ -1,4 +1,4 @@
-import { adminClient, getAuthenticatedUserId } from '../_shared/supabase.ts'
+import { adminClient, requestErrorStatus, requireAuthenticatedUserId, requireInstallOwnership } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
 // Keep only the numeric signal needed for trigger logic — strip names, labels, amounts, IDs.
@@ -37,9 +37,13 @@ Deno.serve(async req => {
       ? body.lastTxDate
       : null
 
+    const userId = await requireAuthenticatedUserId(req)
+    const supabase = adminClient()
+    await requireInstallOwnership(supabase, installId, userId)
+
     const row = {
       install_id: installId,
-      user_id: await getAuthenticatedUserId(req),
+      user_id: userId,
       snapshot_date: snapshotDate,
       today_tx_count: Math.max(0, Math.floor(Number(body.todayTxCount ?? 0))),
       last_tx_date: lastTxDate,
@@ -53,13 +57,13 @@ Deno.serve(async req => {
       app_version: body.appVersion ? String(body.appVersion).slice(0, 80) : null,
     }
 
-    const { error } = await adminClient()
+    const { error } = await supabase
       .from('mt_notification_snapshots')
       .upsert(row, { onConflict: 'install_id' })
     if (error) throw error
 
     return jsonResponse({ ok: true }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 500, req)
+    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, requestErrorStatus(error), req)
   }
 })

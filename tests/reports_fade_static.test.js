@@ -8,13 +8,13 @@ const app = fs.readFileSync(path.join(root, 'app_v2.js'), 'utf8')
 const css = fs.readFileSync(path.join(root, 'style_v2.css'), 'utf8')
 
 test('reports fade-in uses a declarative CSS animation class, not inline opacity + setTimeout', () => {
-  const patchMatch = app.match(/_patchRReportsExtra[\s\S]*?N24: insight rows/)
-  assert.ok(patchMatch, 'N13 renderReports patch not found')
+  const patchMatch = app.match(/MTScreenHooks\.register\('reports', 'animations\.enhanced'[\s\S]*?N24: insight rows/)
+  assert.ok(patchMatch, 'N13 reports hook not found')
   const patchBody = patchMatch[0]
 
   assert.ok(
     patchBody.includes("classList.add('mt-reports-fade-in')"),
-    'renderReports patch must toggle the mt-reports-fade-in class'
+    'reports hook must toggle the mt-reports-fade-in class'
   )
   assert.equal(
     /content\.style\.opacity\s*=/.test(patchBody),

@@ -1,4 +1,4 @@
-import { adminClient, getAuthenticatedUserId } from '../_shared/supabase.ts'
+import { adminClient, requestErrorStatus, requireAuthenticatedUserId, requireInstallOwnership } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
 type WebPushSubscription = {
@@ -21,8 +21,12 @@ Deno.serve(async req => {
       return jsonResponse({ error: 'pushSubscription is required when enabling notifications' }, 400, req)
     }
 
-    const userId = await getAuthenticatedUserId(req)
+    const userId = await requireAuthenticatedUserId(req)
     const supabase = adminClient()
+    await requireInstallOwnership(supabase, installId, userId, {
+      allowUnregistered: true,
+      allowClaimAnonymous: true,
+    })
     const device = {
       install_id: installId,
       user_id: userId,
@@ -54,6 +58,6 @@ Deno.serve(async req => {
 
     return jsonResponse({ ok: true }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 500, req)
+    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, requestErrorStatus(error), req)
   }
 })

@@ -27,7 +27,7 @@ test('auth sync module enforces google-only sessions and does not store plaintex
   assert.match(source, /isGoogleSession/)
   assert.match(source, /mt_user_vaults/)
   assert.match(source, /ciphertext/)
-  assert.match(source, /state\.locked = row \? true : !state\.dataKey/)
+  assert.match(source, /state\.vaultMeta = row \|\| null[\s\S]{0,400}state\.locked = !state\.dataKey/)
   assert.match(source, /function needsVaultUnlock\(\)/)
   assert.match(source, /debugSnapshot/)
   assert.match(source, /generateRecoveryKey/)

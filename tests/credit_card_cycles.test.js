@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const CC = require('../credit_card_cycles.js')
+const release = require('../release_manifest.js')
 
 const root = path.join(__dirname, '..')
 
@@ -135,15 +136,14 @@ test('detail history starts with current open cycle and then previous month', ()
 })
 
 test('fixed-day credit card fix is cache-busted for deployed PWAs', () => {
-  const version = '2026.06.23-credit-due-r107'
   const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8')
   const demoHtml = fs.readFileSync(path.join(root, 'demo/index.html'), 'utf8')
   const appSrc = fs.readFileSync(path.join(root, 'app_v2.js'), 'utf8')
   const swSrc = fs.readFileSync(path.join(root, 'service-worker_v2.js'), 'utf8')
 
-  assert.match(indexHtml, new RegExp(`credit_card_cycles\\.js\\?v=${version}`))
-  assert.match(indexHtml, new RegExp(`app_v2\\.js\\?v=${version}`))
-  assert.match(demoHtml, new RegExp(`app_v2\\.js\\?v=${version}`))
-  assert.match(appSrc, new RegExp(`const APP_VERSION = '${version}'`))
-  assert.match(swSrc, new RegExp(`const APP_VERSION = '${version}'`))
+  assert.match(indexHtml, new RegExp(`credit_card_cycles\\.js\\?v=${release.version}`))
+  assert.match(indexHtml, new RegExp(`app_v2\\.js\\?v=${release.version}`))
+  assert.match(demoHtml, new RegExp(`app_v2\\.js\\?v=${release.version}`))
+  assert.match(appSrc, /const APP_VERSION = window\.MT_RELEASE\?\.version/)
+  assert.match(swSrc, /const APP_VERSION = self\.MT_RELEASE\.version/)
 })

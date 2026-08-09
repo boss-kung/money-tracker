@@ -20,7 +20,7 @@ The app is a static GitHub Pages site — no build step, no bundler, no npm.
 
 ```bash
 # Run all tests
-node --test tests/
+node --test tests/*.test.js
 
 # Run a single test file
 node --test tests/credit_card_cycles.test.js
@@ -30,7 +30,7 @@ Tests use Node.js built-in `node:test` + `node:assert/strict`. No Jest, no Vites
 
 ## Bumping Script Versions
 
-Every `<script>` tag in `index.html` has a `?v=` cache-bust query string. **After editing any JS file, bump its version string in `index.html`** so the Service Worker serves the new file. The SW (`service-worker_v2.js`) also has `APP_VERSION` at line 1 — bump it when `index.html` itself changes.
+`release_manifest.js` is the single release contract for the app and Service Worker. Change its `version`, then run `node scripts/update-release-version.js` to update local JS/CSS cache keys in both production and demo HTML. Add new production dependencies to `coreAssets` so offline startup remains complete.
 
 If cache issues occur during dev, run this in the browser console:
 ```js

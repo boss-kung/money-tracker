@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const release = require('../release_manifest.js')
 
 const root = path.join(__dirname, '..')
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8')
@@ -24,9 +25,9 @@ test('CSP allows Apps Script JSONP gold proxy hosts', () => {
 })
 
 test('service worker treats gold_market.js as core cached code', () => {
-  assert.ok(sw.includes("'./gold_market.js'"), 'service worker missing gold_market.js precache asset')
-  assert.ok(sw.includes("'gold_market.js'"), 'service worker missing gold_market.js core code marker')
-  assert.ok(sw.includes("2026.06.23-credit-due-r107"), 'service worker cache version was not bumped')
+  assert.ok(release.coreAssets.includes('./gold_market.js'), 'release manifest missing gold_market.js precache asset')
+  assert.ok(release.networkFirstFiles.includes('gold_market.js'), 'release manifest missing gold_market.js core code marker')
+  assert.match(sw, /self\.MT_RELEASE\.version/, 'service worker does not use the shared release version')
 })
 
 test('app delegates Thai gold sync to shared helper', () => {

@@ -11,7 +11,9 @@
   const PEOPLE_KEY = 'mt_split_people'
 
   // ── Utilities ────────────────────────────────────────────────
-  const esc     = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))
+  const SafeRender = globalThis.MTSafeRender || (typeof require === 'function' ? require('./safe_render.js') : null)
+  const esc     = SafeRender.escapeHtml
+  const jsArg   = SafeRender.jsArg
   const nowISO  = () => new Date().toISOString()
   const genId   = () => Date.now().toString(36) + Math.random().toString(36).slice(2)
   const fmt     = n => { const v = Number(n||0); return '฿' + (v === 0 ? '0' : v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})) }
@@ -536,7 +538,7 @@
       const sub   = itemSubtotal(b)
       const total = b.manualTotal > 0 ? b.manualTotal : runPipeline(sub, b.pipeline, b.rounding).finalTotal
       const n     = (b.peopleIds||[]).length
-      return `<div class="card card-pad sb-bill-row" onclick="App.openSplitBillDetail('${esc(b.id)}')">
+      return `<div class="card card-pad sb-bill-row" onclick="App.openSplitBillDetail(${jsArg(b.id)})">
         <div style="display:flex;align-items:center;gap:10px">
           <div style="flex:1;min-width:0">
             <div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.title||'ไม่มีชื่อ')}</div>
@@ -608,7 +610,7 @@
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               <div style="font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
-              ${linkState.linkedTxId && remaining > 0 ? `<button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openSharedExpenseReimbursement('${esc(linkState.linkedTxId)}',{amount:${remaining},splitBillId:'${esc(bill.id)}',fromSplitPersonId:'${esc(t.from)}',toSplitPersonId:'${esc(t.to)}',sourceName:'${esc(bill.title || 'บิลร่วม')}'})">รับคืน</button>` : ''}
+              ${linkState.linkedTxId && remaining > 0 ? `<button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openSharedExpenseReimbursement(${jsArg(linkState.linkedTxId)},{amount:${remaining},splitBillId:${jsArg(bill.id)},fromSplitPersonId:${jsArg(t.from)},toSplitPersonId:${jsArg(t.to)},sourceName:${jsArg(bill.title || 'บิลร่วม')}})">รับคืน</button>` : ''}
             </div>
           </div>`
         }).join('')
@@ -645,8 +647,8 @@
         </div>
       </div>`
     const linkButtons = linkState.status === 'linked'
-      ? `<button class="btn btn-primary flex-1" onclick="App.openSplitBillLinkedTransaction('${esc(billId)}')">เปิดรายการจ่าย</button>`
-      : `<button class="btn btn-primary flex-1" onclick="App.openSplitBillLinkedTxForm('${esc(billId)}')">${linkState.status === 'mismatch' ? 'อัปเดตรายการจ่าย' : 'สร้างรายการจ่าย'}</button>`
+      ? `<button class="btn btn-primary flex-1" onclick="App.openSplitBillLinkedTransaction(${jsArg(billId)})">เปิดรายการจ่าย</button>`
+      : `<button class="btn btn-primary flex-1" onclick="App.openSplitBillLinkedTxForm(${jsArg(billId)})">${linkState.status === 'mismatch' ? 'อัปเดตรายการจ่าย' : 'สร้างรายการจ่าย'}</button>`
 
     const copyText = _lineText(bill, result)
 
@@ -654,7 +656,7 @@
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openSplitBillScreen()">←</button>
         <h2 style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(bill.title||'ไม่มีชื่อ')}</h2>
-        <button class="btn btn-secondary btn-sm" onclick="App.openSplitBillForm('${esc(billId)}')" style="width:auto">✏️ แก้ไข</button>
+        <button class="btn btn-secondary btn-sm" onclick="App.openSplitBillForm(${jsArg(billId)})" style="width:auto">✏️ แก้ไข</button>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         <div style="font-size:13px;color:var(--muted);margin-bottom:10px">📅 ${thaiDate(bill.date)}</div>
@@ -679,15 +681,15 @@
 
         <div style="display:flex;gap:8px;margin-top:16px">
           ${linkButtons}
-          ${linkState.linkedTxId && receivable?.remaining > 0 ? `<button class="btn btn-secondary flex-1" onclick="App.openSharedExpenseReimbursement('${esc(linkState.linkedTxId)}',{splitBillId:'${esc(bill.id)}',sourceName:'${esc(bill.title || 'บิลร่วม')}'})">รับคืน ${fmt(receivable.remaining)}</button>` : ''}
+          ${linkState.linkedTxId && receivable?.remaining > 0 ? `<button class="btn btn-secondary flex-1" onclick="App.openSharedExpenseReimbursement(${jsArg(linkState.linkedTxId)},{splitBillId:${jsArg(bill.id)},sourceName:${jsArg(bill.title || 'บิลร่วม')}})">รับคืน ${fmt(receivable.remaining)}</button>` : ''}
         </div>
         <div style="display:flex;gap:8px;margin-top:8px">
-          <button class="btn btn-secondary flex-1" onclick="App.openSplitBillForm('${esc(billId)}')">✏️ แก้ไข</button>
-          <button class="btn btn-secondary flex-1" onclick="App._sbCopy('${esc(billId)}')">⧉ ทำซ้ำ</button>
+          <button class="btn btn-secondary flex-1" onclick="App.openSplitBillForm(${jsArg(billId)})">✏️ แก้ไข</button>
+          <button class="btn btn-secondary flex-1" onclick="App._sbCopy(${jsArg(billId)})">⧉ ทำซ้ำ</button>
           <button class="btn btn-secondary flex-1" onclick="App._sbDetailCopyLine()">📋 ข้อความ</button>
         </div>
         <div style="height:1px;background:var(--border);margin:12px 0"></div>
-        <button class="btn btn-outline" onclick="App._sbDelete('${esc(billId)}')" style="width:100%;color:var(--expense);border-color:var(--expense)">🗑 ลบบิล</button>
+        <button class="btn btn-outline" onclick="App._sbDelete(${jsArg(billId)})" style="width:100%;color:var(--expense);border-color:var(--expense)">🗑 ลบบิล</button>
       </div>`)
   }
 
@@ -777,7 +779,7 @@
 
     const chips = people.map(p => {
       const on = selected.includes(p.id)
-      return `<button class="chip sb-person-chip${on?' active':''}" onclick="App._sbTogglePerson('${esc(p.id)}')" style="min-width:60px">
+      return `<button class="chip sb-person-chip${on?' active':''}" onclick="App._sbTogglePerson(${jsArg(p.id)})" style="min-width:60px">
         ${esc(p.emoji||'👤')} ${esc(p.name)}
       </button>`
     }).join('')
@@ -888,7 +890,7 @@
       const on     = !!ip
       const person = SbStore.getPerson(id)
       const label  = person ? person.name : '?'
-      return `<button class="chip${on?' active':''}" onclick="App._sbItemTogglePerson('${esc(id)}')"
+      return `<button class="chip${on?' active':''}" onclick="App._sbItemTogglePerson(${jsArg(id)})"
         style="${on?'background:var(--primary);color:#fff;border-color:var(--primary);min-width:60px!important;':'min-width:60px!important'}">
         ${esc(label)}
       </button>`
@@ -1287,10 +1289,10 @@
               value="${paid||''}" placeholder="0"
               style="width:100%;text-align:right;padding-right:${hasPaid?'28':'10'}px !important"
               oninput="App._fmtNum(this);(function(v,id){var n=parseFloat(v.replace(/,/g,''))||0;var x=document.getElementById('pay-x-'+id);if(x){x.style.display=n>0?'flex':'none'};document.getElementById('pay-'+id).style.setProperty('padding-right',n>0?'28px':'10px','important')})(this.value,'${safeId}');App._sbUpdatePayRemaining()">
-            <button id="pay-x-${safeId}" onclick="App._sbPayClear('${safeId}')"
+            <button id="pay-x-${esc(safeId)}" onclick="App._sbPayClear(${jsArg(safeId)})"
               style="display:${hasPaid?'flex':'none'};position:absolute;right:6px;background:none;border:none;cursor:pointer;color:var(--muted);padding:2px;align-items:center;font-size:13px;line-height:1">✕</button>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="App._sbPayAll('${safeId}')" style="width:auto;padding:0 10px;font-size:12px">ทั้งหมด</button>
+          <button class="btn btn-secondary btn-sm" onclick="App._sbPayAll(${jsArg(safeId)})" style="width:auto;padding:0 10px;font-size:12px">ทั้งหมด</button>
         </div>
       </div>`
     }).join('')
@@ -1442,15 +1444,15 @@
             <input class="form-input" id="sbp-edit-${esc(p.id)}" value="${esc(p.name)}"
               style="flex:1;padding:8px 10px;font-size:14px"
               onkeydown="if(event.key==='Enter')App._sbSaveEditPerson('${esc(p.id)}');if(event.key==='Escape')App.openSplitPeopleScreen()">
-            <button class="btn btn-primary btn-sm" onclick="App._sbSaveEditPerson('${esc(p.id)}')" style="width:auto;padding:8px 14px">บันทึก</button>
+            <button class="btn btn-primary btn-sm" onclick="App._sbSaveEditPerson(${jsArg(p.id)})" style="width:auto;padding:8px 14px">บันทึก</button>
             <button class="btn-icon" onclick="App.openSplitPeopleScreen()" style="color:var(--muted)">✕</button>
           </div>`
       }
       return `
         <div class="settings-row" style="padding:0px 8px">
           <div class="s-label" style="flex:1">${esc(p.name)}</div>
-          <button class="btn-icon" onclick="App.openSplitPeopleScreen('${esc(p.id)}')" style="color:var(--muted);font-size:13px" title="แก้ไข">✏️</button>
-          <button class="btn-icon" onclick="App._sbDeletePerson('${esc(p.id)}')" style="color:var(--expense);font-size:13px" title="ลบ">🗑</button>
+          <button class="btn-icon" onclick="App.openSplitPeopleScreen(${jsArg(p.id)})" style="color:var(--muted);font-size:13px" title="แก้ไข">✏️</button>
+          <button class="btn-icon" onclick="App._sbDeletePerson(${jsArg(p.id)})" style="color:var(--expense);font-size:13px" title="ลบ">🗑</button>
         </div>`
     }).join('')
 
@@ -1513,15 +1515,6 @@
     const s = document.createElement('style'); s.id = 'sb-styles'
     s.textContent = `.sb-bill-row{cursor:pointer;transition:opacity .15s}.sb-bill-row:active{opacity:.8}.sb-item-row{cursor:pointer;transition:opacity .15s}.sb-item-row:active{opacity:.8}.flex-1{flex:1}`
     document.head.appendChild(s)
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  //  PATCH renderMore
-  // ══════════════════════════════════════════════════════════════
-  const _prevRenderMoreSB = App.renderMore?.bind(App)
-  App.renderMore = function () {
-    _prevRenderMoreSB?.()
-    // หารบิล is now part of the วางแผน tab in the 3-tab More layout — skip standalone injection
   }
 
   // ── Init ──────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
    Onboarding — New User Flow (B + D)
    Progressive checklist card + smart empty states
    Self-contained IIFE, no CSS file changes (inline styles only)
-   Wraps App render functions — safe to disable by removing script tag
+   Extends App screens through the named MTScreenHooks Seam.
    ============================================================ */
 ;(function () {
   'use strict'
@@ -31,7 +31,8 @@
   })()
 
   // ── Shared helpers ───────────────────────────────────────────
-  const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  const SafeRender = globalThis.MTSafeRender || (typeof require === 'function' ? require('./safe_render.js') : null)
+  const esc = SafeRender.escapeHtml
 
   // ════════════════════════════════════════════════════════════
   // PRIORITY 1: Checklist Card on Dashboard
@@ -39,10 +40,7 @@
   // Auto-ticks each step, disappears permanently when all done.
   // ════════════════════════════════════════════════════════════
 
-  const _prevRenderDashboard = App.renderDashboard?.bind(App)
-  App.renderDashboard = function () {
-    if (_prevRenderDashboard) _prevRenderDashboard()
-
+  MTScreenHooks.register('dashboard', 'onboarding.checklist', function () {
     // Always remove Phase 2 banners — checklist replaces them
     document.querySelector('.p2-setup-banner')?.remove()
     document.querySelector('.p2-first-tx-hint')?.remove()
@@ -102,7 +100,7 @@
       ${stepRow(reportVisited, '📊', 'ดูรายงานเดือนนี้', "App.showPage('reports')", !hasTx)}
     `
     netCard.insertAdjacentElement('afterend', card)
-  }
+  }, { priority: 100 })
 
   // ════════════════════════════════════════════════════════════
   // PRIORITY 2a: Track when user visits Reports tab
@@ -142,9 +140,7 @@
   // Shows a welcome card with CTA when there are no wallets yet
   // ════════════════════════════════════════════════════════════
 
-  const _prevRenderWalletsOB = App.renderWallets?.bind(App)
-  App.renderWallets = function () {
-    if (_prevRenderWalletsOB) _prevRenderWalletsOB()
+  MTScreenHooks.register('wallets', 'onboarding.empty-wallets', function () {
     if (_obDismissed()) return
 
     const hasWallet = (S.wallets || []).filter(w => !w.hiddenFromWalletList).length > 0
@@ -163,16 +159,14 @@
       <button class="btn btn-primary btn-sm" style="width:auto" onclick="App.openWalletForm(null)">+ เพิ่มกระเป๋าแรก</button>
     `
     content.insertAdjacentElement('afterbegin', hint)
-  }
+  }, { priority: 100 })
 
   // ════════════════════════════════════════════════════════════
   // PRIORITY 4: Smart Empty State — Reports Tab
   // Shows a one-line hint with CTA when there are no transactions
   // ════════════════════════════════════════════════════════════
 
-  const _prevRenderReportsOB = App.renderReports?.bind(App)
-  App.renderReports = function () {
-    if (_prevRenderReportsOB) _prevRenderReportsOB()
+  MTScreenHooks.register('reports', 'onboarding.empty-reports', function () {
     if (_obDismissed()) return
     if ((S.transactions || []).length > 0) return
 
@@ -187,7 +181,7 @@
       <button class="btn btn-primary btn-sm" style="width:auto" onclick="App.openAddTx()">+ บันทึกรายการ</button>
     `
     content.insertAdjacentElement('afterbegin', hint)
-  }
+  }, { priority: 100 })
 
   // ════════════════════════════════════════════════════════════
   // PRIORITY 5: More Tab — One-time Context Hint
@@ -200,9 +194,7 @@
     document.querySelector('.ob-more-hint')?.remove()
   }
 
-  const _prevRenderMoreOB = App.renderMore?.bind(App)
-  App.renderMore = function () {
-    if (_prevRenderMoreOB) _prevRenderMoreOB()
+  MTScreenHooks.register('more', 'onboarding.recurring-hint', function () {
     if (_obGet().moreHintSeen) return
 
     const hasTx        = (S.transactions || []).length > 0
@@ -227,7 +219,7 @@
       <button class="btn-icon" style="font-size:13px;flex-shrink:0;padding:0 4px;line-height:1;color:var(--muted)" onclick="App._dismissMoreHint()" aria-label="ปิด">✕</button>
     `
     targetSec.insertAdjacentElement('beforebegin', hint)
-  }
+  }, { priority: 200 })
 
   // ════════════════════════════════════════════════════════════
   // INITIAL PAINT

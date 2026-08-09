@@ -1,10 +1,11 @@
-import { adminClient } from '../_shared/supabase.ts'
+import { adminClient, requestErrorStatus, requireCronSecret } from '../_shared/supabase.ts'
 import { sendWebPush } from '../_shared/webpush.ts'
 import type { WebPushSubscription } from '../_shared/webpush.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
 type DeviceRow = {
   install_id: string
+  user_id: string
   push_subscription: WebPushSubscription | null
 }
 
@@ -29,14 +30,14 @@ Deno.serve(async req => {
   if (options) return options
   if (!['GET', 'POST'].includes(req.method)) return jsonResponse({ error: 'Method not allowed' }, 405, req)
 
-  const supabase = adminClient()
-  const today = bangkokDate()
-  const dedupeKey = `daily-expense:${today}`
-
   try {
+    requireCronSecret(req)
+    const supabase = adminClient()
+    const today = bangkokDate()
+    const dedupeKey = `daily-expense:${today}`
     const { data: devices, error } = await supabase
       .from('mt_notification_devices')
-      .select('install_id, push_subscription, enabled, permission')
+      .select('install_id, user_id, push_subscription, enabled, permission')
       .eq('enabled', true)
       .eq('permission', 'granted')
     if (error) throw error
@@ -102,6 +103,7 @@ Deno.serve(async req => {
 
         await supabase.from('mt_notification_logs').upsert({
           install_id: installId,
+          user_id: device.user_id,
           notification_type: 'daily_expense',
           dedupe_key: dedupeKey,
           title,
@@ -116,6 +118,7 @@ Deno.serve(async req => {
         failures.push({ installId, error: message })
         await supabase.from('mt_notification_logs').upsert({
           install_id: installId,
+          user_id: device.user_id,
           notification_type: 'daily_expense',
           dedupe_key: dedupeKey,
           title,
@@ -128,6 +131,6 @@ Deno.serve(async req => {
 
     return jsonResponse({ ok: true, date: today, sent, skipped, failures }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, 500, req)
+    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, requestErrorStatus(error), req)
   }
 })

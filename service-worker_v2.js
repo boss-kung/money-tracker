@@ -1,40 +1,11 @@
-const APP_VERSION = '2026.07.23-fix-duplicate-tx-history-race'
+importScripts('./release_manifest.js')
+
+const APP_VERSION = self.MT_RELEASE.version
 const CACHE_PREFIX = 'money-tracker-v2'
 const CACHE_NAME = `${CACHE_PREFIX}-${APP_VERSION}`
 const CORE_NETWORK_TIMEOUT_MS = 900
 
-const STATIC_ASSETS = [
-  './',
-  './index.html',
-  './style_v2.css',
-  './ui_v2.css',
-  './app_v2.js',
-  './gold_market.js',
-  './storage_v2.js',
-  './app_lock.js',
-  './calculations.js',
-  './sample-data_v2.js',
-  './ai_insights.js',
-  './finance_intelligence.js',
-  './ask_my_money_core.js',
-  './notification_config.js',
-  './notifications_v2.js',
-  './onboarding.js',
-  './loans_v2.js',
-  './auth_sync.js',
-  './credit_card_cycles.js',
-  './crypto_vault.js',
-  './split_bill.js',
-  './quick_capture.js',
-  './thai_bank_holidays.js',
-  './manifest.json',
-  './assets/icon.svg',
-  './assets/icon-180.png',
-  './assets/fonts/LINESeedSansTH_Rg.ttf',
-  './assets/fonts/LINESeedSansTH_Bd.ttf',
-  './assets/fonts/LINESeedSansTH_XBd.ttf',
-  './assets/fonts/tabler-icons-subset.woff2',
-]
+const STATIC_ASSETS = self.MT_RELEASE.coreAssets
 
 self.addEventListener('push', event => {
   let payload = {}
@@ -209,7 +180,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url)
   const path = url.pathname.split('/').pop()
   const acceptsHtml = request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html')
-  const isCoreCode = ['app_v2.js', 'gold_market.js', 'storage_v2.js', 'calculations.js', 'sample-data_v2.js', 'ai_insights.js', 'finance_intelligence.js', 'ask_my_money_core.js', 'notification_config.js', 'notifications_v2.js', 'onboarding.js', 'loans_v2.js', 'auth_sync.js', 'app_lock.js', 'credit_card_cycles.js', 'crypto_vault.js', 'split_bill.js', 'quick_capture.js', 'thai_bank_holidays.js', 'style_v2.css', 'LINESeedSansTH_Rg.ttf', 'LINESeedSansTH_Bd.ttf', 'LINESeedSansTH_XBd.ttf', 'icon-180.png'].includes(path)
+  const isCoreCode = self.MT_RELEASE.networkFirstFiles.includes(path)
 
   if (acceptsHtml) {
     event.respondWith(cacheFirstNavigation(request))

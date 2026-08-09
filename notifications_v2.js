@@ -17,7 +17,9 @@
   const MANUAL_FETCH_TIMEOUT_MS = 10000
   let backgroundSyncTimer = null
   let backgroundSyncInFlight = false
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch]))
+  const SafeRender = globalThis.MTSafeRender || (typeof require === 'function' ? require('./safe_render.js') : null)
+  const esc = SafeRender.escapeHtml
+  const jsArg = SafeRender.jsArg
 
   function notify(message, type = 'info') {
     try { toast(message, type) } catch (_) { console.log(message) }
@@ -742,9 +744,7 @@
       </div>`
   }
 
-  const previousRenderMore = App.renderMore?.bind(App)
-  App.renderMore = function() {
-    previousRenderMore?.()
+  MTScreenHooks.register('more', 'notifications.settings', function() {
     const content = document.getElementById('more-content')
     if (!content || document.getElementById('mt-notification-settings')) return
     const systemTitle = [...content.querySelectorAll('.sec-title')]
@@ -756,7 +756,7 @@
     if (systemTitle) systemTitle.insertAdjacentElement('beforebegin', wrapper)
     else if (footer) footer.insertAdjacentElement('beforebegin', wrapper)
     else content.appendChild(wrapper)
-  }
+  }, { priority: 100 })
 
   App.enableNotifications = function() {
     enableNotifications().catch(err => notify(err.message || 'เปิดการแจ้งเตือนไม่สำเร็จ', 'error'))
@@ -774,15 +774,15 @@
     S.notificationRuleDraft = null
     const rules = sortNotificationRulesForSummary(getCustomRules())
     const rows = rules.map(rule => `
-      <div class="list-item" onclick="App.openNotificationRuleForm('${esc(rule.id)}')">
+      <div class="list-item" onclick="App.openNotificationRuleForm(${jsArg(rule.id)})">
         <div class="list-item-icon" style="background:${rule.enabled ? 'rgba(37,99,235,.12)' : 'rgba(148,163,184,.18)'}">${rule.enabled ? '🔔' : '🔕'}</div>
         <div class="list-item-info">
           <div class="list-item-name">${esc(rule.title || 'ยังไม่ตั้งชื่อ')}</div>
           <div class="list-item-sub">${esc(triggerLabel(rule))} · ไปที่ ${esc(routeLabel(rule.route))}</div>
         </div>
         <div class="recurring-actions">
-          <button class="icon-btn" onclick="event.stopPropagation();App.toggleNotificationRule('${esc(rule.id)}')">${rule.enabled ? 'ปิด' : 'เปิด'}</button>
-          <button class="icon-btn" onclick="event.stopPropagation();App.testCustomNotificationRule('${esc(rule.id)}')" style="width:auto">ทดสอบ</button>
+          <button class="icon-btn" onclick="event.stopPropagation();App.toggleNotificationRule(${jsArg(rule.id)})">${rule.enabled ? 'ปิด' : 'เปิด'}</button>
+          <button class="icon-btn" onclick="event.stopPropagation();App.testCustomNotificationRule(${jsArg(rule.id)})" style="width:auto">ทดสอบ</button>
         </div>
       </div>`).join('')
     App.openSubScreen(`
@@ -851,7 +851,7 @@
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openCustomNotificationRulesScreen()">←</button>
         <h2>${existing ? 'แก้ไขกฎ' : 'เพิ่มกฎแจ้งเตือน'}</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.saveNotificationRule('${esc(rule.id)}')" style="width:auto">บันทึก</button>
+        <button class="btn btn-primary btn-sm" onclick="App.saveNotificationRule(${jsArg(rule.id)})" style="width:auto">บันทึก</button>
       </div>
       <div class="sub-scroll">
         <div class="card card-pad">
@@ -922,8 +922,8 @@
             <p class="form-hint" style="margin-top:4px">ค่าเริ่มต้นของ Trigger นี้คือ “${esc(routeLabel(defaultRouteForTrigger(rule.triggerType)))}” และจะ sync ไป Supabase ตามค่านี้เมื่อไม่ได้เลือกหน้าเอง</p>
           </div>
           <div class="form-group"><label class="form-label">ป้ายปุ่ม Action</label><input class="form-input" id="nr-action-label" value="${esc(rule.actionLabel || 'เปิดดู')}" placeholder="เช่น เปิดดู, เพิ่มรายการ"></div>
-          <button class="btn btn-secondary" onclick="App.testNotificationRuleFromForm('${esc(rule.id)}')">ทดสอบกฎนี้ในเครื่อง</button>
-          ${existing ? `<button class="btn btn-outline mt-8" onclick="App.deleteNotificationRule('${esc(rule.id)}')">ลบกฎนี้</button>` : ''}
+          <button class="btn btn-secondary" onclick="App.testNotificationRuleFromForm(${jsArg(rule.id)})">ทดสอบกฎนี้ในเครื่อง</button>
+          ${existing ? `<button class="btn btn-outline mt-8" onclick="App.deleteNotificationRule(${jsArg(rule.id)})">ลบกฎนี้</button>` : ''}
         </div>
       </div>`, { animate })
     setNotificationRuleFormState(rule)

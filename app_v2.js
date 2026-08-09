@@ -890,7 +890,7 @@ window.__mountUpcomingBillsFeature = function() {
    Vanilla JS, no build tools, works on file:// and GitHub Pages
    ============================================================ */
 
-const APP_VERSION = '2026.06.23-credit-due-r107'
+const APP_VERSION = window.MT_RELEASE?.version || 'development'
 window.MT_APP_VERSION = APP_VERSION
 window.MTBoot?.mark?.('app_v2.version', { version: APP_VERSION })
 
@@ -1025,21 +1025,41 @@ let S = {
 }
 
 let MT_STORAGE_HYDRATED = false
+let MT_STATE_COMMIT = null
+
+function getStateCommit() {
+  if (MT_STATE_COMMIT) return MT_STATE_COMMIT
+  if (!window.MTStateCommit?.create) return null
+  MT_STATE_COMMIT = window.MTStateCommit.create({
+    readState: () => S,
+    isReady: () => MT_STORAGE_HYDRATED,
+    storage: Storage,
+    beforeCommit: [() => {
+      try { App._beforePersistV50?.() } catch (_) {}
+      try { App._beforePersistV40?.() } catch (_) {}
+      try { App.ensurePrivilegesState?.() } catch (_) {}
+    }],
+    afterCommit: [() => {
+      try { window.MTAuthSync?.markDirty?.() } catch (_) {}
+    }],
+  })
+  return MT_STATE_COMMIT
+}
 
 // ── Persist ──────────────────────────────────────────────────
-function persist() {
+function persist(reason = 'app') {
   if (!MT_STORAGE_HYDRATED) {
     console.warn('[Money Tracker] persist skipped before storage hydration')
     return false
   }
-  try { App._beforePersistV50?.() } catch (_) {}
-  try { App._beforePersistV40?.() } catch (_) {}
-  try { App.ensurePrivilegesState?.() } catch (_) {}
-  const ok = Storage.saveAll(S)
+  const stateCommit = getStateCommit()
+  const result = stateCommit
+    ? stateCommit.commit({ reason })
+    : { ok: Storage.saveAll(S) === true }
+  const ok = result.ok === true
   if (!ok) {
+    if (result.error) console.error('[Money Tracker] state commit failed:', result.error)
     try { toast('บันทึกไม่สำเร็จ — แนะนำสำรองข้อมูลก่อนลองใหม่', 'error') } catch (_) {}
-  } else {
-    try { window.MTAuthSync?.markDirty?.() } catch (_) {}
   }
   return ok
 }
@@ -1174,6 +1194,7 @@ function toast(msg, type = 'info') {
 
 // ── Overlay helpers ───────────────────────────────────────────
 const App = {
+  saveAll(reason = 'app') { return persist(reason) },
   openOverlay(id)  { document.getElementById(id)?.classList.add('open') },
   closeOverlay(id) {
     document.getElementById(id)?.classList.remove('open')
@@ -2377,7 +2398,8 @@ App.render();
 ;(function(){
   const INVEST_TYPES = ['gold','crypto','fcd']
   const isInvest = w => w && INVEST_TYPES.includes(w.type)
-  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const esc = MTSafeRender.escapeHtml
+  const jsArg = MTSafeRender.jsArg
   const clampPct = n => Math.max(0, Math.min(100, Number(n) || 0))
   const fmt = n => moneyFmt(Number(n) || 0)
   const signedFmt = (n, type) => {
@@ -2398,6 +2420,7 @@ App.render();
   const walletTypeLabelMap = { bank:'ธนาคาร', cash:'เงินสด', ewallet:'E-Wallet', credit:'บัตรเครดิต', saving:'ออมทรัพย์', gold:'ทองคำ', crypto:'Crypto', fcd:'เงินฝากต่างประเทศ', bnpl:'BNPL' }
 
   App._esc = esc
+  App._jsArg = jsArg
   App._fmtMoney = fmt
   App._fmtSignedMoney = signedFmt
 
@@ -5246,33 +5269,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   // ── 1. Balance reconciliation ─────────────────────────────────
 
   App._computeWalletFlows = function() {
-    if (typeof App._ledgerFlows === 'function') return App._ledgerFlows()
-    const cash = {}
-    S.transactions.forEach(tx => {
-      const amt = Number(tx.amount) || 0
-      if (!tx.walletId) return
-      if (tx.type === 'income')
-        cash[tx.walletId] = (cash[tx.walletId] || 0) + amt
-      else if (tx.type === 'expense')
-        cash[tx.walletId] = (cash[tx.walletId] || 0) - amt
-      else if (tx.type === 'transfer') {
-        cash[tx.walletId] = (cash[tx.walletId] || 0) - amt
-        if (tx.toWalletId)
-          cash[tx.toWalletId] = (cash[tx.toWalletId] || 0) + amt
-      } else if (tx.type === 'cc_payment') {
-        const cashAmount = (typeof App.getCCPaymentCashAmount === 'function')
-          ? App.getCCPaymentCashAmount(tx)
-          : (Number(tx.cashAmount) > 0 ? Number(tx.cashAmount) : amt)
-        cash[tx.walletId] = (cash[tx.walletId] || 0) - cashAmount
-        if (tx.toWalletId)
-          cash[tx.toWalletId] = (cash[tx.toWalletId] || 0) + amt
-      } else if (tx.type === 'bnpl_payment') {
-        cash[tx.walletId] = (cash[tx.walletId] || 0) - amt
-        if (tx.toWalletId)
-          cash[tx.toWalletId] = (cash[tx.toWalletId] || 0) + amt
-      }
-    })
-    return { cash, units: {} }
+    return App._ledgerFlows()
   }
 
   function expectedWalletStateForRepair(w, flows) {
@@ -5572,43 +5569,28 @@ Calc.getUsableMoney = function(wallets, state = null) {
   // AND its date is still in the future. Once the date arrives it is posted
   // regardless of the flag, so past installment months are always included.
   App._isPostedTx = function(tx) {
-    if (tx.scheduled !== true) return true          // not flagged scheduled → always posted
     const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
-    return String(tx.date || '') <= todayStr         // scheduled but date arrived → posted
+    return window.MTLedger.isPostedTx(tx, todayStr)
   }
 
   App.getLedgerAmountForTx = function(tx) {
-    if ('ledgerAmount' in (tx || {}) && Number.isFinite(Number(tx?.ledgerAmount))) {
-      return round2(Number(tx.ledgerAmount || 0))
-    }
-    const baseAmount = round2(Number(tx?.amount || 0))
-    if (!tx || tx.type !== 'expense') return baseAmount
-    const wallet = walletById(tx.walletId)
-    if (!wallet || wallet.type !== 'credit') return baseAmount
-    if (Number(tx.instantDiscountAmount || 0) > 0) return baseAmount
-    const rewardEstimate = typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(tx) : tx.rewardEstimate
-    const discount = Math.max(0, round2(Number(rewardEstimate?.discount || 0)))
-    if (!(discount > 0)) return baseAmount
-    return round2(Math.max(0, baseAmount - discount))
+    return window.MTLedger.getLedgerAmountForTx(tx, {
+      wallets:S.wallets || [],
+      rewardForTx:row => typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(row) : row.rewardEstimate,
+      preferStored:true,
+    })
   }
 
   App.getCCPaymentCashAmount = function(tx) {
-    if (!tx || tx.type !== 'cc_payment') return round2(Number(tx?.amount || 0))
-    const cashAmount = Number(tx.cashAmount)
-    if (Number.isFinite(cashAmount) && cashAmount > 0) return round2(cashAmount)
-    return round2(Number(tx.amount || 0))
+    return window.MTLedger.getCCPaymentCashAmount(tx)
   }
 
   App._expectedLedgerAmountForTx = function(tx) {
-    const baseAmount = round2(Number(tx?.amount || 0))
-    if (!tx || tx.type !== 'expense') return baseAmount
-    const wallet = walletById(tx.walletId)
-    if (!wallet || wallet.type !== 'credit') return baseAmount
-    if (Number(tx.instantDiscountAmount || 0) > 0) return baseAmount
-    const rewardEstimate = typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(tx) : tx.rewardEstimate
-    const discount = Math.max(0, round2(Number(rewardEstimate?.discount || 0)))
-    if (!(discount > 0)) return baseAmount
-    return round2(Math.max(0, baseAmount - discount))
+    return window.MTLedger.getLedgerAmountForTx(tx, {
+      wallets:S.wallets || [],
+      rewardForTx:row => typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(row) : row.rewardEstimate,
+      preferStored:false,
+    })
   }
 
   App._repairInstallmentLedgerAmounts = function() {
@@ -5626,32 +5608,13 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App._ledgerFlows = function() {
-    const cash = {}, units = {}
-    ;(S.transactions || []).forEach(tx => {
-      // Skip future-scheduled transactions — they have not happened yet and
-      // must not reduce today's real wallet/card balance.
-      if (!App._isPostedTx(tx)) return
-
-      const amt = tx.type === 'expense' && typeof App._expectedLedgerAmountForTx === 'function'
-        ? App._expectedLedgerAmountForTx(tx)
-        : App.getLedgerAmountForTx(tx)
-      const addCash = (id, value) => { if (id) cash[id] = (cash[id] || 0) + value }
-      const addUnits = (id, value) => { if (id) units[id] = (units[id] || 0) + value }
-      if (!amt && !Number(tx.unitsDelta || tx.units || 0)) return
-
-      if (tx.type === 'income') addCash(tx.walletId, amt)
-      else if (tx.type === 'expense') addCash(tx.walletId, -amt)
-      else if (tx.type === 'transfer') { addCash(tx.walletId, -amt); addCash(tx.toWalletId, amt) }
-      else if (tx.type === 'cc_payment') {
-        addCash(tx.walletId, -App.getCCPaymentCashAmount(tx))
-        addCash(tx.toWalletId, amt)
-      }
-      else if (tx.type === 'investment_buy') { addCash(tx.cashWalletId || tx.sourceWalletId, -amt); addUnits(tx.walletId, Number(tx.units || 0)) }
-      else if (tx.type === 'investment_sell') { addCash(tx.cashWalletId || tx.sourceWalletId, amt); addUnits(tx.walletId, -Math.abs(Number(tx.units || 0))) }
-      else if (tx.type === 'investment_adjust') addUnits(tx.walletId, Number(tx.unitsDelta || tx.units || 0))
-      else if (tx.type === 'bnpl_payment') { addCash(tx.walletId, -amt); addCash(tx.toWalletId, amt) }
+    return window.MTLedger.compute({
+      transactions:S.transactions || [],
+      wallets:S.wallets || [],
+      loans:S.loans || [],
+      today:today(),
+      rewardForTx:tx => typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(tx) : tx.rewardEstimate,
     })
-    return { cash, units }
   }
 
   App.ensureLedgerBaselines = function(force = false) {
@@ -5674,14 +5637,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App._validateLedgerIntegrity = function() {
-    const walletIds = new Set((S.wallets || []).map(w => w.id))
-    const issues = []
-    ;(S.transactions || []).forEach(tx => {
-      if (!App._isPostedTx(tx)) return
-      if (!tx.walletId || !walletIds.has(tx.walletId))
-        issues.push({ txId: tx.id, date: tx.date, field: 'walletId', value: tx.walletId })
-      if ((tx.type === 'transfer' || tx.type === 'cc_payment') && (!tx.toWalletId || !walletIds.has(tx.toWalletId)))
-        issues.push({ txId: tx.id, date: tx.date, field: 'toWalletId', value: tx.toWalletId })
+    const issues = window.MTLedger.validateIntegrity({
+      transactions:S.transactions || [],
+      wallets:S.wallets || [],
+      today:today(),
     })
     // บันทึกเพื่อแสดง warning บน dashboard
     S._ledgerIssues = issues.length > 0 ? issues : null
@@ -5694,15 +5653,17 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (issues.length > 0) console.warn('[MoneyTracker] ledger integrity issues found:', issues)
     App.ensureLedgerBaselines(false)
     const flows = App._ledgerFlows()
+    const reconciled = window.MTLedger.reconcileWallets({
+      wallets:S.wallets || [],
+      flows,
+      investmentUnitPrice:w => App._investmentUnitPriceV4(w),
+    })
+    const byId = new Map(reconciled.map(row => [row.id, row]))
     ;(S.wallets || []).forEach(w => {
-      if (isInvestWallet(w)) {
-        const units = Math.round(((Number(w.openingUnits || 0) + (flows.units[w.id] || 0)) || 0) * 1e8) / 1e8
-        w.units = units
-        const price = App._investmentUnitPriceV4(w)
-        w.balance = Math.round((units * price) * 100) / 100
-      } else {
-        w.balance = Math.round(((Number(w.openingBalance || 0) + (flows.cash[w.id] || 0)) || 0) * 100) / 100
-      }
+      const next = byId.get(w.id)
+      if (!next) return
+      if ('units' in next) w.units = next.units
+      w.balance = next.balance
     })
     if (recordSnapshot) App.recordNetWorthSnapshot?.()
     if (save) persist()
@@ -7759,7 +7720,7 @@ App._pickMerchant = function(name, opts = {}) {
     // Fallback: ตัดชื่อ function ออกถ้ายังมีติดมา
     return m.replace(/[a-z_][a-z0-9_]*\s+is not (a function|defined)/gi, 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง').slice(0, 120)
   }
-  const persist = () => { try { Storage.saveAll(S) } catch (_) {} }
+  const persist = () => { try { return App.saveAll?.('credit-card-benefits') === true } catch (_) { return false } }
   const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
   const genId = () => (typeof Calc?.genId === 'function' ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2)))
   const isInvestType = t => ['gold','crypto','fcd'].includes(t)
@@ -15181,11 +15142,9 @@ App._pickMerchant = function(name, opts = {}) {
       console.warn('[Benefits] inject cycle shift toggle failed', err)
     }
   }
-  const prevBenefitShiftRenderAddTxDetail = App._renderAddTxDetail?.bind(App)
-  App._renderAddTxDetail = function(...args) {
-    prevBenefitShiftRenderAddTxDetail?.(...args)
+  MTScreenHooks.register('addTransactionDetail', 'benefits.cycle-shift', function () {
     injectBenefitCycleShiftControl()
-  }
+  }, { priority: 40 })
   const prevBenefitShiftTxField = App._txField?.bind(App)
   App._txField = function(key, value) {
     prevBenefitShiftTxField?.(key, value)
@@ -16650,10 +16609,12 @@ App._pickMerchant = function(name, opts = {}) {
     const normalized = Storage.normalizeBackupPayload(data)
     BACKUP_SCHEMA_KEYS.forEach(key => {
       if (key === 'settings') S.settings = { ...(S.settings || {}), ...(normalized.settings || {}) }
-      else if (key === 'aiInsightStore') {
-        try { if (typeof InsightEngine !== 'undefined') InsightEngine.saveStore(normalized.aiInsightStore) } catch (_) {}
-      } else if (['splitBills', 'splitPeople', 'splitBillDraft'].includes(key)) {
-        S[key] = normalized[key]
+      else if (!Storage.isStateCollection?.(key)) {
+        if (key === 'aiInsightStore') {
+          try { if (typeof InsightEngine !== 'undefined') InsightEngine.saveStore(normalized.aiInsightStore) } catch (_) {}
+        } else {
+          Storage.saveCollection?.(key, normalized[key])
+        }
       } else {
         S[key] = normalized[key]
       }
@@ -17254,7 +17215,7 @@ App._pickMerchant = function(name, opts = {}) {
   const money  = n  => (typeof moneyFmt === 'function' ? moneyFmt(Number(n)||0) : Calc.fmt(Number(n)||0))
   const today  = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
   const thisMonth = () => (typeof getTHISMONTH === 'function' ? getTHISMONTH() : new Date().toISOString().slice(0,7))
-  const persist = () => { try { Storage.saveAll(S) } catch (_) {} }
+  const persist = () => { try { return App.saveAll?.('daily-ux') === true } catch (_) { return false } }
   const walletById = id => (S.wallets||[]).find(w => w.id === id)
   const TH_MONTHS_P2 = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
   function thaiDateP2(dateStr) {
@@ -17422,10 +17383,7 @@ App._pickMerchant = function(name, opts = {}) {
   // below the net-worth card so new users know what to do next.
   // ════════════════════════════════════════════════════════════
 
-  const _prevRenderDashboard = App.renderDashboard?.bind(App)
-  App.renderDashboard = function() {
-    if (_prevRenderDashboard) _prevRenderDashboard()
-
+  MTScreenHooks.register('dashboard', 'onboarding.phase2-setup', function () {
     const visibleWalletCount = (S.wallets || []).filter(w => !w.hiddenFromWalletList).length
 
     // No wallets at all → first-use guidance card
@@ -17461,7 +17419,7 @@ App._pickMerchant = function(name, opts = {}) {
         }
       }
     }
-  }
+  }, { priority: 10 })
 
   // ════════════════════════════════════════════════════════════
   // 4. SEARCH EMPTY STATE — Clear-filter action button
@@ -17640,9 +17598,7 @@ App._pickMerchant = function(name, opts = {}) {
   // income-by-category breakdown computed here.
   // ════════════════════════════════════════════════════════════
 
-  const _prevRenderReports = App.renderReports?.bind(App)
-  App.renderReports = function() {
-    if (_prevRenderReports) _prevRenderReports()
+  MTScreenHooks.register('reports', 'reports.income-empty-repair', function () {
     if (S.rptView !== 'income') return
 
     const content = document.getElementById('reports-content')
@@ -17688,7 +17644,7 @@ App._pickMerchant = function(name, opts = {}) {
     const tmp = document.createElement('div')
     tmp.innerHTML = catHtml
     wrapper.replaceWith(tmp.firstChild)
-  }
+  }, { priority: 10 })
 
   // ════════════════════════════════════════════════════════════
   // 8. HIDDEN BALANCE CONSISTENCY — Global render guard
@@ -18751,11 +18707,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     anchor.insertAdjacentElement('afterend', block)
   }
 
-  const prevRenderDashboard = App.renderDashboard?.bind(App)
-  App.renderDashboard = function() {
-    prevRenderDashboard?.()
+  MTScreenHooks.register('dashboard', 'privileges.alerts', function () {
     injectDashboardPrivilegeAlerts()
-  }
+  }, { priority: 20 })
 
   ensurePrivilegesState()
   ensurePrivilegesStorageKey()
@@ -18919,9 +18873,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // ── 4.15 Pre-Transaction Card Picker ─────────────────────
-  const _prevRenderAddTxDetail = App._renderAddTxDetail?.bind(App)
-  App._renderAddTxDetail = function() {
-    _prevRenderAddTxDetail?.()
+  MTScreenHooks.register('addTransactionDetail', 'cards.picker', function () {
     _injectCardPicker()
     const _box = document.getElementById('add-tx-content')
     if (_box) {
@@ -18930,7 +18882,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       const _wg = _box.querySelector('#tx-wallet')?.closest('.form-group')
       if (_mg) (_cp || _wg)?.before(_mg)
     }
-  }
+  }, { priority: 50 })
 
   function _injectCardPicker() {
     if (!S.tx || S.tx.type !== 'expense') return
@@ -19195,11 +19147,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // ── Dashboard: inject insight section ────────────────────
-  const _prevRenderDashboard = App.renderDashboard?.bind(App)
-  App.renderDashboard = function() {
-    _prevRenderDashboard?.()
+  MTScreenHooks.register('dashboard', 'insights.summary', function () {
     _injectDashboardInsights()
-  }
+  }, { priority: 30 })
 
   function _injectDashboardInsights() {
     const content = document.getElementById('dashboard-content')
@@ -19252,11 +19202,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     App.openReportsCoach?.()
   })
 
-  const _prevRenderReports = App.renderReports?.bind(App)
-  App.renderReports = function() {
-    _prevRenderReports?.()
+  MTScreenHooks.register('reports', 'insights.upgrade', function () {
     _upgradeReportsAI()
-  }
+  }, { priority: 30 })
 
   const _prevSetRptView = App.setRptView?.bind(App)
   App.setRptView = function(v) {
@@ -19344,11 +19292,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // ── Add-tx detail: budget impact chip ────────────────────
-  const _prevRenderDetail = App._renderAddTxDetail?.bind(App)
-  App._renderAddTxDetail = function() {
-    _prevRenderDetail?.()
+  MTScreenHooks.register('addTransactionDetail', 'budgets.impact', function () {
     _injectBudgetChip()
-  }
+  }, { priority: 60 })
 
   function _injectBudgetChip() {
     try {
@@ -19390,12 +19336,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     } catch(_) {}
   }
 
-  // ── Invalidate cache on data mutation ────────────────────
-  const _prevSaveAll = App.saveAll?.bind(App)
-  App.saveAll = function() {
-    _prevSaveAll?.()
-    try { InsightEngine.invalidate() } catch(_) {}
-  }
+  // Invalidate derived insights only after the durable State Commit succeeds.
+  getStateCommit()?.addAfterCommit(() => {
+    try { InsightEngine.invalidate() } catch (_) {}
+  })
 
   // ── Init ─────────────────────────────────────────────────
   try { if (S.page === 'dashboard') App.renderDashboard?.() } catch(_) {}
@@ -21543,9 +21487,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     App.openActionAuditLog()
   }
 
-  const _prevRenderReportsForCategoryForecast = App.renderReports?.bind(App)
-  App.renderReports = function(...args) {
-    _prevRenderReportsForCategoryForecast?.(...args)
+  MTScreenHooks.register('reports', 'finance.category-forecast', function () {
     if (S.rptView !== 'expense') return
     const content = document.getElementById('reports-content')
     if (!content || content.querySelector('.mt-category-forecast-card')) return
@@ -21557,16 +21499,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <span>${fmt(c.projected)}${c.accuracy?.mape !== null ? ` · error ${(c.accuracy.mape*100).toFixed(0)}%` : ''}</span>
       </div>`).join('') || '<div class="list-item-sub">ยังไม่มีข้อมูลคาดการณ์</div>'}
     </div>`)
-  }
+  }, { priority: 40 })
 
   App.scheduleFinanceFeatureRebuild?.({ reason: 'boot' })
 
-  const _prevSaveAllForFinanceIntelligence = App.saveAll?.bind(App)
-  App.saveAll = function(...args) {
-    const result = _prevSaveAllForFinanceIntelligence?.(...args)
-    App.scheduleFinanceFeatureRebuild?.({ reason: 'saveAll' })
-    return result
-  }
+  getStateCommit()?.addAfterCommit((_state, context) => {
+    App.scheduleFinanceFeatureRebuild?.({ reason: context.reason || 'saveAll' })
+  })
 
   // ── Init ─────────────────────────────────────────────────────
   try { if (S.page === 'more') App.renderMore?.() } catch(_) {}
@@ -21690,16 +21629,16 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // ─────────────────────────────────────────────────────────────
   // P1-E  renderDashboard post-hook
   // ─────────────────────────────────────────────────────────────
-  const _origRD = App.renderDashboard?.bind(App)
-  App.renderDashboard = function (...args) {
-    // W15: snapshot values before re-render
+  MTScreenHooks.register('dashboard', 'animations.snapshot-values', function (context) {
     const _prevVals = {}
     document.querySelectorAll('#dashboard-content [data-val-key]').forEach(el => {
       _prevVals[el.dataset.valKey] = el.textContent.trim()
     })
+    context.metadata.previousValues = _prevVals
+  }, { phase: 'before', priority: 10 })
 
-    _origRD?.(...args)
-
+  MTScreenHooks.register('dashboard', 'animations.dashboard', function (context) {
+    const _prevVals = context.metadata.previousValues || {}
     try {
       _runDashCountUp()
       _animProgressBars('#dashboard-content')
@@ -21748,7 +21687,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         }
       }, 1100)
     } catch (_) {}
-  }
+  }, { priority: 100 })
 
   // ─────────────────────────────────────────────────────────────
   // P1-F  Transaction list stagger
@@ -21824,9 +21763,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     })
   }
 
-  const _origRR = App.renderReports?.bind(App)
-  App.renderReports = function (...args) {
-    _origRR?.(...args)
+  MTScreenHooks.register('reports', 'animations.core', function () {
     try {
       _staggerReportCards()
       _animProgressBars('#reports-content')
@@ -21834,20 +21771,18 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       // W10: SVG bar draw on trend chart
       setTimeout(_animTrendBars, 120)
     } catch (_) {}
-  }
+  }, { priority: 100 })
 
   // ─────────────────────────────────────────────────────────────
   // P2-D  Wallets: animate progress bars + W14
   // ─────────────────────────────────────────────────────────────
-  const _origRW = App.renderWallets?.bind(App)
-  App.renderWallets = function (...args) {
-    _origRW?.(...args)
+  MTScreenHooks.register('wallets', 'animations.core', function () {
     try {
       _animProgressBars('#wallets-content')
       // W14: elastic scroll perspective
       _setupElasticScroll()
     } catch (_) {}
-  }
+  }, { priority: 100 })
 
   // ─────────────────────────────────────────────────────────────
   // P3-A  Flash newly-saved tx row green + W5 FAB particles +
@@ -22234,15 +22169,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // ─────────────────────────────────────────────────────────────
   // W4: inject budget rings after wallet/report renders
   // ─────────────────────────────────────────────────────────────
-  const _origRW2 = App.renderWallets
-  App.renderWallets = (function (_prev) {
-    return function (...args) {
-      _prev?.(...args)
-      try {
-        setTimeout(() => _injectBudgetRing(document.getElementById('wallets-content') || document.body), 300)
-      } catch (_) {}
-    }
-  })(App.renderWallets)
+  MTScreenHooks.register('wallets', 'animations.budget-ring', function () {
+    try {
+      setTimeout(() => _injectBudgetRing(document.getElementById('wallets-content') || document.body), 300)
+    } catch (_) {}
+  }, { priority: 110 })
 
   // ─────────────────────────────────────────────────────────────
   // Init
@@ -22404,10 +22335,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   })()
 
   // ── N12 + N21: Wallet page: negative glow + budget colors ──
-  ;(function _patchRWExtra() {
-    const _prev = App.renderWallets?.bind(App)
-    App.renderWallets = function (...args) {
-      _prev?.(...args)
+  MTScreenHooks.register('wallets', 'animations.balance-and-budget-state', function () {
       try {
         // N12: negative balance red glow (skip credit cards — negative balance is expected)
         document.querySelectorAll('#wallets-content .wc-card, #wallets-content .wallet-card:not(.wallet-card-credit)').forEach(card => {
@@ -22426,14 +22354,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           else if (pct > 70) wrap.classList.add('mt-bar-warn')
         })
       } catch (_) {}
-    }
-  })()
+  }, { priority: 120 })
 
   // ── N13 + N24 + N27: Reports extra hooks ──────────────────
-  ;(function _patchRReportsExtra() {
-    const _prev = App.renderReports?.bind(App)
-    App.renderReports = function (...args) {
-      _prev?.(...args)
+  MTScreenHooks.register('reports', 'animations.enhanced', function () {
       try {
         const content = document.getElementById('reports-content')
         // N13: fade in new content (declarative CSS animation — always completes on
@@ -22465,8 +22389,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           window.MT_confetti?.(r.left + r.width / 2, r.top + r.height / 2)
         }, 400)
       } catch (_) {}
-    }
-  })()
+  }, { priority: 120 })
 
   // ── N14: Sheet handle pulse on overlay open ────────────────
   ;(function _patchOpenOverlayHandle() {
@@ -22699,10 +22622,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // ── A2 + B3 + B4: renderWallets combined hook ─────────────────
-  ;(function _patchRWave2() {
-    const _prev = App.renderWallets?.bind(App)
-    App.renderWallets = function (...args) {
-      _prev?.(...args)
+  MTScreenHooks.register('wallets', 'animations.entrance-and-summary', function () {
       try {
         // A2: wallet card entrance stagger
         document.querySelectorAll('#wallets-content .wallet-card:not(.mt-w2-in)').forEach((card, i) => {
@@ -22712,8 +22632,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         // B4: wallet summary count-up
         document.querySelectorAll('#wallets-summary strong').forEach(el => _cu(el, 900))
       } catch (_) {}
-    }
-  })()
+  }, { priority: 130 })
 
   // ── A3: FAB scroll hide/show ──────────────────────────────────
   let _fabHidden = false
@@ -22968,10 +22887,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   })()
 
   // ── B10: Reports income/expense count-up ──────────────────────
-  ;(function _patchRReportsCountUp() {
-    const _prev = App.renderReports?.bind(App)
-    App.renderReports = function (...args) {
-      _prev?.(...args)
+  MTScreenHooks.register('reports', 'animations.summary-count-up', function () {
       try {
         // Target summary values — avoid re-hitting category bars already handled by Wave 1
         document.querySelectorAll(
@@ -22981,8 +22897,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           '#reports-content .card > div > strong'
         ).forEach(el => _cu(el, 950))
       } catch (_) {}
-    }
-  })()
+  }, { priority: 130 })
 
   // ── B11: Tab-strip button tap bounce ──────────────────────────
   document.addEventListener('click', function (e) {
@@ -23068,9 +22983,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (sessionStorage.getItem('mt_w2_dash_entered')) return
     sessionStorage.setItem('mt_w2_dash_entered', '1')
     let _done = false
-    const _prev = App.renderDashboard?.bind(App)
-    App.renderDashboard = function (...args) {
-      _prev?.(...args)
+    MTScreenHooks.register('dashboard', 'animations.cold-start', function () {
       if (_done) return
       _done = true
       try {
@@ -23085,7 +22998,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           )
         })
       } catch (_) {}
-    }
+    }, { priority: 140 })
   })()
 
   // ── B23: Export/backup success row flash ──────────────────────
@@ -23166,11 +23079,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   })()
 
   // ── D6: Cat-btn grid — sort + stagger fade-in (first entrance) ──
-  ;(function _patchRenderAddTxDetailD6() {
-    const _prev = App._renderAddTxDetail?.bind(App)
-    App._renderAddTxDetail = function (...args) {
-      const isFirstEntrance = !document.getElementById('cat-grid')
-      _prev?.(...args)
+  ;(function _registerRenderAddTxDetailD6() {
+    MTScreenHooks.register('addTransactionDetail', 'animations.category-snapshot', function (context) {
+      context.metadata.isFirstCategoryEntrance = !document.getElementById('cat-grid')
+    }, { phase: 'before', priority: 10 })
+    MTScreenHooks.register('addTransactionDetail', 'animations.category-grid', function (context) {
       try {
         // #2: "อื่น" stays last unless it is the active category
         const grid = document.getElementById('cat-grid')
@@ -23190,7 +23103,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         }
       } catch (_) {}
       // #1: stagger fade-in only on first entrance to detail step
-      if (!isFirstEntrance) return
+      if (!context.metadata.isFirstCategoryEntrance) return
       try {
         document.querySelectorAll('#cat-grid .cat-btn').forEach((btn, i) => {
           // setProperty 'important' needed to beat CSS animation !important shorthand
@@ -23198,7 +23111,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           btn.classList.add('mt-cat-in')
         })
       } catch (_) {}
-    }
+    }, { priority: 120 })
   })()
 
   // ── D7 + D38: tx-summary count-up + new-row slide-in ──────────
@@ -23677,9 +23590,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // ── 1. Transactions header: move summary cards to after month chips (non-sticky) ──
-  const _prevRT = App.renderTransactions?.bind(App)
-  App.renderTransactions = function (...args) {
-    _prevRT?.(...args)
+  MTScreenHooks.register('transactions', 'layout.summary-after-months', function () {
     try {
       const header = document.querySelector('#page-transactions .page-header')
       if (!header) return
@@ -23687,7 +23598,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       const monthRow = header.querySelector('.tx-month-row')
       if (cards && monthRow) monthRow.insertAdjacentElement('afterend', cards)
     } catch (_) {}
-  }
+  }, { priority: 10 })
 
   // ── 2. More tab: 3-tab strip ─────────────────────────────────────────
 
@@ -23968,12 +23879,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // Wrap renderDashboard for dedup + chip fix
-  const _prevRD4 = App.renderDashboard?.bind(App)
-  App.renderDashboard = function (...args) {
-    _prevRD4?.(...args)
+  MTScreenHooks.register('dashboard', 'dashboard.deduplicate-alerts', function () {
     try { dedupDashboardAlerts() } catch (_) {}
     try { fixDailyChips() } catch (_) {}
-  }
+  }, { priority: 90 })
 
   // ── 6. Budget alert toasts ────────────────────────────────────────────
 
@@ -24391,11 +24300,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
   }
 
-  const prevRenderDetail = App._renderAddTxDetail?.bind(App)
-  App._renderAddTxDetail = function(...args) {
-    prevRenderDetail?.(...args)
+  MTScreenHooks.register('addTransactionDetail', 'shared-expense.controls', function () {
     injectSharedExpenseControls()
-  }
+  }, { priority: 140 })
 
   const prevGoToDetail = App._goToDetail?.bind(App)
   App._goToDetail = function(...args) {
@@ -24718,3 +24625,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     el?.addEventListener('click', e => { if (e.target === el) popLayer() })
   }
 })()
+
+// Stable extension Seam: feature modules register named post-render Adapters.
+window.MTScreenHooks?.install?.(App, {
+  dashboard: 'renderDashboard',
+  wallets: 'renderWallets',
+  reports: 'renderReports',
+  transactions: 'renderTransactions',
+  more: 'renderMore',
+  addTransactionDetail: '_renderAddTxDetail',
+})

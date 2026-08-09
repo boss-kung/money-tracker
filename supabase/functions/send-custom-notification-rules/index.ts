@@ -1,4 +1,4 @@
-import { adminClient } from '../_shared/supabase.ts'
+import { adminClient, requestErrorStatus, requireCronSecret } from '../_shared/supabase.ts'
 import { sendWebPush } from '../_shared/webpush.ts'
 import type { WebPushSubscription } from '../_shared/webpush.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
@@ -8,6 +8,7 @@ const WINDOW_MINUTES = 15
 type DeviceRow = { install_id: string; push_subscription: WebPushSubscription | null }
 type RuleRow = {
   install_id: string
+  user_id: string
   rule_id: string
   title: string
   body: string
@@ -149,9 +150,9 @@ Deno.serve(async req => {
   if (options) return options
   if (!['GET', 'POST'].includes(req.method)) return jsonResponse({ error: 'Method not allowed' }, 405, req)
 
-  const supabase = adminClient()
-
   try {
+    requireCronSecret(req)
+    const supabase = adminClient()
     const { data: devices, error: devicesError } = await supabase
       .from('mt_notification_devices')
       .select('install_id, push_subscription')
@@ -169,7 +170,7 @@ Deno.serve(async req => {
 
     const { data: rules, error: rulesError } = await supabase
       .from('mt_notification_rules')
-      .select('install_id, rule_id, title, body, route, action_label, trigger_type, trigger_config')
+      .select('install_id, user_id, rule_id, title, body, route, action_label, trigger_type, trigger_config')
       .eq('enabled', true)
       .in('install_id', installIds)
     if (rulesError) throw rulesError
@@ -248,6 +249,7 @@ Deno.serve(async req => {
 
       await supabase.from('mt_notification_logs').upsert({
         install_id: rule.install_id,
+        user_id: rule.user_id,
         notification_type: 'custom_rule',
         dedupe_key: dedupeKey,
         title: rule.title,
@@ -262,6 +264,6 @@ Deno.serve(async req => {
 
     return jsonResponse({ ok: true, sent, skipped, failures }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, 500, req)
+    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, requestErrorStatus(error), req)
   }
 })

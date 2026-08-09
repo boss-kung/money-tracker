@@ -15,9 +15,9 @@
   function today() {
     return (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
   }
-  function esc(s) {
-    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-  }
+  const SafeRender = globalThis.MTSafeRender || (typeof require === 'function' ? require('./safe_render.js') : null)
+  const esc = SafeRender.escapeHtml
+  const jsArg = SafeRender.jsArg
   function fmt(n) {
     if (typeof moneyFmt === 'function') return moneyFmt(n)
     if (typeof Calc !== 'undefined' && Calc.fmt) return Calc.fmt(n)
@@ -160,47 +160,9 @@
 
   window.LoanStore = LoanStore
 
-  // ── hook into _ledgerFlows so recalculateWalletBalances includes loans ──
-  // recalculateWalletBalances (called at startup) uses _ledgerFlows directly.
-  // Without this patch, it resets wallet balances ignoring loans on every reload.
-  if (typeof App !== 'undefined') {
-    const _patchFlows = () => {
-      function _addLoanFlows(result) {
-        ;(S.loans || []).forEach(loan => {
-          if (loan.walletId)
-            result.cash[loan.walletId] = (result.cash[loan.walletId] || 0) - Number(loan.amount || 0)
-          ;(loan.repayments || []).forEach(r => {
-            if (r.walletId)
-              result.cash[r.walletId] = (result.cash[r.walletId] || 0) + Number(r.amount || 0)
-          })
-        })
-        return result
-      }
-
-      // Patch _ledgerFlows — the one recalculateWalletBalances actually uses
-      if (typeof App._ledgerFlows === 'function') {
-        const prevLedger = App._ledgerFlows.bind(App)
-        App._ledgerFlows = function () { return _addLoanFlows(prevLedger()) }
-      }
-
-      // Also patch _computeWalletFlows for the balance-repair UI
-      if (typeof App._computeWalletFlows === 'function') {
-        const prevFlows = App._computeWalletFlows.bind(App)
-        App._computeWalletFlows = function () { return _addLoanFlows(prevFlows()) }
-      }
-
-      // Re-run recalculateWalletBalances so current session has correct balances
-      // (it already ran in app_v2.js before loans_v2.js loaded, without loan flows)
-      try { App.recalculateWalletBalances?.({ save: false }) } catch (_) {}
-      try { if (typeof S !== 'undefined') App.render?.() } catch (_) {}
-    }
-
-    if (App._ledgerFlows) {
-      _patchFlows()
-    } else {
-      document.addEventListener('DOMContentLoaded', _patchFlows, { once: true })
-    }
-  }
+  // Loan principal and repayments are part of the Ledger input. The Ledger Module
+  // reads S.loans directly, so this file no longer changes balance behaviour by
+  // monkey-patching App methods or depending on script load order.
 
   // ── UI ────────────────────────────────────────────────────────
 
@@ -319,7 +281,7 @@
             <div style="font-size:14px;font-weight:600;color:var(--income)">+${fmt(r.amount)}</div>
             <div style="font-size:12px;color:var(--muted)">${fmtDate(r.date)}${r.walletId ? ' · ' + _walletName(r.walletId) : ''}${r.note ? ' · ' + esc(r.note) : ''}</div>
           </div>
-          <button class="btn-icon" style="color:var(--muted);font-size:16px" onclick="App._loanDeleteRepayment('${esc(loan.id)}','${esc(r.id)}')">🗑</button>
+          <button class="btn-icon" style="color:var(--muted);font-size:16px" onclick="App._loanDeleteRepayment(${jsArg(loan.id)},${jsArg(r.id)})">🗑</button>
         </div>`).join('')
 
     const progressPct = loan.amount > 0 ? Math.min(100, Math.round(((loan.amount - rem) / loan.amount) * 100)) : 100
@@ -329,8 +291,8 @@
         <button class="btn-icon" onclick="App.openLoansScreen()">←</button>
         <h2>${esc(loan.borrowerName)}</h2>
         <div style="display:flex;gap:4px">
-          <button class="btn-icon" onclick="App.openLoanForm('${esc(loan.id)}')" title="แก้ไข">✏️</button>
-          <button class="btn-icon" onclick="App._loanDeleteConfirm('${esc(loan.id)}')" title="ลบ">🗑</button>
+          <button class="btn-icon" onclick="App.openLoanForm(${jsArg(loan.id)})" title="แก้ไข">✏️</button>
+          <button class="btn-icon" onclick="App._loanDeleteConfirm(${jsArg(loan.id)})" title="ลบ">🗑</button>
         </div>
       </div>
       <div class="sub-scroll" style="padding:16px 16px 48px">
@@ -365,13 +327,13 @@
         </div>
 
         ${loan.status !== 'settled' ? `
-        <button class="btn btn-primary" onclick="App.openRepaymentForm('${esc(loan.id)}')" style="width:100%;margin-bottom:8px">
+        <button class="btn btn-primary" onclick="App.openRepaymentForm(${jsArg(loan.id)})" style="width:100%;margin-bottom:8px">
           + บันทึกรับคืน
         </button>
-        <button class="btn" onclick="App._loanMarkSettled('${esc(loan.id)}')" style="width:100%;color:var(--income)">
+        <button class="btn" onclick="App._loanMarkSettled(${jsArg(loan.id)})" style="width:100%;color:var(--income)">
           ✅ ทำเครื่องหมายว่าคืนครบแล้ว
         </button>` : `
-        <button class="btn" onclick="App._loanMarkSettled('${esc(loan.id)}', false)" style="width:100%;color:var(--muted)">
+        <button class="btn" onclick="App._loanMarkSettled(${jsArg(loan.id)}, false)" style="width:100%;color:var(--muted)">
           ↩️ เปลี่ยนเป็นยังค้างอยู่
         </button>`}
       </div>`
@@ -406,7 +368,7 @@
     const d = _draft
     return `
       <div class="sub-header">
-        <button class="btn-icon" onclick="${isEdit ? `App.openLoanDetail('${esc(_editLoanId)}')` : 'App.openLoansScreen()'}">←</button>
+        <button class="btn-icon" onclick="${isEdit ? `App.openLoanDetail(${jsArg(_editLoanId)})` : 'App.openLoansScreen()'}">←</button>
         <h2>${isEdit ? 'แก้ไขรายการ' : 'ให้ยืมเงิน'}</h2>
         <div></div>
       </div>
@@ -522,7 +484,7 @@
     const d = _repDraft
     return `
       <div class="sub-header">
-        <button class="btn-icon" onclick="App.openLoanDetail('${esc(loan.id)}')">←</button>
+        <button class="btn-icon" onclick="App.openLoanDetail(${jsArg(loan.id)})">←</button>
         <h2>บันทึกรับคืน</h2>
         <div></div>
       </div>

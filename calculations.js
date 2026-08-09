@@ -176,19 +176,16 @@ const Calc = {
   // existing data that has no scheduled field).
   // A scheduled transaction whose date has arrived is also treated as posted.
   isPostedTx(t) {
-    if (!t || t.scheduled !== true) return true
     const todayStr = (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
+    if (globalThis.MTLedger?.isPostedTx) return globalThis.MTLedger.isPostedTx(t, todayStr)
+    if (!t || t.scheduled !== true) return true
     return String(t.date || '') <= todayStr
   },
 
   getExpenseLedgerAmount(t) {
     if (!t) return 0
     if (t.type !== 'expense') return Number(t.amount || 0)
-    try {
-      if (typeof App !== 'undefined' && typeof App.getLedgerAmountForTx === 'function') {
-        return Number(App.getLedgerAmountForTx(t) || 0)
-      }
-    } catch (_) {}
+    if (globalThis.MTLedger?.getLedgerAmountForTx) return Number(globalThis.MTLedger.getLedgerAmountForTx(t) || 0)
     if ('ledgerAmount' in t && Number.isFinite(Number(t.ledgerAmount))) {
       return Number(t.ledgerAmount || 0)
     }
@@ -204,6 +201,7 @@ const Calc = {
   },
 
   getCCPaymentCashAmount(t) {
+    if (globalThis.MTLedger?.getCCPaymentCashAmount) return globalThis.MTLedger.getCCPaymentCashAmount(t)
     if (!t || t.type !== 'cc_payment') return Number(t?.amount || 0)
     const cashAmount = Number(t.cashAmount)
     if (Number.isFinite(cashAmount) && cashAmount > 0) return cashAmount
