@@ -15,6 +15,7 @@
   function today() {
     return (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
   }
+  const Ledger = globalThis.MTLedger || (typeof require === 'function' ? require('./ledger.js') : null)
   const SafeRender = globalThis.MTSafeRender || (typeof require === 'function' ? require('./safe_render.js') : null)
   const esc = SafeRender.escapeHtml
   const jsArg = SafeRender.jsArg
@@ -32,11 +33,11 @@
     } catch (_) { return d }
   }
   function isOverdue(loan) {
-    if (!loan.dueDate || loan.status === 'settled') return false
+    if (!loan.dueDate || LoanStore.isSettled(loan)) return false
     return today() > loan.dueDate
   }
   function isDueSoon(loan) {
-    if (!loan.dueDate || loan.status === 'settled') return false
+    if (!loan.dueDate || LoanStore.isSettled(loan)) return false
     const diff = (new Date(loan.dueDate) - new Date(today())) / 86400000
     return diff >= 0 && diff <= 7
   }
@@ -48,38 +49,45 @@
     getById(id) { return LoanStore.getAll().find(l => l.id === id) || null },
 
     remaining(loan) {
-      const paid = (loan.repayments || []).reduce((s, r) => s + Number(r.amount || 0), 0)
-      return Math.max(0, Number(loan.amount || 0) - paid)
+      return Ledger.getLoanContractRemaining(loan, today())
+    },
+
+    isSettled(loan) {
+      return Ledger.isDatedActivityPosted(loan, today()) && Number(loan?.amount || 0) > 0 && LoanStore.remaining(loan) <= 0
     },
 
     totalOutstanding() {
       return LoanStore.getAll()
-        .filter(l => l.status !== 'settled')
+        .filter(l => Ledger.isDatedActivityPosted(l, today()) && !LoanStore.isSettled(l))
         .reduce((s, l) => s + LoanStore.remaining(l), 0)
     },
 
     outstanding() {
-      return LoanStore.getAll().filter(l => l.status !== 'settled')
+      return LoanStore.getAll().filter(l => !LoanStore.isSettled(l))
     },
 
     settled() {
-      return LoanStore.getAll().filter(l => l.status === 'settled')
+      return LoanStore.getAll().filter(l => LoanStore.isSettled(l))
     },
 
-    _adjustWallet(walletId, delta) {
-      if (!walletId || typeof S === 'undefined') return
-      const w = (S.wallets || []).find(x => x.id === walletId)
-      if (w) w.balance = Math.round((Number(w.balance || 0) + delta) * 100) / 100
+    _commit() {
+      if (typeof App !== 'undefined' && typeof App.recalculateWalletBalances === 'function') {
+        App.recalculateWalletBalances({ save:false, recordSnapshot:true })
+      }
+      if (typeof persist === 'function') persist()
     },
 
     create(data) {
+      const date = data.date || today()
+      if (date > today()) return { error:'FUTURE_DATE' }
+      if (data.dueDate && data.dueDate < date) return { error:'DUE_BEFORE_LOAN' }
       const loan = {
         id: genId(),
         borrowerName: String(data.borrowerName || '').trim(),
         borrowerContact: String(data.borrowerContact || '').trim(),
         amount: Number(data.amount) || 0,
         walletId: data.walletId || '',
-        date: data.date || today(),
+        date,
         dueDate: data.dueDate || '',
         note: String(data.note || '').trim(),
         status: 'outstanding',
@@ -88,35 +96,35 @@
       }
       if (typeof S !== 'undefined') {
         S.loans = [loan, ...(S.loans || [])]
-        LoanStore._adjustWallet(loan.walletId, -loan.amount)
-        if (typeof persist === 'function') persist()
+        LoanStore._commit()
       }
       return loan
     },
 
     update(id, data) {
-      if (typeof S === 'undefined') return
+      if (typeof S === 'undefined') return { error:'NO_STATE' }
       const idx = (S.loans || []).findIndex(l => l.id === id)
-      if (idx < 0) return
+      if (idx < 0) return { error:'NOT_FOUND' }
       const old = S.loans[idx]
-      // if amount or walletId changed, reverse old then apply new
-      if (data.amount !== undefined && (Number(data.amount) !== old.amount || (data.walletId && data.walletId !== old.walletId))) {
-        LoanStore._adjustWallet(old.walletId, old.amount)
-        LoanStore._adjustWallet(data.walletId || old.walletId, -Number(data.amount))
-      }
-      S.loans[idx] = { ...old, ...data, id, repayments: old.repayments }
-      if (typeof persist === 'function') persist()
+      const nextDate = data.date || old.date || today()
+      if (nextDate > today()) return { error:'FUTURE_DATE' }
+      if (data.dueDate && data.dueDate < nextDate) return { error:'DUE_BEFORE_LOAN' }
+      if ((old.repayments || []).some(repayment => String(repayment.date || '') < nextDate)) return { error:'LOAN_DATE_AFTER_REPAYMENT' }
+      const paid = (old.repayments || []).reduce((sum, repayment) => sum + Math.max(0, Number(repayment.amount || 0)), 0)
+      if (data.amount !== undefined && Number(data.amount) + 0.005 < paid) return { error:'AMOUNT_BELOW_REPAID', paid }
+      const next = { ...old, ...data, date:nextDate, id, repayments:old.repayments }
+      next.status = LoanStore.isSettled(next) ? 'settled' : 'outstanding'
+      S.loans[idx] = next
+      LoanStore._commit()
+      return { loan:next }
     },
 
     delete(id) {
       if (typeof S === 'undefined') return
       const loan = LoanStore.getById(id)
       if (!loan) return
-      // reverse wallet adjustments
-      LoanStore._adjustWallet(loan.walletId, loan.amount)
-      ;(loan.repayments || []).forEach(r => LoanStore._adjustWallet(r.walletId, -r.amount))
       S.loans = (S.loans || []).filter(l => l.id !== id)
-      if (typeof persist === 'function') persist()
+      LoanStore._commit()
     },
 
     addRepayment(loanId, data) {
@@ -130,10 +138,12 @@
         walletId: data.walletId || loan.walletId || '',
         note: String(data.note || '').trim(),
       }
+      const validation = Ledger.validateLoanRepayment(loan, rep, today())
+      if (!validation.ok) return { error:validation.code, remaining:validation.remaining }
       loan.repayments = [...(loan.repayments || []), rep]
-      LoanStore._adjustWallet(rep.walletId, rep.amount)
       if (LoanStore.remaining(loan) <= 0) loan.status = 'settled'
-      if (typeof persist === 'function') persist()
+      else loan.status = 'outstanding'
+      LoanStore._commit()
       return rep
     },
 
@@ -143,18 +153,9 @@
       if (!loan) return
       const rep = (loan.repayments || []).find(r => r.id === repId)
       if (!rep) return
-      LoanStore._adjustWallet(rep.walletId, -rep.amount)
       loan.repayments = loan.repayments.filter(r => r.id !== repId)
-      if (loan.status === 'settled' && LoanStore.remaining(loan) > 0) loan.status = 'outstanding'
-      if (typeof persist === 'function') persist()
-    },
-
-    markSettled(id, settled = true) {
-      if (typeof S === 'undefined') return
-      const loan = LoanStore.getById(id)
-      if (!loan) return
-      loan.status = settled ? 'settled' : 'outstanding'
-      if (typeof persist === 'function') persist()
+      loan.status = LoanStore.isSettled(loan) ? 'settled' : 'outstanding'
+      LoanStore._commit()
     },
   }
 
@@ -201,6 +202,7 @@
 
     const loanCard = (l) => {
       const rem = LoanStore.remaining(l)
+      const isSettled = LoanStore.isSettled(l)
       const overdue = isOverdue(l)
       const dueSoon = isDueSoon(l)
       const dueLine = l.dueDate
@@ -209,7 +211,7 @@
            </span>`
         : ''
       const paidPct = l.amount > 0 ? Math.min(100, Math.round(((l.amount - rem) / l.amount) * 100)) : 100
-      const progressBar = l.status !== 'settled' && l.repayments?.length
+      const progressBar = !isSettled && l.repayments?.length
         ? `<div style="margin-top:6px;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="width:${paidPct}%;height:100%;background:var(--income);border-radius:2px"></div></div>`
         : ''
       return `<div class="settings-row" style="align-items:flex-start;padding:12px 16px;cursor:pointer" data-loan-id="${esc(l.id)}">
@@ -218,7 +220,7 @@
           <div style="font-weight:600;font-size:15px">${esc(l.borrowerName)}</div>
           <div style="font-size:13px;color:var(--muted);margin-top:2px">${fmt(l.amount)} · ${fmtDate(l.date)}</div>
           ${dueLine}
-          ${l.status !== 'settled' ? `<div style="font-size:13px;font-weight:600;color:var(--expense);margin-top:2px">คงค้าง ${fmt(rem)}</div>` : ''}
+          ${!isSettled ? `<div style="font-size:13px;font-weight:600;color:var(--expense);margin-top:2px">คงค้าง ${fmt(rem)}</div>` : ''}
           ${progressBar}
         </div>
         <div style="color:var(--muted);font-size:18px;margin-left:8px;margin-top:4px">›</div>
@@ -269,6 +271,7 @@
   function _renderLoanDetail(loan) {
     const hideMoney = typeof S !== 'undefined' && S.settings?.hideMoney
     const rem = LoanStore.remaining(loan)
+    const isSettled = LoanStore.isSettled(loan)
     const overdue = isOverdue(loan)
     const dueSoon = isDueSoon(loan)
 
@@ -306,7 +309,7 @@
           ${loan.note ? `<div style="font-size:13px;color:var(--muted);margin-top:4px">📝 ${esc(loan.note)}</div>` : ''}
         </div>
 
-        ${loan.status !== 'settled' ? `
+        ${!isSettled ? `
         <div class="card card-pad" style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <div style="font-size:13px;color:var(--muted)">คงค้าง</div>
@@ -326,16 +329,10 @@
           ${repRows || `<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0">ยังไม่มีรายการรับคืน</div>`}
         </div>
 
-        ${loan.status !== 'settled' ? `
+        ${!isSettled ? `
         <button class="btn btn-primary" onclick="App.openRepaymentForm(${jsArg(loan.id)})" style="width:100%;margin-bottom:8px">
           + บันทึกรับคืน
-        </button>
-        <button class="btn" onclick="App._loanMarkSettled(${jsArg(loan.id)})" style="width:100%;color:var(--income)">
-          ✅ ทำเครื่องหมายว่าคืนครบแล้ว
-        </button>` : `
-        <button class="btn" onclick="App._loanMarkSettled(${jsArg(loan.id)}, false)" style="width:100%;color:var(--muted)">
-          ↩️ เปลี่ยนเป็นยังค้างอยู่
-        </button>`}
+        </button>` : ''}
       </div>`
   }
 
@@ -399,7 +396,7 @@
         <div class="card card-pad" style="margin-bottom:12px">
           <div class="form-group">
             <label class="form-label">วันที่ให้ยืม</label>
-            <input class="form-input" id="loan-date" type="date" value="${esc(d.date)}" oninput="window._loanDraft('date',this.value)">
+            <input class="form-input" id="loan-date" type="date" max="${today()}" value="${esc(d.date)}" oninput="window._loanDraft('date',this.value)">
           </div>
           <div class="form-group">
             <label class="form-label">วันนัดคืน (ไม่บังคับ)</label>
@@ -427,12 +424,18 @@
     if (!name) { if (typeof toast === 'function') toast('กรุณากรอกชื่อคนยืม', 'error'); return }
     if (!amount || amount <= 0) { if (typeof toast === 'function') toast('กรุณากรอกจำนวนเงิน', 'error'); return }
     if (!_draft.walletId) { if (typeof toast === 'function') toast('กรุณาเลือกกระเป๋า', 'error'); return }
+    if ((_draft.date || today()) > today()) { if (typeof toast === 'function') toast('วันที่ให้ยืมต้องไม่เป็นวันในอนาคต', 'error'); return }
+    if (_draft.dueDate && _draft.dueDate < (_draft.date || today())) { if (typeof toast === 'function') toast('วันนัดคืนต้องไม่ก่อนวันที่ให้ยืม', 'error'); return }
     if (_editLoanId) {
-      LoanStore.update(_editLoanId, { ..._draft, amount })
+      const result = LoanStore.update(_editLoanId, { ..._draft, amount })
+      if (result?.error === 'AMOUNT_BELOW_REPAID') { if (typeof toast === 'function') toast(`ยอดให้ยืมต้องไม่น้อยกว่ายอดที่รับคืนแล้ว ${fmt(result.paid)}`, 'error'); return }
+      if (result?.error === 'LOAN_DATE_AFTER_REPAYMENT') { if (typeof toast === 'function') toast('วันที่ให้ยืมต้องไม่อยู่หลังรายการรับคืน', 'error'); return }
+      if (result?.error) { if (typeof toast === 'function') toast('ข้อมูลวันที่ไม่ถูกต้อง', 'error'); return }
       if (typeof toast === 'function') toast('บันทึกแล้ว', 'success')
       App.openLoanDetail(_editLoanId)
     } else {
       const loan = LoanStore.create({ ..._draft, amount })
+      if (loan?.error) { if (typeof toast === 'function') toast('ข้อมูลวันที่ไม่ถูกต้อง', 'error'); return }
       if (typeof toast === 'function') toast('บันทึกการให้ยืมแล้ว', 'success')
       App.openLoanDetail(loan.id)
     }
@@ -456,13 +459,6 @@
         if (typeof S !== 'undefined' && S.page === 'more') App.renderMore?.()
       },
     })
-  }
-
-  App._loanMarkSettled = function (id, settled = true) {
-    LoanStore.markSettled(id, settled)
-    App.openLoanDetail(id)
-    if (typeof toast === 'function') toast(settled ? 'ทำเครื่องหมายว่าคืนครบแล้ว' : 'เปลี่ยนเป็นยังค้างอยู่', 'success')
-    if (typeof S !== 'undefined' && S.page === 'more') App.renderMore?.()
   }
 
   // ── Repayment Form ────────────────────────────────────────────
@@ -508,7 +504,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">วันที่รับคืน</label>
-            <input class="form-input" id="rep-date" type="date" value="${esc(d.date)}" oninput="window._repDraft('date',this.value)">
+            <input class="form-input" id="rep-date" type="date" min="${esc(loan.date || '')}" max="${today()}" value="${esc(d.date)}" oninput="window._repDraft('date',this.value)">
           </div>
           <div class="form-group">
             <label class="form-label">หมายเหตุ</label>
@@ -528,7 +524,11 @@
     const amount = parseFloat(_repDraft.amount)
     if (!amount || amount <= 0) { if (typeof toast === 'function') toast('กรุณากรอกจำนวนเงิน', 'error'); return }
     if (!_repDraft.walletId) { if (typeof toast === 'function') toast('กรุณาเลือกกระเป๋า', 'error'); return }
-    LoanStore.addRepayment(_repDraft.loanId, { ..._repDraft, amount })
+    const result = LoanStore.addRepayment(_repDraft.loanId, { ..._repDraft, amount })
+    if (result?.error === 'OVERPAYMENT') { if (typeof toast === 'function') toast(`ยอดรับคืนเกินยอดคงค้าง ${fmt(result.remaining)}`, 'error'); return }
+    if (result?.error === 'FUTURE_DATE') { if (typeof toast === 'function') toast('วันที่รับคืนต้องไม่เป็นวันในอนาคต', 'error'); return }
+    if (result?.error === 'BEFORE_LOAN_DATE') { if (typeof toast === 'function') toast('วันที่รับคืนต้องไม่ก่อนวันที่ให้ยืม', 'error'); return }
+    if (result?.error) { if (typeof toast === 'function') toast('บันทึกรายการรับคืนไม่ได้', 'error'); return }
     if (typeof toast === 'function') toast('บันทึกการรับคืนแล้ว', 'success')
     App.openLoanDetail(_repDraft.loanId)
     _repDraft = null

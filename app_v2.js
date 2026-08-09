@@ -2263,16 +2263,54 @@ App.render();
     return Number(w.balance || 0)
   }
 
-  Calc.getNetWorth = function(wallets) {
-    let assets = 0, debt = 0
-    ;(wallets || []).filter(w => !w?.excludeFromNetWorth).forEach(w => {
-      const value = App._walletValueTHB ? App._walletValueTHB(w) : Number(w.balance || 0)
-      if (value >= 0) assets += value
-      else debt += Math.abs(value)
-    })
+  App.getFinancialPosition = function() {
+    const wallets = S.wallets || []
+    const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    const amountForTx = tx => typeof App._expectedLedgerAmountForTx === 'function'
+      ? App._expectedLedgerAmountForTx(tx)
+      : window.MTLedger.getLedgerAmountForTx(tx, { wallets })
+    const committedLiabilities = wallets
+      .filter(wallet => wallet?.type === 'credit' && !wallet.excludeFromNetWorth)
+      .reduce((sum, wallet) => sum + window.MTLedger.getCommittedInstallmentDebt({
+        transactions:S.transactions || [],
+        today:todayStr,
+        walletId:wallet.id,
+        amountForTx,
+      }), 0)
     const cryptoValue = Number(App.getCryptoPortfolioSummary?.().totalValueTHB || 0)
-    return { assets: assets + cryptoValue, debt, net: assets + cryptoValue - debt }
+    const position = window.MTLedger.getFinancialPosition({
+      wallets,
+      loans:S.loans || [],
+      today:todayStr,
+      cryptoValue,
+      committedLiabilities,
+      walletValue:wallet => App._walletValueTHB(wallet),
+      // Crypto holdings have their own portfolio ledger. Excluding legacy
+      // Crypto Wallets here prevents the same holding from being counted twice.
+      excludeWalletTypes:['crypto'],
+    })
+    const categories = { cash:0, investment:0, gold:0, fcd:0 }
+    wallets.forEach(wallet => {
+      if (!wallet || wallet.excludeFromNetWorth || wallet.type === 'credit' || wallet.type === 'bnpl' || wallet.type === 'crypto') return
+      const value = Math.max(0, Number(App._walletValueTHB(wallet) || 0))
+      if (['bank','cash','ewallet','saving'].includes(wallet.type)) categories.cash += value
+      else if (wallet.type === 'gold') categories.gold += value
+      else if (wallet.type === 'fcd') categories.fcd += value
+      else categories.investment += value
+    })
+    const rounded = value => Math.round(Number(value || 0) * 100) / 100
+    return {
+      ...position,
+      debt:position.liabilities,
+      netWorth:position.net,
+      cash:rounded(categories.cash),
+      investment:rounded(categories.investment),
+      gold:rounded(categories.gold),
+      fcd:rounded(categories.fcd),
+    }
   }
+
+  Calc.getNetWorth = function() { return App.getFinancialPosition() }
 
   Calc.getWalletGroups = function(wallets) {
     const assets = (wallets || []).filter(w => ['bank','cash','ewallet','saving'].includes(w.type))
@@ -4252,8 +4290,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
       .slice(0, 5)
     const visibleAssets = (typeof visibleWallets === 'function' ? visibleWallets() : S.wallets.filter(w => !w.hiddenFromWalletList)).filter(w => w.type !== 'credit')
     const cryptoSummary = App.getCryptoPortfolioSummary?.() || { holdings: [], totalValueTHB: 0 }
-    const currentNetWorth = Calc.getNetWorth ? Calc.getNetWorth(S.wallets) : { assets: usable.liquid || 0 }
-    const dashboardNetWorth = Number(currentNetWorth.assets || 0) - Number(usable.creditDebt || 0)
+    const currentNetWorth = Calc.getNetWorth ? Calc.getNetWorth(S.wallets) : { net: usable.liquid || 0 }
+    const dashboardNetWorth = Number(currentNetWorth.net || 0)
     function hasPaymentForCreditDue(card, due) {
       const shiftDateLocal = (dateStr, dayDelta = 0) => {
         const [y, m, d] = String(dateStr || '').split('-').map(Number)
@@ -4552,7 +4590,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       ? Calc.getPendingUpcomingBills(S)
       : (S.upcomingBills || []).filter(b => b && b.status === 'pending')
     const unpaidBillCount = pendingUpcomingBills.length
-    const debtTotal = Number(usable.creditDebt || 0)
+    const debtTotal = Number(currentNetWorth.liabilities || usable.creditDebt || 0)
     const prevMonth = Calc.getPreviousMonth?.(dm) || Calc.getMonths?.(2)?.[1] || ''
     const prevMonthly = prevMonth ? Calc.getMonthlyIncomeExpense(S.transactions, prevMonth) : null
     const shortMonthLabel = ym => String(mlabel(ym) || '').split(' ')[0] || ''
@@ -5558,16 +5596,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
   App._beforePersistV40 = function() {
     ensureV4State()
-    try { App.recalculateWalletBalances?.({ save:false, recordSnapshot:false }) } catch (_) {}
+    try { App.recalculateWalletBalances?.({ save:false, recordSnapshot:true }) } catch (_) {}
     S.settings.storageMeta.lastSavedAt = localNow()
     S.settings.storageMeta.storageMode = 'local-only'
   }
 
   // ── Ledger balance source of truth ──────────────────────────
-  // Only "posted" transactions affect real wallet balances.
-  // A transaction is scheduled (not yet posted) when tx.scheduled === true
-  // AND its date is still in the future. Once the date arrives it is posted
-  // regardless of the flag, so past installment months are always included.
+  // Only Posted Transactions affect real Wallet balances. Any future-dated
+  // Transaction remains Scheduled until its date, regardless of legacy flags.
   App._isPostedTx = function(tx) {
     const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
     return window.MTLedger.isPostedTx(tx, todayStr)
@@ -5671,7 +5707,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
   App.recordNetWorthSnapshot = function() {
     ensureV4State()
-    const nw = Calc.getNetWorth(S.wallets || [])
+    const nw = App.getFinancialPosition()
     const date = today()
     const row = { date, assets: Math.round((nw.assets || 0) * 100) / 100, debt: Math.round((nw.debt || 0) * 100) / 100, net: Math.round((nw.net || 0) * 100) / 100 }
     const list = (S.netWorthSnapshots || []).filter(x => x.date !== date)
@@ -5939,6 +5975,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       channel: S.tx.type === 'expense' ? String(S.tx.channel || '').trim() : '',
       note: S.tx.note || '',
       date: S.tx.date || today(),
+      scheduled: String(S.tx.date || today()) > today(),
       benefitDateOverride: S.tx.benefitDateOverride || undefined,
       isRecurring: !!S.tx.isRecurring,
       isInstallment: !!S.tx.isInstallment,
@@ -6644,15 +6681,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const budget = Calc.getBudgetProgress(S.transactions, S.budgets, S.categories, month)
     const creditSummary = Calc.getCreditLiabilitySummary(S.wallets, { refDate: today() })
     const cryptoSummary = App.getCryptoPortfolioSummary?.() || { totalValueTHB: 0, holdings: [] }
-    const rawAssetBreakdown = Calc.getAssetBreakdown(S.wallets, { cryptoTotal: cryptoSummary.totalValueTHB })
-    const committedInstallmentDebt = (S.wallets || [])
-      .filter(w => w?.type === 'credit' && !w.hiddenFromWalletList)
-      .reduce((sum, w) => sum + Number(App._getUnpostedInstallmentDebt?.(w.id) || 0), 0)
-    const assetBreakdown = {
-      ...rawAssetBreakdown,
-      liabilities: rawAssetBreakdown.liabilities + committedInstallmentDebt,
-      netWorth: rawAssetBreakdown.assets - rawAssetBreakdown.liabilities - committedInstallmentDebt,
-    }
+    const assetBreakdown = App.getFinancialPosition()
     const postedMonthTx = Calc.getMonthlyTransactions(S.transactions, month)
     const expenseTxCount = postedMonthTx.filter(t => t.type === 'expense').length
     const incomeTxCount = postedMonthTx.filter(t => t.type === 'income' && !(Calc.isReimbursementTx?.(t) || App.isReimbursementTx?.(t))).length
@@ -6879,7 +6908,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
         <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">🥇</span><span>ทองคำ</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.gold)}</strong></div></div></div>
         <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">💱</span><span>FCD / เงินตราต่างประเทศ</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.fcd)}</strong></div></div></div>
         <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">🪙</span><span>Crypto</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.crypto)}</strong></div></div></div>
-        <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">💳</span><span>หนี้บัตรเครดิต</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.liabilities)}</strong></div></div></div>
+        <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">🤝</span><span>เงินให้ยืมที่ยังไม่ได้คืน</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.receivables)}</strong></div></div></div>
+        <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">💳</span><span>หนี้สินและยอดผูกพัน</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.liabilities)}</strong></div></div></div>
       </div>`
     }
     const content = document.getElementById('reports-content')
@@ -13166,7 +13196,6 @@ App._pickMerchant = function(name, opts = {}) {
     return (S.cryptoAssets || []).find(a => normalizeCoinGeckoId(a.coinGeckoId) === normalized) || null
   }
 
-  const LIVE_CRYPTO_THB_DISCOUNT_FACTOR = 0.97
   const cryptoPriceTHBFmt = n => {
   const value = Number(n || 0)
   if (!Number.isFinite(value)) return '0.00'
@@ -13181,7 +13210,7 @@ App._pickMerchant = function(name, opts = {}) {
     const asset = holding ? App.getCryptoAsset(holding.assetId) : assetOrHolding
     const marketId = normalizeCoinGeckoId(asset?.coinGeckoId)
     const live = marketId ? Number(S.marketPrices?.crypto?.[marketId]?.thb || 0) : 0
-    if (live > 0) return Number((live * LIVE_CRYPTO_THB_DISCOUNT_FACTOR).toFixed(8))
+    if (live > 0) return Number(live.toFixed(8))
     const manual = Number(holding?.manualPriceTHB || assetOrHolding?.manualPriceTHB || 0)
     if (manual > 0) return manual
     return 0
@@ -13214,6 +13243,10 @@ App._pickMerchant = function(name, opts = {}) {
       lastUpdatedAt: updatedAt ? new Date(updatedAt).toISOString() : '',
     }
   }
+
+  // The first Wallet reconciliation runs before this feature block is loaded.
+  // Refresh today's snapshot now that Crypto valuation is available.
+  App.recordNetWorthSnapshot?.()
 
   function getCryptoPortfolioSortKey() {
     return String(S.settings?.cryptoPortfolioSort || 'value_desc')
@@ -14005,18 +14038,11 @@ App._pickMerchant = function(name, opts = {}) {
     const bnpls = BNPL_FEATURE_ENABLED ? wallets.filter(w => w.type === 'bnpl') : []
     const invests = wallets.filter(w => ['gold','fcd'].includes(w.type))
     const cryptoSummary = App.getCryptoPortfolioSummary()
-    const sumBase = assets.reduce((s, w) => s + Math.max(0, Number(w.balance || 0)), 0)
-    const sumInv = invests.reduce((s, w) => s + Math.max(0, App._investmentValueTHB?.(w) || Number(w.balance || 0)), 0)
-    // Include future committed installment rows — they are already reserved
-    // against the credit limit even though not yet posted to statements.
-    const debt = credits.reduce((s, w) => {
-      const committedInstallments = App._getUnpostedInstallmentDebt ? App._getUnpostedInstallmentDebt(w.id) : 0
-      return s + Math.abs(Number(w.balance || 0)) + committedInstallments
-    }, 0) + bnpls.reduce((s, w) => s + Math.abs(Math.min(0, Number(w.balance || 0))), 0)
+    const walletPosition = App.getFinancialPosition()
     const summaryEl = document.getElementById('wallets-summary')
     if (summaryEl) summaryEl.innerHTML = `<div class="wallet-summary-grid wallet-summary-grid-fixed">
-      <div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${S.settings?.hideMoney ? '฿*****' : plainMoney(sumBase + sumInv + cryptoSummary.totalValueTHB)}</strong></div>
-      <div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${S.settings?.hideMoney ? '฿*****' : plainMoney(debt)}</strong></div>
+      <div class="wallet-summary-card"><span>สินทรัพย์รวม</span><strong class="c-income">${S.settings?.hideMoney ? '฿*****' : plainMoney(walletPosition.assets)}</strong></div>
+      <div class="wallet-summary-card"><span>หนี้สินรวม</span><strong class="c-expense">${S.settings?.hideMoney ? '฿*****' : plainMoney(walletPosition.liabilities)}</strong></div>
     </div>`
 
     const pageHeader = document.querySelector('#page-wallets .page-header')
@@ -16906,18 +16932,31 @@ App._pickMerchant = function(name, opts = {}) {
     ;(S.recurring || []).forEach(r => {
       if (!r || r.paused) return
       const due = r.nextDueDate || r.startDate || r.date || t
-      if (String(due) <= end) rows.push({ id:`rec-${r.id}`, date:due, icon:r.icon || '🔁', title:r.name || 'รายการประจำ', amount:Number(r.amount || 0), type:'recurring', status:String(due) < t ? 'overdue' : 'upcoming', action:`App.postRecurringNow('${esc(r.id)}')`, skip:`App.skipRecurringNow('${esc(r.id)}')` })
+      const wallet = (S.wallets || []).find(row => row.id === r.walletId)
+      const cashflowKind = r.type === 'income' ? 'income' : ['credit','bnpl'].includes(wallet?.type) ? 'liability' : 'expense'
+      if (String(due) <= end) rows.push({ id:`rec-${r.id}`, date:due, icon:r.icon || '🔁', title:r.name || 'รายการประจำ', amount:Number(r.amount || 0), type:'recurring', cashflowKind, walletId:r.walletId || '', status:String(due) < t ? 'overdue' : 'upcoming', action:`App.postRecurringNow('${esc(r.id)}')`, skip:`App.skipRecurringNow('${esc(r.id)}')` })
     })
     ;(S.transactions || []).forEach(tx => {
-      if (!(tx.scheduled === true && String(tx.date || '') >= t)) return
-      rows.push({ id:`tx-${tx.id}`, date:tx.date, icon:tx.installmentGroupId ? '🧾' : '📅', title:tx.merchant || tx.note || App._txTypeLabel?.(tx.type) || 'รายการตามแผน', amount:Number(tx.amount || 0), type:tx.installmentGroupId ? 'installment' : 'scheduled', status:'upcoming' })
+      const txDate = String(tx.date || '')
+      const isPosted = typeof App._isPostedTx === 'function' ? App._isPostedTx(tx) : (!txDate || txDate <= t)
+      if (isPosted || !txDate || txDate > end) return
+      const wallet = (S.wallets || []).find(row => row.id === tx.walletId)
+      const cashflowKind = tx.type === 'income'
+        ? 'income'
+        : ['cc_payment','bnpl_payment'].includes(tx.type)
+          ? 'settlement'
+          : tx.type === 'transfer'
+            ? 'neutral'
+            : ['credit','bnpl'].includes(wallet?.type) ? 'liability' : 'expense'
+      const amount = tx.type === 'cc_payment' ? Number(tx.cashAmount || tx.amount || 0) : Number(tx.amount || 0)
+      rows.push({ id:`tx-${tx.id}`, date:tx.date, icon:tx.installmentGroupId ? '🧾' : '📅', title:tx.merchant || tx.note || App._txTypeLabel?.(tx.type) || 'รายการตามแผน', amount, type:tx.installmentGroupId ? 'installment' : 'scheduled', cashflowKind, walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', status:'upcoming' })
     })
     ;(S.wallets || []).filter(w => w.type === 'credit').forEach(card => {
       const due = App.getCreditCardDueInfo?.(card)
       if (!due?.dateStr || due.dateStr > end) return
       const amount = Math.max(0, Number(due.amount || due.statement?.balanceDue || 0))
       if (amount <= 0) return
-      rows.push({ id:`cc-${card.id}:${due.statementId || due.dateStr}`, date:due.dateStr, icon:card.icon || '💳', title:`ชำระบัตร ${card.name}`, amount, type:'credit_due', status:due.daysLeft < 0 ? 'overdue' : 'upcoming', open:`App.openCCDetail('${esc(card.id)}')` })
+      rows.push({ id:`cc-${card.id}:${due.statementId || due.dateStr}`, date:due.dateStr, icon:card.icon || '💳', title:`ชำระบัตร ${card.name}`, amount, type:'credit_due', cashflowKind:'settlement', toWalletId:card.id, status:due.daysLeft < 0 ? 'overdue' : 'upcoming', open:`App.openCCDetail('${esc(card.id)}')` })
     })
     ;(S.goals || []).forEach(g => {
       if (!g.targetDate || g.status === 'archived') return
@@ -16934,6 +16973,8 @@ App._pickMerchant = function(name, opts = {}) {
           title: `${item.merchant || 'BNPL'} (งวด ${item.no}/${item.installments})`,
           amount: item.amount,
           type: 'bnpl_due',
+          cashflowKind: 'settlement',
+          toWalletId: item.walletId,
           status: item.isOverdue ? 'overdue' : 'upcoming',
           open: `BNPL.ui.openPayModal('${esc(item.planId)}',${item.no})`,
         })

@@ -42,6 +42,71 @@ test('Ledger includes Loan principal and repayments without a runtime patch', ()
   assert.equal(flows.cash.cash, -180)
 })
 
+test('Ledger treats every future-dated Transaction as Scheduled until its date', () => {
+  const tx = { id:'future-manual', type:'expense', walletId:'cash', amount:500, date:'2026-09-01' }
+  assert.equal(Ledger.isPostedTx(tx, '2026-08-09'), false)
+  assert.equal(Ledger.compute({ transactions:[tx], wallets, today:'2026-08-09' }).cash.cash, undefined)
+  assert.equal(Ledger.isPostedTx(tx, '2026-09-01'), true)
+})
+
+test('Ledger applies Loan principal and repayments only when their dates are Posted', () => {
+  const flows = Ledger.compute({
+    wallets,
+    today:'2026-08-09',
+    loans:[{
+      id:'loan', walletId:'cash', amount:300, date:'2026-08-01',
+      repayments:[
+        { walletId:'cash', amount:120, date:'2026-08-05' },
+        { walletId:'cash', amount:180, date:'2026-09-01' },
+      ],
+    }],
+  })
+  assert.equal(flows.cash.cash, -180)
+
+  const futureLoan = Ledger.compute({
+    wallets,
+    today:'2026-08-09',
+    loans:[{ id:'future-loan', walletId:'cash', amount:900, date:'2026-09-01', repayments:[] }],
+  })
+  assert.equal(futureLoan.cash.cash, undefined)
+})
+
+test('Financial Position includes Posted Loan receivables and committed liabilities once', () => {
+  const position = Ledger.getFinancialPosition({
+    wallets:[
+      { id:'cash', type:'bank', balance:1000 },
+      { id:'card', type:'credit', balance:-200 },
+      { id:'bnpl', type:'bnpl', balance:-100 },
+      { id:'excluded', type:'saving', balance:5000, excludeFromNetWorth:true },
+    ],
+    loans:[{
+      id:'loan', amount:300, date:'2026-08-01',
+      repayments:[{ amount:100, date:'2026-08-05' }],
+    }],
+    today:'2026-08-09',
+    cryptoValue:50,
+    committedLiabilities:400,
+  })
+  assert.deepEqual(position, {
+    walletAssets:1000,
+    receivables:200,
+    crypto:50,
+    assets:1250,
+    walletLiabilities:300,
+    committedLiabilities:400,
+    liabilities:700,
+    net:550,
+  })
+})
+
+test('Loan repayment validation rejects future dates and overpayment', () => {
+  const loan = { amount:300, date:'2026-08-01', repayments:[{ amount:100, date:'2026-08-05' }] }
+  assert.equal(Ledger.validateLoanRepayment(loan, { amount:200, date:'2026-08-09' }, '2026-08-09').ok, true)
+  assert.equal(Ledger.validateLoanRepayment(loan, { amount:201, date:'2026-08-09' }, '2026-08-09').code, 'OVERPAYMENT')
+  assert.equal(Ledger.validateLoanRepayment(loan, { amount:50, date:'2026-08-10' }, '2026-08-09').code, 'FUTURE_DATE')
+  assert.equal(Ledger.validateLoanRepayment(loan, { amount:50, date:'2026-07-31' }, '2026-08-09').code, 'BEFORE_LOAN_DATE')
+})
+
 test('Ledger validates Wallet references and reconciles cash and investment Wallets', () => {
   const issues = Ledger.validateIntegrity({
     wallets,

@@ -59,6 +59,23 @@ test('partial payment leaves only remaining balance payable', () => {
   assert.equal(rows[0].balanceDue, 3000)
 })
 
+test('future-dated credit payment does not reduce the current statement', () => {
+  const stId = 'ktc:2026-04-26:2026-05-25'
+  const txs = [
+    { id:'old', type:'expense', walletId:'ktc', amount:5000, date:'2026-05-10' },
+    { id:'future-pay', type:'cc_payment', toWalletId:'ktc', amount:5000, date:'2026-06-10', statementId:stId },
+  ]
+  const rows = CC.getPayableStatements({
+    card,
+    transactions:txs,
+    refDate:'2026-06-03',
+    isPostedTx:tx => String(tx.date || '') <= '2026-06-03',
+  })
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].paidTotal, 0)
+  assert.equal(rows[0].balanceDue, 5000)
+})
+
 test('fixed-day payment uses fixedDueDay saved by the wallet form', () => {
   const fixedCard = {
     ...card,

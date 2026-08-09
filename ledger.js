@@ -21,8 +21,51 @@
   }
 
   function isPostedTx(tx, today = todayLocalISO()) {
-    if (!tx || tx.scheduled !== true) return true
-    return String(tx.date || '') <= String(today || todayLocalISO())
+    if (!tx) return false
+    const txDate = String(tx.date || '')
+    if (!txDate) return true
+    return txDate <= String(today || todayLocalISO())
+  }
+
+  function isDatedActivityPosted(activity, today = todayLocalISO()) {
+    if (!activity) return false
+    const date = String(activity.date || '')
+    return !date || date <= String(today || todayLocalISO())
+  }
+
+  function isLoanRepaymentPosted(loan, repayment, today = todayLocalISO()) {
+    if (!isDatedActivityPosted(repayment, today)) return false
+    const loanDate = String(loan?.date || '')
+    const repaymentDate = String(repayment?.date || '')
+    return !loanDate || !repaymentDate || repaymentDate >= loanDate
+  }
+
+  function getLoanContractRemaining(loan, today = todayLocalISO()) {
+    const principal = Math.max(0, round2(loan?.amount))
+    let remaining = principal
+    const repayments = [...(loan?.repayments || [])]
+      .filter(repayment => isLoanRepaymentPosted(loan, repayment, today))
+      .sort((a, b) => String(a?.date || '').localeCompare(String(b?.date || '')))
+    repayments.forEach(repayment => {
+      const amount = Math.max(0, round2(repayment?.amount))
+      remaining = round2(Math.max(0, remaining - Math.min(remaining, amount)))
+    })
+    return remaining
+  }
+
+  function getLoanReceivable(loan, today = todayLocalISO()) {
+    if (!isDatedActivityPosted(loan, today)) return 0
+    return getLoanContractRemaining(loan, today)
+  }
+
+  function validateLoanRepayment(loan, repayment, today = todayLocalISO()) {
+    const amount = round2(repayment?.amount)
+    if (!(amount > 0)) return { ok:false, code:'INVALID_AMOUNT', remaining:getLoanContractRemaining(loan, today) }
+    if (String(repayment?.date || '') < String(loan?.date || '')) return { ok:false, code:'BEFORE_LOAN_DATE', remaining:getLoanContractRemaining(loan, today) }
+    if (!isDatedActivityPosted(repayment, today)) return { ok:false, code:'FUTURE_DATE', remaining:getLoanContractRemaining(loan, today) }
+    const remaining = getLoanContractRemaining(loan, today)
+    if (amount > remaining + 0.005) return { ok:false, code:'OVERPAYMENT', remaining }
+    return { ok:true, code:'', remaining }
   }
 
   function getCCPaymentCashAmount(tx) {
@@ -70,11 +113,66 @@
     })
 
     ;(loans || []).forEach(loan => {
-      addCash(loan.walletId, -Number(loan.amount || 0))
-      ;(loan.repayments || []).forEach(repayment => addCash(repayment.walletId, Number(repayment.amount || 0)))
+      if (!isDatedActivityPosted(loan, today)) return
+      let remaining = Math.max(0, round2(loan.amount))
+      addCash(loan.walletId, -remaining)
+      ;[...(loan.repayments || [])]
+        .filter(repayment => isLoanRepaymentPosted(loan, repayment, today))
+        .sort((a, b) => String(a?.date || '').localeCompare(String(b?.date || '')))
+        .forEach(repayment => {
+          const credited = Math.min(remaining, Math.max(0, round2(repayment.amount)))
+          if (!(credited > 0)) return
+          addCash(repayment.walletId, credited)
+          remaining = round2(remaining - credited)
+        })
     })
 
     return { cash, units }
+  }
+
+  function getCommittedInstallmentDebt({ transactions = [], today = todayLocalISO(), walletId = '', amountForTx = null } = {}) {
+    return round2((transactions || []).reduce((sum, tx) => {
+      if (!tx?.installmentGroupId || tx.type !== 'expense' || isPostedTx(tx, today)) return sum
+      if (walletId && String(tx.walletId || '') !== String(walletId)) return sum
+      const amount = typeof amountForTx === 'function' ? amountForTx(tx) : getLedgerAmountForTx(tx)
+      return sum + Math.max(0, Number(amount || 0))
+    }, 0))
+  }
+
+  function getFinancialPosition({
+    wallets = [],
+    loans = [],
+    today = todayLocalISO(),
+    cryptoValue = 0,
+    committedLiabilities = 0,
+    walletValue = wallet => Number(wallet?.balance || 0),
+    excludeWalletTypes = [],
+  } = {}) {
+    const excludedTypes = new Set((excludeWalletTypes || []).map(type => String(type || '').toLowerCase()))
+    let walletAssets = 0
+    let walletLiabilities = 0
+    ;(wallets || []).forEach(wallet => {
+      if (!wallet || wallet.excludeFromNetWorth || excludedTypes.has(String(wallet.type || '').toLowerCase())) return
+      const value = Number(walletValue(wallet) || 0)
+      if (!Number.isFinite(value)) return
+      if (value >= 0) walletAssets += value
+      else walletLiabilities += Math.abs(value)
+    })
+    const receivables = (loans || []).reduce((sum, loan) => sum + getLoanReceivable(loan, today), 0)
+    const crypto = Math.max(0, Number(cryptoValue || 0))
+    const committed = Math.max(0, Number(committedLiabilities || 0))
+    const assets = walletAssets + receivables + crypto
+    const liabilities = walletLiabilities + committed
+    return {
+      walletAssets:round2(walletAssets),
+      receivables:round2(receivables),
+      crypto:round2(crypto),
+      assets:round2(assets),
+      walletLiabilities:round2(walletLiabilities),
+      committedLiabilities:round2(committed),
+      liabilities:round2(liabilities),
+      net:round2(assets - liabilities),
+    }
   }
 
   function validateIntegrity({ transactions = [], wallets = [], today = todayLocalISO() } = {}) {
@@ -102,9 +200,15 @@
 
   return Object.freeze({
     isPostedTx,
+    isDatedActivityPosted,
     getLedgerAmountForTx,
     getCCPaymentCashAmount,
+    getLoanContractRemaining,
+    getLoanReceivable,
+    validateLoanRepayment,
     compute,
+    getCommittedInstallmentDebt,
+    getFinancialPosition,
     validateIntegrity,
     reconcileWallets,
   })

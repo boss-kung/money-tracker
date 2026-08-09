@@ -42,7 +42,7 @@ const InsightEngine = (() => {
         bills:    (p.billsDue || []).length,
         privExp:  (p.privExpiring || []).length,
         cc:       (p.creditStatements || [])
-          .map(row => `${row.card?.id || ''}:${Math.round(Number(row.card?.balance || 0))}:${row.dueInfo?.dateStr || ''}:${row.hasPaymentForDue ? 1 : 0}`)
+          .map(row => `${row.card?.id || ''}:${Math.round(Number(row.amountDue || 0))}:${row.dueInfo?.dateStr || ''}:${row.hasPaymentForDue ? 1 : 0}`)
           .sort()
           .join(','),
       }))
@@ -56,14 +56,6 @@ const InsightEngine = (() => {
       }
     } catch (_) {}
     return Number(t?.ledgerAmount ?? t?.amount ?? 0) || 0
-  }
-
-  function shiftDateStr(dateStr, dayDelta = 0) {
-    const [y, m, d] = String(dateStr || '').split('-').map(Number)
-    if (!y || !m || !d) return ''
-    const next = new Date(y, m - 1, d)
-    next.setDate(next.getDate() + Number(dayDelta || 0))
-    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`
   }
 
   // ── Store CRUD ───────────────────────────────────────────────
@@ -157,18 +149,12 @@ const InsightEngine = (() => {
       let stmt = null, dueInfo = null
       try { if (typeof App !== 'undefined' && App.getCardStatement) stmt = App.getCardStatement(card.id) } catch(_) {}
       try { if (typeof App !== 'undefined' && App.getCreditCardDueInfo) dueInfo = App.getCreditCardDueInfo(card) } catch(_) {}
-      const dueDate = String(dueInfo?.dateStr || stmt?.dueDate || '')
-      const alertWindowStart = shiftDateStr(dueDate, -3)
-      const hasPaymentForDue = (Number(stmt?.paidTotal || 0) > 0 && (!dueDate || String(stmt?.dueDate || '') === dueDate))
-        || txs.some(t => {
-          if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
-          if (!(Number(t.amount || 0) > 0)) return false
-          if (stmt?.id && String(t.statementId || '') === String(stmt.id)) return true
-          const date = String(t.date || '')
-          if (stmt?.end && stmt?.dueDate && date > String(stmt.end) && date <= String(stmt.dueDate)) return true
-          return !!(date && alertWindowStart && dueDate && date >= alertWindowStart && date <= dueDate)
-        })
-      return { card, stmt, dueInfo, hasPaymentForDue }
+      const dueStatement = dueInfo?.statement || stmt
+      const amountDue = Math.max(0, Number(dueInfo?.amount ?? dueStatement?.balanceDue ?? 0))
+      // A partial payment reduces balanceDue but does not satisfy the reminder.
+      // The due is settled only when the statement's remaining balance reaches zero.
+      const hasPaymentForDue = amountDue <= 0
+      return { card, stmt:dueStatement, dueInfo, amountDue, hasPaymentForDue }
     })
 
     // Pending bills with daysLeft
@@ -237,7 +223,7 @@ const InsightEngine = (() => {
 
     // Monthly recurring total for INS-15
     const monthlyRecurringTotal = recurring
-      .filter(r => r.status !== 'inactive' && r.status !== 'cancelled')
+      .filter(r => !r.paused && r.status !== 'inactive' && r.status !== 'cancelled')
       .reduce((s, r) => {
         const amt = Number(r.amount || 0)
         if (r.frequency === 'weekly') return s + amt * 4.3
@@ -326,19 +312,20 @@ const InsightEngine = (() => {
 
     // ── INS-03: Credit Card Due Soon ───────────────────────────
     try {
-      payload.creditStatements.forEach(({ card, dueInfo, hasPaymentForDue }) => {
+      payload.creditStatements.forEach(({ card, dueInfo, amountDue, hasPaymentForDue }) => {
         if (!dueInfo) return
         if (hasPaymentForDue) return
         const daysLeft = Number(dueInfo.daysLeft)
         if (daysLeft < 0 || daysLeft > 7) return
-        const amount = Math.abs(Number(card.balance || 0))
+        const amount = Math.max(0, Number(amountDue || dueInfo?.amount || dueInfo?.statement?.balanceDue || 0))
         if (amount <= 0) return
         const canPay = Number(payload.usable.liquid || 0) >= amount
         const urgency = Math.max(1, 10 - daysLeft)
         const dueLabel = daysLeft === 0 ? 'ครบกำหนดวันนี้' : `ครบกำหนดใน ${daysLeft} วัน`
+        const amountLabel = typeof Calc.fmtNum === 'function' ? Calc.fmtNum(amount) : Math.round(amount).toLocaleString('en-US')
         add('03', card.id + (daysLeft <= 3 ? '-urgent' : '-7d'), {
           title: `${card.name} ${dueLabel}`,
-          body: `ยอดค้างชำระ ฿${Calc.fmtNum(amount)}${canPay ? ' — เงินพร้อมใช้เพียงพอ' : ' — ควรโอนเงินเตรียมไว้ล่วงหน้า'}`,
+          body: `ยอดค้างชำระ ฿${amountLabel}${canPay ? ' — เงินพร้อมใช้เพียงพอ' : ' — ควรโอนเงินเตรียมไว้ล่วงหน้า'}`,
           severity: daysLeft <= 3 ? 'critical' : 'warning', urgency, impact: 8,
           action: { label: 'ชำระบัตร', fn: `App.openCCPay('${card.id}')` },
           evidence: { cardId: card.id, daysLeft, amount, canPay },
@@ -776,3 +763,5 @@ const InsightEngine = (() => {
     loadStore, saveStore,
   }
 })()
+
+if (typeof module !== 'undefined' && module.exports) module.exports = InsightEngine

@@ -141,9 +141,24 @@ const FinanceIntelligence = (() => {
     const credit = Calc.getCreditLiabilitySummary?.(state.wallets || []) || { cards:[], totals:{ statementDue:0, currentCycleSpending:0, committedInstallments:0, totalLiability:0 } }
     const upcoming = typeof App !== 'undefined' && App.getUpcomingItems ? App.getUpcomingItems(30) : []
     const upcomingCommitted = upcoming
-      .filter(r => ['credit_due','recurring','scheduled','installment'].includes(r.type))
+      .filter(r => ['expense','settlement'].includes(r.cashflowKind) || (!r.cashflowKind && ['credit_due','recurring','scheduled','installment','bnpl_due'].includes(r.type)))
       .reduce((s,r)=>s+Number(r.amount || 0),0)
-    const recurring = (state.recurring || []).filter(r => !['inactive','cancelled'].includes(r.status))
+    const monthEndUpcoming = upcoming.filter(row => {
+      const date = String(row.date || '')
+      // Include overdue cash obligations too; they still need funding before
+      // this month closes even when their original due date was last month.
+      return Boolean(date && date <= `${month}-31`)
+    })
+    const monthEndKnownIncome = monthEndUpcoming
+      .filter(row => row.cashflowKind === 'income')
+      .reduce((sum, row) => sum + Number(row.amount || 0), 0)
+    const monthEndKnownExpense = monthEndUpcoming
+      .filter(row => row.cashflowKind === 'expense')
+      .reduce((sum, row) => sum + Number(row.amount || 0), 0)
+    const monthEndSettlementOutflows = monthEndUpcoming
+      .filter(row => row.cashflowKind === 'settlement')
+      .reduce((sum, row) => sum + Number(row.amount || 0), 0)
+    const recurring = (state.recurring || []).filter(r => !r.paused && !['inactive','cancelled'].includes(r.status))
     const recurringMonthlyTotal = recurring.reduce((s,r)=>s+recurringMonthlyAmount(r),0)
     const goals = (state.goals || []).filter(g => g.status === 'active').map(goal => {
       let progress = null
@@ -157,17 +172,25 @@ const FinanceIntelligence = (() => {
     const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate()
     const elapsedRatio = clamp(day / daysInMonth, 0.05, 1)
     const currentEvents = memoryForMonth(month)
-    const projectedExpense = Math.max(0, monthly.expense - excludedAmountForMonth(month, 'expense')) / elapsedRatio
-    const projectedIncome = monthly.income > 0 ? monthly.income : avgIncome
+    const currentAdjustedExpense = Math.max(0, monthly.expense - excludedAmountForMonth(month, 'expense'))
+    const currentAdjustedIncome = Math.max(0, monthly.income - excludedAmountForMonth(month, 'income'))
+    const projectedExpense = currentAdjustedExpense / elapsedRatio
+    const projectedIncome = Math.max(currentAdjustedIncome, avgIncome)
+    const remainingExpense = Math.max(0, projectedExpense - currentAdjustedExpense)
+    const remainingIncome = Math.max(0, projectedIncome - currentAdjustedIncome)
     const snapshots = [...(state.netWorthSnapshots || [])].sort((a,b)=>String(a.date).localeCompare(String(b.date)))
-    const assets = Calc.getAssetBreakdown?.(state.wallets || [], { cryptoTotal: App.getCryptoPortfolioSummary?.()?.totalValueTHB || 0 }) || null
+    const assets = (typeof App !== 'undefined' && App.getFinancialPosition?.())
+      || Calc.getAssetBreakdown?.(state.wallets || [], { cryptoTotal:typeof App !== 'undefined' ? App.getCryptoPortfolioSummary?.()?.totalValueTHB || 0 : 0 })
+      || null
 
     return {
       month, previousMonth, txs, cats, monthly, previous, history, pastHistory,
       expenseCategories, previousExpenseCategories, merchantBreakdown, budgets,
       usable, credit, upcoming, upcomingCommitted, recurring, recurringMonthlyTotal,
       goals, avgExpense, avgIncome, avgNet, day, daysInMonth, elapsedRatio,
-      projectedExpense, projectedIncome, snapshots, assets, events:currentEvents,
+      currentAdjustedExpense, currentAdjustedIncome, projectedExpense, projectedIncome,
+      remainingExpense, remainingIncome, monthEndKnownIncome, monthEndKnownExpense, monthEndSettlementOutflows,
+      snapshots, assets, events:currentEvents,
     }
   }
 
@@ -209,7 +232,14 @@ const FinanceIntelligence = (() => {
     const confidence = adjustedExpenses.length >= 5 && (accuracy.mape === null || accuracy.mape <= 0.2)
       ? 'high'
       : adjustedExpenses.length >= 3 ? 'medium' : 'low'
-    const monthEndCash = round2(ctx.usable.liquid + (ctx.projectedIncome - spendForecast) - ctx.upcomingCommitted)
+    const derivedRemainingIncome = Math.max(0, Number(ctx.projectedIncome || 0) - Number(ctx.monthly?.income || 0))
+    const derivedRemainingExpense = Math.max(0, Number(ctx.projectedExpense || 0) - Number(ctx.monthly?.expense || 0))
+    const remainingIncome = Number.isFinite(Number(ctx.remainingIncome)) ? Math.max(0, Number(ctx.remainingIncome)) : derivedRemainingIncome
+    const remainingExpense = Number.isFinite(Number(ctx.remainingExpense)) ? Math.max(0, Number(ctx.remainingExpense)) : derivedRemainingExpense
+    const forecastIncome = Math.max(remainingIncome, Math.max(0, Number(ctx.monthEndKnownIncome || 0)))
+    const forecastExpense = Math.max(remainingExpense, Math.max(0, Number(ctx.monthEndKnownExpense || 0)))
+    const settlementOutflows = Math.max(0, Number(ctx.monthEndSettlementOutflows || 0))
+    const monthEndCash = round2(Number(ctx.usable?.liquid || 0) + forecastIncome - forecastExpense - settlementOutflows)
     const categories = ctx.expenseCategories.map(c => ({
       ...c,
       seasonality: categorySeasonality(c.id),
@@ -228,7 +258,9 @@ const FinanceIntelligence = (() => {
       return { goal, progress, monthsToGoal }
     })
     return {
-      spendForecast, lowerBound, upperBound, confidence, accuracy, monthEndCash, remainingDays, budgetLimit, budgetSpent,
+      spendForecast, lowerBound, upperBound, confidence, accuracy, monthEndCash,
+      remainingIncome:round2(forecastIncome), remainingExpense:round2(forecastExpense), settlementOutflows:round2(settlementOutflows),
+      remainingDays, budgetLimit, budgetSpent,
       budgetRemaining: round2(budgetLimit - budgetSpent),
       categories, budgetRisk, goalForecasts,
     }
@@ -249,11 +281,11 @@ const FinanceIntelligence = (() => {
       title:'เหตุผลของคาดการณ์',
       confidence: confidenceMeta(forecast.confidence),
       sources:['เงินพร้อมใช้','รายรับ/รายจ่ายเดือนนี้','บิล/รายการที่จะถึง','ประวัติย้อนหลัง','เหตุการณ์พิเศษ'],
-      formula:'เงินสิ้นเดือน = เงินพร้อมใช้ + รายรับคาดการณ์ - รายจ่ายคาดการณ์ - ภาระที่กำลังจะถึง',
+      formula:'เงินสิ้นเดือน = เงินพร้อมใช้ตอนนี้ + รายรับที่เหลือ - รายจ่ายที่เหลือ - ยอดชำระหนี้ที่เหลือ',
       assumptions:[
-        `รายรับคาดการณ์ ${formatNumber(ctx.projectedIncome || 0)} บาท`,
-        `รายจ่ายคาดการณ์ ${formatNumber(forecast.spendForecast || 0)} บาท`,
-        `ภาระที่จะถึง ${formatNumber(ctx.upcomingCommitted || 0)} บาท`,
+        `รายรับที่เหลือ ${formatNumber(forecast.remainingIncome || 0)} บาท`,
+        `รายจ่ายที่เหลือ ${formatNumber(forecast.remainingExpense || 0)} บาท`,
+        `ยอดชำระหนี้ที่เหลือ ${formatNumber(forecast.settlementOutflows || 0)} บาท`,
         `ใช้ข้อมูลผ่านไป ${Math.round((ctx.elapsedRatio || 0) * 100)}% ของเดือน`,
       ],
       signals:[
@@ -331,8 +363,8 @@ const FinanceIntelligence = (() => {
     const debtPayment = Number(input.debtPayment || 0)
     const futureIncome = ctx.projectedIncome + incomeDelta
     const futureExpense = ctx.projectedExpense + expenseDelta + oneOffExpense
-    const futureNet = futureIncome - futureExpense - savingsDelta - debtPayment
-    const monthEndCash = ctx.usable.liquid + futureNet - ctx.upcomingCommitted
+    const baseline = forecasts(ctx)
+    const monthEndCash = baseline.monthEndCash + incomeDelta - expenseDelta - oneOffExpense - savingsDelta - debtPayment
     const savingsRate = futureIncome > 0 ? ((futureIncome - futureExpense) / futureIncome) * 100 : null
     return {
       input,
@@ -1169,7 +1201,7 @@ const FinanceIntelligence = (() => {
     }
   }
 
-  function featureForMonth(S, month) {
+  function featureForMonth(S, month, previousRow = null) {
     const state = S || {}
     const txs = state.transactions || []
     const cats = state.categories || { expense: [], income: [] }
@@ -1179,7 +1211,10 @@ const FinanceIntelligence = (() => {
     const ctx = buildContext({ ...state, transactions:txs })
     const previousMap = new Map(previousExpenseCategories.map(c => [c.id, c]))
     const categoryActuals = Object.fromEntries(expenseCategories.map(c => [c.id, round2(c.amount)]))
-    const categoryForecasts = Object.fromEntries(expenseCategories.map(c => [c.id, round2(c.amount)]))
+    const isCurrent = month === currentMonth()
+    const categoryForecasts = isCurrent
+      ? Object.fromEntries(expenseCategories.map(c => [c.id, round2(c.amount / Math.max(0.05, ctx.elapsedRatio || 1))]))
+      : { ...(previousRow?.categoryForecasts || {}) }
     return {
       schemaVersion:FEATURE_SCHEMA_VERSION,
       month,
@@ -1200,10 +1235,10 @@ const FinanceIntelligence = (() => {
       categoryActuals,
       categoryForecasts,
       events:memoryForMonth(month),
-      health:month === currentMonth() ? healthScore(ctx) : null,
+      health:isCurrent ? healthScore(ctx) : (previousRow?.health || null),
       forecast:{
-        predictedExpense: month === currentMonth() ? forecasts(ctx).spendForecast : null,
-        actualExpense:round2(monthly.expense),
+        predictedExpense:isCurrent ? forecasts(ctx).spendForecast : (previousRow?.forecast?.predictedExpense ?? null),
+        actualExpense:round2(Math.max(0, monthly.expense - excludedAmountForMonth(month, 'expense'))),
       },
     }
   }
@@ -1287,7 +1322,8 @@ const FinanceIntelligence = (() => {
     const started = typeof performance !== 'undefined' ? performance.now() : Date.now()
     mark('rebuildFull.start', { monthsBack })
     const months = Calc.getMonths?.(monthsBack) || [currentMonth()]
-    const rows = months.map(m => featureForMonth(S, m))
+    const previousRows = new Map((loadFeatureStore().rows || []).map(row => [row.month, row]))
+    const rows = months.map(m => featureForMonth(S, m, previousRows.get(m)))
     saveFeatureStore(rows)
     saveFeatureStoreMeta({
       schemaVersion: FEATURE_SCHEMA_VERSION,
@@ -1324,7 +1360,7 @@ const FinanceIntelligence = (() => {
 
     mark('rebuildIncremental.start', { months })
     const rebuilt = new Map((store.rows || []).map(row => [row.month, row]))
-    months.forEach(m => rebuilt.set(m, featureForMonth(S, m)))
+    months.forEach(m => rebuilt.set(m, featureForMonth(S, m, rebuilt.get(m))))
 
     const allowed = new Set(Calc.getMonths?.(monthsBack) || [month])
     const rows = [...rebuilt.values()]

@@ -73,6 +73,69 @@ test('forecast exposes confidence interval and goal optimizer allocates capacity
   assert.equal(Array.isArray(g.allocation), true)
 })
 
+test('month-end cash adds only remaining flows to current liquid cash', () => {
+  const f = FI.forecasts({
+    usable:{ liquid:90000 },
+    monthly:{ income:50000, expense:20000 },
+    projectedIncome:50000,
+    projectedExpense:20000,
+    remainingIncome:0,
+    remainingExpense:0,
+    monthEndKnownIncome:0,
+    monthEndKnownExpense:0,
+    monthEndSettlementOutflows:0,
+    upcomingCommitted:0,
+    budgets:[], pastHistory:[], avgExpense:0,
+    expenseCategories:[], previousExpenseCategories:[], goals:[],
+    elapsedRatio:1, daysInMonth:31, day:31,
+  })
+  assert.equal(f.monthEndCash, 90000)
+})
+
+test('paused Recurring items do not inflate financial commitments', () => {
+  const ctx = FI.buildContext({
+    transactions:[], categories:{ expense:[], income:[] }, wallets:[], goals:[],
+    recurring:[
+      { id:'paused', amount:8000, paused:true },
+      { id:'active', amount:2000, paused:false },
+    ],
+  })
+  assert.equal(ctx.recurring.length, 1)
+  assert.equal(ctx.recurring[0].id, 'active')
+  assert.equal(ctx.recurringMonthlyTotal, 2000)
+})
+
+test('month-end cash keeps overdue settlements due while excluding next-month settlements', () => {
+  const originalUpcoming = App.getUpcomingItems
+  App.getUpcomingItems = () => [
+    { id:'overdue-card', date:'2026-04-28', amount:3000, cashflowKind:'settlement', type:'credit_due' },
+    { id:'next-month-card', date:'2026-06-02', amount:7000, cashflowKind:'settlement', type:'credit_due' },
+  ]
+  try {
+    const ctx = FI.buildContext({ transactions:[], categories:{ expense:[], income:[] }, wallets:[], recurring:[], goals:[] })
+    assert.equal(ctx.monthEndSettlementOutflows, 3000)
+    assert.equal(FI.forecasts(ctx).settlementOutflows, 3000)
+  } finally {
+    App.getUpcomingItems = originalUpcoming
+  }
+})
+
+test('incremental rebuild preserves the prediction captured for a completed month', () => {
+  localStorage.setItem('mt_monthly_financial_features', JSON.stringify({
+    version:2,
+    rows:[
+      { month:'2026-05', forecast:{ predictedExpense:22000, actualExpense:20000 } },
+      { month:'2026-04', forecast:{ predictedExpense:28000, actualExpense:25000 } },
+    ],
+  }))
+  FI.rebuildFeatureStoreIncremental(
+    { transactions:[], categories:{ expense:[], income:[] }, wallets:[], recurring:[], goals:[] },
+    { force:true, months:['2026-04'] },
+  )
+  const april = FI.loadFeatureStore().rows.find(row => row.month === '2026-04')
+  assert.equal(april.forecast.predictedExpense, 28000)
+})
+
 test('forecast accuracy summary and richer behavior classifier are available', () => {
   const store = {
     version: 2,

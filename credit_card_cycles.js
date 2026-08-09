@@ -39,6 +39,13 @@
   function clampFixedDueDay(day) { return Math.min(31, Math.max(1, Number(day || 23))) }
   function statementId(cardId, start, end) { return `${cardId}:${start}:${end}` }
 
+  function isPostedAt(tx, refDate, predicate) {
+    if (!tx) return false
+    if (typeof predicate === 'function') return predicate(tx) === true
+    const date = String(tx.date || '')
+    return !date || date <= String(refDate || '')
+  }
+
   const DEFAULT_THAI_BANK_HOLIDAYS_MMDD = [
     '01-01',
     '04-06',
@@ -172,10 +179,11 @@
       String(t.walletId || '') === String(card.id) &&
       String(t.date || '') >= period.start &&
       String(t.date || '') <= period.end &&
-      (typeof isPostedTx === 'function' ? isPostedTx(t) : t.scheduled !== true)
+      isPostedAt(t, refDate, isPostedTx)
     )
     const payments = transactions.filter(t => {
       if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
+      if (!isPostedAt(t, refDate, isPostedTx)) return false
       if (String(t.statementId || '') === id) return true
       const txDate = String(t.date || '')
       return txDate > period.end && txDate <= dueDate

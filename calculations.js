@@ -370,7 +370,7 @@ const Calc = {
     let fcd = 0
     let liabilities = 0
     rows.forEach(w => {
-      if (!w || w.hiddenFromWalletList) return
+      if (!w || w.excludeFromNetWorth) return
       const type = String(w.type || '').toLowerCase()
       const value = Number(w.balance || 0)
       if (['cash', 'bank', 'ewallet', 'saving'].includes(type)) cash += Math.max(0, value)
@@ -395,7 +395,7 @@ const Calc = {
   },
 
   getCreditLiabilitySummary(wallets, opts = {}) {
-    const cards = (wallets || []).filter(w => w && w.type === 'credit' && !w.hiddenFromWalletList)
+    const cards = (wallets || []).filter(w => w && w.type === 'credit' && !w.excludeFromNetWorth)
     const items = cards.map(card => {
       const statement = typeof App !== 'undefined' && typeof App.getCardStatement === 'function' ? App.getCardStatement(card.id, opts.refDate) : null
       const due = typeof App !== 'undefined' && typeof App.getCreditCardDueInfo === 'function' ? App.getCreditCardDueInfo(card, opts.refDate) : null
@@ -472,9 +472,11 @@ const Calc = {
 
   getNetWorth(wallets) {
     let assets = 0, debt = 0
-    wallets.forEach(w => {
-      if (w.balance >= 0) assets += w.balance
-      else                debt   += Math.abs(w.balance)
+    ;(wallets || []).forEach(w => {
+      if (!w || w.excludeFromNetWorth) return
+      const balance = Number(w.balance || 0)
+      if (balance >= 0) assets += balance
+      else              debt   += Math.abs(balance)
     })
     return { assets, debt, net: assets - debt }
   },

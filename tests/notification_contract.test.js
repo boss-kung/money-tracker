@@ -37,3 +37,19 @@ test('notification delivery functions authenticate cron before creating admin cl
   assert.match(cron, /x-mt-cron-secret/)
   assert.doesNotMatch(cron, /Bearer eyJ/)
 })
+
+test('Notification Snapshot transport sends the privacy-limited values that were built locally', () => {
+  const source = read('notifications_v2.js')
+  for (const field of [
+    'todayTxCount',
+    'lastTxDate',
+    'upcomingBills',
+    'creditDue',
+    'budgetAlerts',
+    'recurringDue',
+    'privilegesExpiring',
+  ]) {
+    assert.match(source, new RegExp(`${field}: snapshot\\.${field}`), field)
+  }
+  assert.doesNotMatch(source, /todayTxCount:\s*0,[\s\S]{0,240}privilegesExpiring:\s*\[\]/)
+})

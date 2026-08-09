@@ -35,19 +35,54 @@
 
   // ── BNPLCalc ────────────────────────────────────────────────────────────────
   const BNPLCalc = {
+    distributeAmounts(totalAmount, installments) {
+      const total = Math.round(Number(totalAmount) * 100) / 100
+      const n = Number(installments)
+      if (!Number.isFinite(total) || total < 0 || !Number.isInteger(n) || n < 1) return []
+      const unitAmt = Math.floor((total / n) * 100) / 100
+      return Array.from({ length:n }, (_, index) => index === n - 1
+        ? Math.round((total - unitAmt * (n - 1)) * 100) / 100
+        : unitAmt)
+    },
+
     buildSchedule(totalAmount, installments, purchaseDate, payDay) {
       const total = Number(totalAmount)
       const n = Number(installments)
-      const unitAmt = Math.floor((total / n) * 100) / 100
-      const lastAmt = Math.round((total - unitAmt * (n - 1)) * 100) / 100
+      const amounts = BNPLCalc.distributeAmounts(total, n)
       return Array.from({ length: n }, (_, i) => {
         // If payDay is set, use that fixed day-of-month instead of purchase day
         let dueDate = addMonths(purchaseDate, i + 1)
         if (payDay && payDay >= 1 && payDay <= 28) {
           dueDate = dueDate.slice(0, 8) + String(payDay).padStart(2, '0')
         }
-        return { no: i + 1, dueDate, amount: i === n - 1 ? lastAmt : unitAmt, paidTxId: null }
+        return { no: i + 1, dueDate, amount: amounts[i], paidTxId: null }
       })
+    },
+
+    rebuildSchedulePreservingPayments(plan, totalAmount, installments, payDay) {
+      const newTotal = Math.round(Number(totalAmount) * 100) / 100
+      const newN = Number(installments)
+      if (!(newTotal > 0) || !Number.isInteger(newN) || newN < 1) return { error:'invalid_values' }
+      const oldSchedule = Array.isArray(plan?.schedule) ? plan.schedule : []
+      const paidByNo = new Map(oldSchedule.filter(row => row?.paidTxId).map(row => [Number(row.no), row]))
+      const maxPaidNo = Math.max(0, ...paidByNo.keys())
+      if (newN < maxPaidNo) return { error:'installments_below_paid' }
+      const paidTotal = Math.round([...paidByNo.values()].reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0) * 100) / 100
+      if (newTotal + 0.005 < paidTotal) return { error:'total_below_paid', paidTotal }
+
+      const datedSchedule = BNPLCalc.buildSchedule(newTotal, newN, plan?.purchaseDate || todayStr(), payDay)
+      const unpaidRows = datedSchedule.filter(row => !paidByNo.has(row.no))
+      const remainingTotal = Math.round((newTotal - paidTotal) * 100) / 100
+      if (!unpaidRows.length && Math.abs(remainingTotal) > 0.005) return { error:'paid_plan_total_locked', paidTotal }
+      if (unpaidRows.length && remainingTotal <= 0) return { error:'zero_remaining_with_unpaid', paidTotal }
+      const unpaidAmounts = unpaidRows.length ? BNPLCalc.distributeAmounts(remainingTotal, unpaidRows.length) : []
+      let unpaidIndex = 0
+      const schedule = datedSchedule.map(row => {
+        const paid = paidByNo.get(row.no)
+        if (paid) return { ...paid, no:row.no }
+        return { ...row, amount:unpaidAmounts[unpaidIndex++] }
+      })
+      return { schedule, totalAmount:newTotal, installments:newN, paidTotal }
     },
     getUsedCredit(wallet) {
       return Math.abs(Math.min(0, Number(wallet?.balance || 0)))
@@ -107,10 +142,12 @@
       // Defense-in-depth: validate source wallet type
       const sourceWallet = (typeof S !== 'undefined' ? S.wallets : [])?.find(w => w.id === sourceWalletId)
       const validSourceTypes = new Set(['bank', 'cash', 'ewallet', 'saving'])
-      if (sourceWallet && !validSourceTypes.has(sourceWallet.type)) {
-        console.warn('[BNPL] payInstallment: invalid source wallet type', sourceWallet.type)
+      if (!sourceWallet || !validSourceTypes.has(sourceWallet.type)) {
+        console.warn('[BNPL] payInstallment: invalid source wallet')
         return null
       }
+      const paymentDate = date || todayStr()
+      if (paymentDate > todayStr() || paymentDate < String(plan.purchaseDate || '')) return null
 
       const txId = 'tx_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
       const tx = {
@@ -121,7 +158,7 @@
         toWalletId: plan.walletId,
         bnplPlanId: planId,
         bnplInstallmentNo: no,
-        date: date || todayStr(),
+        date: paymentDate,
         note: `จ่ายงวด ${no}/${plan.installments} ${plan.merchant || 'BNPL'}`.trim(),
       }
       if (typeof S !== 'undefined') {
@@ -181,10 +218,12 @@
 
       const sourceWallet = (typeof S !== 'undefined' ? S.wallets : [])?.find(w => w.id === sourceWalletId)
       const validSourceTypes = new Set(['bank', 'cash', 'ewallet', 'saving'])
-      if (sourceWallet && !validSourceTypes.has(sourceWallet.type)) {
-        console.warn('[BNPL] payoffAll: invalid source wallet type', sourceWallet.type)
+      if (!sourceWallet || !validSourceTypes.has(sourceWallet.type)) {
+        console.warn('[BNPL] payoffAll: invalid source wallet')
         return null
       }
+      const paymentDate = date || todayStr()
+      if (paymentDate > todayStr() || paymentDate < String(plan.purchaseDate || '')) return null
 
       const total = unpaid.reduce((s, i) => s + Number(i.amount || 0), 0)
       const txId = 'tx_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
@@ -196,7 +235,7 @@
         toWalletId: plan.walletId,
         bnplPlanId: planId,
         bnplPayoffAll: true,
-        date: date || todayStr(),
+        date: paymentDate,
         note: `ปิดยอดทั้งหมด ${plan.merchant || 'BNPL'}`.trim(),
       }
       if (typeof S !== 'undefined') {
@@ -226,19 +265,20 @@
       const newN = installments != null && installments !== '' ? Number(installments) : plan.installments
       const structureChanged = newTotal !== plan.totalAmount || newN !== plan.installments
       if (structureChanged) {
-        if (!(newTotal > 0) || !(newN >= 1)) return { error: 'invalid_values' }
-        const maxPaidNo = Math.max(0, ...plan.schedule.filter(s => s.paidTxId).map(s => s.no))
-        if (newN < maxPaidNo) return { error: 'installments_below_paid' }
         const wallet = (typeof S !== 'undefined' ? S.wallets : [])?.find(w => w.id === plan.walletId)
-        const rebuilt = BNPLCalc.buildSchedule(newTotal, newN, plan.purchaseDate, wallet?.payDay || null)
-        plan.schedule = rebuilt.map(item => {
-          const old = plan.schedule.find(s => s.no === item.no)
-          return old?.paidTxId ? { ...item, paidTxId: old.paidTxId } : item
-        })
-        plan.totalAmount = newTotal
-        plan.installments = newN
+        const rebuilt = BNPLCalc.rebuildSchedulePreservingPayments(plan, newTotal, newN, wallet?.payDay || null)
+        if (rebuilt.error) return rebuilt
+        plan.schedule = rebuilt.schedule
+        plan.totalAmount = rebuilt.totalAmount
+        plan.installments = rebuilt.installments
         plan.status = plan.schedule.every(s => s.paidTxId) ? 'paid_off' : 'active'
-        if (srcTx && newTotal !== Number(srcTx.amount)) srcTx.amount = newTotal
+        if (srcTx && newTotal !== Number(srcTx.amount)) {
+          srcTx.amount = newTotal
+          delete srcTx.ledgerAmount
+          srcTx.ledgerAmount = typeof App !== 'undefined' && typeof App._expectedLedgerAmountForTx === 'function'
+            ? App._expectedLedgerAmountForTx(srcTx)
+            : newTotal
+        }
       }
       try { App?.recalculateWalletBalances?.({ save: false }) } catch (_) {}
       if (typeof persist === 'function') persist()
@@ -463,7 +503,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">วันที่จ่าย</label>
-          <input class="form-input" type="date" id="bnpl-pay-date" value="${t}">
+          <input class="form-input" type="date" id="bnpl-pay-date" min="${esc(plan.purchaseDate || '')}" max="${t}" value="${t}">
         </div>
         <div style="display:flex;gap:8px;margin-top:16px">
           <button type="button" class="btn btn-secondary" style="flex:1" onclick="BNPL.ui.closePayModal()">ยกเลิก</button>
@@ -556,7 +596,13 @@
       if (result && result.error) {
         const msg = result.error === 'installments_below_paid'
           ? 'ลดจำนวนงวดต่ำกว่างวดที่จ่ายแล้วไม่ได้'
-          : 'กรุณากรอกยอดรวมและจำนวนงวดให้ถูกต้อง'
+          : result.error === 'total_below_paid'
+            ? `ยอดรวมต้องไม่น้อยกว่ายอดที่จ่ายแล้ว ${money(result.paidTotal)}`
+            : result.error === 'paid_plan_total_locked'
+              ? 'แผนที่จ่ายครบแล้วเปลี่ยนยอดรวมไม่ได้'
+              : result.error === 'zero_remaining_with_unpaid'
+                ? 'หากยอดคงเหลือเป็นศูนย์ ต้องลดจำนวนงวดให้เท่ากับงวดที่จ่ายแล้ว'
+                : 'กรุณากรอกยอดรวมและจำนวนงวดให้ถูกต้อง'
         try { App?.toast?.(msg, 'error') } catch (_) {}
         return
       }
@@ -603,11 +649,13 @@
   }
 
   // ── Global exposure ─────────────────────────────────────────────────────────
-  window.BNPL = { store: BNPLStore, calc: BNPLCalc, ui: BNPLui }
+  const api = { store: BNPLStore, calc: BNPLCalc, ui: BNPLui }
+  if (typeof module !== 'undefined' && module.exports) module.exports = api
+  if (typeof window !== 'undefined') window.BNPL = api
 
-  if (document.readyState === 'loading') {
+  if (typeof document !== 'undefined' && document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => BNPLui.injectOverlays())
-  } else {
+  } else if (typeof document !== 'undefined') {
     BNPLui.injectOverlays()
   }
 })()
