@@ -6908,7 +6908,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">🥇</span><span>ทองคำ</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.gold)}</strong></div></div></div>
         <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">💱</span><span>FCD / เงินตราต่างประเทศ</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.fcd)}</strong></div></div></div>
         <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">🪙</span><span>Crypto</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.crypto)}</strong></div></div></div>
-        <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">🤝</span><span>เงินให้ยืมที่ยังไม่ได้คืน</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.receivables)}</strong></div></div></div>
+        <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">🤝</span><span>เงินให้ยืมที่ยังไม่ได้คืน (ไม่นับรวม)</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.receivables)}</strong></div></div></div>
         <div class="report-cat-row"><div class="report-cat-top"><div class="report-cat-name"><span class="report-cat-icon">💳</span><span>หนี้สินและยอดผูกพัน</span></div><div class="report-cat-value"><strong>${money(assetBreakdown.liabilities)}</strong></div></div></div>
       </div>`
     }

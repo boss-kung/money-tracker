@@ -71,7 +71,7 @@ test('Ledger applies Loan principal and repayments only when their dates are Pos
   assert.equal(futureLoan.cash.cash, undefined)
 })
 
-test('Financial Position includes Posted Loan receivables and committed liabilities once', () => {
+test('Financial Position reports Loan receivables without adding them back to assets', () => {
   const position = Ledger.getFinancialPosition({
     wallets:[
       { id:'cash', type:'bank', balance:1000 },
@@ -91,12 +91,38 @@ test('Financial Position includes Posted Loan receivables and committed liabilit
     walletAssets:1000,
     receivables:200,
     crypto:50,
-    assets:1250,
+    assets:1050,
     walletLiabilities:300,
     committedLiabilities:400,
     liabilities:700,
-    net:550,
+    net:350,
   })
+})
+
+test('Financial Position deducts outstanding Loan cash until it is repaid', () => {
+  const loan = {
+    id:'loan', walletId:'cash', amount:300, date:'2026-08-01',
+    repayments:[{ walletId:'cash', amount:100, date:'2026-08-05' }],
+  }
+  const flows = Ledger.compute({
+    wallets:[{ id:'cash', type:'bank', openingBalance:1000 }],
+    loans:[loan],
+    today:'2026-08-09',
+  })
+  const [cash] = Ledger.reconcileWallets({
+    wallets:[{ id:'cash', type:'bank', openingBalance:1000 }],
+    flows,
+  })
+  const position = Ledger.getFinancialPosition({
+    wallets:[{ id:'cash', type:'bank', balance:cash.balance }],
+    loans:[loan],
+    today:'2026-08-09',
+  })
+
+  assert.equal(cash.balance, 800)
+  assert.equal(position.receivables, 200)
+  assert.equal(position.assets, 800)
+  assert.equal(position.net, 800)
 })
 
 test('Loan repayment validation rejects future dates and overpayment', () => {

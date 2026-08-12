@@ -161,7 +161,10 @@
     const receivables = (loans || []).reduce((sum, loan) => sum + getLoanReceivable(loan, today), 0)
     const crypto = Math.max(0, Number(cryptoValue || 0))
     const committed = Math.max(0, Number(committedLiabilities || 0))
-    const assets = walletAssets + receivables + crypto
+    // A Loan reduces the source Wallet immediately. Keep the outstanding
+    // receivable visible for collection tracking, but do not add it back to
+    // realizable assets until a repayment actually returns to a Wallet.
+    const assets = walletAssets + crypto
     const liabilities = walletLiabilities + committed
     return {
       walletAssets:round2(walletAssets),
