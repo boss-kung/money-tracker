@@ -5,7 +5,7 @@
   if (root) root.MT_RELEASE = manifest
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict'
-  const version = '2026.08.12-loan-net-worth-r123'
+  const version = '2026.10.01-p2-r124'
   const coreAssets = Object.freeze([
     './',
     './index.html',
