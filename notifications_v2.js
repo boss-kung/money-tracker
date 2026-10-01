@@ -317,7 +317,9 @@
     let lastTxDate = null
     for (const tx of txs) {
       const date = String(tx?.date || '')
-      if (date && (!lastTxDate || date > lastTxDate)) lastTxDate = date
+      const posted = typeof App._isPostedTx === 'function' ? App._isPostedTx(tx) : (!tx?.scheduled || date <= today)
+      if (!posted) continue
+      if (date && date <= today && (!lastTxDate || date > lastTxDate)) lastTxDate = date
       if (date === today && txCountTypes.has(String(tx?.type || ''))) todayTxCount++
     }
 
@@ -331,7 +333,7 @@
         daysLeft: daysBetween(b.dueDate, today),
         reminderDaysBefore: Array.isArray(b.reminderDaysBefore) ? b.reminderDaysBefore : [],
       }))
-      .filter(b => b.daysLeft <= 7)
+      .filter(b => b.daysLeft >= 0 && b.daysLeft <= 90)
       .slice(0, 25)
 
     const creditDue = typeof CreditCardCycles !== 'undefined'
@@ -340,7 +342,7 @@
           transactions: S.transactions || [],
           refDate: today,
           hideAmounts: Boolean(S.settings?.notifications?.hide_amounts_in_notification),
-          maxDays: 7,
+          maxDays: 90,
           rewardForTx: tx => App.getTransactionRewardEstimate?.(tx) || { points:0, cashback:0, discount:0 },
           amountForTx: tx => typeof App._expectedLedgerAmountForTx === 'function'
             ? App._expectedLedgerAmountForTx(tx)
@@ -691,24 +693,35 @@
 
   async function disableNotifications() {
     const prefs = ensureSettings()
+    const previousEnabled = prefs.enabled === true
     prefs.enabled = false
     persist()
-    if (isConfigured()) {
-      const sub = storedPushSub()
-      await callFunction('register-notification-device', {
-        installId: getInstallId(),
-        pushSubscription: sub,
-        platform: platform(),
-        browser: browserName(),
-        timezone: prefs.timezone,
-        permission: Notification.permission || 'default',
-        enabled: false,
-        hideAmounts: Boolean(prefs.hide_amounts_in_notification),
-        appVersion: window.MT_APP_VERSION || '',
-        userAgent: navigator.userAgent || '',
-      }, { timeoutMs: MANUAL_FETCH_TIMEOUT_MS }).catch(() => {})
+    try {
+      if (isConfigured()) {
+        const sub = storedPushSub()
+        await callFunction('register-notification-device', {
+          installId: getInstallId(),
+          pushSubscription: sub,
+          platform: platform(),
+          browser: browserName(),
+          timezone: prefs.timezone,
+          permission: Notification.permission || 'default',
+          enabled: false,
+          hideAmounts: Boolean(prefs.hide_amounts_in_notification),
+          appVersion: window.MT_APP_VERSION || '',
+          userAgent: navigator.userAgent || '',
+        }, { timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
+        await savePreferences()
+      }
+    } catch (err) {
+      // Keep the local switch aligned with the server. Claiming success here
+      // would leave a live device row that can still receive push messages.
+      prefs.enabled = previousEnabled
+      persist()
+      notify('ปิดการแจ้งเตือนไม่สำเร็จ: ยังเชื่อมต่อเซิร์ฟเวอร์ไม่ได้', 'error')
+      App.renderMore?.()
+      return false
     }
-    await savePreferences().catch(() => {})
     notify('ปิดการแจ้งเตือนแล้ว', 'success')
     App.renderMore?.()
     return true

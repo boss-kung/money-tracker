@@ -578,6 +578,7 @@
     const result = calcResult(bill)
     const linkState = splitBillLinkState(bill)
     const ownerSummary = linkState.expected || splitBillOwnerSummary(bill)
+    const ownerPersonId = ownerSummary.ownerId || bill.ownerPersonId || ''
     const receivable = linkState.linkedTxId && typeof App.getSharedReceivableForTx === 'function'
       ? App.getSharedReceivableForTx(linkState.linkedTxId)
       : null
@@ -610,7 +611,7 @@
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               <div style="font-weight:800;color:var(--primary)">${fmt(t.amount)}</div>
-              ${linkState.linkedTxId && remaining > 0 ? `<button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openSharedExpenseReimbursement(${jsArg(linkState.linkedTxId)},{amount:${remaining},splitBillId:${jsArg(bill.id)},fromSplitPersonId:${jsArg(t.from)},toSplitPersonId:${jsArg(t.to)},sourceName:${jsArg(bill.title || 'บิลร่วม')}})">รับคืน</button>` : ''}
+              ${linkState.linkedTxId && remaining > 0 && String(t.to || '') === String(ownerPersonId || '') ? `<button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openSharedExpenseReimbursement(${jsArg(linkState.linkedTxId)},{amount:${remaining},splitBillId:${jsArg(bill.id)},fromSplitPersonId:${jsArg(t.from)},toSplitPersonId:${jsArg(t.to)},sourceName:${jsArg(bill.title || 'บิลร่วม')}})">รับคืน</button>` : ''}
             </div>
           </div>`
         }).join('')

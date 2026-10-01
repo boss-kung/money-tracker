@@ -59,6 +59,34 @@ test('partial payment leaves only remaining balance payable', () => {
   assert.equal(rows[0].balanceDue, 3000)
 })
 
+test('opening card debt is carried into payable balance and combined with later credits', () => {
+  const openingDebtCard = { ...card, openingBalance: -5000 }
+  const txs = [
+    { id:'purchase', type:'expense', walletId:'ktc', amount:5000, date:'2026-05-10' },
+    { id:'refund', type:'income', walletId:'ktc', amount:500, date:'2026-05-20' },
+    { id:'payment', type:'cc_payment', toWalletId:'ktc', amount:1000, date:'2026-06-01' },
+  ]
+  const rows = CC.getPayableStatements({ card:openingDebtCard, transactions:txs, refDate:'2026-06-03' })
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].openingDebt, 5000)
+  assert.equal(rows[0].creditTotal, 500)
+  assert.equal(rows[0].purchaseTotal, 10000)
+  assert.equal(rows[0].balanceDue, 8500)
+})
+
+test('payments first consume the combined purchase and opening debt balance', () => {
+  const openingDebtCard = { ...card, openingBalance: -5000 }
+  const rows = CC.getPayableStatements({
+    card: openingDebtCard,
+    transactions:[
+      { id:'purchase', type:'expense', walletId:'ktc', amount:5000, date:'2026-05-10' },
+      { id:'payment', type:'cc_payment', toWalletId:'ktc', amount:6000, date:'2026-06-01' },
+    ],
+    refDate:'2026-06-03',
+  })
+  assert.equal(rows[0].balanceDue, 4000)
+})
+
 test('old unpaid statements remain payable beyond the default six-cycle history', () => {
   const txs = [
     { id:'old', type:'expense', walletId:'ktc', amount:5000, date:'2025-01-10' },

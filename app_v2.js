@@ -13,6 +13,35 @@ function creditDebtBalance(wallet) {
   return Math.max(0, -Number(wallet?.balance || 0))
 }
 
+// Array position is presentation state: new transactions are unshifted and
+// older imports may not have createdAt. Keep a monotonic sequence so
+// same-day capped benefits do not change when the list is re-rendered.
+function ensureTransactionCreationSequence() {
+  const txs = Array.isArray(S?.transactions) ? S.transactions : []
+  let max = 0
+  txs.forEach(tx => {
+    const sequence = Number(tx?.createdSequence)
+    if (Number.isFinite(sequence) && sequence > max) max = sequence
+  })
+  let next = max + 1
+  let changed = false
+  // Legacy arrays are newest-first (transactions are inserted with unshift),
+  // so assign the oldest missing row first and preserve that historical order.
+  for (let i = txs.length - 1; i >= 0; i--) {
+    const tx = txs[i]
+    if (!tx || Number.isFinite(Number(tx.createdSequence))) continue
+    tx.createdSequence = next++
+    changed = true
+  }
+  return changed
+}
+
+function nextTransactionCreationSequence() {
+  ensureTransactionCreationSequence()
+  const max = (S?.transactions || []).reduce((highest, tx) => Math.max(highest, Number(tx?.createdSequence) || 0), 0)
+  return max + 1
+}
+
 /* ============================================================
    V6.2 Hard mobile zoom lock
    Must run before the app boots: injects/updates viewport meta and
@@ -696,6 +725,8 @@ window.__mountUpcomingBillsFeature = function() {
       merchant,
       note,
       date: paidDate,
+      createdAt: nowISO(),
+      createdSequence: nextTransactionCreationSequence(),
       upcomingBillId: bill.id,
       sourceUpcomingBillId: bill.id,
     }
@@ -1909,6 +1940,7 @@ function init() {
   const data = Storage.init()
   window.MTBoot?.mark?.('storage.init.done', { duration: Math.round((performance.now() - storageStart) * 10) / 10 })
   S.transactions = data.transactions
+  ensureTransactionCreationSequence()
   S.wallets      = data.wallets
   S.categories   = data.categories
   S.budgets      = data.budgets
@@ -3057,11 +3089,13 @@ App.render();
     const label = active === 'income' ? 'รายรับ' : 'รายจ่าย'
     const verb = active === 'income' ? 'รับแล้ว' : 'ใช้ไปแล้ว'
     const cats = S.categories[active] || []
+    const posted = (S.transactions || []).filter(t => (typeof Calc.isPostedTx === 'function' ? Calc.isPostedTx(t) : App._isPostedTx?.(t) !== false))
     const rows = cats.map(cat => {
       const b = S[listKey].find(x => x.categoryId === cat.id)
-      const spent = S.transactions
+      const spent = posted
         .filter(t => (t.date || '').startsWith(THIS_MONTH) && t.type === active && t.categoryId === cat.id)
-        .reduce((sum, t) => sum + Number(t.amount || 0), 0)
+        .filter(t => active !== 'income' || !(Calc.isReimbursementTx?.(t) || App.isReimbursementTx?.(t)))
+        .reduce((sum, t) => sum + (active === 'expense' ? Number(Calc.getExpenseLedgerAmount?.(t) ?? t.ledgerAmount ?? t.amount ?? 0) : Number(t.amount || 0)), 0)
       return { cat, limit: b?.monthlyLimit || 0, spent }
     })
     const rowsHtml = rows.length ? rows.map(r => `<div class="budget-row">
@@ -5884,11 +5918,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App.getSharedExpenseReimbursements = function(txId, opts = {}) {
-    const { fromSplitPersonId = '', splitBillId = '' } = opts || {}
+    const { fromSplitPersonId = '', splitBillId = '', includeScheduled = false } = opts || {}
     return (S.transactions || []).filter(t => {
       if (!App.isReimbursementTx(t) || t.reimbursesSharedExpenseTxId !== txId) return false
       if (fromSplitPersonId && t.fromSplitPersonId !== fromSplitPersonId) return false
       if (splitBillId && (t.reimbursementSplitBillId || t.splitBillId || '') !== splitBillId) return false
+      if (!includeScheduled && typeof App._isPostedTx === 'function' && !App._isPostedTx(t)) return false
       return true
     })
   }
@@ -5980,6 +6015,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   function cleanTxFromDraft(id) {
+    const existingTx = (S.transactions || []).find(row => row.id === id)
     const wallet = walletById(S.tx.walletId)
     const useRewardRules = !!(wallet && wallet.type === 'credit' && S.tx.type === 'expense')
     let sharedExpense = normalizeSharedExpenseDraft(S.tx)
@@ -6023,6 +6059,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
       channel: S.tx.type === 'expense' ? String(S.tx.channel || '').trim() : '',
       note: S.tx.note || '',
       date: S.tx.date || today(),
+      createdAt: existingTx?.createdAt || new Date().toISOString(),
+      createdSequence: existingTx?.createdSequence || nextTransactionCreationSequence(),
       scheduled: String(S.tx.date || today()) > today(),
       benefitDateOverride: S.tx.benefitDateOverride || undefined,
       isRecurring: !!S.tx.isRecurring,
@@ -6103,6 +6141,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         let allocated = 0
         const groupId = Calc.genId()
         const baseDate = S.tx.date || today()
+        const sequenceBase = nextTransactionCreationSequence()
         const txs = []
         for (let i = 0; i < months; i++) {
           const amount = i === months - 1 ? Math.round((total - allocated) * 100) / 100 : base
@@ -6116,6 +6155,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
             installmentMonths: months,
             installmentTotalAmount: total,
             scheduled: addMonths(baseDate, i) > today(),
+            createdSequence: sequenceBase + i,
           })
           delete tx.benefitBaseAmount
           delete tx.instantDiscountAmount
@@ -6201,13 +6241,13 @@ Calc.getUsableMoney = function(wallets, state = null) {
         createdRec.startDate = startDate
         if (createdRec.durationMonths && !createdRec.totalOccurrences) createdRec.totalOccurrences = Number(createdRec.durationMonths)
         if (createdRec.recurrenceType === 'monthly' && !createdRec.recurringDayOfMonth) createdRec.recurringDayOfMonth = Number(draft.recurringDayOfMonth || String(startDate).slice(-2)) || 1
-        const scheduledDate = occurrenceDate(createdRec, 1)
+        const scheduledDate = App._recurringOccurrenceDate?.(createdRec, 1) || createdRec.nextDueDate || startDate
         createdTx.sourceRecurringId = createdRec.id
         createdTx.recurringDueDate = scheduledDate
         createdTx.recurringOccurrenceNo = 1
-        createdTx.recurringInstanceKey = instanceKey(createdRec.id, 1, scheduledDate)
+        createdTx.recurringInstanceKey = App._recurringInstanceKey?.(createdRec.id, 1, scheduledDate) || `${createdRec.id}__1__${scheduledDate}`
         createdTx.isRecurring = true
-        updateRecurringNext(createdRec)
+        App._updateRecurringNext?.(createdRec)
         App.refreshTransactionRewardEstimates?.()
         App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
         persist()
@@ -6285,6 +6325,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
       toWalletId:card.id, date:existingTx?.date || today(),
       note:existingTx?.note || `ชำระ ${card.name}`,
       statementId:existingTx?.statementId || st?.id,
+      createdAt: existingTx?.createdAt || nowISO(),
+      createdSequence: existingTx?.createdSequence || nextTransactionCreationSequence(),
     }
     if (hasDiscount && discountAmount > 0) {
       tx.cashAmount = Math.round(cashAmount * 100) / 100
@@ -6443,7 +6485,15 @@ Calc.getUsableMoney = function(wallets, state = null) {
     persist(); App.openRecurringScreen(); toast('บันทึกรายการประจำแล้ว', 'success')
   }
 
-  App.snoozeRecurring = function(id, days = 7) { const r = S.recurring.find(x => x.id === id); if (!r) return; r.nextDueDate = addDays(r.nextDueDate || today(), days); persist(); App.openRecurringScreen(); toast(`เลื่อน ${days} วันแล้ว`, 'info') }
+  App.snoozeRecurring = function(id, days = 7) {
+    const r = S.recurring.find(x => x.id === id)
+    if (!r) return
+    const occurrenceNo = Number(r.nextOccurrenceNo || 1) || 1
+    r.nextOccurrenceNoOverride = occurrenceNo
+    r.nextDueDateOverride = addDays(r.nextDueDate || today(), days)
+    r.nextDueDate = r.nextDueDateOverride
+    persist(); App.openRecurringScreen(); toast(`เลื่อน ${days} วันแล้ว`, 'info')
+  }
 
   // Make transaction rows readable for new types.
 
@@ -7559,7 +7609,7 @@ App._pickMerchant = function(name, opts = {}) {
     const months = Calc.getMonths(6)
     const filtered = currentTxFilteredV42()
     const expenseAmountForList = tx => tx.type === 'expense'
-      ? Number(Calc.getExpenseLedgerAmount?.(tx) || tx.amount || 0)
+      ? Number(Calc.getExpenseLedgerAmount?.(tx) ?? tx.ledgerAmount ?? tx.amount ?? 0)
       : Number(tx.amount || 0)
     const income = filtered.filter(t => t.type === 'income' && !(Calc.isReimbursementTx?.(t) || App.isReimbursementTx?.(t))).reduce((s,t) => s + Number(t.amount || 0), 0)
     const expense = filtered
@@ -7752,15 +7802,17 @@ App._pickMerchant = function(name, opts = {}) {
           return
         }
       }
+      let futureBaseDate = addMonths(startDate, startOffset)
+      if (scope === 'future') {
+        let guard = 0
+        while (futureBaseDate <= today() && guard < 120) { futureBaseDate = addMonths(futureBaseDate, 1); guard++ }
+      }
       const amounts = distributeAmounts(amountPool, count)
+      const sequenceBase = nextTransactionCreationSequence()
       const generated = amounts.map((amount, idx) => {
-        let date = addMonths(startDate, startOffset + idx)
-        if (scope === 'future') {
-          let guard = 0
-          while (date <= today() && guard < 36) { date = addMonths(date, 1); guard++ }
-        }
+        const date = scope === 'future' ? addMonths(futureBaseDate, idx) : addMonths(startDate, startOffset + idx)
         const no = startOffset + idx + 1
-        return { id:Calc.genId(), type:'expense', amount, walletId, categoryId, merchant, note, date, isInstallment:true, installmentGroupId:groupId, installmentNo:no, installmentMonths:months, installmentTotalAmount:total, scheduled:date > today() }
+        return { id:Calc.genId(), type:'expense', amount, walletId, categoryId, merchant, note, date, isInstallment:true, installmentGroupId:groupId, installmentNo:no, installmentMonths:months, installmentTotalAmount:total, scheduled:date > today(), createdAt:nowISO(), createdSequence:sequenceBase + idx }
       })
       S.transactions = (S.transactions || []).filter(t => t.installmentGroupId !== groupId).concat(keep, generated)
       S.transactions.sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
@@ -10567,6 +10619,7 @@ App._pickMerchant = function(name, opts = {}) {
         categoryId:undefined, merchant:'Cashback',
         note:`รับ Cashback ${card?.name || ''}`,
         date:today(), isRewardReceived:true, statementId, rewardLedgerId:ledgerId,
+        createdAt: nowISO(), createdSequence: nextTransactionCreationSequence(),
       }
       S.transactions.unshift(tx)
     }
@@ -11628,7 +11681,7 @@ App._pickMerchant = function(name, opts = {}) {
       if (destination === 'income') {
         const wallet = walletById(incomeWalletId)
         if (wallet) {
-          const tx = { id:genId(), type:'income', amount:actualCashback, walletId:incomeWalletId, categoryId:'other_income', merchant:'Cashback', note:`รับ Cashback ${card?.name||''}`, date:recordDate, isRewardReceived:true, statementId, rewardLedgerId:ledgerId }
+          const tx = { id:genId(), type:'income', amount:actualCashback, walletId:incomeWalletId, categoryId:'other_income', merchant:'Cashback', note:`รับ Cashback ${card?.name||''}`, date:recordDate, isRewardReceived:true, statementId, rewardLedgerId:ledgerId, createdAt: now, createdSequence: nextTransactionCreationSequence() }
           S.transactions.unshift(tx)
           S.rewardLedger.push({ id:ledgerId, type:'cashback_received', cardId, statementId, amount:actualCashback, points:0, date:recordDate, note:'รับเป็นรายรับ', createdAt:now })
           App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
@@ -12296,6 +12349,14 @@ App._pickMerchant = function(name, opts = {}) {
       recurringDayOfMonth: recType === 'monthly' ? dayOfMonth : undefined,
       durationMonths: recType === 'monthly' && durationMonths ? durationMonths : undefined,
       _postedCount: durationMonths ? 1 : undefined,
+      sharedExpense: draft.sharedExpense?.enabled ? {
+        enabled: true,
+        mode: draft.sharedExpense.mode || 'custom',
+        peopleCount: Math.max(1, Number(draft.sharedExpense.peopleCount || 2)),
+        myShare: Math.max(0, Math.min(Number(draft.amount || 0), Number(draft.sharedExpense.myShare || 0))),
+        reimbursableAmount: Math.max(0, Number(draft.amount || 0) - Number(draft.sharedExpense.myShare || 0)),
+        status: 'pending',
+      } : undefined,
     }
     S.recurring.push(data)
     try { persist() } catch (_) {}
@@ -12398,12 +12459,19 @@ App._pickMerchant = function(name, opts = {}) {
     if (t.recurringInstanceKey && t.recurringInstanceKey === key) return true
     if (t.sourceRecurringId !== r.id && t.recurringId !== r.id) {
       // Fallback for legacy transactions that predate sourceRecurringId/recurringInstanceKey fields.
-      // Match by date + amount + walletId + type to catch duplicates after backup restore.
+      // Match only when the legacy tuple is unambiguous. A generic transaction
+      // must never silently satisfy two recurring templates with the same tuple.
       const sameDate   = String(t.date || '') === String(scheduledDate || '')
       const sameAmt    = Math.abs(Number(t.amount || 0) - Number(r.amount || 0)) < 0.01
       const sameWallet = String(t.walletId || '') === String(r.walletId || '')
       const sameType   = String(t.type || '') === String(r.type || 'expense')
-      return sameDate && sameAmt && sameWallet && sameType
+      if (!(sameDate && sameAmt && sameWallet && sameType)) return false
+      const candidates = (S.recurring || []).filter(other => other && other.id !== r.id && !other.paused &&
+        String(other.walletId || '') === String(r.walletId || '') &&
+        String(other.type || 'expense') === String(r.type || 'expense') &&
+        Math.abs(Number(other.amount || 0) - Number(r.amount || 0)) < 0.01 &&
+        occurrenceDate(other, Number(occurrenceNo || 1)) === String(scheduledDate || ''))
+      return candidates.length === 0
     }
     if (Number(t.recurringOccurrenceNo || 0) === Number(occurrenceNo)) return true
     return String(t.recurringDueDate || '') === String(scheduledDate)
@@ -12427,7 +12495,19 @@ App._pickMerchant = function(name, opts = {}) {
     const includeFuture = opts.includeFuture !== false
     const t = today()
     const total = totalOccurrences(r)
-    const limit = total || 240
+    const overrideDate = String(r?.nextDueDateOverride || '')
+    const overrideNo = Number(r?.nextOccurrenceNoOverride || r?.nextOccurrenceNo || 0)
+    if (overrideDate && overrideNo > 0) {
+      if (!hasOccurrenceTx(r, overrideNo, overrideDate) && !isSkipped(r, overrideNo, overrideDate)) {
+        if (includeFuture || overrideDate <= t) return { occurrenceNo: overrideNo, scheduledDate: overrideDate, instanceKey: instanceKey(r.id, overrideNo, overrideDate), due: overrideDate <= t, totalOccurrences: total }
+      }
+      delete r.nextDueDateOverride
+      delete r.nextOccurrenceNoOverride
+    }
+    // Unlimited series use a bounded search window only as a safety guard. The
+    // window expands with the number of consumed occurrences, so occurrence 241
+    // (and later) can never be mistaken for completion.
+    const limit = total || Math.max(240, usedQuota(r) + 240)
     for (let no = 1; no <= limit; no++) {
       const scheduledDate = occurrenceDate(r, no)
       if (hasOccurrenceTx(r, no, scheduledDate)) continue
@@ -12452,6 +12532,10 @@ App._pickMerchant = function(name, opts = {}) {
     }
     return null
   }
+
+  App._recurringOccurrenceDate = occurrenceDate
+  App._recurringInstanceKey = instanceKey
+  App._updateRecurringNext = updateRecurringNext
   function migrateRecurringLite() {
     if (!Array.isArray(S.recurring)) S.recurring = []
     if (!Array.isArray(S.transactions)) S.transactions = []
@@ -12510,7 +12594,7 @@ App._pickMerchant = function(name, opts = {}) {
     let no = Number(tx.recurringOccurrenceNo || 0)
     let scheduledDate = tx.recurringDueDate || ''
     if (!no && scheduledDate) {
-      const limit = totalOccurrences(r) || 240
+      const limit = totalOccurrences(r) || Math.max(240, usedQuota(r) + 240)
       for (let i = 1; i <= limit; i++) {
         if (occurrenceDate(r, i) === scheduledDate) { no = i; break }
       }
@@ -12617,7 +12701,7 @@ App._pickMerchant = function(name, opts = {}) {
   function _countOverdueOccurrences(r) {
     const t = today()
     const total = totalOccurrences(r)
-    const limit = total || 240
+    const limit = total || Math.max(240, usedQuota(r) + 240)
     let count = 0
     for (let no = 1; no <= limit; no++) {
       const scheduledDate = occurrenceDate(r, no)
@@ -12676,6 +12760,23 @@ App._pickMerchant = function(name, opts = {}) {
       recurringDueDate: info.scheduledDate,
       recurringOccurrenceNo: info.occurrenceNo,
       recurringInstanceKey: info.instanceKey,
+      createdAt: new Date().toISOString(),
+      createdSequence: nextTransactionCreationSequence(),
+    }
+    if (r.sharedExpense?.enabled) {
+      const gross = Number(r.amount || 0)
+      const myShare = Math.max(0, Math.min(gross, Number(r.sharedExpense.myShare || 0)))
+      tx.sharedExpense = {
+        enabled: true,
+        mode: r.sharedExpense.mode || 'custom',
+        peopleCount: Math.max(1, Number(r.sharedExpense.peopleCount || 2)),
+        myShare,
+        reimbursableAmount: Math.max(0, gross - myShare),
+        status: 'pending',
+      }
+      tx.ledgerAmount = myShare
+      tx.reimbursementStatus = 'pending'
+      tx.remainingReimbursableAmount = tx.sharedExpense.reimbursableAmount
     }
     const err = App.validateTransactionDraft?.(tx)
     if (err) { notify(err, 'error'); return }
@@ -13262,7 +13363,7 @@ App._pickMerchant = function(name, opts = {}) {
         const walletUnits = Number(wallet.units || 0)
         const inferredUnits = walletUnits > 0 ? walletUnits : ((Number(wallet.manualPrice || 0) > 0 && Number(wallet.balance || 0) > 0) ? Number(wallet.balance || 0) / Number(wallet.manualPrice || 1) : 0)
         const units = round8(inferredUnits)
-        const manualPrice = round2(Number(wallet.manualPrice || ((units > 0 && Number(wallet.balance || 0) > 0) ? Number(wallet.balance || 0) / units : 0) || 0))
+        const manualPrice = round8(Number(wallet.manualPrice || ((units > 0 && Number(wallet.balance || 0) > 0) ? Number(wallet.balance || 0) / units : 0) || 0))
         S.cryptoHoldings.push({
           id: Calc.genId(),
           assetId: asset.id,
@@ -14142,7 +14243,7 @@ App._pickMerchant = function(name, opts = {}) {
     const wallets = visibleWallets()
     const assets = wallets.filter(w => ['bank','cash','ewallet','saving'].includes(w.type))
     const credits = wallets.filter(w => w.type === 'credit')
-    const bnpls = BNPL_FEATURE_ENABLED ? wallets.filter(w => w.type === 'bnpl') : []
+    const bnpls = wallets.filter(w => w.type === 'bnpl')
     const invests = wallets.filter(w => ['gold','fcd'].includes(w.type))
     const cryptoSummary = App.getCryptoPortfolioSummary()
     const walletPosition = App.getFinancialPosition()
@@ -14200,7 +14301,7 @@ App._pickMerchant = function(name, opts = {}) {
       tabBar.innerHTML = [
         ['wallet-anchor-assets',  '🏦 สินทรัพย์'],
         ['wallet-anchor-credits', '💳 บัตร'],
-        ...(BNPL_FEATURE_ENABLED ? [['wallet-anchor-bnpl', '🛍️ BNPL']] : []),
+        ...((BNPL_FEATURE_ENABLED || bnpls.length) ? [['wallet-anchor-bnpl', '🛍️ BNPL']] : []),
         ['wallet-anchor-invest',  '📈 ลงทุน'],
         ['wallet-anchor-crypto',  '🪙 Crypto'],
       ].map(([id, label]) =>
@@ -14245,7 +14346,7 @@ App._pickMerchant = function(name, opts = {}) {
     content.innerHTML = goldNote
       + section('สินทรัพย์', '🏦', assets, 'ยังไม่มีสินทรัพย์', true, '', 'wallet-anchor-assets')
       + section('บัตรเครดิต', '💳', credits, 'ยังไม่มีบัตรเครดิต', false, '', 'wallet-anchor-credits')
-      + (BNPL_FEATURE_ENABLED ? section('BNPL', '🛍️', bnpls, 'ยังไม่มีกระเป๋า BNPL', false, '', 'wallet-anchor-bnpl') : '')
+      + ((BNPL_FEATURE_ENABLED || bnpls.length) ? section('BNPL', '🛍️', bnpls, BNPL_FEATURE_ENABLED ? 'ยังไม่มีกระเป๋า BNPL' : 'พบข้อมูล BNPL เดิม', false, '', 'wallet-anchor-bnpl') : '')
       + section('การลงทุน', '📈', invests, 'เพิ่มทอง / FCD เพื่อดูราคาอ้างอิง', true, '', 'wallet-anchor-invest')
       + cryptoSection
   }
@@ -15732,9 +15833,26 @@ App._pickMerchant = function(name, opts = {}) {
       // "Usage before" must only count transactions that occurred strictly earlier than the
       // reference transaction (excludeTxId), otherwise two same-block transactions each see the
       // other as "before" them and both independently claim the threshold-crossing reward.
+      const ensureCreation = typeof ensureTransactionCreationSequence === 'function'
+        ? ensureTransactionCreationSequence
+        : () => {
+          const txs = Array.isArray(S.transactions) ? S.transactions : []
+          let next = txs.reduce((highest, tx) => Math.max(highest, Number(tx?.createdSequence) || 0), 0) + 1
+          for (let i = txs.length - 1; i >= 0; i--) {
+            if (txs[i] && !Number.isFinite(Number(txs[i].createdSequence))) txs[i].createdSequence = next++
+          }
+        }
+      ensureCreation()
       const allCardTxs = S.transactions || []
       const indexById = new Map(allCardTxs.map((tx, i) => [String(tx.id || ''), i]))
+      const durableOrder = tx => {
+        const sequence = Number(tx?.createdSequence)
+        if (Number.isFinite(sequence)) return sequence
+        const created = Date.parse(String(tx?.createdAt || ''))
+        return Number.isFinite(created) ? created : (indexById.get(String(tx?.id || '')) ?? 0)
+      }
       const excludeIndex = excludeTxId ? (indexById.has(String(excludeTxId)) ? indexById.get(String(excludeTxId)) : -1) : -1
+      const excludeOrder = excludeIndex >= 0 ? durableOrder(allCardTxs[excludeIndex]) : null
       const effectiveRefDate = refDate || (excludeIndex > -1 ? resolveBenefitTxDate(allCardTxs[excludeIndex]) : '')
       const isBeforeRef = tx => {
         if (!effectiveRefDate) return true
@@ -15743,7 +15861,9 @@ App._pickMerchant = function(name, opts = {}) {
         if (d > effectiveRefDate) return false
         if (excludeIndex === -1) return true // new/unsaved draft: same-day existing txs count as prior
         const idx = indexById.get(String(tx.id || ''))
-        return idx != null && idx < excludeIndex
+        const order = durableOrder(tx)
+        if (excludeOrder == null && idx != null && idx < excludeIndex) return true
+        return idx != null && (excludeOrder != null ? order < excludeOrder : idx < excludeIndex)
       }
       const txsInCycle = allCardTxs
         .filter(tx => {
@@ -15754,7 +15874,7 @@ App._pickMerchant = function(name, opts = {}) {
           if (d < cycleStart || d > cycleEnd) return false
           return isBeforeRef(tx)
         })
-        .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+        .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || durableOrder(a) - durableOrder(b) || String(a.id || '').localeCompare(String(b.id || '')))
       if (isThresholdMode) {
         txsInCycle.forEach(tx => {
           const txCh = resolveBenefitTxChannel(tx)
@@ -16373,7 +16493,9 @@ App._pickMerchant = function(name, opts = {}) {
     const scoreFor = estimate => Number((estimate?.rankingScore ?? rewardTotalForRanking(estimate || {}, card.id)) || 0)
 
     const candidates = expandRuleSubsets(applicableRules)
-      .filter(subset => subset.filter(r => r.allowStacking === false).length <= 1)
+      // An exclusive rule may stand alone, but it must never be combined with
+      // another reward rule. Two stackable rules may still be selected together.
+      .filter(subset => subset.length === 1 || subset.every(r => r.allowStacking !== false))
       .map(subset => {
         const ids = subset.map(rule => rule.id)
         return { ids, estimate: estimateFor(ids) }
@@ -17032,14 +17154,37 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.getUpcomingItems = function(days = 60) {
     const t = today()
-    const end = addMonthsLocal(t, Math.ceil(days / 30))
+    const endDate = new Date(`${t}T00:00:00`)
+    endDate.setDate(endDate.getDate() + Math.max(0, Number(days || 0)))
+    const end = `${endDate.getFullYear()}-${String(endDate.getMonth()+1).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')}`
     const rows = []
     ;(S.recurring || []).forEach(r => {
       if (!r || r.paused) return
-      const due = r.nextDueDate || r.startDate || r.date || t
       const wallet = (S.wallets || []).find(row => row.id === r.walletId)
       const cashflowKind = r.type === 'income' ? 'income' : ['credit','bnpl'].includes(wallet?.type) ? 'liability' : 'expense'
-      if (String(due) <= end) rows.push({ id:`rec-${r.id}`, date:due, icon:r.icon || '🔁', title:r.name || 'รายการประจำ', amount:Number(r.amount || 0), type:'recurring', cashflowKind, walletId:r.walletId || '', status:String(due) < t ? 'overdue' : 'upcoming', action:`App.postRecurringNow('${esc(r.id)}')`, skip:`App.skipRecurringNow('${esc(r.id)}')` })
+      const type = r.recurrenceType === 'monthly' || r.recurringDayOfMonth || r.durationMonths || r.totalOccurrences ? 'monthly' : 'days'
+      const stepDays = Math.max(1, Number(r.everyDays || 30) || 30)
+      let due = String(r.nextDueDate || r.startDate || r.date || t)
+      let occurrence = Number(r.nextOccurrenceNo || 1) || 1
+      const total = Number(r.totalOccurrences || r.durationMonths || 0) || 0
+      let guard = 0
+      while (due && due <= end && guard++ < 1000 && (!total || occurrence <= total)) {
+        rows.push({ id:`rec-${r.id}:${occurrence}:${due}`, recurringId:r.id, date:due, icon:r.icon || '🔁', title:r.name || 'รายการประจำ', amount:Number(r.amount || 0), type:'recurring', cashflowKind, walletId:r.walletId || '', status:String(due) < t ? 'overdue' : 'upcoming', action: occurrence === Number(r.nextOccurrenceNo || 1) ? `App.postRecurringNow('${esc(r.id)}')` : '', skip: occurrence === Number(r.nextOccurrenceNo || 1) ? `App.skipRecurringNow('${esc(r.id)}')` : '' })
+        occurrence++
+        if (type === 'monthly') {
+          const [y,m,d] = due.split('-').map(Number)
+          const next = new Date(y, (m || 1), 1)
+          const preferred = Math.max(1, Math.min(31, Number(r.recurringDayOfMonth || d || 1)))
+          const last = new Date(next.getFullYear(), next.getMonth()+1, 0).getDate()
+          due = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-${String(Math.min(preferred,last)).padStart(2,'0')}`
+        } else {
+          const d = new Date(`${due}T00:00:00`); d.setDate(d.getDate() + stepDays)
+          due = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+        }
+      }
+    })
+    ;(S.upcomingBills || []).filter(b => b && b.status === 'pending' && b.dueDate && String(b.dueDate) <= end).forEach(b => {
+      rows.push({ id:`bill-${b.id}`, date:b.dueDate, icon:'🧾', title:b.title || 'รายการรอจ่าย', amount:Number(b.amount || 0), type:'upcoming_bill', cashflowKind:'expense', walletId:b.walletId || '', status:String(b.dueDate) < t ? 'overdue' : 'upcoming', open:`App.openUpcomingBillsScreen('pending')` })
     })
     ;(S.transactions || []).forEach(tx => {
       const txDate = String(tx.date || '')
@@ -17069,7 +17214,9 @@ App._pickMerchant = function(name, opts = {}) {
       if (p.remaining <= 0 || g.targetDate > end) return
       rows.push({ id:`goal-${g.id}`, date:g.targetDate, icon:g.icon || '🎯', title:`เป้าหมาย ${g.name}`, amount:p.remaining, type:'goal', status:String(g.targetDate) < t ? 'overdue' : 'upcoming', open:`App.openGoalForm('${esc(g.id)}')` })
     })
-    if (BNPL_FEATURE_ENABLED && typeof BNPL !== 'undefined') {
+    // Existing BNPL plans remain visible and payable even while creation of
+    // new BNPL entries is feature-gated off.
+    if (typeof BNPL !== 'undefined') {
       BNPL.store.getUpcomingInstallments(days).forEach(item => {
         rows.push({
           id: `bnpl-${item.planId}:${item.no}`,
@@ -17100,7 +17247,7 @@ App._pickMerchant = function(name, opts = {}) {
     const order = ['ค้างอยู่', '7 วันข้างหน้า', 'เดือนนี้ / 30 วัน', 'ถัดไป']
     const itemHtml = row => `<div class="list-item upcoming-item ${row.status === 'overdue' ? 'overdue' : ''}" ${row.open ? `onclick="${row.open}"` : ''}>
       <div class="list-item-icon">${esc(row.icon)}</div>
-      <div class="list-item-info"><div class="list-item-name">${esc(row.title)}</div><div class="list-item-sub">${thaiDate(row.date)} · ${{ recurring:'รายการประจำ', installment:'ผ่อนชำระ', credit_due:'ชำระบัตรเครดิต', scheduled:'ตามแผน', goal:'เป้าหมาย', bnpl_due:'ผ่อน BNPL' }[row.type] || esc(row.type)} · ${row.status === 'overdue' ? 'เลยกำหนด' : 'กำลังจะถึง'}</div></div>
+      <div class="list-item-info"><div class="list-item-name">${esc(row.title)}</div><div class="list-item-sub">${thaiDate(row.date)} · ${{ recurring:'รายการประจำ', installment:'ผ่อนชำระ', credit_due:'ชำระบัตรเครดิต', scheduled:'ตามแผน', upcoming_bill:'รายการรอจ่าย', goal:'เป้าหมาย', bnpl_due:'ผ่อน BNPL' }[row.type] || esc(row.type)} · ${row.status === 'overdue' ? 'เลยกำหนด' : 'กำลังจะถึง'}</div></div>
       <div style="text-align:right"><strong>${fmtHidden(row.amount)}</strong>${row.action ? `<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();${row.action}" style="width:auto">บันทึก</button>${row.skip ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();${row.skip}" style="width:auto">ข้าม</button>` : ''}</div>` : ''}</div>
     </div>`
     const html = order.filter(k => grouped[k]?.length).map(k => `<div class="sec-title">${k}</div><div class="card"><div style="padding:0 12px">${grouped[k].map(itemHtml).join('')}</div></div>`).join('')
@@ -24324,11 +24471,12 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   App.getSharedExpenseReimbursements = function(txId, opts = {}) {
-    const { fromSplitPersonId = '', splitBillId = '' } = opts || {}
+    const { fromSplitPersonId = '', splitBillId = '', includeScheduled = false } = opts || {}
     return (S.transactions || []).filter(t => {
       if (!(App.isReimbursementTx?.(t) || t.type === 'income') || t.reimbursesSharedExpenseTxId !== txId) return false
       if (fromSplitPersonId && t.fromSplitPersonId !== fromSplitPersonId) return false
       if (splitBillId && (t.reimbursementSplitBillId || t.splitBillId || '') !== splitBillId) return false
+      if (!includeScheduled && typeof App._isPostedTx === 'function' && !App._isPostedTx(t)) return false
       return true
     })
   }
@@ -24502,7 +24650,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   function openDeleteSharedSourceChoice(tx, context = {}) {
     const settlement = App.getSharedReceivableForTx?.(tx.id)
-    const reimbursements = settlement?.reimbursements || App.getSharedExpenseReimbursements?.(tx.id) || []
+    const scheduledAware = App.getSharedExpenseReimbursements?.(tx.id, { includeScheduled:true }) || []
+    const reimbursements = scheduledAware.length ? scheduledAware : (settlement?.reimbursements || [])
     if (!reimbursements.length) return false
     document.getElementById('shared-delete-choice-overlay')?.remove()
     const el = document.createElement('div')

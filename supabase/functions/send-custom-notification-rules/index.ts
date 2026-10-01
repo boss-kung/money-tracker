@@ -70,6 +70,10 @@ function shouldSend(rule: RuleRow, snapshot: SnapshotRow | undefined, now = bang
   const config = rule.trigger_config || {}
   const time = minutesOf(config.time || '09:00')
   const todayDedupe = `custom-rule:${rule.rule_id}:${now.date}`
+  const snapshotTriggers = new Set(['no_transaction_today', 'upcoming_bill_due', 'credit_card_due', 'backup_stale', 'no_tx_streak', 'budget_over', 'recurring_due_today', 'privilege_expiry'])
+  // A stale snapshot describes a previous local day. Never send a data-driven
+  // notification from it; the next client sync will make the decision again.
+  if (snapshotTriggers.has(rule.trigger_type) && snapshot?.snapshot_date !== now.date) return ''
 
   if (rule.trigger_type === 'daily_time') {
     return isInCurrentWindow(time, now.minutes) ? todayDedupe : ''

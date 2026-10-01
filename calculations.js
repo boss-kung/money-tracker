@@ -55,7 +55,9 @@ const Calc = {
     return value.toLocaleString('en-US', {
       minimumFractionDigits: minDigits,
       maximumFractionDigits: maxDigits,
-    }).replace(/\.?0+$/, '')
+    // Trim insignificant fractional zeroes only. A plain integer such as
+    // 1,000 must keep its integer zeroes.
+    }).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
   },
 
   clampDay(year, monthIndex, day) {

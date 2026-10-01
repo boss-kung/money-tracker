@@ -7,7 +7,8 @@
   'use strict'
 
   // ── Utilities ─────────────────────────────────────────────
-  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
+  const localDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const today = () => (typeof getTODAY === 'function' ? getTODAY() : localDate(new Date()))
   const SafeRender = globalThis.MTSafeRender || (typeof require === 'function' ? require('./safe_render.js') : null)
   const esc   = SafeRender.escapeHtml
   const money = n  => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : `฿${(Number(n)||0).toLocaleString('en-US')}`)
@@ -58,6 +59,64 @@
       s = s.replace(new RegExp(word, 'g'), ` ${val} `)
     }
     return s
+  }
+
+  // Parse a Thai number phrase without replacing number-like syllables inside
+  // merchant names (for example ห้าง). This handles compounds such as
+  // "หนึ่งพันสองร้อยห้าสิบ" and keeps the original text intact elsewhere.
+  const THAI_NUMBER_TOKENS = [
+    ['หนึ่ง',1],['สอง',2],['สาม',3],['สี่',4],['ห้า',5],['หก',6],['เจ็ด',7],['แปด',8],['เก้า',9],['ศูนย์',0],['เอ็ด',1],['ยี่',2],
+    ['ล้าน',1000000],['แสน',100000],['หมื่น',10000],['พัน',1000],['ร้อย',100],['สิบ',10],
+  ]
+  const THAI_NUMBER_TOKEN_RE = new RegExp(THAI_NUMBER_TOKENS.map(([word]) => word).sort((a,b) => b.length-a.length).join('|'), 'g')
+  function thaiNumberRun(value) {
+    const source = String(value || '')
+    const matches = [...source.matchAll(THAI_NUMBER_TOKEN_RE)]
+    if (!matches.length) return null
+    let run = [], best = []
+    for (const match of matches) {
+      const previous = run[run.length - 1]
+      const gap = previous ? source.slice(previous.index + previous[0].length, match.index) : ''
+      if (previous && !/^\s*$/.test(gap)) run = []
+      run.push(match)
+      if (run.length > best.length) best = [...run]
+    }
+    if (!best.length) return null
+    const start = best[0].index
+    const end = best[best.length - 1].index + best[best.length - 1][0].length
+    return { matches: best, start, end, text: source.slice(start, end) }
+  }
+  function parseThaiNumberWords(value) {
+    const source = String(value || '')
+    const run = thaiNumberRun(source)
+    if (!run) return 0
+    const best = run.matches
+    const text = run.text.replace(/\s+/g, '')
+    if (best.length === 1 && !/[สิบร้อยพันหมื่นแสนล้าน]/.test(text)) return 0
+    let cursor = 0
+    let total = 0, section = 0, current = 0
+    for (const match of best) {
+      if (match[0] !== source.slice(run.start + cursor, run.start + cursor + match[0].length)) return 0
+      cursor += match[0].length
+      const token = THAI_NUMBER_TOKENS.find(([word]) => word === match[0])
+      if (!token) return 0
+      const valueNum = token[1]
+      if (valueNum >= 10) {
+        const multiplier = current || 1
+        if (valueNum === 1000000) {
+          section += multiplier
+          total += section * valueNum
+          section = 0
+        } else {
+          section += multiplier * valueNum
+        }
+        current = 0
+      } else {
+        current += valueNum
+      }
+    }
+    if (cursor !== text.length) return 0
+    return total + section + current
   }
 
   // ── Parser: Type keywords ─────────────────────────────────
@@ -130,14 +189,14 @@
       if (re.test(c)) {
         d.setDate(d.getDate() + days)
         c = c.replace(re, '').replace(/\s+/g, ' ').trim()
-        return { date: d.toISOString().slice(0, 10), clean: c }
+        return { date: localDate(d), clean: c }
       }
     }
     const mDays = c.match(/(\d+)\s*วันก่อน/)
     if (mDays) {
       d.setDate(d.getDate() - parseInt(mDays[1], 10))
       c = c.replace(mDays[0], '').replace(/\s+/g, ' ').trim()
-      return { date: d.toISOString().slice(0, 10), clean: c }
+      return { date: localDate(d), clean: c }
     }
     return { date: t, clean: c }
   }
@@ -266,13 +325,34 @@
       if (val > 0) return { raw: m[1] || m[2] || m[0], val, idx: m.index, fullMatch: m[0] }
     }
 
+    // Thai number words followed by บาท/บ. (keep the whole phrase in the
+    // match so it is removed from the merchant text after extraction). Only
+    // remove the number span; the merchant text before it must be preserved.
+    const thaiUnit = /([ก-๛\s]+?)\s*(?:บาท|บ\.)/g
+    for (const m of text.matchAll(thaiUnit)) {
+      const run = thaiNumberRun(m[1])
+      if (!run) continue
+      const val = parseThaiNumberWords(run.text)
+      if (val > 0) {
+        const idx = m.index + run.start
+        const fullMatch = text.slice(idx, m.index + m[0].length)
+        return { raw: run.text, val, idx, fullMatch }
+      }
+    }
+
     // Priority 2: largest plain number (exclude likely years)
     const re      = new RegExp(NUM, 'g')
     const matches = [...text.matchAll(re)]
     if (!matches.length) return null
+    const hasDateContext = /(?:ปี|ค\.?ศ\.?|พ\.?ศ\.?|วันที่|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b)/i.test(text)
     const nums = matches
-      .map(m => ({ raw: m[0], val: parseFloat(m[0].replace(/,/g, '')), idx: m.index, fullMatch: m[0] }))
-      .filter(n => n.val > 0 && !(n.val >= 2000 && n.val <= 2100 && n.raw.replace(/,/g, '').length === 4))
+      .map(m => {
+        const raw = m[0]
+        const val = parseFloat(raw.replace(/,/g, ''))
+        const ambiguousYear = val >= 2000 && val <= 2100 && raw.replace(/,/g, '').length === 4
+        return { raw, val, idx: m.index, fullMatch: raw, ambiguousYear }
+      })
+      .filter(n => n.val > 0 && !(n.ambiguousYear && hasDateContext))
     if (!nums.length) return null
     return [...nums].sort((a, b) => b.val - a.val)[0]
   }
@@ -471,7 +551,6 @@
     if (!raw || !raw.trim()) return null
 
     let text = normalizeThaiDigits(raw.trim())
-    text = replaceThaiNumbers(text)
     text = text.replace(/\s+/g, ' ').trim()
 
     // 1. Type
@@ -566,7 +645,7 @@
 
     const canQuickSave = amount > 0 && !!categoryId
     const confidence   = canQuickSave
-      ? (merchant ? 'high' : 'medium')
+      ? (merchant && !amountMatch.ambiguousYear ? 'high' : 'medium')
       : 'low_nocat'
 
     return { amount, type, merchant, categoryId, walletId, note: '', date, confidence, rawInput: raw.trim() }
@@ -653,7 +732,7 @@
     if (iso === t) return 'วันนี้'
     const yd = new Date(t + 'T00:00:00')
     yd.setDate(yd.getDate() - 1)
-    if (iso === yd.toISOString().slice(0, 10)) return 'เมื่อวาน'
+    if (iso === localDate(yd)) return 'เมื่อวาน'
     const [y, m, d] = (iso || '').split('-')
     return (d && m && y) ? `${d}/${m}/${y}` : (iso || '')
   }

@@ -157,7 +157,8 @@
   function keypadHtml() {
     const config = readConfig()
     const canUseBiometric = !!(config?.biometric?.enabled && config?.biometric?.credentialId && hasWebAuthn())
-    return `<div class="mt-lock-dots" aria-hidden="true">${Array.from({ length: MIN_PIN_LENGTH }).map((_, i) => `<span class="${enteredPin.length > i ? 'filled' : ''}"></span>`).join('')}</div>
+    const dotCount = Math.max(MIN_PIN_LENGTH, Number(config?.pinLength || MIN_PIN_LENGTH))
+    return `<div class="mt-lock-dots" aria-hidden="true">${Array.from({ length: dotCount }).map((_, i) => `<span class="${enteredPin.length > i ? 'filled' : ''}"></span>`).join('')}</div>
       ${canUseBiometric ? `<button class="mt-lock-biometric-btn" type="button" onclick="MTAppLock.unlockWithBiometric()">ใช้ Face ID / Touch ID</button>` : ''}
       <div class="mt-lock-keypad">
         ${[1,2,3,4,5,6,7,8,9].map(n => `<button type="button" onpointerdown="MTAppLock.pressFromPointer(event,'${n}')">${n}</button>`).join('')}
@@ -165,6 +166,7 @@
         <button type="button" onpointerdown="MTAppLock.pressFromPointer(event,'0')">0</button>
         <button type="button" class="ghost" onpointerdown="MTAppLock.backspaceFromPointer(event)">ลบ</button>
       </div>`
+      + `<button type="button" class="btn btn-primary mt-lock-submit" onclick="MTAppLock.verify()" ${enteredPin.length < MIN_PIN_LENGTH ? 'disabled' : ''}>ยืนยัน</button>`
   }
   function renderUnlock(message = '', opts = {}) {
     mode = 'unlock'
@@ -234,9 +236,13 @@
     if (mode !== 'unlock') return
     const dots = document.querySelector('#mt-app-lock .mt-lock-dots')
     if (!dots) return
-    dots.innerHTML = Array.from({ length: MIN_PIN_LENGTH })
+    const dotCount = Math.max(MIN_PIN_LENGTH, Number(readConfig()?.pinLength || MIN_PIN_LENGTH))
+    dots.innerHTML = Array.from({ length: dotCount })
       .map((_, i) => `<span class="${enteredPin.length > i ? 'filled' : ''}"></span>`)
       .join('')
+    const submit = document.querySelector('#mt-app-lock .mt-lock-submit')
+    const configuredLength = Number(readConfig()?.pinLength || 0)
+    if (submit) submit.disabled = configuredLength > 0 ? enteredPin.length !== configuredLength : enteredPin.length < MIN_PIN_LENGTH
   }
   function unlockSuccess(config, method = 'pin') {
     unlocked = true
@@ -415,6 +421,7 @@
           iterations: ITERATIONS,
           lockOnBackground: true,
           lockTimeoutMs: 0,
+          pinLength: pinA.length,
           failureCount: 0,
           lockedUntil: 0,
           createdAt: new Date().toISOString(),
@@ -489,11 +496,18 @@
       if (enteredPin.length >= MAX_PIN_LENGTH) return
       enteredPin += String(value)
       refreshKeypad()
-      if (enteredPin.length >= MIN_PIN_LENGTH) verifyEnteredPin()
+      // PIN length is user-configurable (6–12), so verification is explicit.
+      // Auto-submitting at six digits would reject every longer PIN.
     },
     backspace() {
       enteredPin = enteredPin.slice(0, -1)
       refreshKeypad()
+    },
+    verify() {
+      const configuredLength = Number(readConfig()?.pinLength || 0)
+      if (enteredPin.length < MIN_PIN_LENGTH || enteredPin.length > MAX_PIN_LENGTH) return false
+      if (configuredLength > 0 && enteredPin.length !== configuredLength) return false
+      return verifyEnteredPin()
     },
     cancel() {
       if (mode === 'unlock' && readConfig()?.enabled) return

@@ -225,9 +225,15 @@
       return txDate > period.end && txDate <= dueDate
         && legacyPaymentStatementId(card, t, transactions) === id
     })
+    const credits = transactions.filter(t =>
+      t && t.type === 'income' && String(t.walletId || '') === String(card.id) &&
+      String(t.date || '') >= period.start && String(t.date || '') <= period.end &&
+      isPostedAt(t, postedRefDate || refDate, isPostedTx)
+    )
     const purchaseTotal = Math.round(purchases.reduce((sum, tx) => sum + Number(typeof amountForTx === 'function' ? amountForTx(tx) : tx.amount || 0), 0) * 100) / 100
     const paidTotal = Math.round(payments.reduce((sum, tx) => sum + Number(tx.amount || 0), 0) * 100) / 100
-    const balanceDue = Math.max(0, Math.round((purchaseTotal - paidTotal) * 100) / 100)
+    const creditTotal = Math.round(credits.reduce((sum, tx) => sum + Number(tx.amount || 0), 0) * 100) / 100
+    const balanceDue = Math.max(0, Math.round((purchaseTotal - paidTotal - creditTotal) * 100) / 100)
     const reward = purchases.reduce((sum, tx) => {
       const est = typeof rewardForTx === 'function' ? rewardForTx(tx) : { points:0, cashback:0, discount:0 }
       sum.points += Number(est.points || 0)
@@ -238,7 +244,7 @@
     reward.points = Math.floor(reward.points)
     reward.cashback = Math.round(reward.cashback * 100) / 100
     reward.discount = Math.round(reward.discount * 100) / 100
-    return { id, cardId:card.id, start:period.start, end:period.end, dueDate, dueAfterCycleDays:clampDueAfter(card.dueAfterCycleDays || 10), purchases, payments, purchaseTotal, paidTotal, balanceDue, paid:balanceDue <= 0 && purchaseTotal > 0, reward }
+    return { id, cardId:card.id, start:period.start, end:period.end, dueDate, dueAfterCycleDays:clampDueAfter(card.dueAfterCycleDays || 10), purchases, payments, credits, purchaseTotal, paidTotal, creditTotal, balanceDue, paid:balanceDue <= 0 && purchaseTotal > 0, reward }
   }
 
   function shiftStatementRef(statement, deltaCycles) {
@@ -284,7 +290,17 @@
     const historyCount = Math.max(Number(lookback) || 0, refMonth !== null && oldestMonth !== null
       ? Math.max(0, refMonth - oldestMonth) + 3
       : Number(lookback) || 0)
-    return getStatementHistory({ card, transactions, refDate, count:historyCount, rewardForTx, amountForTx, isPostedTx })
+    const rows = getStatementHistory({ card, transactions, refDate, count:historyCount, rewardForTx, amountForTx, isPostedTx })
+    // openingBalance is the signed card baseline. Carry an opening debt into
+    // the next payable statement once, so a card opened with an existing debt
+    // cannot appear debt-free until a new purchase is made.
+    const openingDebt = Math.max(0, -Number(card?.openingBalance || 0))
+    if (openingDebt > 0 && rows.length && !rows.some(row => row.openingDebtIncluded)) {
+      const first = rows[0]
+      const combinedBalance = Math.max(0, Math.round((Number(first.purchaseTotal || 0) + openingDebt - Number(first.paidTotal || 0) - Number(first.creditTotal || 0)) * 100) / 100)
+      rows[0] = { ...first, openingDebt, openingDebtIncluded:true, purchaseTotal:Math.round((Number(first.purchaseTotal || 0) + openingDebt) * 100) / 100, balanceDue:combinedBalance, paid:combinedBalance <= 0 }
+    }
+    return rows
       .filter(st => Number(st.balanceDue || 0) > 0)
       .filter(st => includeOverdue || String(st.dueDate || '') >= String(refDate || ''))
       .map(st => ({ ...st, daysLeft:daysBetween(st.dueDate, refDate) }))
