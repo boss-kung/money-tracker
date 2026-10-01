@@ -46,7 +46,9 @@ const APP_KEYS = [
   'mt_credit_limit_groups','mt_reward_accounts','mt_crypto_assets','mt_crypto_holdings',
   'mt_crypto_transactions','mt_crypto_sync_meta','mt_goals','mt_privileges',
   'mt_credit_card_promo_searches','mt_credit_card_promotions','mt_split_bills','mt_split_people',
-  'mt_split_bill_draft','mt_migrations'
+  'mt_split_bill_draft','mt_loans','mt_bnpl_plans','mt_migrations',
+  'mt_ai_insight_store','mt_financial_profile','mt_financial_memory','mt_monthly_financial_features',
+  'mt_finance_feature_store_meta','mt_financial_recommendation_feedback','mt_financial_action_log','mt_financial_life_plans'
 ]
 const FIELD_MAP = {
   transactions:'mt_transactions', wallets:'mt_wallets', categories:'mt_categories', budgets:'mt_budgets',
@@ -58,7 +60,11 @@ const FIELD_MAP = {
   cryptoTransactions:'mt_crypto_transactions', cryptoSyncMeta:'mt_crypto_sync_meta', goals:'mt_goals',
   privileges:'mt_privileges', creditCardPromoSearches:'mt_credit_card_promo_searches',
   creditCardPromotions:'mt_credit_card_promotions', splitBills:'mt_split_bills', splitPeople:'mt_split_people',
-  splitBillDraft:'mt_split_bill_draft', migrations:'mt_migrations'
+  splitBillDraft:'mt_split_bill_draft', loans:'mt_loans', bnplPlans:'mt_bnpl_plans', migrations:'mt_migrations',
+  aiInsightStore:'mt_ai_insight_store', financialProfile:'mt_financial_profile', financialMemory:'mt_financial_memory',
+  monthlyFinancialFeatures:'mt_monthly_financial_features', financeFeatureStoreMeta:'mt_finance_feature_store_meta',
+  financialRecommendationFeedback:'mt_financial_recommendation_feedback', financialActionLog:'mt_financial_action_log',
+  financialLifePlans:'mt_financial_life_plans'
 }
 function readJSON(key, fallback = null) {
   try {
@@ -131,9 +137,29 @@ function scan() {
   }
   document.getElementById('status').textContent = JSON.stringify(info, null, 2)
   const options = candidates()
-  document.getElementById('restore-options').innerHTML = options.length
-    ? options.map(c => `<div class="card"><strong>${c.label}</strong><p>${c.summary.transactions} transactions · ${c.summary.wallets} wallets<br>${c.summary.firstWallets || ''}</p><button onclick="restore('${c.id}')">กู้คืนชุดนี้</button></div>`).join('')
-    : '<p class="warn">ยังไม่พบ backup อัตโนมัติใน localStorage ถ้าคุณเคย export JSON ไว้ ให้กลับไปใช้เมนูนำเข้าไฟล์ backup ในแอปจริง</p>'
+  const container = document.getElementById('restore-options')
+  container.replaceChildren()
+  if (!options.length) {
+    const empty = document.createElement('p')
+    empty.className = 'warn'
+    empty.textContent = 'ยังไม่พบ backup อัตโนมัติใน localStorage ถ้าคุณเคย export JSON ไว้ ให้กลับไปใช้เมนูนำเข้าไฟล์ backup ในแอปจริง'
+    container.appendChild(empty)
+    return
+  }
+  options.forEach(candidate => {
+    const card = document.createElement('div')
+    card.className = 'card'
+    const title = document.createElement('strong')
+    title.textContent = candidate.label
+    const summary = document.createElement('p')
+    summary.textContent = `${candidate.summary.transactions} transactions · ${candidate.summary.wallets} wallets${candidate.summary.firstWallets ? `\n${candidate.summary.firstWallets}` : ''}`
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = 'กู้คืนชุดนี้'
+    button.addEventListener('click', () => restore(candidate.id))
+    card.append(title, summary, button)
+    container.appendChild(card)
+  })
 }
 scan()
 </script>

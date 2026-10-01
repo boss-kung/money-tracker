@@ -3,6 +3,16 @@ const assert = require('node:assert/strict')
 
 const Calc = require('../calculations.js')
 
+test('positive credit-card balances are credits rather than debt', () => {
+  const result = Calc.getNetWorth([
+    { id: 'card-credit', type: 'credit', balance: 800 },
+    { id: 'card-debt', type: 'credit', balance: -1200 },
+    { id: 'cash', type: 'cash', balance: 5000 },
+  ])
+  assert.equal(result.assets, 5000)
+  assert.equal(result.debt, 1200)
+})
+
 test('shared expense counts only personal share in expense reports', () => {
   const txs = [
     {
@@ -58,8 +68,43 @@ test('reimbursement increases cash-inflow metadata but not normal income', () =>
   assert.equal(monthly.income, 0)
   assert.equal(monthly.reimbursementInflow, 750)
   assert.equal(monthly.netCashflow, -250)
-  assert.equal(monthly.cashNetCashflow, 500)
+  assert.equal(monthly.cashNetCashflow, -250)
   assert.equal(incomeBreakdown.length, 0)
+})
+
+test('cashflow includes actual card cash payment without counting the purchase again', () => {
+  const txs = [
+    { id:'purchase', type:'expense', amount:5000, walletId:'card', date:'2026-04-10' },
+    { id:'payment', type:'cc_payment', amount:5000, walletId:'bank', toWalletId:'card', date:'2026-05-01' },
+  ]
+  const monthly = Calc.getMonthlyIncomeExpense(txs, '2026-05')
+  assert.equal(monthly.expense, 0)
+  assert.equal(monthly.cashNetCashflow, -5000)
+})
+
+test('cashflow excludes credit-card purchases and counts only their cash payment', () => {
+  const monthly = Calc.getMonthlyIncomeExpense([
+    { id:'purchase', type:'expense', amount:5000, walletId:'card', date:'2026-05-01' },
+    { id:'payment', type:'cc_payment', amount:5000, walletId:'bank', toWalletId:'card', date:'2026-05-02' },
+  ], '2026-05', [], [
+    { id:'card', type:'credit', balance:-5000 },
+    { id:'bank', type:'bank', balance:10000 },
+  ])
+  assert.equal(monthly.expense, 5000)
+  assert.equal(monthly.cashNetCashflow, -5000)
+})
+
+test('cashflow includes loan principal outflow and posted repayment inflow', () => {
+  const monthly = Calc.getMonthlyIncomeExpense([], '2026-05', [
+    {
+      id: 'loan-1',
+      amount: 2000,
+      walletId: 'cash',
+      date: '2026-05-02',
+      repayments: [{ id: 'rep-1', amount: 700, walletId: 'cash', date: '2026-05-20' }],
+    },
+  ])
+  assert.equal(monthly.cashNetCashflow, -1300)
 })
 
 test('legacy monthly stats helper also excludes reimbursements from income', () => {
@@ -98,7 +143,7 @@ test('legacy monthly stats helper also excludes reimbursements from income', () 
   assert.equal(stats.expense, 250)
   assert.equal(stats.reimbursementInflow, 750)
   assert.equal(stats.net, 49750)
-  assert.equal(stats.cashNet, 50500)
+  assert.equal(stats.cashNet, 49750)
 })
 
 test('income category breakdown can include reimbursements only when explicitly requested', () => {

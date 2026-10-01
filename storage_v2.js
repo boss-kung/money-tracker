@@ -74,9 +74,19 @@ const Storage = {
     return clean
   },
 
-  isLocalStorageAvailable() {
+  isLocalStorageReadable() {
     try {
-      if (typeof localStorage === 'undefined') return false
+      return typeof localStorage !== 'undefined'
+        && typeof localStorage.getItem === 'function'
+        && typeof localStorage.key === 'function'
+    } catch (_) {
+      return false
+    }
+  },
+
+  isLocalStorageWritable() {
+    try {
+      if (!Storage.isLocalStorageReadable() || typeof localStorage.setItem !== 'function') return false
       const probeKey = '__mt_storage_probe__'
       localStorage.setItem(probeKey, '1')
       const ok = localStorage.getItem(probeKey) === '1'
@@ -85,6 +95,11 @@ const Storage = {
     } catch (_) {
       return false
     }
+  },
+
+  // Kept as a compatibility alias for callers that only need to read state.
+  isLocalStorageAvailable() {
+    return Storage.isLocalStorageReadable()
   },
 
   _stringify(data) {
@@ -136,7 +151,7 @@ const Storage = {
   },
 
   load(key) {
-    if (!Storage.isLocalStorageAvailable()) {
+    if (!Storage.isLocalStorageReadable()) {
       Storage.lastLoadError = { key, message: 'localStorage unavailable', at: new Date().toISOString() }
       return null
     }
@@ -169,7 +184,7 @@ const Storage = {
   },
 
   save(key, data, _retried = false) {
-    if (!Storage.isLocalStorageAvailable()) {
+    if (!Storage.isLocalStorageWritable()) {
       Storage.lastSaveError = { key, message: 'localStorage unavailable', at: new Date().toISOString() }
       setTimeout(() => {
         if (typeof toast === 'function') toast('อุปกรณ์นี้ไม่พร้อมบันทึก local storage กรุณาส่งออกข้อมูลสำรองไว้ก่อน', 'error')
@@ -220,7 +235,7 @@ const Storage = {
   },
 
   verifyKey(key, expectedData) {
-    if (!Storage.isLocalStorageAvailable()) {
+    if (!Storage.isLocalStorageReadable()) {
       Storage.lastVerifyError = { key, message: 'localStorage unavailable', at: new Date().toISOString() }
       return false
     }
@@ -283,20 +298,57 @@ const Storage = {
 
   saveAll(state) {
     if (!state || typeof state !== 'object') return false
-    const results = Object.entries(COLLECTIONS)
-      .filter(([, descriptor]) => descriptor.state !== false)
-      .map(([name, descriptor]) => {
+    if (!Storage.isLocalStorageReadable()) {
+      Storage.lastSaveError = { key: '*', message: 'localStorage unavailable', at: new Date().toISOString() }
+      return false
+    }
+
+    const entries = Object.entries(COLLECTIONS).filter(([, descriptor]) => descriptor.state !== false)
+    const previous = new Map()
+    const serialized = new Map()
+    try {
+      entries.forEach(([name, descriptor]) => {
         const value = state[name] !== undefined
           ? state[name]
           : descriptor.defaultValue({ hasExistingPrimaryData:true, name })
-        return Storage.save(descriptor.key, value)
+        previous.set(descriptor.key, localStorage.getItem(descriptor.key))
+        serialized.set(descriptor.key, Storage._stringify(value))
       })
-    if (!results.every(Boolean)) return false
-    const verification = Storage.verifyState(state, ['transactions', 'wallets', 'settings', 'upcomingBills'])
-    return verification.ok
+    } catch (e) {
+      Storage.lastSaveError = { key: '*', message: e?.message || 'save snapshot failed', at: new Date().toISOString() }
+      return false
+    }
+
+    let committed = false
+    try {
+      for (const [key, payload] of serialized) {
+        localStorage.setItem(key, payload)
+        if (localStorage.getItem(key) !== payload) throw new Error(`readback mismatch after save: ${key}`)
+      }
+      const verification = Storage.verifyState(state, ['transactions', 'wallets', 'settings', 'upcomingBills'])
+      committed = verification.ok
+      if (!committed) throw new Error(`state verification failed: ${verification.failures.join(', ')}`)
+      Storage.lastSaveError = null
+      Storage.lastVerifyError = null
+      return true
+    } catch (e) {
+      Storage.lastSaveError = { key: '*', message: e?.message || 'save failed', at: new Date().toISOString() }
+      return false
+    } finally {
+      if (!committed) {
+        // Best-effort rollback restores the last coherent snapshot. Existing values
+        // are never replaced by a partially-written state when one key fails.
+        for (const [key, raw] of previous) {
+          try {
+            if (raw === null || raw === undefined) localStorage.removeItem(key)
+            else localStorage.setItem(key, raw)
+          } catch (_) {}
+        }
+      }
+    }
   },
 
-  buildExportPayload(state) {
+  buildExportPayload(state, { preferState = false } = {}) {
     const payload = {
       backupSchemaVersion: BACKUP_SCHEMA_VERSION,
       source: 'money-tracker-v2',
@@ -307,7 +359,7 @@ const Storage = {
       const fallback = BACKUP_DEFAULTS[key]
       const descriptor = COLLECTIONS[key]
       let value = state?.[key]
-      if (descriptor.state === false || descriptor.preferStoredForBackup) {
+      if (!preferState && (descriptor.state === false || descriptor.preferStoredForBackup)) {
         value = Storage.load(descriptor.key)
         if (value === null) value = state?.[key]
       }
@@ -371,8 +423,8 @@ const Storage = {
     return normalized
   },
 
-  exportJSON(state, filename = '') {
-    const data = Storage.buildExportPayload(state)
+  exportJSON(state, filename = '', options = {}) {
+    const data = Storage.buildExportPayload(state, options)
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     return Storage.triggerDownload(blob, filename || `backup-${(typeof getTODAY === 'function' ? getTODAY() : TODAY)}.json`)
   },
@@ -477,7 +529,12 @@ const Storage = {
   },
 
   reset() {
-    Object.values(KEYS).forEach(k => localStorage.removeItem(k))
+    Object.values(KEYS).forEach(k => {
+      try { localStorage.removeItem(k) } catch (_) {}
+    })
+    try { localStorage.removeItem(LOCAL_BACKUP_KEY) } catch (_) {}
+    try { localStorage.removeItem('mt_pre_import_backup') } catch (_) {}
+    try { localStorage.removeItem('mt_pre_migration_backup') } catch (_) {}
   },
 }
 

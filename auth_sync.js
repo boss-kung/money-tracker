@@ -7,6 +7,7 @@
   const PKCE_VERIFIER_KEY = 'mt_auth_sync_pkce_verifier'
   const DEVICE_RECOVERY_KEY = 'mt_auth_sync_recovery_key'
   let _deviceRecoveryKeyMemory = '' // in-memory primary store; never touches localStorage
+  let _deviceRecoveryKeyOwnerId = ''
   const FRESH_START_KEY = 'mt_auth_fresh_start'
   const DIRTY_DEBOUNCE_MS = 2500
   const STORAGE_BRIDGE_TIMEOUT_MS = 8000
@@ -21,6 +22,7 @@
     vaultMeta: null,
     dataKey: null,
     dirty: false,
+    dirtyRevision: 0,
     syncing: false,
     debounceTimer: null,
     accountMenuOpen: false,
@@ -72,6 +74,33 @@
 
   function storageSave(next) {
     try { localStorage.setItem(STATE_KEY, JSON.stringify({ ...storageLoad(), ...next })) } catch (_) {}
+  }
+
+  function restoreDurableDirtyState(saved = storageLoad()) {
+    const ownerId = String(saved?.dirtyUserId || saved?.userId || '')
+    if (!state.user?.id || ownerId !== String(state.user.id)) {
+      state.dirtyRevision = 0
+      state.dirty = false
+      return
+    }
+    const localRevision = Math.max(0, Number(saved?.localRevision || 0))
+    const syncedRevision = Math.max(0, Number(saved?.syncedRevision || 0))
+    state.dirtyRevision = Math.max(localRevision, syncedRevision)
+    state.dirty = localRevision > syncedRevision
+  }
+
+  function acknowledgeDurableRevision(revision, { dirty = false } = {}) {
+    const acknowledged = Math.max(0, Number(revision || 0))
+    const saved = storageLoad()
+    const localRevision = Math.max(acknowledged, Number(saved?.localRevision || 0), Number(state.dirtyRevision || 0))
+    const syncedRevision = dirty
+      ? Math.max(0, Number(saved?.syncedRevision || 0), acknowledged)
+      : localRevision
+    storageSave({
+      dirtyUserId: state.user?.id || '',
+      localRevision,
+      syncedRevision,
+    })
   }
 
   function appStorage() {
@@ -171,6 +200,7 @@
       vaultVersion: state.vaultMeta?.data_version || null,
       vaultConfirmedEmpty: Boolean(state.vaultConfirmedEmpty),
       dirty: Boolean(state.dirty),
+      dirtyRevision: Number(state.dirtyRevision || 0),
       syncing: Boolean(state.syncing),
       accountMenuOpen: Boolean(state.accountMenuOpen),
       buttonText: document.getElementById('mt-auth-gate')?.innerText || '',
@@ -187,22 +217,38 @@
   }
 
   function readDeviceRecoveryKey() {
-    if (_deviceRecoveryKeyMemory) return _deviceRecoveryKeyMemory
+    if (_deviceRecoveryKeyMemory) {
+      return !_deviceRecoveryKeyOwnerId || !_userOwnsRecoveryKey(_deviceRecoveryKeyOwnerId)
+        ? ''
+        : _deviceRecoveryKeyMemory
+    }
     try {
-      const stored = localStorage.getItem(DEVICE_RECOVERY_KEY) || ''
-      if (stored) _deviceRecoveryKeyMemory = stored
-      return stored
+      const raw = localStorage.getItem(DEVICE_RECOVERY_KEY) || ''
+      if (!raw) return ''
+      const stored = JSON.parse(raw)
+      if (!stored?.key || !_userOwnsRecoveryKey(stored.userId)) return ''
+      _deviceRecoveryKeyMemory = String(stored.key)
+      _deviceRecoveryKeyOwnerId = String(stored.userId)
+      return _deviceRecoveryKeyMemory
     } catch (_) { return '' }
+  }
+
+  function _userOwnsRecoveryKey(ownerId) {
+    return !!state.user?.id && String(ownerId || '') === String(state.user.id)
   }
 
   function saveDeviceRecoveryKey(recoveryKey) {
     const key = String(recoveryKey || '')
     _deviceRecoveryKeyMemory = key
-    try { localStorage.setItem(DEVICE_RECOVERY_KEY, key) } catch (_) {}
+    _deviceRecoveryKeyOwnerId = String(state.user?.id || '')
+    try {
+      localStorage.setItem(DEVICE_RECOVERY_KEY, JSON.stringify({ userId: _deviceRecoveryKeyOwnerId, key }))
+    } catch (_) {}
   }
 
   function clearDeviceRecoveryKey() {
     _deviceRecoveryKeyMemory = ''
+    _deviceRecoveryKeyOwnerId = ''
     try { localStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
     try { sessionStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
   }
@@ -278,6 +324,7 @@
   }
 
   async function setSession(session, { _silent = false } = {}) {
+    const savedBeforeSession = storageLoad()
     state.session = session
     state.user = await fetchUser(session)
     if (!isGoogleSession(session, state.user)) {
@@ -291,6 +338,7 @@
       userId: state.user.id,
       email: state.user.email || '',
     })
+    restoreDurableDirtyState(savedBeforeSession)
     await waitForStorageBridge()
     await pullRemoteVault({ silent: true })
     await ensureFirstRunBackup()
@@ -364,6 +412,7 @@
         token_type: 'bearer',
       }
       state.user = { id: saved.userId, email: saved.email }
+      restoreDurableDirtyState(saved)
       scheduleBackgroundTokenRefresh(saved)
       return state
     }
@@ -412,12 +461,16 @@
     state.dataKey = null
     state.vaultMeta = null
     state.dirty = false
+    state.dirtyRevision = 0
     state.syncing = false
     state.vaultConfirmedEmpty = false
-    storageSave({ accessToken: '', refreshToken: '', expiresAt: 0, userId: '', email: '' })
-    // Recovery key is device-specific and vault-specific — keep it in sessionStorage so
-    // the user is auto-unlocked on the next sign-in within the same browser session.
-    // Only clear it when the vault itself is deleted (reset-demo-vault).
+    storageSave({
+      accessToken: '', refreshToken: '', expiresAt: 0, userId: '', email: '',
+      dirtyUserId: '', localRevision: 0, syncedRevision: 0,
+    })
+    // Recovery key is device-specific and user-scoped. Keep it so the same account
+    // can auto-unlock on the next sign-in; readDeviceRecoveryKey rejects it for
+    // every other user. It is cleared when the vault/account is deleted.
     try { localStorage.removeItem(PKCE_VERIFIER_KEY) } catch (_) {}
     if (clearLocalData) {
       try { appStorage()?.reset?.() } catch (_) {}
@@ -572,17 +625,21 @@
     return saved
   }
 
-  async function vaultRequest(method, body) {
+  async function vaultRequest(method, body, expectedVersion = null) {
     const cfg = getConfig()
     if (!state.session?.access_token) throw new Error('ต้องเข้าสู่ระบบก่อน sync')
-    const query = method === 'POST'
-      ? 'on_conflict=user_id'
+    let query = method === 'POST'
+      ? ''
       : `user_id=eq.${encodeURIComponent(state.user.id)}`
+    if (method === 'PATCH') {
+      if (!Number.isFinite(Number(expectedVersion)) || Number(expectedVersion) < 1) throw new Error('Missing vault revision for update')
+      query += `&data_version=eq.${encodeURIComponent(Number(expectedVersion))}`
+    }
     const response = await fetch(`${cfg.supabaseUrl}/rest/v1/${VAULT_TABLE}?${query}`, {
       method,
       headers: {
         ...authHeaders(),
-        Prefer: method === 'POST' ? 'resolution=merge-duplicates,return=representation' : 'return=representation',
+        Prefer: 'return=representation',
       },
       body: body ? JSON.stringify(body) : undefined,
     })
@@ -667,6 +724,7 @@
     state.vaultMeta = Array.isArray(saved) ? saved[0] : row
     state.locked = false
     state.dirty = false
+    acknowledgeDurableRevision(state.dirtyRevision)
     rememberAppliedVaultVersion(state.vaultMeta)
     render()
     if (!options.silent) toastSafe('บันทึกข้อมูลไว้แล้ว', 'success')
@@ -690,12 +748,12 @@
     console.debug('[MTAuthSync] vault deleted')
   }
 
-  async function deleteAccount() {
-    await deleteVault()
+  async function deleteAccount(otp) {
     const cfg = getConfig()
     const resp = await fetch(`${cfg.supabaseUrl}/functions/v1/delete-account`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ otp: String(otp || '').replace(/\D/g, '') }),
     })
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}))
@@ -710,19 +768,17 @@
 
   async function sendDeleteOtp() {
     if (!state.session?.access_token) throw new Error('ต้องเข้าสู่ระบบก่อน')
-    await requestAuth('/reauthenticate', {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${state.session.access_token}` },
+    const cfg = getConfig()
+    const response = await fetch(`${cfg.supabaseUrl}/functions/v1/send-delete-otp`, {
+      method: 'POST',
+      headers: authHeaders(),
     })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(data?.error || 'ส่ง OTP ไม่สำเร็จ')
   }
 
   async function verifyOtpAndDelete(token) {
-    await requestAuth('/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, type: 'reauthentication' }),
-    })
-    await deleteAccount()
+    await deleteAccount(token)
   }
 
   function showDeleteAccountSheet() {
@@ -865,14 +921,21 @@
     state.dataKey = dataKey
     state.locked = false
     state.vaultMeta = row
+    if (state.dirty) setTimeout(autoSyncIfReady, 0)
     render()
     if (!options.silent) toastSafe('กู้ข้อมูลสำเร็จ', 'success')
     return payload
   }
 
   async function pushEncryptedVault(recoveryKey = '') {
+    // Keep the revision observed before the refresh. pullRemoteVault updates
+    // state.vaultMeta, so comparing against state.vaultMeta afterwards would
+    // always compare the remote row with itself and miss a concurrent update.
+    const knownMeta = state.vaultMeta
     const remote = await pullRemoteVault({ silent: true })
-    if (remote && state.vaultMeta && Number(remote.data_version || 0) > Number(state.vaultMeta.data_version || 0)) {
+    const remoteVersion = Number(remote?.data_version || 0)
+    const knownVersion = Number(knownMeta?.data_version || 0)
+    if (remote && (!knownMeta || remoteVersion > knownVersion)) {
       // Remote is newer — if we have no local pending changes, silently apply remote.
       // Only show conflict dialog when both sides have unmerged changes.
       if (!state.dirty) {
@@ -883,10 +946,38 @@
     }
     if (!state.dataKey && !recoveryKey) throw new Error('ต้องกรอกรหัสกู้ข้อมูลก่อนบันทึก')
     await waitForStorageBridge()
-    const row = await buildEncryptedRow(recoveryKey, currentPayload(), remote || state.vaultMeta)
-    const saved = await vaultRequest('POST', row)
-    state.vaultMeta = Array.isArray(saved) ? saved[0] : row
-    state.dirty = false
+    const uploadRevision = Number(state.dirtyRevision || 0)
+    const previous = remote || state.vaultMeta
+    const row = await buildEncryptedRow(recoveryKey, currentPayload(), previous)
+    let saved
+    if (previous) {
+      saved = await vaultRequest('PATCH', row, previous.data_version)
+      if (!Array.isArray(saved) || !saved[0]) {
+        const latest = await pullRemoteVault({ silent: true })
+        if (latest) return handleRemoteConflict(latest)
+        throw new Error('ไม่สามารถยืนยัน revision ของ vault ได้ จึงหยุดการบันทึกเพื่อป้องกันข้อมูลทับกัน')
+      }
+    } else {
+      try {
+        saved = await vaultRequest('POST', row)
+      } catch (error) {
+        // Another device may have created the first row while this request was in flight.
+        const latest = await pullRemoteVault({ silent: true })
+        if (latest) return handleRemoteConflict(latest)
+        throw error
+      }
+      if (!Array.isArray(saved) || !saved[0]) {
+        const latest = await pullRemoteVault({ silent: true })
+        if (latest) return handleRemoteConflict(latest)
+        throw new Error('สร้าง vault ไม่สำเร็จ')
+      }
+    }
+    state.vaultMeta = saved[0]
+    // A mutation may have happened while encryption/network I/O was in flight.
+    // Keep it dirty so the next debounce pushes the newer local snapshot.
+    const uploadCompleted = Number(state.dirtyRevision || 0) === uploadRevision
+    state.dirty = !uploadCompleted
+    acknowledgeDurableRevision(uploadRevision, { dirty: !uploadCompleted })
     rememberAppliedVaultVersion(state.vaultMeta)
     render()
     return state.vaultMeta
@@ -901,6 +992,7 @@
     storageSave({ lastAppliedVaultVersion: Number(remote.data_version || 0) })
     state.vaultMeta = remote
     state.dirty = false
+    acknowledgeDurableRevision(state.dirtyRevision)
     state.locked = false
     render()
     return remote
@@ -978,7 +1070,16 @@
       }
       return
     }
+    const saved = storageLoad()
+    const sameUser = String(saved?.dirtyUserId || saved?.userId || '') === String(state.user?.id || '')
+    const durableRevision = sameUser ? Number(saved?.localRevision || 0) : 0
+    state.dirtyRevision = Math.max(Number(state.dirtyRevision || 0), durableRevision) + 1
     state.dirty = true
+    storageSave({
+      dirtyUserId: state.user?.id || '',
+      localRevision: state.dirtyRevision,
+      syncedRevision: sameUser ? Number(saved?.syncedRevision || 0) : 0,
+    })
     clearTimeout(state.debounceTimer)
     state.debounceTimer = setTimeout(() => {
           syncNow({ direction: 'push' }).catch(error => toastSafe(`บันทึกข้อมูลล้มเหลว: ${error.message}`, 'warn'))

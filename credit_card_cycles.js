@@ -34,6 +34,11 @@
     return Math.round((date - ref) / DAY_MS)
   }
 
+  function monthIndex(dateIso) {
+    const date = parseDate(dateIso)
+    return date ? date.getFullYear() * 12 + date.getMonth() : null
+  }
+
   function clampCycleDay(day) { return Math.min(31, Math.max(1, Number(day || 25))) }
   function clampDueAfter(days) { return Math.min(60, Math.max(1, Number(days || 10))) }
   function clampFixedDueDay(day) { return Math.min(31, Math.max(1, Number(day || 23))) }
@@ -169,7 +174,34 @@
     return addDays(statementEnd, clampDueAfter(card?.dueAfterCycleDays || 10))
   }
 
-  function getCardStatement({ card, transactions = [], refDate, rewardForTx, amountForTx, isPostedTx, includeOpen = false }) {
+  function legacyPaymentStatementId(card, payment, transactions = []) {
+    const paymentDate = String(payment?.date || '')
+    const parsedPayment = parseDate(paymentDate)
+    if (!parsedPayment || !card?.id) return ''
+    const cycleDay = clampCycleDay(card.cycleDay || 25)
+    const candidates = []
+    // A due date can be at most 60 days after a cycle end. Scan a generous
+    // window so legacy rows without statementId still get one deterministic
+    // allocation even when the card has not been opened for many months.
+    for (let offset = -12; offset <= 0; offset++) {
+      const month = new Date(parsedPayment.getFullYear(), parsedPayment.getMonth() + offset, 1)
+      const endDay = clampDay(month.getFullYear(), month.getMonth(), cycleDay)
+      const periodRef = dateStr(new Date(month.getFullYear(), month.getMonth(), endDay + 1))
+      const period = getStatementPeriod(card, periodRef, { includeOpen:false })
+      if (!period || String(period.end) >= paymentDate) continue
+      const dueDate = resolveDueDate(card, period.end)
+      if (!dueDate || paymentDate > dueDate) continue
+      const hasPurchase = transactions.some(tx => tx && tx.type === 'expense'
+        && String(tx.walletId || '') === String(card.id)
+        && String(tx.date || '') >= period.start
+        && String(tx.date || '') <= period.end)
+      if (hasPurchase) candidates.push({ id:statementId(card.id, period.start, period.end), dueDate, end:period.end })
+    }
+    candidates.sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)) || String(a.end).localeCompare(String(b.end)))
+    return candidates[0]?.id || ''
+  }
+
+  function getCardStatement({ card, transactions = [], refDate, postedRefDate, rewardForTx, amountForTx, isPostedTx, includeOpen = false }) {
     const period = getStatementPeriod(card, refDate, { includeOpen })
     if (!period || !card?.id) return null
     const dueDate = resolveDueDate(card, period.end)
@@ -179,14 +211,19 @@
       String(t.walletId || '') === String(card.id) &&
       String(t.date || '') >= period.start &&
       String(t.date || '') <= period.end &&
-      isPostedAt(t, refDate, isPostedTx)
+      isPostedAt(t, postedRefDate || refDate, isPostedTx)
     )
     const payments = transactions.filter(t => {
       if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
-      if (!isPostedAt(t, refDate, isPostedTx)) return false
+      if (!isPostedAt(t, postedRefDate || refDate, isPostedTx)) return false
       if (String(t.statementId || '') === id) return true
       const txDate = String(t.date || '')
+      // A non-empty statementId is an explicit allocation. Never let the
+      // date-based legacy fallback allocate that same payment to another
+      // statement as well.
+      if (String(t.statementId || '')) return false
       return txDate > period.end && txDate <= dueDate
+        && legacyPaymentStatementId(card, t, transactions) === id
     })
     const purchaseTotal = Math.round(purchases.reduce((sum, tx) => sum + Number(typeof amountForTx === 'function' ? amountForTx(tx) : tx.amount || 0), 0) * 100) / 100
     const paidTotal = Math.round(payments.reduce((sum, tx) => sum + Number(tx.amount || 0), 0) * 100) / 100
@@ -205,26 +242,49 @@
   }
 
   function shiftStatementRef(statement, deltaCycles) {
-    return addDays(deltaCycles < 0 ? statement.start : statement.end, deltaCycles < 0 ? -1 : 1)
+    // getStatementPeriod treats the cycle day itself as the closed period. The
+    // first day of the current period therefore selects the immediately prior
+    // period; subtracting one day skipped an entire statement every time.
+    return deltaCycles < 0 ? statement.start : addDays(statement.end, 1)
   }
 
   function getStatementHistory({ card, transactions = [], refDate, count = 6, rewardForTx, amountForTx, isPostedTx, includeOpen = false }) {
     const rows = []
     let cursor = refDate
+    let includeOpenForCursor = includeOpen
     const seen = new Set()
     for (let i = 0; i < count; i++) {
-      const st = getCardStatement({ card, transactions, refDate:cursor, rewardForTx, amountForTx, isPostedTx, includeOpen })
+      const st = getCardStatement({
+        card, transactions, refDate:cursor, postedRefDate:refDate,
+        rewardForTx, amountForTx, isPostedTx,
+        includeOpen:includeOpenForCursor,
+      })
       if (!st || seen.has(st.id)) break
       rows.push(st)
       seen.add(st.id)
       cursor = shiftStatementRef(st, -1)
+      // Only the first row may be the currently open cycle. Once the cursor
+      // moves to the previous boundary, use closed-cycle semantics so a
+      // cycle starting after the card's cycle day does not resolve forward.
+      includeOpenForCursor = false
       if (!cursor) break
     }
     return rows
   }
 
   function getPayableStatements({ card, transactions = [], refDate, lookback = 6, rewardForTx, amountForTx, isPostedTx, includeOverdue = true }) {
-    return getStatementHistory({ card, transactions, refDate, count:lookback, rewardForTx, amountForTx, isPostedTx })
+    const refMonth = monthIndex(refDate)
+    const relevantDates = transactions
+      .filter(tx => tx && ['expense', 'cc_payment'].includes(tx.type))
+      .filter(tx => String(tx.walletId || tx.toWalletId || '') === String(card?.id || '') || String(tx.toWalletId || '') === String(card?.id || ''))
+      .filter(tx => isPostedAt(tx, refDate, isPostedTx))
+      .map(tx => monthIndex(tx.date))
+      .filter(value => value !== null)
+    const oldestMonth = relevantDates.length ? Math.min(...relevantDates) : refMonth
+    const historyCount = Math.max(Number(lookback) || 0, refMonth !== null && oldestMonth !== null
+      ? Math.max(0, refMonth - oldestMonth) + 3
+      : Number(lookback) || 0)
+    return getStatementHistory({ card, transactions, refDate, count:historyCount, rewardForTx, amountForTx, isPostedTx })
       .filter(st => Number(st.balanceDue || 0) > 0)
       .filter(st => includeOverdue || String(st.dueDate || '') >= String(refDate || ''))
       .map(st => ({ ...st, daysLeft:daysBetween(st.dueDate, refDate) }))

@@ -59,6 +59,14 @@ test('partial payment leaves only remaining balance payable', () => {
   assert.equal(rows[0].balanceDue, 3000)
 })
 
+test('old unpaid statements remain payable beyond the default six-cycle history', () => {
+  const txs = [
+    { id:'old', type:'expense', walletId:'ktc', amount:5000, date:'2025-01-10' },
+  ]
+  const rows = CC.getPayableStatements({ card, transactions:txs, refDate:'2026-10-01' })
+  assert.ok(rows.some(row => row.balanceDue === 5000))
+})
+
 test('future-dated credit payment does not reduce the current statement', () => {
   const stId = 'ktc:2026-04-26:2026-05-25'
   const txs = [
@@ -150,6 +158,41 @@ test('detail history starts with current open cycle and then previous month', ()
   assert.equal(rows[1].end, '2026-05-19')
   assert.equal(rows[2].start, '2026-03-20')
   assert.equal(rows[2].end, '2026-04-19')
+})
+
+test('history walks every adjacent closed cycle without skipping a month', () => {
+  const rows = CC.getStatementHistory({
+    card,
+    transactions:[{ id:'old', type:'expense', walletId:'ktc', amount:5000, date:'2026-05-10' }],
+    refDate:'2026-07-26',
+    count:4,
+  })
+  assert.deepEqual(rows.map(row => row.end), ['2026-07-25', '2026-06-25', '2026-05-25', '2026-04-25'])
+  assert.equal(rows[2].balanceDue, 5000)
+})
+
+test('a payment assigned to one statement cannot also pay another by date fallback', () => {
+  const transactions = [
+    { id:'apr', type:'expense', walletId:'ktc', amount:1000, date:'2026-04-30' },
+    { id:'may', type:'expense', walletId:'ktc', amount:1000, date:'2026-05-30' },
+    { id:'payment', type:'cc_payment', toWalletId:'ktc', amount:1000, date:'2026-06-01', statementId:'ktc:2026-03-26:2026-04-25' },
+  ]
+  const statements = CC.getStatementHistory({ card, transactions, refDate:'2026-06-03', count:3 })
+  assert.equal(statements.find(row => row.end === '2026-04-25').paidTotal, 1000)
+  assert.equal(statements.find(row => row.end === '2026-05-25').paidTotal, 0)
+})
+
+test('legacy payment without statement id is allocated to one oldest eligible statement', () => {
+  const longDueCard = { ...card, dueAfterCycleDays: 60 }
+  const transactions = [
+    { id:'apr', type:'expense', walletId:'ktc', amount:1000, date:'2026-05-10' },
+    { id:'may', type:'expense', walletId:'ktc', amount:1000, date:'2026-06-10' },
+    { id:'legacy-pay', type:'cc_payment', toWalletId:'ktc', amount:1000, date:'2026-06-20' },
+  ]
+  const statements = CC.getStatementHistory({ card:longDueCard, transactions, refDate:'2026-07-01', count:4 })
+  const matching = statements.filter(row => row.payments.some(payment => payment.id === 'legacy-pay'))
+  assert.equal(matching.length, 1)
+  assert.equal(matching[0].end, '2026-05-25')
 })
 
 test('fixed-day credit card fix is cache-busted for deployed PWAs', () => {

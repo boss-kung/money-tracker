@@ -5,6 +5,13 @@
    point — all BNPL code and stored data are kept intact.
    ============================================================ */
 const BNPL_FEATURE_ENABLED = false
+const CC_PAYMENT_SOURCE_TYPES = new Set(['cash', 'bank', 'ewallet', 'saving'])
+function isCCPaymentSourceWallet(wallet) {
+  return !!wallet && !wallet.archived && CC_PAYMENT_SOURCE_TYPES.has(String(wallet.type || '').toLowerCase())
+}
+function creditDebtBalance(wallet) {
+  return Math.max(0, -Number(wallet?.balance || 0))
+}
 
 /* ============================================================
    V6.2 Hard mobile zoom lock
@@ -1469,12 +1476,27 @@ const App = {
   // CC PAYMENT
   // ─────────────────────────────────────────────────────────
   openCCPay(cardId) {
+    const editingTxId = arguments[1] || ''
     S.payingCardId = cardId
+    S.editingCCPaymentId = editingTxId || null
     const card    = S.wallets.find(w => w.id === cardId)
+    const editingTx = editingTxId
+      ? (S.transactions || []).find(t => t.id === editingTxId && t.type === 'cc_payment')
+      : null
+    if (editingTxId && !editingTx) {
+      toast('ไม่พบรายการชำระบัตรที่ต้องการแก้ไข', 'error')
+      return
+    }
     const due     = App.getCreditCardDueInfo?.(card)
-    const owed    = Math.max(0, Number(due?.amount || due?.statement?.balanceDue || Math.abs(card.balance || 0)))
-    const sources = S.wallets.filter(w => w.id !== cardId && w.type !== 'credit' && w.type !== 'bnpl')
+    const owed    = editingTx
+      ? Math.max(0, Number(editingTx.amount || 0))
+      : Math.max(0, Number(due?.amount || due?.statement?.balanceDue || creditDebtBalance(card)))
+    const sources = S.wallets.filter(w => w.id !== cardId && isCCPaymentSourceWallet(w))
     const esc     = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch])))
+    const hasDiscount = !!editingTx && Number(editingTx.discountAmount || 0) > 0
+    const cashAmount = editingTx ? Number(editingTx.cashAmount ?? editingTx.amount ?? 0) : owed
+    const discountAmount = editingTx ? Number(editingTx.discountAmount || 0) : 0
+    const title = editingTx ? 'แก้ไขการชำระบัตร' : 'ชำระบัตรเครดิต'
 
     document.getElementById('cc-pay-content').innerHTML = `
       <div style="text-align:center;margin-bottom:20px">
@@ -1482,12 +1504,12 @@ const App = {
         <div style="font-size:40px;font-weight:800;color:var(--expense);margin-top:4px">${Calc.fmt(owed)}</div>
       </div>
       <div class="form-group">
-        <label class="form-label">จ่ายจากกระเป๋า</label>
-        <select class="form-input" id="cc-pay-wallet">
-          <option value="">เลือกกระเป๋า</option>
-          ${sources.map(w => `<option value="${esc(w.id)}">${esc(w.icon)} ${esc(w.name)} (${Calc.fmt(w.balance)})</option>`).join('')}
-        </select>
-      </div>
+          <label class="form-label">จ่ายจากกระเป๋า</label>
+          <select class="form-input" id="cc-pay-wallet">
+            <option value="">เลือกกระเป๋า</option>
+          ${sources.map(w => `<option value="${esc(w.id)}"${editingTx?.walletId === w.id ? ' selected' : ''}>${esc(w.icon)} ${esc(w.name)} (${Calc.fmt(w.balance)})</option>`).join('')}
+          </select>
+        </div>
       <div class="form-group">
         <label class="form-label">ยอดที่ต้องการตัดจากบัตร (฿)</label>
         <div class="cc-pay-clearable-input">
@@ -1498,16 +1520,16 @@ const App = {
       <label class="settings-row" style="margin:0 0 12px;padding:10px 0;border:0">
         <div class="s-icon">🏷️</div>
         <div class="s-label">มีส่วนลดตอนชำระ</div>
-        <button type="button" id="cc-pay-has-discount" class="toggle" onclick="App.toggleCCPayDiscount()" aria-label="เปิดส่วนลดตอนชำระ" aria-pressed="false"></button>
+        <button type="button" id="cc-pay-has-discount" class="toggle${hasDiscount ? ' on' : ''}" onclick="App.toggleCCPayDiscount()" aria-label="เปิดส่วนลดตอนชำระ" aria-pressed="${hasDiscount ? 'true' : 'false'}"></button>
       </label>
-      <div id="cc-pay-discount-fields" style="display:none">
+      <div id="cc-pay-discount-fields" style="display:${hasDiscount ? '' : 'none'}">
         <div class="form-group">
           <label class="form-label">ส่วนลด (฿)</label>
-          <input class="form-input" type="text" inputmode="decimal" id="cc-pay-discount" placeholder="0" value="0" oninput="App.updateCCPayPreview()">
+          <input class="form-input" type="text" inputmode="decimal" id="cc-pay-discount" placeholder="0" value="${discountAmount}" oninput="App.updateCCPayPreview()">
         </div>
         <div class="form-group">
           <label class="form-label">เงินที่จ่ายจริง (฿)</label>
-          <input class="form-input" type="text" inputmode="decimal" id="cc-pay-cash-amount" placeholder="0" value="${owed}" oninput="App.updateCCPayPreview('cash')">
+          <input class="form-input" type="text" inputmode="decimal" id="cc-pay-cash-amount" placeholder="0" value="${cashAmount}" oninput="App.updateCCPayPreview('cash')">
         </div>
       </div>
       <div class="amount-summary-card" id="cc-pay-preview" style="margin-bottom:16px"></div>
@@ -1516,7 +1538,7 @@ const App = {
           `<button class="chip" onclick="document.getElementById('cc-pay-amount').value='${v}';App.updateCCPayPreview()">${v===owed?'เต็มจำนวน':Calc.fmt(v)}</button>`
         ).join('')}
       </div>
-      <button class="btn btn-primary" onclick="App.saveCCPay()">ชำระเงิน</button>`
+      <button class="btn btn-primary" onclick="App.saveCCPay()">${title}</button>`
 
     App.updateCCPayPreview()
     App.openOverlay('overlay-cc-pay')
@@ -2317,7 +2339,7 @@ App.render();
     const liabilities = (wallets || []).filter(w => w.type === 'credit')
     const investments = (wallets || []).filter(w => INVEST_TYPES.includes(w.type))
     const sum = list => list.reduce((s,w) => s + Math.max(0, App._walletValueTHB(w)), 0)
-    const debt = liabilities.reduce((s,w) => s + Math.abs(Number(w.balance || 0)), 0)
+    const debt = liabilities.reduce((s,w) => s + creditDebtBalance(w), 0)
     return {
       assets, liabilities, investments,
       assetTotal: sum(assets) + sum(investments),
@@ -2480,6 +2502,13 @@ App.render();
   App.openEditTx = function(id) {
     const tx = S.transactions.find(t => t.id === id)
     if (!tx) return
+    // Card payments have a second amount (the cash actually debited when a
+    // discount/promotion is used). Route them through the dedicated form so
+    // editing cannot silently discard that relationship.
+    if (tx.type === 'cc_payment') {
+      App.openCCPay(tx.toWalletId, tx.id)
+      return
+    }
     S.txMode = 'edit'
     S.editingTxId = id
     S.tx = { step:'detail', type:tx.type, amount:String(tx.benefitBaseAmount || tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || TODAY, benefitDateOverride:tx.benefitDateOverride || '', isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:tx.splitBillId || '', splitBillOwnerPersonId:tx.splitBillOwnerPersonId || '', splitBillOwnerShare:Number(tx.ledgerAmount || 0), splitBillOwnerPaidAmount:Number(tx.amount || 0), reimbursesSharedExpenseTxId:tx.reimbursesSharedExpenseTxId || '', reimbursementSource:tx.reimbursementSource || '', incomeTreatment:tx.incomeTreatment || '', reimbursementSplitBillId:tx.reimbursementSplitBillId || '', fromSplitPersonId:tx.fromSplitPersonId || '', toSplitPersonId:tx.toSplitPersonId || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:tx.rewardRulesTouched === true, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
@@ -3607,9 +3636,9 @@ App.render();
   }
 
   App.getFinancialAdvisorInsights = function(month = S.rptMonth || THIS_MONTH) {
-    const stats = Calc.getMonthlyStats(S.transactions, month)
+    const stats = Calc.getMonthlyStats(S.transactions, month, S.loans, S.wallets)
     const prevMonth = Calc.getMonths(2)[1]
-    const prev = Calc.getMonthlyStats(S.transactions, prevMonth)
+    const prev = Calc.getMonthlyStats(S.transactions, prevMonth, S.loans, S.wallets)
     const budget = Calc.getBudgetProgress(S.transactions, S.budgets || [], S.categories, month)
     const top = Object.entries(stats.byCategory || {}).sort((a,b) => b[1] - a[1])[0]
     const cat = top && App._findCat?.(top[0])
@@ -3630,7 +3659,7 @@ App.render();
       insights.push({ icon:'💸', title:'บิลใกล้ถึงเกินเงินพร้อมใช้', body:`14 วันข้างหน้ามีภาระประมาณ ${fmt(upcomingCommitted)} แต่เงินพร้อมใช้มี ${fmt(usable.liquid)} ควรเตรียมสภาพคล่องล่วงหน้า` })
     }
     const creditSoon = (S.wallets || []).filter(w => w.type === 'credit').map(card => ({ card, due: App.getCreditCardDueInfo?.(card) })).filter(row => row.due && Number(row.due.daysLeft) >= 0 && Number(row.due.daysLeft) <= 7)
-    if (creditSoon.length && usable && usable.liquid < creditSoon.reduce((sum, row) => sum + Math.abs(Number(row.card.balance || 0)), 0)) {
+    if (creditSoon.length && usable && usable.liquid < creditSoon.reduce((sum, row) => sum + creditDebtBalance(row.card), 0)) {
       insights.push({ icon:'💳', title:'บัตรเครดิตครบกำหนดเร็ว ๆ นี้', body:`มีบัตรครบกำหนดภายใน 7 วันและเงินพร้อมใช้อาจไม่พอชำระเต็มจำนวน ควรจัดลำดับการจ่ายก่อนถึง due date` })
     }
     const behindGoal = (S.goals || []).filter(g => g.status === 'active').map(g => ({ goal: g, progress: App.getGoalProgress?.(g) })).find(row => row.progress && row.progress.remaining > 0 && ((row.goal.targetDate && row.progress.daysLeft < 0) || (row.goal.targetDate && row.goal.monthlyContribution > 0 && row.progress.suggestedMonthly > row.goal.monthlyContribution)))
@@ -3927,7 +3956,7 @@ App.render();
     const investments = wallets.filter(w => isInvest(w));
     const sumAssets = assets.reduce((s,w)=>s+Math.max(0, Number(w.balance||0)),0);
     const sumInvest = investments.reduce((s,w)=>s+Math.max(0, App._investmentValueTHB(w) || Number(w.balance||0)),0);
-    const debt = liabilities.reduce((s,w)=>s+Math.abs(Number(w.balance||0)),0);
+    const debt = liabilities.reduce((s,w)=>s+creditDebtBalance(w),0);
     return { assets, liabilities, investments, assetTotal: sumAssets + sumInvest, liabilityTotal: debt, netTotal: sumAssets + sumInvest - debt };
   }
   Calc.getWalletGroups = () => netWorthGroups();
@@ -4098,8 +4127,26 @@ App.render();
       privileges: [],
       merchants: [],
       ccBenefits: {},
+      ccBenefitRules: [],
+      creditLimitGroups: [],
       incomeBudgets: [],
       marketPrices: {},
+      rewardAccounts: [],
+      rewardLedger: [],
+      netWorthSnapshots: [],
+      investmentSnapshots: [],
+      cryptoAssets: [],
+      cryptoHoldings: [],
+      cryptoTransactions: [],
+      cryptoSyncMeta: {},
+      splitBills: [],
+      splitPeople: [],
+      splitBillDraft: null,
+      loans: [],
+      bnplPlans: [],
+      creditCardPromoSearches: [],
+      creditCardPromotions: [],
+      migrations: { cryptoCentralizedV1: false },
     }
   }
 
@@ -4277,7 +4324,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const thisMonth = getTHISMONTH()
     const isCurrentMonth = dm === thisMonth
 
-    const stats = Calc.getMonthlyStats(S.transactions, dm)
+    const stats = Calc.getMonthlyStats(S.transactions, dm, S.loans, S.wallets)
     const reimbursementInflow = Number(stats.reimbursementInflow || 0)
     const dashboardCashNet = Number(stats.cashNet ?? stats.net ?? 0)
     const usable = Calc.getUsableMoney
@@ -4592,7 +4639,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const unpaidBillCount = pendingUpcomingBills.length
     const debtTotal = Number(currentNetWorth.liabilities || usable.creditDebt || 0)
     const prevMonth = Calc.getPreviousMonth?.(dm) || Calc.getMonths?.(2)?.[1] || ''
-    const prevMonthly = prevMonth ? Calc.getMonthlyIncomeExpense(S.transactions, prevMonth) : null
+    const prevMonthly = prevMonth ? Calc.getMonthlyIncomeExpense(S.transactions, prevMonth, S.loans, S.wallets) : null
     const shortMonthLabel = ym => String(mlabel(ym) || '').split(' ')[0] || ''
     const pctText = pct => `${Math.abs(pct) >= 10 ? Math.abs(pct).toFixed(0) : Math.abs(pct).toFixed(1)}%`
     const monthCompareSub = (current, previous, emptyText) => {
@@ -4853,7 +4900,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (S._summaryDismissed === lastMonth) return null
 
     // เงื่อนไข 4: เดือนที่แล้วมีข้อมูล
-    const stats = Calc.getMonthlyStats(S.transactions || [], lastMonth)
+    const stats = Calc.getMonthlyStats(S.transactions || [], lastMonth, S.loans, S.wallets)
     if (!stats.income && !stats.expense) return null
 
     return { stats, lastMonth }
@@ -4876,9 +4923,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App._showMonthlySummaryDetail = function(month) {
-    const stats = Calc.getMonthlyStats(S.transactions || [], month)
+    const stats = Calc.getMonthlyStats(S.transactions || [], month, S.loans, S.wallets)
     const prevMonth = Calc.getPreviousMonth(month)
-    const prevStats = Calc.getMonthlyStats(S.transactions || [], prevMonth)
+    const prevStats = Calc.getMonthlyStats(S.transactions || [], prevMonth, S.loans, S.wallets)
     const mLabel = Calc.monthLabel(month)
     const expCats = S.categories?.expense || []
     const catBreakdown = Calc.getCategoryBreakdown(S.transactions, month, {
@@ -5023,7 +5070,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       // postedOwed = what's already on the ledger (current statement)
       // committedInstallments = future installment months that are already committed
       //   against the credit limit even though not yet posted to the statement
-      const postedOwed = Math.abs(Number(w.balance || 0))
+      const postedOwed = creditDebtBalance(w)
       const committedInstallments = App._getUnpostedInstallmentDebt ? App._getUnpostedInstallmentDebt(w.id) : 0
       const totalOwed = postedOwed + committedInstallments
       const limit = App.getCreditLimitForCard ? App.getCreditLimitForCard(w) : Number(w.limit || 0)
@@ -5262,6 +5309,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
    ============================================================ */
 ;(function() {
   const esc = App._esc
+  const jsArg = MTSafeRender.jsArg
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
 
   // Add n months to a YYYY-MM-DD string, clamped to last day of target month
@@ -6171,6 +6219,13 @@ Calc.getUsableMoney = function(wallets, state = null) {
     }
   }
 
+  function isValidImportDate(value) {
+    const text = String(value || '')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false
+    const parsed = new Date(`${text}T00:00:00Z`)
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text
+  }
+
   App._validateImportPayload = function(data) {
     const errors = [], warnings = []
     if (!data || typeof data !== 'object') errors.push('ไฟล์ไม่ใช่ JSON object')
@@ -6181,10 +6236,17 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const validTypes = new Set(['income','expense','transfer','cc_payment','bnpl_payment','investment_buy','investment_sell','investment_adjust'])
     const transactions = data.transactions.filter(t => {
       if (!validTypes.has(t.type)) { warnings.push(`ข้ามรายการ type ผิด: ${t.type}`); return false }
-      if (!(Number(t.amount) > 0) && !['investment_adjust'].includes(t.type)) { warnings.push('ข้ามรายการจำนวนเงินไม่ถูกต้อง'); return false }
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(t.date || ''))) { warnings.push('ข้ามรายการวันที่ไม่ถูกต้อง'); return false }
+      const amount = Number(t.amount)
+      if (!Number.isFinite(amount) || (!(amount > 0) && !['investment_adjust'].includes(t.type))) { warnings.push('ข้ามรายการจำนวนเงินไม่ถูกต้อง'); return false }
+      if (!isValidImportDate(t.date)) { warnings.push('ข้ามรายการวันที่ไม่ถูกต้อง'); return false }
       if (t.walletId && !walletIds.has(t.walletId)) { warnings.push('ข้ามรายการที่อ้างอิง wallet ไม่พบ'); return false }
       if (t.toWalletId && !walletIds.has(t.toWalletId)) { warnings.push('ข้ามรายการที่อ้างอิงปลายทางไม่พบ'); return false }
+      if (t.type === 'transfer' && (!t.walletId || !t.toWalletId || t.walletId === t.toWalletId)) {
+        warnings.push('ข้ามรายการโอนที่ไม่มีกระเป๋าต้นทาง/ปลายทางครบถ้วน'); return false
+      }
+      if (['cc_payment', 'bnpl_payment'].includes(t.type) && (!t.walletId || !t.toWalletId)) {
+        warnings.push('ข้ามรายการชำระหนี้ที่ไม่มีกระเป๋าต้นทาง/ปลายทางครบถ้วน'); return false
+      }
       return true
     })
     return { ok:true, errors, warnings, originalTransactionCount: data.transactions.length, data:{ ...data, transactions } }
@@ -6192,6 +6254,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
   App.saveCCPay = function() {
     const parsePayNumber = value => Number(String(value || '0').replace(/,/g, '')) || 0
+    const editId = S.editingCCPaymentId
+    const existingTx = editId
+      ? (S.transactions || []).find(t => t.id === editId && t.type === 'cc_payment')
+      : null
     const sourceId = document.getElementById('cc-pay-wallet')?.value
     const amount = parsePayNumber(document.getElementById('cc-pay-amount')?.value)
     const hasDiscount = !!document.getElementById('cc-pay-has-discount')?.classList?.contains('on')
@@ -6208,19 +6274,44 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (cashAmount > amount + 0.01) { App._showFieldError('cc-pay-cash-amount', 'เงินที่จ่ายจริงต้องไม่เกินยอดที่ตัดจากบัตร'); return }
     if (hasDiscount && Math.abs((amount - cashAmount) - discountAmount) > 0.01) { App._showFieldError('cc-pay-discount', 'ส่วนลดต้องตรงกับยอดตัดบัตรลบเงินที่จ่ายจริง'); return }
     const due = App.getCreditCardDueInfo?.(card)
-    if (source.type !== 'credit' && Number(source.balance || 0) < cashAmount) { App._showFieldError('cc-pay-cash-amount', 'ยอดเงินในกระเป๋าไม่เพียงพอ'); return }
+    if (!isCCPaymentSourceWallet(source)) { App._showFieldError('cc-pay-wallet', 'ชำระบัตรได้จากกระเป๋าเงินสด ธนาคาร E-Wallet หรือออมทรัพย์เท่านั้น'); return }
+    const oldCashAmount = existingTx ? App.getCCPaymentCashAmount(existingTx) : 0
+    const availableSourceBalance = Number(source.balance || 0) + (existingTx?.walletId === sourceId ? oldCashAmount : 0)
+    if (availableSourceBalance < cashAmount) { App._showFieldError('cc-pay-cash-amount', 'ยอดเงินในกระเป๋าไม่เพียงพอ'); return }
     // อนุญาตให้ชำระเกินหรือน้อยกว่ายอดที่ระบบแจ้งได้ (ยอดจริงอาจมากกว่าที่ระบบคำนวณ)
     const st = due?.statement || App.getCardStatement(card.id)
-    const tx = { id:Calc.genId(), type:'cc_payment', amount, walletId:sourceId, toWalletId:card.id, date:today(), note:`ชำระ ${card.name}`, statementId:st?.id }
+    const tx = {
+      id: editId || Calc.genId(), type:'cc_payment', amount, walletId:sourceId,
+      toWalletId:card.id, date:existingTx?.date || today(),
+      note:existingTx?.note || `ชำระ ${card.name}`,
+      statementId:existingTx?.statementId || st?.id,
+    }
     if (hasDiscount && discountAmount > 0) {
       tx.cashAmount = Math.round(cashAmount * 100) / 100
       tx.discountAmount = Math.round(discountAmount * 100) / 100
       tx.discountSource = 'platform'
     }
     const subScreenCardId = document.querySelector('.cc-detail-screen')?.dataset.cardId || ''
-    S.transactions.unshift(tx)
+    if (existingTx) {
+      const index = S.transactions.findIndex(row => row.id === editId)
+      if (index < 0) { toast('ไม่พบรายการชำระบัตรที่ต้องการแก้ไข', 'error'); return }
+      S.transactions[index] = tx
+    } else {
+      S.transactions.unshift(tx)
+    }
+    S.editingCCPaymentId = null
     App.recalculateWalletBalances({ save:false, recordSnapshot:true })
-    persist()
+    if (!persist()) {
+      if (existingTx) {
+        const rollbackIndex = S.transactions.findIndex(row => row.id === editId)
+        if (rollbackIndex >= 0) S.transactions[rollbackIndex] = existingTx
+      } else {
+        S.transactions = S.transactions.filter(row => row.id !== tx.id)
+      }
+      S.editingCCPaymentId = editId || null
+      App.recalculateWalletBalances({ save:false, recordSnapshot:false })
+      return
+    }
     App.closeOverlay('overlay-cc-pay')
     if (subScreenCardId && subScreenCardId === card.id) {
       App.openCCDetail(card.id)
@@ -6228,7 +6319,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (S.page === 'dashboard') App.renderDashboard?.()
     else if (S.page === 'wallets') App.renderWallets?.()
     else App.render()
-    toast(`ชำระ ${money(amount)} สำเร็จ${discountAmount > 0 ? ` · จ่ายจริง ${money(cashAmount)}` : ''}`, 'success')
+    toast(`${existingTx ? 'แก้ไขการชำระ' : 'ชำระ'} ${money(amount)} สำเร็จ${discountAmount > 0 ? ` · จ่ายจริง ${money(cashAmount)}` : ''}`, 'success')
   }
 
   // ── Installment center + recurring due schedule ─────────────
@@ -6358,12 +6449,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
   // Delete/archive protection for referenced masters.
   App.deleteWallet = function(id) {
-    const refs = (S.transactions || []).filter(t => t.walletId === id || t.toWalletId === id || t.cashWalletId === id).length + (S.recurring || []).filter(r => r.walletId === id).length
+    const transactionRefs = (S.transactions || []).filter(t => t.walletId === id || t.toWalletId === id || t.cashWalletId === id).length
+    const recurringRefs = (S.recurring || []).filter(r => r.walletId === id || r.cashWalletId === id || r.toWalletId === id).length
+    const loanRefs = (S.loans || []).filter(loan => loan.walletId === id || (loan.repayments || []).some(rep => rep.walletId === id)).length
+    const bnplRefs = (S.bnplPlans || []).filter(plan => plan.walletId === id || (plan.schedule || []).some(row => row.walletId === id)).length
+    const refs = transactionRefs + recurringRefs + loanRefs + bnplRefs
     if (refs > 0) { const w = walletById(id); if (w) { w.archived = true; persist(); App.closeOverlay('overlay-wallet-form'); App.render(); toast('มีรายการอ้างอิง จึง Archive กระเป๋าแทนการลบ', 'warn') } return }
-    // Cascade: ลบ BNPL plans ของ wallet นี้ด้วย
-    if ((S.bnplPlans || []).some(p => p.walletId === id)) {
-      S.bnplPlans = (S.bnplPlans || []).filter(p => p.walletId !== id)
-    }
     S.wallets = (S.wallets || []).filter(w => w.id !== id); persist(); App.closeOverlay('overlay-wallet-form'); App.render(); toast('ลบกระเป๋าแล้ว', 'success')
   }
   App.deleteCategory = function(id) {
@@ -6672,9 +6763,13 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
     const month = S.rptMonth
     const prevMonth = Calc.getPreviousMonth?.(month) || Calc.getMonths(2)[1]
-    const monthly = Calc.getMonthlyIncomeExpense(S.transactions, month)
-    const previous = prevMonth ? Calc.getMonthlyIncomeExpense(S.transactions, prevMonth) : null
-    const comparison = Calc.getMonthComparison(S.transactions, month, { expenseCategories: S.categories?.expense || [] })
+    const monthly = Calc.getMonthlyIncomeExpense(S.transactions, month, S.loans, S.wallets)
+    const previous = prevMonth ? Calc.getMonthlyIncomeExpense(S.transactions, prevMonth, S.loans, S.wallets) : null
+    const comparison = Calc.getMonthComparison(S.transactions, month, {
+      expenseCategories: S.categories?.expense || [],
+      loans: S.loans,
+      wallets: S.wallets,
+    })
     const expenseBreakdown = Calc.getCategoryBreakdown(S.transactions, month, { type: 'expense', categories: S.categories?.expense || [] })
     const incomeBreakdown = Calc.getCategoryBreakdown(S.transactions, month, { type: 'income', categories: S.categories?.income || [], uncategorizedIcon: '💰' })
     const merchantBreakdown = Calc.getMerchantBreakdown(S.transactions, month)
@@ -7652,6 +7747,10 @@ App._pickMerchant = function(name, opts = {}) {
         count = months - past.length
         amountPool = Math.round((total - paidKept) * 100) / 100
         startOffset = past.length
+        if (count === 0 && amountPool > 0.01) {
+          toast(`จำนวนงวดใหม่ไม่พอรองรับเงินต้นคงเหลือ ${money(amountPool)} กรุณาเพิ่มจำนวนงวด`, 'error')
+          return
+        }
       }
       const amounts = distributeAmounts(amountPool, count)
       const generated = amounts.map((amount, idx) => {
@@ -9408,7 +9507,12 @@ App._pickMerchant = function(name, opts = {}) {
     const selectedDrafts = preview.ruleDrafts.filter((_, i) => sel.has(i))
     if (!selectedDrafts.length) { notify('กรุณาเลือกอย่างน้อย 1 กฎก่อนบันทึก', 'warn'); return }
     App.ensureCCBenefitRulesState?.()
-    const existingByKey = new Map((S.ccBenefitRules || []).map(rule => [buildImportedRuleKey(cardId, rule), rule]))
+    // Deduplication is scoped to the card being imported. Including every
+    // card's rule in this map lets an import for card B mutate card A's rule
+    // when source/name/type happen to match.
+    const existingByKey = new Map((S.ccBenefitRules || [])
+      .filter(rule => String(rule?.cardId || '') === String(cardId || ''))
+      .map(rule => [buildImportedRuleKey(cardId, rule), rule]))
     let created = 0
     let updated = 0
     selectedDrafts.forEach(draft => {
@@ -9425,6 +9529,7 @@ App._pickMerchant = function(name, opts = {}) {
       } else {
         normalized.id = genId()
         S.ccBenefitRules.push(normalized)
+        existingByKey.set(key, normalized)
         created++
       }
     })
@@ -10592,7 +10697,7 @@ App._pickMerchant = function(name, opts = {}) {
   App.getCreditUsageForCard = function(cardId) {
     const card = walletById(cardId)
     if (!card || card.type !== 'credit') return 0
-    const postedDebt = Math.abs(Number(card.balance || 0))
+    const postedDebt = creditDebtBalance(card)
     const committedDebt = App._getUnpostedInstallmentDebt(cardId)
     return postedDebt + committedDebt
   }
@@ -10948,8 +11053,8 @@ App._pickMerchant = function(name, opts = {}) {
           <input class="form-input" type="number" id="wf-balance" value="${w && !isCC ? Math.abs(w.balance) : ''}">
         </div>
         ${(isCC || isBNPL) ? `<div class="form-group" id="wf-cc-balance-group">
-          <label class="form-label">ยอดค้างชำระ (฿)</label>
-          <input class="form-input" type="number" id="wf-cc-balance" value="${w ? Math.abs(w.balance||0) : ''}">
+          <label class="form-label">ยอดคงเหลือบัตร (฿) · ติดลบ = หนี้, บวก = เครดิต</label>
+          <input class="form-input" type="number" step="0.01" id="wf-cc-balance" value="${w ? Number(w.balance || 0) : ''}">
         </div>` : ''}
       `)}
       <div id="wf-cc-fields" style="${isCC?'':'display:none'}">${ccExtraHtml}</div>
@@ -11172,7 +11277,9 @@ App._pickMerchant = function(name, opts = {}) {
     const _wErr = _fieldTooLong(name, FIELD_MAX.name, 'ชื่อกระเป๋า')
     if (_wErr) { notify(_wErr, 'error'); return }
 
-    let balance = isDebt ? -Math.abs(rawBalance) : rawBalance
+    // Credit-card balances are signed: negative means debt, positive means
+    // overpayment/credit. BNPL remains a debt-only wallet.
+    let balance = isCC ? rawBalance : (isBNPL ? -Math.abs(rawBalance) : rawBalance)
 
     const data = { name, type, color, icon: ICONS[type] || '💳', balance }
 
@@ -13526,7 +13633,7 @@ App._pickMerchant = function(name, opts = {}) {
             <button type="button" class="btn btn-outline" onclick="App.saveCryptoLocationOption()" style="width:auto">บันทึก location นี้</button>
             <button type="button" class="btn btn-outline" id="crypto-location-delete-btn" onclick="App.deleteCryptoLocationOption()" style="width:auto">ลบ location นี้</button>
           </div>
-          <div class="chip-row" id="crypto-location-chip-row" style="margin-top:8px">${locationOptions.map(loc => `<button type="button" class="chip mini${loc === locationValue ? ' active' : ''}" onclick="App._setCryptoLocation('${esc(loc)}')">${esc(loc)}</button>`).join('')}</div>
+        <div class="chip-row" id="crypto-location-chip-row" style="margin-top:8px">${locationOptions.map(loc => `<button type="button" class="chip mini${loc === locationValue ? ' active' : ''}" onclick="App._setCryptoLocation(${jsArg(loc)})">${esc(loc)}</button>`).join('')}</div>
         </div>
         <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="crypto-note" value="${esc(holding?.note || '')}" placeholder="เช่น DCA, long-term, cold wallet"></div>
       </div>`)
@@ -13551,7 +13658,7 @@ App._pickMerchant = function(name, opts = {}) {
     const current = String(input?.value || '').trim()
     const locations = getCryptoLocationOptions(current)
     if (datalist) datalist.innerHTML = locations.map(loc => `<option value="${esc(loc)}">`).join('')
-    if (chipRow) chipRow.innerHTML = locations.map(loc => `<button type="button" class="chip mini${loc === current ? ' active' : ''}" onclick="App._setCryptoLocation('${esc(loc)}')">${esc(loc)}</button>`).join('')
+    if (chipRow) chipRow.innerHTML = locations.map(loc => `<button type="button" class="chip mini${loc === current ? ' active' : ''}" onclick="App._setCryptoLocation(${jsArg(loc)})">${esc(loc)}</button>`).join('')
     if (deleteBtn) deleteBtn.style.display = current && (S.settings?.cryptoLocations || []).includes(current) ? '' : 'none'
   }
 
@@ -13782,8 +13889,8 @@ App._pickMerchant = function(name, opts = {}) {
     const name = String(selectedAsset?.name || inferredPreset?.name || customName || '').trim()
     const coinGeckoId = normalizeCoinGeckoId(selectedAsset?.coinGeckoId || inferredPreset?.coinGeckoId || manualCoinGeckoId)
     const units = Number(document.getElementById('crypto-units')?.value || 0)
-    const averageCostTHB = round2(Number(document.getElementById('crypto-avg-cost')?.value || 0))
-    const manualPriceTHB = round2(Number(document.getElementById('crypto-manual-price')?.value || 0))
+    const averageCostTHB = round8(Number(document.getElementById('crypto-avg-cost')?.value || 0))
+    const manualPriceTHB = round8(Number(document.getElementById('crypto-manual-price')?.value || 0))
     const location = String(document.getElementById('crypto-location')?.value || 'Wallet').trim() || 'Wallet'
     const note = String(document.getElementById('crypto-note')?.value || '').trim()
 
@@ -16581,7 +16688,7 @@ App._pickMerchant = function(name, opts = {}) {
     // postedOwed = what's on the current statement (ledger balance)
     // committedInstallments = future installment months not yet posted but already
     //   consuming credit limit — real credit utilisation is the sum of both.
-    const postedOwed = Math.abs(Number(card.balance||0))
+    const postedOwed = creditDebtBalance(card)
     const committedInstallments = App._getUnpostedInstallmentDebt ? App._getUnpostedInstallmentDebt(cardId) : 0
     const owed = postedOwed + committedInstallments   // total credit limit usage
     const limit = App.getCreditLimitForCard(card)
@@ -16678,25 +16785,23 @@ App._pickMerchant = function(name, opts = {}) {
     normalizeCreditCardWallets()
     App.ensurePrivilegesState?.()
     const saved = persist()
-    if (!saved) {
-      notify('ส่งออกไม่ได้ขณะนี้ — ลองบันทึกรายการใหม่ก่อน', 'error')
-      return
-    }
-    const verification = Storage.verifyState?.(S, ['transactions', 'wallets', 'settings', 'upcomingBills', 'goals', 'privileges']) || { ok: true, failures: [] }
-    if (!verification.ok) {
-      notify(`ยังส่งออกไม่ได้ เพราะข้อมูลบางส่วนยังไม่ตรงกับ local storage: ${verification.failures.join(', ')}`, 'error')
-      return
-    }
     const exportedAt = new Date().toISOString()
     if (S.settings?.storageMeta) S.settings.storageMeta.lastExportedAt = exportedAt
-    const exportOk = Storage.exportJSON(S, `backup-${today()}.json`)
+    // Export the current in-memory snapshot even when local persistence is
+    // unavailable. This is the emergency recovery path for quota/write errors.
+    const exportOk = Storage.exportJSON(S, `backup-${today()}.json`, { preferState: true })
     if (!exportOk) {
       notify('ส่งออกข้อมูลไม่สำเร็จบนอุปกรณ์นี้', 'error')
       return
     }
-    const exportMetaSaved = persist()
+    const verification = saved
+      ? (Storage.verifyState?.(S, ['transactions', 'wallets', 'settings', 'upcomingBills', 'goals', 'privileges']) || { ok: true, failures: [] })
+      : { ok: false, failures: ['local storage'] }
+    const exportMetaSaved = saved && verification.ok ? persist() : false
     App.renderMore?.()
-    notify(exportMetaSaved ? 'ส่งออกข้อมูลสำเร็จ' : 'ส่งออกข้อมูลสำเร็จ แต่บันทึกสถานะล่าสุดลงเครื่องไม่สมบูรณ์', exportMetaSaved ? 'success' : 'warn')
+    notify(exportMetaSaved
+      ? 'ส่งออกข้อมูลสำเร็จ'
+      : 'ส่งออกข้อมูลสำเร็จจากข้อมูลในหน่วยความจำ แต่ยังบันทึกลงเครื่องไม่สมบูรณ์', 'warn')
   }
 
   App.importData = function(input) {
@@ -17030,7 +17135,7 @@ App._pickMerchant = function(name, opts = {}) {
     S.splitBills = Storage.load?.(KEYS.splitBills) || S.splitBills || []
     S.splitPeople = Storage.load?.(KEYS.splitPeople) || S.splitPeople || []
     S.splitBillDraft = Storage.load?.(KEYS.splitBillDraft) || S.splitBillDraft || null
-    ;['transactions','wallets','budgets','incomeBudgets','recurring','upcomingBills','merchants','ccBenefitRules','creditLimitGroups','rewardAccounts','rewardLedger','netWorthSnapshots','investmentSnapshots','cryptoAssets','cryptoHoldings','cryptoTransactions','goals','privileges','splitBills','splitPeople'].forEach(key => {
+    ;['transactions','wallets','budgets','incomeBudgets','recurring','upcomingBills','merchants','ccBenefitRules','creditLimitGroups','rewardAccounts','rewardLedger','netWorthSnapshots','investmentSnapshots','cryptoAssets','cryptoHoldings','cryptoTransactions','goals','privileges','splitBills','splitPeople','loans','bnplPlans','creditCardPromoSearches','creditCardPromotions'].forEach(key => {
       const result = mergeById(S[key] || [], payload[key] || [])
       S[key] = result.rows
       stats[key] = result
@@ -17064,6 +17169,7 @@ App._pickMerchant = function(name, opts = {}) {
       ['ร้านค้า', 'merchants'], ['รายการประจำ', 'recurring'], ['เป้าหมาย', 'goals'],
       ['ผ่อนชำระ', 'installments'], ['บัญชีคะแนน', 'rewardAccounts'], ['Crypto holdings', 'cryptoHoldings'],
       ['กฎสิทธิประโยชน์', 'ccBenefitRules'], ['หารบิล', 'splitBills'], ['คนหารบิล', 'splitPeople'],
+      ['เงินให้ยืม', 'loans'], ['BNPL', 'bnplPlans'],
     ]
     const droppedCount = (checked.warnings || []).length
     const counts = rows.map(([label, key]) => {
@@ -18832,7 +18938,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     // Oldest-first 6-month data
     const displayMonths = Calc.getMonths(6).reverse()
     const data = displayMonths.map(m => {
-      const s = Calc.getMonthlyIncomeExpense(S.transactions, m)
+      const s = Calc.getMonthlyIncomeExpense(S.transactions, m, S.loans, S.wallets)
       return { month: m, income: s.income, expense: s.expense, net: s.netCashflow, rate: s.savingsRate }
     })
 
@@ -19440,8 +19546,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     let monthly = { income:0, expense:0, netCashflow:0, savingsRate:null }
     let prevMon = { income:0, expense:0 }
     let budProg = [], expCats = []
-    try { monthly = Calc.getMonthlyIncomeExpense(txs, month) }                         catch(_) {}
-    try { prevMon = Calc.getMonthlyIncomeExpense(txs, prev) }                          catch(_) {}
+    try { monthly = Calc.getMonthlyIncomeExpense(txs, month, S.loans, S.wallets) }       catch(_) {}
+    try { prevMon = Calc.getMonthlyIncomeExpense(txs, prev, S.loans, S.wallets) }        catch(_) {}
     try { budProg = Calc.getBudgetProgress(txs, bds, cats, month) || [] }              catch(_) {}
     try { expCats = Calc.getCategoryBreakdown(txs, month, { type:'expense', categories: cats.expense||[] }) || [] } catch(_) {}
 
@@ -19684,18 +19790,18 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       : null
     const monthly = range.kind === 'window'
       ? null
-      : Calc.getMonthlyIncomeExpense(txs, range.month)
+      : Calc.getMonthlyIncomeExpense(txs, range.month, S.loans, S.wallets)
     const prevMonth = range.month ? prevM(range.month) : prevM(now())
-    const previous = Calc.getMonthlyIncomeExpense(txs, prevMonth)
+    const previous = Calc.getMonthlyIncomeExpense(txs, prevMonth, S.loans, S.wallets)
     const expCats = range.kind === 'window'
       ? []
       : Calc.getCategoryBreakdown(txs, range.month, { type:'expense', categories:cats.expense || [] })
     const history = (payload?.history || Calc.getMonths?.(6)?.map(m => {
-      const s = Calc.getMonthlyIncomeExpense(txs, m)
+      const s = Calc.getMonthlyIncomeExpense(txs, m, S.loans, S.wallets)
       return { month:m, income:s.income, expense:s.expense, net:s.netCashflow, rate:s.savingsRate }
     }) || [])
     const recentHistory = history.filter(h => h.month !== now() && (h.income > 0 || h.expense > 0))
-    const current = monthly || intelligence?.monthly || Calc.getMonthlyIncomeExpense(txs, now())
+    const current = monthly || intelligence?.monthly || Calc.getMonthlyIncomeExpense(txs, now(), S.loans, S.wallets)
     const budget = payload?.budget || Calc.getBudgetProgress(txs, S.budgets || [], cats, now()) || []
     const topInsights = (() => { try { return InsightEngine.getTopN?.(3, 'reports', S) || [] } catch(_) { return [] } })()
     const netSnapshots = [...(S.netWorthSnapshots || [])].sort((a,b)=>String(a.date).localeCompare(String(b.date)))
@@ -20032,7 +20138,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     // ── Credit card ──────────────────────────────────────────────
     if (intent === 'credit') {
       const summary = Calc.getCreditLiabilitySummary?.(wals) || null
-      const ccs = summary?.cards || wals.filter(w => w.type === 'credit' && !w.archived).map(card => ({ card, statementDue:Math.abs(card.balance||0), committedInstallments:0, availableLimit:Math.max(0, Number(card.limit||0)-Math.abs(card.balance||0)) }))
+      const ccs = summary?.cards || wals.filter(w => w.type === 'credit' && !w.archived).map(card => ({ card, statementDue:creditDebtBalance(card), committedInstallments:0, availableLimit:Math.max(0, Number(card.limit||0)-creditDebtBalance(card)) }))
       if (!ccs.length) return ans('💳', 'บัตรเครดิต', 'ไม่พบบัตรเครดิตในระบบ')
       const total = summary?.totals?.totalLiability ?? ccs.reduce((s,row) => s + Number(row.statementDue||0) + Number(row.committedInstallments||0), 0)
       return ans('💳', 'ยอดบัตรเครดิต',

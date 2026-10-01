@@ -155,7 +155,13 @@
       if (!wallet || wallet.excludeFromNetWorth || excludedTypes.has(String(wallet.type || '').toLowerCase())) return
       const value = Number(walletValue(wallet) || 0)
       if (!Number.isFinite(value)) return
-      if (value >= 0) walletAssets += value
+      const walletType = String(wallet.type || '').toLowerCase()
+      if (walletType === 'credit' || walletType === 'bnpl') {
+        // These wallets are debt ledgers. A positive balance means an
+        // overpayment/credit and must not become spendable cash or inflate
+        // net worth as an asset.
+        if (value < 0) walletLiabilities += Math.abs(value)
+      } else if (value >= 0) walletAssets += value
       else walletLiabilities += Math.abs(value)
     })
     const receivables = (loans || []).reduce((sum, loan) => sum + getLoanReceivable(loan, today), 0)

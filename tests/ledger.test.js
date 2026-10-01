@@ -125,6 +125,20 @@ test('Financial Position deducts outstanding Loan cash until it is repaid', () =
   assert.equal(position.net, 800)
 })
 
+test('Financial Position does not treat positive credit or BNPL balances as cash assets', () => {
+  const position = Ledger.getFinancialPosition({
+    wallets: [
+      { id:'cash', type:'cash', balance:5000 },
+      { id:'credit', type:'credit', balance:800 },
+      { id:'bnpl', type:'bnpl', balance:300 },
+      { id:'debt', type:'credit', balance:-1200 },
+    ],
+  })
+  assert.equal(position.assets, 5000)
+  assert.equal(position.liabilities, 1200)
+  assert.equal(position.net, 3800)
+})
+
 test('Loan repayment validation rejects future dates and overpayment', () => {
   const loan = { amount:300, date:'2026-08-01', repayments:[{ amount:100, date:'2026-08-05' }] }
   assert.equal(Ledger.validateLoanRepayment(loan, { amount:200, date:'2026-08-09' }, '2026-08-09').ok, true)

@@ -230,26 +230,63 @@ const Calc = {
     })
   },
 
-  getMonthlyIncomeExpense(transactions, month) {
+  getMonthlyIncomeExpense(transactions, month, loans = [], wallets = []) {
     const txns = Calc.getMonthlyTransactions(transactions, month)
+    const walletTypes = new Map((Array.isArray(wallets) ? wallets : []).map(wallet => [String(wallet?.id || ''), String(wallet?.type || '').toLowerCase()]))
     let income = 0
     let expense = 0
+    let cashInflow = 0
+    let cashOutflow = 0
     let reimbursementInflow = 0
     let transfer = 0
     let ccPayment = 0
     let bnplPayment = 0
     txns.forEach(t => {
       if (t.type === 'income') {
-        if (Calc.isReimbursementTx(t)) reimbursementInflow += Number(t.amount || 0)
-        else income += Number(t.amount || 0)
+        const amount = Number(t.amount || 0)
+        if (Calc.isReimbursementTx(t)) reimbursementInflow += amount
+        else income += amount
+        if (!['credit', 'bnpl'].includes(walletTypes.get(String(t.walletId || '')))) cashInflow += amount
       }
-      else if (t.type === 'expense') expense += Calc.getExpenseLedgerAmount(t)
+      else if (t.type === 'expense') {
+        const personalAmount = Calc.getExpenseLedgerAmount(t)
+        expense += personalAmount
+        // The wallet pays the stored cash amount; shared-expense allocation is
+        // a personal reporting view and must not make the cash outflow smaller.
+        const walletType = walletTypes.get(String(t.walletId || ''))
+        if (!['credit', 'bnpl'].includes(walletType)) {
+          cashOutflow += Number(t.cashAmount ?? t.amount ?? personalAmount) || 0
+        }
+      }
       else if (t.type === 'transfer') transfer += Number(t.amount || 0)
-      else if (t.type === 'cc_payment') ccPayment += Calc.getCCPaymentCashAmount(t)
-      else if (t.type === 'bnpl_payment') bnplPayment += Number(t.amount || 0)
+      else if (t.type === 'cc_payment') {
+        const amount = Calc.getCCPaymentCashAmount(t)
+        ccPayment += amount
+        cashOutflow += amount
+      }
+      else if (t.type === 'bnpl_payment') {
+        const amount = Number(t.amount || 0)
+        bnplPayment += amount
+        cashOutflow += amount
+      }
+      else if (t.type === 'investment_buy') cashOutflow += Number(t.amount || 0)
+      else if (t.type === 'investment_sell') cashInflow += Number(t.amount || 0)
+    })
+    // Loans are ledger movements rather than normal income/expense
+    // transactions: principal leaves the lending wallet and repayments return
+    // to the selected wallet. Include only posted dated activity in the month.
+    ;(Array.isArray(loans) ? loans : []).forEach(loan => {
+      if (String(loan?.date || '').startsWith(month) && Calc.isPostedTx(loan)) {
+        cashOutflow += Math.max(0, Number(loan.amount || 0))
+      }
+      ;(Array.isArray(loan?.repayments) ? loan.repayments : []).forEach(repayment => {
+        if (String(repayment?.date || '').startsWith(month) && Calc.isPostedTx(repayment)) {
+          cashInflow += Math.max(0, Number(repayment.amount || 0))
+        }
+      })
     })
     const netCashflow = income - expense
-    const cashNetCashflow = income + reimbursementInflow - expense
+    const cashNetCashflow = cashInflow - cashOutflow
     const savingsRate = income > 0 ? (netCashflow / income) * 100 : null
     return {
       income: Math.round(income * 100) / 100,
@@ -333,8 +370,8 @@ const Calc = {
 
   getMonthComparison(transactions, month, opts = {}) {
     const previousMonth = opts.previousMonth || Calc.getPreviousMonth(month)
-    const current = Calc.getMonthlyIncomeExpense(transactions, month)
-    const previous = previousMonth ? Calc.getMonthlyIncomeExpense(transactions, previousMonth) : null
+    const current = Calc.getMonthlyIncomeExpense(transactions, month, opts.loans, opts.wallets)
+    const previous = previousMonth ? Calc.getMonthlyIncomeExpense(transactions, previousMonth, opts.loans, opts.wallets) : null
     const expCats = Calc.getCategoryBreakdown(transactions, month, { type: 'expense', categories: opts.expenseCategories || [] })
     const prevExpCats = previousMonth
       ? Calc.getCategoryBreakdown(transactions, previousMonth, { type: 'expense', categories: opts.expenseCategories || [] })
@@ -402,7 +439,7 @@ const Calc = {
       const committed = typeof App !== 'undefined' && typeof App._getUnpostedInstallmentDebt === 'function' ? Number(App._getUnpostedInstallmentDebt(card.id) || 0) : 0
       const availableLimit = typeof App !== 'undefined' && typeof App.getAvailableCreditForCard === 'function'
         ? Number(App.getAvailableCreditForCard(card) || 0)
-        : Math.max(0, Number(card.limit || 0) - Math.abs(Number(card.balance || 0)) - committed)
+        : Math.max(0, Number(card.limit || 0) - Math.max(0, -Number(card.balance || 0)) - committed)
       return {
         card,
         statementDue: Math.round(Number(statement?.balanceDue || 0) * 100) / 100,
@@ -431,7 +468,7 @@ const Calc = {
     }
   },
 
-  getMonthlyStats(transactions, month) {
+  getMonthlyStats(transactions, month, loans = [], wallets = []) {
     // Only count posted transactions — future-scheduled items (installments, etc.)
     // must not inflate or deflate the reported income/expense for the month.
     const txns = transactions.filter(t => t.date.startsWith(month) && Calc.isPostedTx(t))
@@ -451,7 +488,7 @@ const Calc = {
     })
 
     const net         = income - expense
-    const cashNet     = income + reimbursementInflow - expense
+    const cashNet     = Calc.getMonthlyIncomeExpense(transactions, month, loans, wallets).cashNetCashflow
     const savingsRate = income > 0 ? Math.max(0, (net / income) * 100) : 0
     return { income, expense, reimbursementInflow, net, cashNet, savingsRate, byCategory }
   },
@@ -475,8 +512,12 @@ const Calc = {
     ;(wallets || []).forEach(w => {
       if (!w || w.excludeFromNetWorth) return
       const balance = Number(w.balance || 0)
-      if (balance >= 0) assets += balance
-      else              debt   += Math.abs(balance)
+      if (w.type === 'credit' || w.type === 'bnpl') {
+        // A positive credit-card balance is an overpayment/credit, not debt.
+        // Keep debt liability-only; the card itself is not a cash asset.
+        if (balance < 0) debt += Math.abs(balance)
+      } else if (balance >= 0) assets += balance
+      else debt += Math.abs(balance)
     })
     return { assets, debt, net: assets - debt }
   },
