@@ -1090,12 +1090,15 @@ function persist(reason = 'app') {
     console.warn('[Money Tracker] persist skipped before storage hydration')
     return false
   }
+  const previousBillingWallets = S.wallets
+  if (typeof CreditCardCycles !== 'undefined') S.wallets = CreditCardCycles.prepareBillingMigration({ wallets:S.wallets, transactions:S.transactions, refDate:getTODAY() }).wallets
   const stateCommit = getStateCommit()
   const result = stateCommit
     ? stateCommit.commit({ reason })
     : { ok: Storage.saveAll(S) === true }
   const ok = result.ok === true
   if (!ok) {
+    S.wallets = previousBillingWallets
     if (result.error) console.error('[Money Tracker] state commit failed:', result.error)
     try { toast('บันทึกไม่สำเร็จ — แนะนำสำรองข้อมูลก่อนลองใหม่', 'error') } catch (_) {}
   }
@@ -1506,8 +1509,7 @@ const App = {
   // ─────────────────────────────────────────────────────────
   // CC PAYMENT
   // ─────────────────────────────────────────────────────────
-  openCCPay(cardId) {
-    const editingTxId = arguments[1] || ''
+  openCCPay(cardId, editingTxId = '', statementId = '') {
     S.payingCardId = cardId
     S.editingCCPaymentId = editingTxId || null
     const card    = S.wallets.find(w => w.id === cardId)
@@ -1518,10 +1520,14 @@ const App = {
       toast('ไม่พบรายการชำระบัตรที่ต้องการแก้ไข', 'error')
       return
     }
+    if (!card || card.type !== 'credit') return
+    const billing = App.getCreditCardBillingState?.(card)
+    const selected = billing?.statements.find(st=>st.id === (statementId || editingTx?.statementId)) || billing?.payableStatements[0] || billing?.openStatement
+    S.payingStatementId = selected?.id || ''
     const due     = App.getCreditCardDueInfo?.(card)
     const owed    = editingTx
       ? Math.max(0, Number(editingTx.amount || 0))
-      : Math.max(0, Number(due?.amount || due?.statement?.balanceDue || creditDebtBalance(card)))
+      : Math.max(0, Number(selected?.balanceDue ?? due?.amount ?? creditDebtBalance(card)))
     const sources = S.wallets.filter(w => w.id !== cardId && isCCPaymentSourceWallet(w))
     const esc     = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch])))
     const hasDiscount = !!editingTx && Number(editingTx.discountAmount || 0) > 0
@@ -1534,6 +1540,9 @@ const App = {
         <div style="font-size:14px;color:var(--muted)">${esc(card.icon)} ${esc(card.name)} · ยอดค้างชำระ</div>
         <div style="font-size:40px;font-weight:800;color:var(--expense);margin-top:4px">${Calc.fmt(owed)}</div>
       </div>
+      <div class="form-group"><label class="form-label">รอบที่ต้องการชำระ</label><select class="form-input" id="cc-pay-statement" onchange="App.selectCCPayStatement(this.value)">
+        ${(billing?.statements || []).filter(st=>st.balanceDue>0 || st.id===selected?.id).map(st=>`<option value="${esc(st.id)}"${st.id===selected?.id?' selected':''}>${esc(st.start)} – ${esc(st.end)} · ${Calc.fmt(st.balanceDue)}</option>`).join('')}
+      </select></div>
       <div class="form-group">
           <label class="form-label">จ่ายจากกระเป๋า</label>
           <select class="form-input" id="cc-pay-wallet">
@@ -1566,13 +1575,21 @@ const App = {
       <div class="amount-summary-card" id="cc-pay-preview" style="margin-bottom:16px"></div>
       <div style="display:flex;gap:8px;margin-bottom:16px">
         ${[owed, Math.min(owed, 1000), Math.min(owed, 500)].filter((v,i,a) => a.indexOf(v)===i && v > 0).map(v =>
-          `<button class="chip" onclick="document.getElementById('cc-pay-amount').value='${v}';App.updateCCPayPreview()">${v===owed?'เต็มจำนวน':Calc.fmt(v)}</button>`
+          `<button class="chip" onclick="document.getElementById('cc-pay-amount').value='${v}';App.updateCCPayPreview()">${v===owed?'เต็มยอดรอบนี้':Calc.fmt(v)}</button>`
         ).join('')}
       </div>
       <button class="btn btn-primary" onclick="App.saveCCPay()">${title}</button>`
 
     App.updateCCPayPreview()
     App.openOverlay('overlay-cc-pay')
+  },
+
+  selectCCPayStatement(statementId) {
+    S.payingStatementId = statementId
+    const card = S.wallets.find(w=>w.id===S.payingCardId)
+    const st = App.getCreditCardBillingState(card).statements.find(st=>st.id===statementId)
+    if (st) document.getElementById('cc-pay-amount').value = st.balanceDue
+    App.updateCCPayPreview()
   },
 
   clearCCPayAmount() {
@@ -1607,10 +1624,14 @@ const App = {
       }
     }
     const cashAmount = hasDiscount ? Math.max(0, parsePayNumber(cashEl?.value)) : amount
+    const card = S.wallets.find(w=>w.id===S.payingCardId)
+    const old = S.editingCCPaymentId ? S.transactions.find(t=>t.id===S.editingCCPaymentId) : null
+    const remainingDebt = Number(App.getCreditCardBillingState?.(card)?.postedDebt || 0) + (old && App._isPostedTx(old) ? Number(old.amount || 0) : 0)
+    const carryCredit = Math.max(0, Math.round((amount-remainingDebt)*100)/100)
     const finalDiscount = hasDiscount ? Math.max(0, Math.min(amount, amount - cashAmount)) : 0
     if (preview) {
       preview.innerHTML = `
-        <small>สรุปการชำระ</small>
+        <small>สรุปการชำระ</small>${carryCredit>0?`<div class="form-hint">เครดิตล่วงหน้า ${Calc.fmt(carryCredit)}</div>`:''}
         <div style="display:grid;gap:6px;margin-top:8px;font-size:13px">
           <div style="display:flex;justify-content:space-between;gap:12px"><span>บัตรเครดิตลดลง</span><strong>${Calc.fmt(amount)}</strong></div>
           <div style="display:flex;justify-content:space-between;gap:12px"><span>เงินออกจากกระเป๋า</span><strong>${Calc.fmt(cashAmount)}</strong></div>
@@ -1970,6 +1991,7 @@ function init() {
   S.netWorthSnapshots  = data.netWorthSnapshots  || []
   S.investmentSnapshots = data.investmentSnapshots || []
   MT_STORAGE_HYDRATED = true
+  App.ensureCreditBillingMetadata?.({reason:'billing-hydration'})
 
   S.settings ||= {}
   S.settings.storageMeta ||= {}
@@ -4373,85 +4395,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const cryptoSummary = App.getCryptoPortfolioSummary?.() || { holdings: [], totalValueTHB: 0 }
     const currentNetWorth = Calc.getNetWorth ? Calc.getNetWorth(S.wallets) : { net: usable.liquid || 0 }
     const dashboardNetWorth = Number(currentNetWorth.net || 0)
-    function hasPaymentForCreditDue(card, due) {
-      const shiftDateLocal = (dateStr, dayDelta = 0) => {
-        const [y, m, d] = String(dateStr || '').split('-').map(Number)
-        if (!y || !m || !d) return ''
-        const next = new Date(y, m - 1, d)
-        next.setDate(next.getDate() + Number(dayDelta || 0))
-        return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`
-      }
-      const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
-      const dueDate = String(due?.dateStr || (Number(due?.daysLeft) === 0 ? todayStr : ''))
-      if (!card?.id) return false
-      const hasRecentPayment = () => {
-        const start = shiftDateLocal(todayStr, -3)
-        const end = dueDate && dueDate > todayStr ? dueDate : todayStr
-        return (S.transactions || []).some(t => {
-          if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
-          if (!(Number(t.amount || 0) > 0)) return false
-          const date = String(t.date || '')
-          return !!(date && start && date >= start && date <= end)
-        })
-      }
-      if (!dueDate || typeof App.getCardStatement !== 'function') return hasRecentPayment()
-      const hasPaymentInStatementWindow = st => (S.transactions || []).some(t => {
-        if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
-        if (!(Number(t.amount || 0) > 0)) return false
-        if (st?.id && String(t.statementId || '') === String(st.id)) return true
-        const date = String(t.date || '')
-        return !!(st?.end && st?.dueDate && date > String(st.end) && date <= String(st.dueDate))
-      })
-      let cursorRef = todayStr
-      const seenStatementIds = new Set()
-      for (let i = 0; i < 3; i++) {
-        const st = App.getCardStatement(card.id, cursorRef)
-        if (!st || !st.id || seenStatementIds.has(st.id)) break
-        seenStatementIds.add(st.id)
-        if (String(st.dueDate || '') === dueDate) {
-          return Number(st.paidTotal || 0) > 0 || hasPaymentInStatementWindow(st)
-        }
-        const prevRef = shiftDateLocal(st.start, -1)
-        if (!prevRef || prevRef === cursorRef) break
-        cursorRef = prevRef
-      }
-      return hasRecentPayment()
-    }
-    const alertCards = (typeof visibleWallets === 'function' ? visibleWallets() : S.wallets.filter(w => !w.hiddenFromWalletList))
-      .filter(w => w.type === 'credit')
-      .map(w => {
-        const due = App.getCreditCardDueInfo ? App.getCreditCardDueInfo(w) : null
-        const used = Number(due?.amount || due?.statement?.balanceDue || 0)
-        return due && used > 0 ? { ...w, used, due } : null
-      })
-      .filter(Boolean)
-      .filter(card => Number(card.due?.daysLeft) >= 0)
-      .filter(card => !hasPaymentForCreditDue(card, card.due))
-      .sort((a, b) => Number(a.due?.daysLeft ?? 9999) - Number(b.due?.daysLeft ?? 9999))
-    App.debugDashboardCreditAlerts = function() {
-      return (typeof visibleWallets === 'function' ? visibleWallets() : S.wallets.filter(w => !w.hiddenFromWalletList))
-        .filter(w => w.type === 'credit')
-        .map(card => {
-          const due = App.getCreditCardDueInfo ? App.getCreditCardDueInfo(card) : (card.dueDay ? Calc.getDueDate(card.dueDay) : null)
-          return {
-            id: card.id,
-            name: card.name,
-            balance: card.balance,
-            due,
-            hasPaymentForDue: hasPaymentForCreditDue(card, due),
-            payments: (S.transactions || [])
-              .filter(t => t.type === 'cc_payment' && String(t.toWalletId || '') === String(card.id))
-              .map(t => ({ id: t.id, date: t.date, amount: t.amount, statementId: t.statementId, walletId: t.walletId, toWalletId: t.toWalletId }))
-              .slice(0, 10),
-          }
-        })
-    }
-    const CREDIT_ALERT_DAYS = 3
-    const minDaysLeft = alertCards.length ? Number(alertCards[0].due.daysLeft ?? 0) : null
-    const shouldShowCreditAlert = minDaysLeft !== null && minDaysLeft >= 0 && minDaysLeft <= CREDIT_ALERT_DAYS
-    const nearDueCards = shouldShowCreditAlert
-      ? alertCards.filter(card => Number(card.due?.daysLeft ?? 0) === minDaysLeft)
-      : []
+    const alertCards = App.getCreditCardAlertRows(typeof visibleWallets === 'function' ? visibleWallets() : S.wallets.filter(w=>!w.hiddenFromWalletList))
+    App.debugDashboardCreditAlerts = () => alertCards.map(card=>({id:card.id,name:card.name,due:card.due,remaining:card.used}))
+    const nearDueCards = alertCards
 
     // Daily budget calculation
     const nowDate = new Date()
@@ -4753,13 +4699,13 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (nearDueCards.length) {
       const nearDueTotal = nearDueCards.reduce((sum, card) => sum + Number(card.used || 0), 0)
       const nearDueDaysLeft = Number(nearDueCards[0].due.daysLeft ?? 0)
-      const nearDueBadge = nearDueDaysLeft === 0 ? 'วันนี้' : `อีก ${nearDueDaysLeft} วัน`
+      const nearDueBadge = nearDueDaysLeft < 0 ? `เลยกำหนด ${-nearDueDaysLeft} วัน` : nearDueDaysLeft === 0 ? 'วันนี้' : `อีก ${nearDueDaysLeft} วัน`
       html += `<div class="mt-alert-card">
-        <div class="mt-alert-title">ครบกำหนดชำระ ${ESC(nearDueCards[0].due.dueStr)} <span class="mt-alert-badges"><em>${ESC(nearDueBadge)}</em><span class="mt-alert-badge-total">${S.settings?.hideMoney ? '฿*****' : `รวม ${FMT(nearDueTotal)}`}</span></span></div>
+        <div class="mt-alert-title">บิลบัตรเครดิตที่ต้องชำระ <span class="mt-alert-badges"><em>${ESC(nearDueBadge)}</em><span class="mt-alert-badge-total">${S.settings?.hideMoney ? '฿*****' : `รวม ${FMT(nearDueTotal)}`}</span></span></div>
         ${nearDueCards.map(card => `
           <div class="mt-alert-row" onclick="App.openCCDetail('${ESC(card.id)}')">
             <div class="mt-alert-row-info">
-              <span class="mt-alert-row-name">${ESC(card.icon || '💳')} ${ESC(card.name)}</span>
+              <span class="mt-alert-row-name">${ESC(card.icon || '💳')} ${ESC(card.name)} · ${ESC(card.due.dueStr)}</span>
             </div>
             <div class="mt-alert-row-amt">${S.settings?.hideMoney ? '฿*****' : FMT(card.used)}</div>
           </div>`).join('')}
@@ -6309,22 +6255,23 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const source = walletById(sourceId)
     if (!card || card.type !== 'credit') { toast('ไม่พบบัตรเครดิต', 'error'); return }
     if (!sourceId || !source) { App._showFieldError('cc-pay-wallet', 'กรุณาเลือกกระเป๋าต้นทาง'); return }
-    if (!(amount > 0)) { App._showFieldError('cc-pay-amount', 'กรุณาระบุยอดชำระ'); return }
-    if (!(cashAmount > 0)) { App._showFieldError('cc-pay-cash-amount', 'กรุณาระบุเงินที่จ่ายจริง'); return }
+    if (!Number.isFinite(amount) || !(amount > 0)) { App._showFieldError('cc-pay-amount', 'กรุณาระบุยอดชำระ'); return }
+    if (!Number.isFinite(cashAmount) || !(cashAmount > 0)) { App._showFieldError('cc-pay-cash-amount', 'กรุณาระบุเงินที่จ่ายจริง'); return }
     if (cashAmount > amount + 0.01) { App._showFieldError('cc-pay-cash-amount', 'เงินที่จ่ายจริงต้องไม่เกินยอดที่ตัดจากบัตร'); return }
     if (hasDiscount && Math.abs((amount - cashAmount) - discountAmount) > 0.01) { App._showFieldError('cc-pay-discount', 'ส่วนลดต้องตรงกับยอดตัดบัตรลบเงินที่จ่ายจริง'); return }
     const due = App.getCreditCardDueInfo?.(card)
     if (!isCCPaymentSourceWallet(source)) { App._showFieldError('cc-pay-wallet', 'ชำระบัตรได้จากกระเป๋าเงินสด ธนาคาร E-Wallet หรือออมทรัพย์เท่านั้น'); return }
-    const oldCashAmount = existingTx ? App.getCCPaymentCashAmount(existingTx) : 0
+    const oldCashAmount = existingTx && App._isPostedTx(existingTx) ? App.getCCPaymentCashAmount(existingTx) : 0
     const availableSourceBalance = Number(source.balance || 0) + (existingTx?.walletId === sourceId ? oldCashAmount : 0)
     if (availableSourceBalance < cashAmount) { App._showFieldError('cc-pay-cash-amount', 'ยอดเงินในกระเป๋าไม่เพียงพอ'); return }
     // อนุญาตให้ชำระเกินหรือน้อยกว่ายอดที่ระบบแจ้งได้ (ยอดจริงอาจมากกว่าที่ระบบคำนวณ)
-    const st = due?.statement || App.getCardStatement(card.id)
+    const selectedStatementId = document.getElementById('cc-pay-statement')?.value || S.payingStatementId || existingTx?.statementId
+    const st = App.getCreditCardBillingState?.(card)?.statements.find(st=>st.id===selectedStatementId) || due?.statement || App.getCardStatement(card.id)
     const tx = {
       id: editId || Calc.genId(), type:'cc_payment', amount, walletId:sourceId,
       toWalletId:card.id, date:existingTx?.date || today(),
       note:existingTx?.note || `ชำระ ${card.name}`,
-      statementId:existingTx?.statementId || st?.id,
+      statementId:st?.id || existingTx?.statementId,
       createdAt: existingTx?.createdAt || nowISO(),
       createdSequence: existingTx?.createdSequence || nextTransactionCreationSequence(),
     }
@@ -11660,6 +11607,9 @@ App._pickMerchant = function(name, opts = {}) {
       // Second click (force confirm row already shown) falls through to record.
     }
 
+    if (actualCashback > 0 && destination === 'income' && !incomeWalletId) { notify('กรุณาเลือกกระเป๋าที่รับเงินคืน', 'error'); return }
+    const previousTransactions = S.transactions.slice()
+    const previousRewardLedger = (S.rewardLedger || []).slice()
     document.getElementById('v50-record-rewards-dlg')?.remove()
 
     const card       = walletById(cardId)
@@ -11711,7 +11661,12 @@ App._pickMerchant = function(name, opts = {}) {
       notify('ไม่มียอดที่บันทึก', 'warn'); return
     }
 
-    persist()
+    if (!persist('credit-reward')) {
+      S.transactions = previousTransactions
+      S.rewardLedger = previousRewardLedger
+      App.recalculateWalletBalances?.({save:false,recordSnapshot:false})
+      return
+    }
     notify(`บันทึกแล้ว${actualPoints ? ` · ${actualPoints.toLocaleString('en-US')} คะแนน` : ''}${actualCashback ? ` · ${money(actualCashback)}` : ''}`, 'success')
     App.openRewardLedgerScreen(cardId)
   }
@@ -16671,8 +16626,32 @@ App._pickMerchant = function(name, opts = {}) {
       amountForTx: tx => typeof App._expectedLedgerAmountForTx === 'function'
         ? App._expectedLedgerAmountForTx(tx)
         : (App.getLedgerAmountForTx?.(tx) || tx.amount || 0),
-      isPostedTx: tx => App._isPostedTx ? App._isPostedTx(tx) : tx.scheduled !== true,
+      isPostedTx: tx => !tx.date || String(tx.date) <= String(refDate),
     }
+  }
+
+  App.ensureCreditBillingMetadata = function({reason='billing-metadata'} = {}) {
+    if (typeof CreditCardCycles === 'undefined') return true
+    const previous = S.wallets
+    const candidate = CreditCardCycles.prepareBillingMigration({wallets:S.wallets,transactions:S.transactions,refDate:today()})
+    if (!candidate.changed) return true
+    S.wallets = candidate.wallets
+    if (persist(reason)) return true
+    S.wallets = previous
+    return false
+  }
+
+  App.getCreditCardBillingState = function(card, refDate = today()) {
+    return CreditCardCycles.buildCardBillingState(App._creditCycleOptions(card,refDate))
+  }
+  App.getCreditCardPayableStatements = function(card, refDate = today()) {
+    return App.getCreditCardBillingState(card,refDate).payableStatements
+  }
+  App.getCreditCardAlertRows = function(cards = S.wallets || []) {
+    return cards.filter(card=>card.type==='credit').flatMap(card=>App.getCreditCardPayableStatements(card)
+      .filter(st=>st.balanceDue>0 && st.daysLeft<=3)
+      .map(st=>({...card,used:st.balanceDue,due:{statementId:st.id,dateStr:st.dueDate,dueStr:st.dueDate,daysLeft:st.daysLeft,statement:st}})))
+      .sort((a,b)=>a.due.daysLeft-b.due.daysLeft)
   }
 
   App.getCreditCardDueInfo = function(card, refDate = today()) {
@@ -16733,12 +16712,13 @@ App._pickMerchant = function(name, opts = {}) {
 
   App._renderCCStatementPanel = function(cardId, st) {
     if (!st) return `<div class="statement-compact statement-compact-th"><div class="empty-state">ยังไม่มีข้อมูลรอบบิล</div></div>`
-    const status = st.paid ? 'ชำระแล้ว' : (Number(st.balanceDue || 0) > 0 ? 'ค้างชำระ' : 'ไม่มียอดต้องจ่าย')
+    const status = ({open:'รอบกำลังสะสม',partial:'ชำระบางส่วน',overdue:'เลยกำหนด',paid:'ชำระแล้ว',unpaid:'ค้างชำระ'})[st.status] || 'ไม่มียอดต้องจ่าย'
     return `<div class="statement-compact statement-compact-th">
       <div class="statement-main">
         <div><b>สรุปรอบบัตรเครดิต</b><span>รอบ ${thaiDate(st.start)} – ${thaiDate(st.end)}</span><span>วันกำหนดชำระ ${thaiDate(st.dueDate)}</span></div>
         <em class="status-pill ${st.paid || Number(st.balanceDue || 0) <= 0 ? 'ok' : 'warn'}">${status}</em>
       </div>
+      ${st.openingDebt>0?`<div class="form-hint">หนี้ตั้งต้น ${money(st.openingDebt)}${walletById(cardId)?.ccBilling?.opening?.provenance==='inferred'?' · วันครบกำหนดประมาณการ':''}</div><button class="btn btn-secondary btn-sm" onclick="App.openCreditOpeningForm('${esc(cardId)}')">แก้วันครบกำหนดหนี้ตั้งต้น</button>`:''}
       <div class="statement-metrics">
         <div><span>ยอดใช้ในรอบ</span><strong>${money(st.purchaseTotal)}</strong></div>
         <div><span>ชำระแล้ว</span><strong>${money(st.paidTotal)}</strong></div>
@@ -16746,6 +16726,22 @@ App._pickMerchant = function(name, opts = {}) {
       </div>
       <button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen('${esc(cardId)}')">บัญชีคะแนนบัตรเครดิต</button>
     </div>`
+  }
+
+  App.openCreditOpeningForm = function(cardId) {
+    const card = walletById(cardId)
+    const opening = card?.ccBilling?.opening
+    if (!opening) return
+    App.openDynamicSheet('cc-opening-date', 'วันครบกำหนดหนี้ตั้งต้น', `<div class="form-group"><label class="form-label">วันครบกำหนดตามใบแจ้งยอด</label><input id="cc-opening-due" class="form-input" type="date" value="${esc(opening.dueDate)}"></div>`, `<button class="btn btn-primary" onclick="App.saveCreditOpeningDate('${esc(cardId)}')">บันทึก</button>`)
+  }
+  App.saveCreditOpeningDate = function(cardId) {
+    const card = walletById(cardId), dueDate = document.getElementById('cc-opening-due')?.value
+    if (!card?.ccBilling || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate || '') || !Number.isFinite(new Date(`${dueDate}T00:00:00`).getTime())) return
+    const previous = card.ccBilling
+    const opening = {...previous.opening,dueDate,provenance:'explicit'}
+    card.ccBilling = {...previous,opening,periods:previous.periods.map(p=>p.id===opening.statementId?{...p,dueDate}:p)}
+    if (!persist('credit-opening-date')) {card.ccBilling=previous;return}
+    App.closeDynamicSheet('cc-opening-date');App.openCCDetail(cardId)
   }
 
   App._renderCCBenefitPanel = function(cardId, st, rewardAcctHtml) {
@@ -16806,7 +16802,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (!card) return
     const offset = App._getCCDetailCycleOffset(cardId)
     const st = App._getCCDetailStatementAtOffset(card, offset)
-    const txns = (S.transactions||[]).filter(t => t.walletId===cardId).sort((a,b) => String(b.date||'').localeCompare(String(a.date||''))).slice(0,20)
+    const txns = (S.transactions||[]).filter(t => t.walletId===cardId || (t.type==='cc_payment' && t.toWalletId===cardId)).sort((a,b) => String(b.date||'').localeCompare(String(a.date||''))).slice(0,20)
     // postedOwed = what's on the current statement (ledger balance)
     // committedInstallments = future installment months not yet posted but already
     //   consuming credit limit — real credit utilisation is the sum of both.
@@ -16827,7 +16823,7 @@ App._pickMerchant = function(name, opts = {}) {
     const heroBreakdown = committedInstallments > 0
       ? `<div style="display:flex;justify-content:space-between;font-size:11px;opacity:.75;margin-top:6px;margin-bottom:2px"><span>ค้างชำระปัจจุบัน ${money(postedOwed)}</span><span>ผ่อนกันวงเงิน ${money(committedInstallments)}</span></div>`
       : ''
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon||'')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}')" style="width:auto">ชำระ</button></div></div><div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}"><div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0"><div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${esc(statementText)}</div><div style="font-size:13px;opacity:.72;margin-bottom:4px">วงเงินที่ใช้ทั้งหมด</div><div class="big">${money(owed)}</div>${heroBreakdown}${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}</div><div class="cc-cycle-swipe-zone" data-card-id="${esc(cardId)}">${cycleContentHtml}</div>${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : ''}<div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}</div></div>${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}<div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx, { showDate: true })).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div></div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon||'')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}', '', '${esc(st?.id || '')}')" style="width:auto">ชำระ</button></div></div><div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}"><div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0"><div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${esc(statementText)}</div><div style="font-size:13px;opacity:.72;margin-bottom:4px">วงเงินที่ใช้ทั้งหมด</div><div class="big">${money(owed)}</div>${heroBreakdown}${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}</div><div class="cc-cycle-swipe-zone" data-card-id="${esc(cardId)}">${cycleContentHtml}</div>${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : ''}<div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}</div></div>${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}<div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx, { showDate: true })).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div></div>`)
     setTimeout(() => { App._bindTxRows?.('sub-screen'); App._bindCCCycleSwipe?.(cardId) }, 0)
   }
 

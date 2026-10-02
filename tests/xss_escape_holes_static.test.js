@@ -7,7 +7,7 @@ const root = path.join(__dirname, '..')
 const app = fs.readFileSync(path.join(root, 'app_v2.js'), 'utf8')
 
 test('openCCPay escapes wallet name/icon before interpolating into <option> and header HTML', () => {
-  const fnStart = app.indexOf('openCCPay(cardId) {')
+  const fnStart = app.indexOf('openCCPay(cardId')
   assert.ok(fnStart >= 0, 'openCCPay not found')
   const fnBody = app.slice(fnStart, app.indexOf('\n  },', fnStart))
   assert.equal(/\$\{w\.name\}/.test(fnBody), false, 'wallet name must not be interpolated raw — wallet names are user-controlled (including via JSON import) and this renders via innerHTML')

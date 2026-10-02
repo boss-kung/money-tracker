@@ -436,6 +436,7 @@ const Calc = {
   getCreditLiabilitySummary(wallets, opts = {}) {
     const cards = (wallets || []).filter(w => w && w.type === 'credit' && !w.excludeFromNetWorth)
     const items = cards.map(card => {
+      const billing = typeof App !== 'undefined' && App.getCreditCardBillingState ? App.getCreditCardBillingState(card, opts.refDate) : null
       const statement = typeof App !== 'undefined' && typeof App.getCardStatement === 'function' ? App.getCardStatement(card.id, opts.refDate) : null
       const due = typeof App !== 'undefined' && typeof App.getCreditCardDueInfo === 'function' ? App.getCreditCardDueInfo(card, opts.refDate) : null
       const committed = typeof App !== 'undefined' && typeof App._getUnpostedInstallmentDebt === 'function' ? Number(App._getUnpostedInstallmentDebt(card.id) || 0) : 0
@@ -444,8 +445,8 @@ const Calc = {
         : Math.max(0, Number(card.limit || 0) - Math.max(0, -Number(card.balance || 0)) - committed)
       return {
         card,
-        statementDue: Math.round(Number(statement?.balanceDue || 0) * 100) / 100,
-        currentCycleSpending: Math.round(Number(statement?.purchaseTotal || 0) * 100) / 100,
+        statementDue: Math.round(Number(billing ? billing.payableStatements.reduce((sum,st)=>sum+st.balanceDue,0) : statement?.balanceDue || 0) * 100) / 100,
+        currentCycleSpending: Math.round(Number(billing?.openStatement?.purchaseTotal ?? statement?.purchaseTotal ?? 0) * 100) / 100,
         committedInstallments: Math.round(committed * 100) / 100,
         availableLimit: Math.round(availableLimit * 100) / 100,
         nextDueDate: due?.dateStr || statement?.dueDate || '',
@@ -465,7 +466,7 @@ const Calc = {
         statementDue: Math.round(totals.statementDue * 100) / 100,
         currentCycleSpending: Math.round(totals.currentCycleSpending * 100) / 100,
         committedInstallments: Math.round(totals.committedInstallments * 100) / 100,
-        totalLiability: Math.round((totals.statementDue + totals.committedInstallments) * 100) / 100,
+        totalLiability: Math.round((items.reduce((sum,row)=>sum+Math.max(0,-Number(row.card.balance||0)),0) + totals.committedInstallments) * 100) / 100,
       },
     }
   },
