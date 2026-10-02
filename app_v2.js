@@ -6264,7 +6264,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (!isCCPaymentSourceWallet(source)) { App._showFieldError('cc-pay-wallet', 'ชำระบัตรได้จากกระเป๋าเงินสด ธนาคาร E-Wallet หรือออมทรัพย์เท่านั้น'); return }
     const oldCashAmount = existingTx && App._isPostedTx(existingTx) ? App.getCCPaymentCashAmount(existingTx) : 0
     const availableSourceBalance = Number(source.balance || 0) + (existingTx?.walletId === sourceId ? oldCashAmount : 0)
-    if (availableSourceBalance < cashAmount) { App._showFieldError('cc-pay-cash-amount', 'ยอดเงินในกระเป๋าไม่เพียงพอ'); return }
+    if (availableSourceBalance < cashAmount) { App._showFieldError(hasDiscount ? 'cc-pay-cash-amount' : 'cc-pay-amount', 'ยอดเงินในกระเป๋าไม่เพียงพอ'); return }
     // อนุญาตให้ชำระเกินหรือน้อยกว่ายอดที่ระบบแจ้งได้ (ยอดจริงอาจมากกว่าที่ระบบคำนวณ)
     const selectedStatementId = document.getElementById('cc-pay-statement')?.value || S.payingStatementId || existingTx?.statementId
     const st = App.getCreditCardBillingState?.(card)?.statements.find(st=>st.id===selectedStatementId) || due?.statement || App.getCardStatement(card.id)
@@ -6273,7 +6273,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       toWalletId:card.id, date:existingTx?.date || today(),
       note:existingTx?.note || `ชำระ ${card.name}`,
       statementId:st?.id || existingTx?.statementId,
-      createdAt: existingTx?.createdAt || nowISO(),
+      createdAt: existingTx?.createdAt || localNow(),
       createdSequence: existingTx?.createdSequence || nextTransactionCreationSequence(),
     }
     if (hasDiscount && discountAmount > 0) {
@@ -23023,7 +23023,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       svg.setAttribute('viewBox', '0 0 64 64')
       svg.setAttribute('width',  '80')
       svg.setAttribute('height', '80')
-      svg.className = 'mt-checkmark-overlay'
+      svg.setAttribute('class', 'mt-checkmark-overlay')
       svg.innerHTML = '<circle cx="32" cy="32" r="30"/><path d="M20 32l9 9 15-18"/>'
       document.body.appendChild(svg)
       setTimeout(() => svg.remove(), 1700)

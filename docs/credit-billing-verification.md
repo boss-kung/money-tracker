@@ -58,3 +58,11 @@ User authorized local merge, push and deployment. `main` fast-forwarded to `83ac
 - Hosted SQL smoke passed for accepted/rejected/legacy revisions, ownership mismatch, active claim deduplication, expired lease reclamation, error retry, disabled rule and restricted RPC execution. Synthetic fixtures ran inside a transaction and were rolled back. Parallel transaction concurrency was not exercised.
 - Deployed `sync-notification-snapshot`, `sync-notification-rules`, and `send-custom-notification-rules` with server-side bundling; existing JWT verification retained.
 - Real device Push delivery and the complete manual staging matrix remain unverified. Deployment status for the frontend is verified separately through GitHub Actions and live release assets.
+
+## Credit payment save hotfix — r126
+
+Reported production save crash: `nowISO is not defined` in `App.saveCCPay`. The correct timestamp helper in its enclosing scope is `localNow`. Earlier isolated tests injected a global `nowISO`, masking this integration error; that stub is removed and the reported crash reproduced before fixing. Additional regression coverage verifies visible insufficient-funds feedback when discount fields are hidden and SVG success animation attributes.
+
+Node238 passed; all6 payment-flow tests passed independently in review. Browser sample payment1000 showed successful save, source balance -1000 and card debt -1000. A post-save SVG className error found in this browser run was fixed with setAttribute; repeated smoke produced no new error. Cache version bumped to `2026.10.02-credit-r126`.
+
+Notification authorization is separate: live credential-free preflight returned204; a POST without Authorization returned401 `UNAUTHORIZED_NO_AUTH_HEADER`, as expected. This does not establish why the user's actual authenticated request received403; no ownership or authentication protections were changed.
