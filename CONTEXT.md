@@ -43,3 +43,9 @@ _Avoid_: Alert job, reminder trigger
 **Notification Snapshot**:
 A privacy-limited projection of local financial state used by scheduled notification delivery.
 _Avoid_: Cloud state, notification cache
+
+## Credit billing
+
+Credit statement balances derive from opening baselines and posted Ledger events in chronological order. Version 2 wallet billing metadata freezes opening debt attribution and closed statement boundaries/due dates. An inferred opening due date can be corrected by the user. Explicit payment targets allocate first, then older remaining obligations; excess payment is carried as card credit. Statement opening debt is separate from purchases and rewards.
+
+Future payments are cash plans, not settlement of actual debt. The upcoming calendar retains unpaid bills while subtracting linked planned settlement from the unplanned cash requirement. Notifications use signed numeric days and server revisions, separate due/overdue modes, and retryable delivery leases. Financial amounts and names are excluded from notification debt snapshots.

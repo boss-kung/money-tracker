@@ -55,3 +55,19 @@ test('credited money before a purchase retains transaction provenance',()=> {
   assert.equal(result.creditBalance,250)
   assert.deepEqual(result.allocations.map(a=>[a.transactionId,a.amount]),[['p',750]])
 })
+
+test('closed statement boundaries survive changed cycle settings',()=> {
+ const txs=[purchase('e','2026-05-10',1000)]
+ const migrated=CC.prepareBillingMigration({wallets:[card],transactions:txs,refDate:'2026-06-03'}).wallets[0]
+ const result=billing(txs,'2026-06-03',{...migrated,cycleDay:19,dueAfterCycleDays:20})
+ assert.equal(result.payableStatements[0].id,sid)
+ assert.equal(result.payableStatements[0].dueDate,'2026-06-04')
+})
+test('future tagged payment cannot move opening debt into an open cycle',()=> {
+ const result=billing([payment('future','2026-07-01',5000,'c:2026-05-26:2026-06-25')],'2026-06-03',{openingBalance:-5000})
+ assert.equal(result.payableStatements[0].id,sid)
+ assert.equal(result.payableStatements[0].balanceDue,5000)
+})
+test('transfer to the same credit wallet has zero billing effect',()=> {
+ assert.equal(billing([{id:'self',type:'transfer',walletId:'c',toWalletId:'c',date:'2026-05-10',amount:1000}],'2026-06-03').creditBalance,0)
+})

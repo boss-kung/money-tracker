@@ -123,3 +123,11 @@ Useful extra config:
 - Per-rule amount visibility override.
 - Category, wallet, merchant, or payment-channel filters.
 - Snooze duration and repeat-until-resolved behavior.
+
+## Credit billing snapshot v2 rollout
+
+Apply `202610020001_credit_notification_snapshot_v2.sql` and `202610020002_credit_notification_delivery_claim.sql` before deploying `sync-notification-snapshot`, `sync-notification-rules`, and `send-custom-notification-rules`. Then publish client release `2026.10.02-credit-r125` and force a snapshot refresh. These migrations grant RPC execution only to service_role and require device ownership.
+
+Debt snapshots retain signed calendar days, use Bangkok dates, expire after 90 days, and deliver late cron runs after the configured time on the same day. Due and overdue are separate rule modes. Claims lease delivery for 120 seconds; transport interruption after delivery but before confirmation can still duplicate a notification. Offline payments suppress reminders only after accepted synchronization.
+
+Before rollout, back up the database and test ownership, concurrent snapshot revisions, concurrent claims, retry after lease expiry, disabled rules/devices, closed-app reminder delivery, and online payment suppression on staging. Local SQL/real Push were not verified in this implementation environment. For rollback retain v2 columns and wallet billing metadata; prepare a compatible rollback build rather than publishing an old client that drops metadata. See `docs/credit-billing-verification.md`.

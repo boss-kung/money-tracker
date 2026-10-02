@@ -1991,7 +1991,8 @@ function init() {
   S.netWorthSnapshots  = data.netWorthSnapshots  || []
   S.investmentSnapshots = data.investmentSnapshots || []
   MT_STORAGE_HYDRATED = true
-  App.ensureCreditBillingMetadata?.({reason:'billing-hydration'})
+  // The extended App APIs are registered later in this script; persist prepares metadata directly.
+  persist('billing-hydration')
 
   S.settings ||= {}
   S.settings.storageMeta ||= {}

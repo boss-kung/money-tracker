@@ -190,11 +190,18 @@
     const diagnostics = []
     const next = wallets.map(card => {
       if (card?.type !== 'credit' || !parseDate(refDate)) return card
-      const relevant = transactions.filter(tx => tx && (tx.walletId === card.id || tx.toWalletId === card.id))
+      const relevant = transactions.filter(tx => tx && parseDate(tx.date) && tx.date <= refDate && (tx.walletId === card.id || tx.toWalletId === card.id))
       const periods = new Map()
       for (const p of card.ccBilling?.periods || []) {
         const parsed = parseStatementId(card, p.id)
         if (parsed && parsed.start === p.start && parsed.end === p.end && parseDate(p.dueDate)) periods.set(p.id, {...parsed, dueDate:p.dueDate})
+      }
+      const addClosedPeriod = period => {
+        const overlaps=[...periods.values()].filter(old=>old.start<=period.end && old.end>=period.start)
+        if(overlaps.some(old=>old.end>=period.end)) return
+        const start=overlaps.length ? addDays(overlaps.sort((a,b)=>b.end.localeCompare(a.end))[0].end,1) : period.start
+        const id=statementId(card.id,start,period.end)
+        periods.set(id,{id,start,end:period.end,dueDate:resolveDueDate(card,period.end)})
       }
       for (const tx of relevant) {
         const tagged = parseStatementId(card, tx.statementId)
@@ -202,8 +209,7 @@
         if (parseDate(tx.date) && String(tx.date) <= refDate && ['expense','transfer'].includes(tx.type) && tx.walletId === card.id) {
           const period = getStatementPeriod(card, tx.date, {includeOpen:true})
           if (period.end < refDate && ![...periods.values()].some(p => tx.date >= p.start && tx.date <= p.end)) {
-            const id = statementId(card.id, period.start, period.end)
-            periods.set(id, {id,...period,dueDate:resolveDueDate(card, period.end)})
+            addClosedPeriod(period)
           }
         }
       }
@@ -214,7 +220,7 @@
         const p = getStatementPeriod(card,cursor)
         if (!p) break
         const id=statementId(card.id,p.start,p.end)
-        if (![...periods.values()].some(old => old.end === p.end)) periods.set(id,{id,...p,dueDate:resolveDueDate(card,p.end)})
+        addClosedPeriod(p)
         if (p.end < earliest) break
         cursor=p.start
       }
@@ -248,12 +254,14 @@
     }
     normalized.ccBilling.periods.forEach(ensure)
     const openPeriod=getStatementPeriod(card,refDate,{includeOpen:true})
+    const lastClosed=normalized.ccBilling.periods.filter(p=>p.end<refDate).sort((a,b)=>b.end.localeCompare(a.end))[0]
+    if(lastClosed && lastClosed.end>=openPeriod.start) openPeriod.start=addDays(lastClosed.end,1)
     const open=ensure(openPeriod)
     let cursor=refDate
     for (let i=0;i<Math.max(6,Math.min(2400,count));i++) {
       const p=getStatementPeriod(card,cursor)
       if (!p) break
-      if (![...rows.values()].some(r=>r.end===p.end)) ensure(p)
+      if (![...rows.values()].some(r=>r.start<=p.end && r.end>=p.start)) ensure(p)
       cursor=p.start
     }
     const baseline=cents(card.openingBalance)
@@ -284,6 +292,7 @@
     for (const tx of events) {
       const amount=cents(tx.type==='expense' && typeof amountForTx==='function' ? amountForTx(tx) : tx.ledgerAmount ?? tx.amount)
       if (!Number.isFinite(Number(tx.amount)) || amount<0) {diagnostics.push({transactionId:tx.id,code:'INVALID_AMOUNT'});continue}
+      if(tx.type==='transfer' && tx.walletId===card.id && tx.toWalletId===card.id) continue
       let direction=0,kind='credit'
       if (tx.walletId===card.id && (tx.type==='expense' || tx.type==='transfer')) direction=1
       if ((tx.type==='income' && tx.walletId===card.id) || (['transfer','cc_payment'].includes(tx.type) && tx.toWalletId===card.id)) direction=-1
