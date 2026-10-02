@@ -28,9 +28,9 @@ Independent review found and verified additional regressions: cycle setting chan
 - Browser smoke: demo starts; statement selector changes amount from 14,960 to 2,550; dashboard shows overdue and upcoming bills; calendar lists both and navigates to the selected historic statement; opening debt has an inferred-date warning/correction control. Credit detail inspected at 390×844; production entry shows the normal authentication gate. No captured browser console errors on either entry.
 - Release manifest includes new modules; production/demo asset versions updated from the shared release contract.
 
-## Not verified in this environment
+## Limitations at implementation verification
 
-Local Supabase cannot run: Docker daemon is unavailable. SQL migrations, real ownership/concurrency/lease expiry, and actual Push delivery are **not runtime-certified**. Deno delivery tests use mocked claims/transports; passing these does not prove database atomicity or real delivery. No remote migration, deployment, or Push was attempted.
+Local Supabase cannot run: Docker daemon is unavailable. SQL migrations, real ownership/concurrency/lease expiry, and actual Push delivery are **not runtime-certified**. Deno delivery tests use mocked claims/transports; passing these does not prove database atomicity or real delivery. No remote migration, deployment, or Push was attempted during implementation verification; see the subsequent deployment record below.
 
 The full manual QA matrix remains a staging requirement: authenticated production payment flow, rule save/reload, light/dark, hide-money, 360px layout, offline PWA reload/cache update and real closed-app Push. The demo smoke used generated local sample data and did not record a payment.
 
@@ -48,3 +48,13 @@ Offline payments remain unknown to the server until accepted sync. Inferred hist
 ## Implementation rulings
 
 Work stayed in an isolated native worktree. Shared app adapters were edited together, with feature-specific behavioral regressions. Earlier static assertions that discarded surplus or clamped overdue were replaced with the approved behavior. The initial optional hydration call preceded extension registration; it now invokes the metadata-aware durable persist directly. No unrelated architectural rewrite, remote push or deploy was performed. Plan tasks 1–10 have implementation/regression coverage; task 11 code/release checks are done, with environment-dependent database and staging QA explicitly outstanding above.
+
+## Authorized production deployment — 2026-10-02
+
+User authorized local merge, push and deployment. `main` fast-forwarded to `83acfc4`; merged-tree Node235/Deno9/type checks passed. After the user restored Supabase CLI access, linked migration dry-run confirmed only the two new migrations were pending.
+
+- Docker-based full schema dump was unavailable. A schema-only JSON export of affected columns, constraints and existing RPC definitions was saved locally at `/tmp/money-tracker-credit-r125-schema-backup.json`. This is a targeted schema export, not a full database/data backup. Automatic approval review rejected exporting notification user records; none were exported.
+- Both additive 20261002 migrations applied successfully to `bwtoyxxwwmsaoaitihqj`.
+- Hosted SQL smoke passed for accepted/rejected/legacy revisions, ownership mismatch, active claim deduplication, expired lease reclamation, error retry, disabled rule and restricted RPC execution. Synthetic fixtures ran inside a transaction and were rolled back. Parallel transaction concurrency was not exercised.
+- Deployed `sync-notification-snapshot`, `sync-notification-rules`, and `send-custom-notification-rules` with server-side bundling; existing JWT verification retained.
+- Real device Push delivery and the complete manual staging matrix remain unverified. Deployment status for the frontend is verified separately through GitHub Actions and live release assets.
