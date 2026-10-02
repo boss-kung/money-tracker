@@ -62,7 +62,7 @@ test('P2 fixes keep durable ordering, explicit long-PIN verification, and recurr
   assert.match(lock, /MTAppLock\.verify\(\)/)
   assert.doesNotMatch(lock, /if \(enteredPin\.length >= MIN_PIN_LENGTH\) verifyEnteredPin\(\)/)
   assert.match(notificationFunction, /snapshot\?\.snapshot_date !== now\.date/)
-  assert.match(notifications, /daysLeft >= 0 && b\.daysLeft <= 90/)
+  assert.deepEqual(require('../notification_snapshot.js').buildBillSignals({bills:[{status:'pending',dueDate:'2026-05-24'}],snapshotDate:'2026-06-03'}), [{daysLeft:-10}])
   assert.match(quick, /localDate\(d\)/)
   assert.doesNotMatch(quick, /text\s*=\s*replaceThaiNumbers\(text\)/)
 })

@@ -1,15 +1,8 @@
+import { upsertSnapshotIfNewer } from '../_shared/notification_snapshot_store.ts'
 import { adminClient, requestErrorStatus, requireAuthenticatedUserId, requireInstallOwnership } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
-// Keep only the numeric signal needed for trigger logic — strip names, labels, amounts, IDs.
-// This prevents any identifying financial detail from reaching the server.
-function sanitizeDaysLeft(arr: unknown): Array<{ daysLeft: number }> {
-  if (!Array.isArray(arr)) return []
-  return arr
-    .filter((item): item is Record<string, unknown> => item !== null && typeof item === 'object')
-    .map(item => ({ daysLeft: Math.max(0, Math.floor(Number(item.daysLeft ?? 0))) }))
-    .slice(0, 100)
-}
+import { sanitizeDaysLeft } from '../_shared/notification_rules.ts'
 
 function sanitizeBudgetAlerts(arr: unknown): Array<{ pct: number; over: boolean }> {
   if (!Array.isArray(arr)) return []
@@ -57,12 +50,12 @@ Deno.serve(async req => {
       app_version: body.appVersion ? String(body.appVersion).slice(0, 80) : null,
     }
 
-    const { error } = await supabase
-      .from('mt_notification_snapshots')
-      .upsert(row, { onConflict: 'install_id' })
-    if (error) throw error
+    const schemaVersion = Number(body.snapshotSchemaVersion || 1)
+    const revision = Number(body.snapshotRevision || 0)
+    if (![1,2].includes(schemaVersion) || !Number.isSafeInteger(revision) || revision < 0 || (schemaVersion === 2 && revision === 0)) return jsonResponse({error:'Invalid snapshot revision'},400,req)
+    const result = await upsertSnapshotIfNewer(supabase,{installId,userId,schemaVersion,revision,payload:row})
 
-    return jsonResponse({ ok: true }, 200, req)
+    return jsonResponse({ ok: true, ...result }, 200, req)
   } catch (error) {
     return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, requestErrorStatus(error), req)
   }

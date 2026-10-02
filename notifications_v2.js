@@ -11,7 +11,6 @@
   const LAST_RULES_SYNC_KEY = 'mt_notification_last_rules_sync'
   const LAST_RULES_HASH_KEY = 'mt_notification_last_rules_hash'
   const RULES_SYNC_TTL_MS = 6 * 60 * 60 * 1000
-  const SNAPSHOT_SYNC_TTL_MS = 10 * 60 * 1000
   const BOOT_SYNC_DELAY_MS = 6000
   const BACKGROUND_FETCH_TIMEOUT_MS = 3000
   const MANUAL_FETCH_TIMEOUT_MS = 10000
@@ -293,13 +292,7 @@
     return Boolean(prefs?.enabled || permission === 'granted' || storedPushSub())
   }
 
-  function todayStr() {
-    const d = new Date()
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${y}-${m}-${day}`
-  }
+  function todayStr() { return MTNotificationSnapshot.bangkokDate() }
 
   function daysBetween(dateStr, ref = todayStr()) {
     const [y, m, d] = String(dateStr || '').split('-').map(Number)
@@ -323,33 +316,11 @@
       if (date === today && txCountTypes.has(String(tx?.type || ''))) todayTxCount++
     }
 
-    const upcomingBills = (S.upcomingBills || [])
-      .filter(b => b?.status === 'pending')
-      .map(b => ({
-        id: b.id,
-        title: b.title,
-        dueDate: b.dueDate,
-        amount: S.settings?.notifications?.hide_amounts_in_notification ? null : Number(b.amount || 0),
-        daysLeft: daysBetween(b.dueDate, today),
-        reminderDaysBefore: Array.isArray(b.reminderDaysBefore) ? b.reminderDaysBefore : [],
-      }))
-      .filter(b => b.daysLeft >= 0 && b.daysLeft <= 90)
-      .slice(0, 25)
-
-    const creditDue = typeof CreditCardCycles !== 'undefined'
-      ? CreditCardCycles.getCreditDueNotificationRows({
-          cards: (S.wallets || []).filter(w => w?.type === 'credit'),
-          transactions: S.transactions || [],
-          refDate: today,
-          hideAmounts: Boolean(S.settings?.notifications?.hide_amounts_in_notification),
-          maxDays: 90,
-          rewardForTx: tx => App.getTransactionRewardEstimate?.(tx) || { points:0, cashback:0, discount:0 },
-          amountForTx: tx => typeof App._expectedLedgerAmountForTx === 'function'
-            ? App._expectedLedgerAmountForTx(tx)
-            : (App.getLedgerAmountForTx?.(tx) || tx.amount || 0),
-          isPostedTx: tx => App._isPostedTx ? App._isPostedTx(tx) : tx.scheduled !== true,
-        })
-      : []
+    const upcomingBills = MTNotificationSnapshot.buildBillSignals({bills:S.upcomingBills || [],snapshotDate:today})
+    const billingStates = (S.wallets || []).filter(w=>w?.type==='credit').map(card=>CreditCardCycles.buildCardBillingState({
+      ...App._creditCycleOptions(card,today),isPostedTx:tx=>!tx.date || tx.date<=today
+    }))
+    const creditDue = MTNotificationSnapshot.buildCreditSignals({billingStates,snapshotDate:today})
 
     const month = today.slice(0, 7)
     let budgetAlerts = []
@@ -357,8 +328,6 @@
       if (typeof Calc !== 'undefined' && Array.isArray(S.budgets) && S.budgets.length) {
         const progress = Calc.getBudgetProgress(txs, S.budgets, S.categories || { expense: [], income: [] }, month)
         budgetAlerts = (progress || []).map(b => ({
-          categoryId: b.categoryId,
-          label: b.label || b.categoryId,
           pct: Math.round(b.pct || 0),
           over: Boolean(b.over),
         })).slice(0, 25)
@@ -367,18 +336,13 @@
 
     const recurringDue = (S.recurring || [])
       .filter(r => !r.paused && r.nextDueDate && r.nextDueDate <= today)
-      .map(r => ({ id: r.id, name: r.name }))
+      .map(() => ({daysLeft:0}))
       .slice(0, 25)
 
     const privilegesExpiring = (S.privileges || [])
       .filter(p => p.status === 'active' && p.expiryDate)
       .map(p => ({
-        id: p.id,
-        title: p.title,
-        expiryDate: p.expiryDate,
         daysLeft: daysBetween(p.expiryDate, today),
-        type: p.type || '',
-        platform: p.platform || '',
       }))
       .filter(p => p.daysLeft >= 0 && p.daysLeft <= 30)
       .slice(0, 25)
@@ -400,31 +364,38 @@
     return snapshot
   }
 
-  async function syncSnapshot({ force = false, timeoutMs = BACKGROUND_FETCH_TIMEOUT_MS } = {}) {
-    if (!notificationsMaySync()) return false
-    const now = Date.now()
-    const last = Number(localStorage.getItem(LAST_SYNC_KEY) || 0)
-    if (!force && now - last < SNAPSHOT_SYNC_TTL_MS) {
-      bootMark('syncSnapshot.skipped', { reason: 'throttle' })
-      return true
-    }
-    const snapshot = buildSnapshot()
-    await callFunction('sync-notification-snapshot', {
-      installId: snapshot.installId,
-      snapshotDate: snapshot.snapshotDate,
-      todayTxCount: snapshot.todayTxCount,
-      lastTxDate: snapshot.lastTxDate,
-      upcomingBills: snapshot.upcomingBills,
-      creditDue: snapshot.creditDue,
-      budgetAlerts: snapshot.budgetAlerts,
-      recurringDue: snapshot.recurringDue,
-      privilegesExpiring: snapshot.privilegesExpiring,
-      lastExportedAt: snapshot.lastExportedAt,
-      appVersion: snapshot.appVersion,
-    }, { timeoutMs })
-    try { localStorage.setItem(LAST_SYNC_KEY, String(now)) } catch (_) {}
-    return true
+  const snapshotQueue = MTNotificationSync.create({
+    readScope: () => window.MTAuthSync?.state?.user?.id ? `${window.MTAuthSync.state.user.id}:${getInstallId()}` : '',
+    readSnapshot: buildSnapshot,
+    scopedStorage: localStorage,
+    canSync: () => notificationsMaySync() && document.visibilityState === 'visible' && navigator.onLine !== false && !!window.MTAuthSync?.state?.user?.id,
+    withLock: (key,fn) => navigator.locks?.request ? navigator.locks.request(key,fn) : fn(),
+    onStatus: state => { App.notificationSnapshotStatus = state },
+    transport: async snapshot => {
+      const result = await callFunction('sync-notification-snapshot', {
+        installId: snapshot.installId,
+        snapshotDate: snapshot.snapshotDate,
+        todayTxCount: snapshot.todayTxCount,
+        lastTxDate: snapshot.lastTxDate,
+        upcomingBills: snapshot.upcomingBills,
+        creditDue: snapshot.creditDue,
+        budgetAlerts: snapshot.budgetAlerts,
+        recurringDue: snapshot.recurringDue,
+        privilegesExpiring: snapshot.privilegesExpiring,
+        lastExportedAt: snapshot.lastExportedAt,
+        appVersion: snapshot.appVersion,
+        snapshotSchemaVersion: snapshot.snapshotSchemaVersion,
+        snapshotRevision: snapshot.snapshotRevision,
+      }, {timeoutMs: MANUAL_FETCH_TIMEOUT_MS})
+      if(result.accepted)try {localStorage.setItem(LAST_SYNC_KEY,String(Date.now()))}catch(_){}
+      return result
+    },
+  })
+  async function syncSnapshot({force=false}={}) {
+    if(!notificationsMaySync())return false
+    return snapshotQueue.flush({force})
   }
+  getStateCommit()?.addAfterCommit(() => snapshotQueue.markDirty())
 
   async function savePreferences() {
     const prefs = ensureSettings()
@@ -474,6 +445,7 @@
         date: String(raw.triggerConfig?.date || raw.date || todayStr()),
         weekdays: Array.isArray(raw.triggerConfig?.weekdays) ? raw.triggerConfig.weekdays : ['mon','tue','wed','thu','fri'],
         daysBefore: Number(raw.triggerConfig?.daysBefore ?? raw.daysBefore ?? 1),
+        mode: raw.triggerConfig?.mode === 'overdue' ? 'overdue' : 'due',
         staleDays: Number(raw.triggerConfig?.staleDays ?? raw.staleDays ?? 30),
         dayOfMonth: Number(raw.triggerConfig?.dayOfMonth ?? 1),
         streakDays: Number(raw.triggerConfig?.streakDays ?? 3),
@@ -621,6 +593,7 @@
     if (rule.triggerType === 'one_time') return `${cfg.date || todayStr()} ${cfg.time || '09:00'}`
     if (rule.triggerType === 'no_transaction_today') return `ถ้าวันนี้ยังไม่มีรายการ เวลา ${cfg.time || '20:30'}`
     if (rule.triggerType === 'upcoming_bill_due') return `บิลครบใน ${Number(cfg.daysBefore ?? 1)} วัน เวลา ${cfg.time || '09:00'}`
+    if (['credit_card_due','upcoming_bill_due'].includes(rule.triggerType) && cfg.mode === 'overdue') return `เตือนรายการเลยกำหนด เวลา ${cfg.time || '09:00'}`
     if (rule.triggerType === 'credit_card_due') return `บัตรครบใน ${Number(cfg.daysBefore ?? 1)} วัน เวลา ${cfg.time || '09:00'}`
     if (rule.triggerType === 'backup_stale') return `ไม่ได้ backup ${Number(cfg.staleDays ?? 30)} วัน เวลา ${cfg.time || '09:00'}`
     if (rule.triggerType === 'monthly_time') return `ทุกเดือน วันที่ ${Number(cfg.dayOfMonth ?? 1)} เวลา ${cfg.time || '09:00'}`
@@ -743,6 +716,7 @@
 
     return `
       <div class="sec-title">การแจ้งเตือน</div>
+      <p class="form-hint">${App.notificationSnapshotStatus?.dirty?'มีข้อมูลรอซิงค์':App.notificationSnapshotStatus?.lastSuccess?`ซิงค์ล่าสุด ${esc(new Date(App.notificationSnapshotStatus.lastSuccess).toLocaleString('th-TH'))}`:'ยังไม่มีข้อมูลซิงค์'} · การชำระออฟไลน์จะอัปเดตการเตือนเมื่อซิงค์สำเร็จ</p>
       <div class="card card-pad">
         <div class="settings-row" onclick="App.toggleNotificationsMaster()">
           <div class="s-icon">🔔</div>
@@ -897,6 +871,7 @@
           ${showWeekdays  ? `<div class="form-group"><label class="form-label">วันในสัปดาห์</label><div class="chips">${[
             ['mon','จ'],['tue','อ'],['wed','พ'],['thu','พฤ'],['fri','ศ'],['sat','ส'],['sun','อา'],
           ].map(([value, label]) => `<label class="chip" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" name="nr-weekday" value="${value}"${checked(value)}> ${label}</label>`).join('')}</div></div>` : ''}
+          ${['credit_card_due','upcoming_bill_due'].includes(rule.triggerType)?`<div class="form-group"><label class="form-label">ช่วงที่ต้องการเตือน</label><select class="form-input" id="nr-due-mode"><option value="due"${cfg.mode!=='overdue'?' selected':''}>ก่อนหรือในวันครบกำหนด</option><option value="overdue"${cfg.mode==='overdue'?' selected':''}>เมื่อเลยกำหนด</option></select></div>`:''}
           ${showDaysBefore ? `<div class="form-group"><label class="form-label">เตือนก่อนครบกำหนดกี่วัน</label><input class="form-input" type="number" min="0" max="30" id="nr-days-before" value="${esc(cfg.daysBefore ?? 1)}"><p class="form-hint">0 = วันเดียวกับครบกำหนด, 1 = วันก่อน</p></div>` : ''}
           ${showStaleDays  ? `<div class="form-group"><label class="form-label">ไม่ได้ backup กี่วันแล้วให้เตือน</label><input class="form-input" type="number" min="1" max="365" id="nr-stale-days" value="${esc(cfg.staleDays ?? 30)}"></div>` : ''}
           ${showStreakDays  ? `<div class="form-group"><label class="form-label">ไม่มีรายการติดกันกี่วัน</label><input class="form-input" type="number" min="1" max="90" id="nr-streak-days" value="${esc(cfg.streakDays ?? 3)}"><p class="form-hint">แนะนำ 3–7 วัน นับจากรายการล่าสุดในแอป</p></div>` : ''}
@@ -960,7 +935,8 @@
         time: formFieldValue(root, 'nr-time', S.notificationRuleDraft?.triggerConfig?.time || '09:00'),
         date: formFieldValue(root, 'nr-date', S.notificationRuleDraft?.triggerConfig?.date || todayStr()),
         weekdays: selectedRuleWeekdays(root),
-        daysBefore: Number(formFieldValue(root, 'nr-days-before', S.notificationRuleDraft?.triggerConfig?.daysBefore || 1)),
+        mode: formFieldValue(root,'nr-due-mode','due'),
+        daysBefore: Number(formFieldValue(root, 'nr-days-before', S.notificationRuleDraft?.triggerConfig?.daysBefore ?? 1)),
         staleDays: Number(formFieldValue(root, 'nr-stale-days', S.notificationRuleDraft?.triggerConfig?.staleDays || 30)),
         dayOfMonth: Number(formFieldValue(root, 'nr-day-of-month', S.notificationRuleDraft?.triggerConfig?.dayOfMonth || 1)),
         streakDays: Number(formFieldValue(root, 'nr-streak-days', S.notificationRuleDraft?.triggerConfig?.streakDays || 3)),
@@ -1000,7 +976,8 @@
         time: formFieldValue(root, 'nr-time', existing?.triggerConfig?.time || '09:00'),
         date: formFieldValue(root, 'nr-date', existing?.triggerConfig?.date || todayStr()),
         weekdays: weekdays.length ? weekdays : existing?.triggerConfig?.weekdays || ['mon','tue','wed','thu','fri'],
-        daysBefore: Number(formFieldValue(root, 'nr-days-before', existing?.triggerConfig?.daysBefore || 1)),
+        mode: formFieldValue(root,'nr-due-mode','due'),
+        daysBefore: Number(formFieldValue(root, 'nr-days-before', existing?.triggerConfig?.daysBefore ?? 1)),
         staleDays: Number(formFieldValue(root, 'nr-stale-days', existing?.triggerConfig?.staleDays || 30)),
         dayOfMonth: Number(formFieldValue(root, 'nr-day-of-month', existing?.triggerConfig?.dayOfMonth || 1)),
         streakDays: Number(formFieldValue(root, 'nr-streak-days', existing?.triggerConfig?.streakDays || 3)),
@@ -1187,5 +1164,8 @@
   window.addEventListener('pageshow', event => {
     if (event.persisted) scheduleBackgroundNotificationSync('pageshow')
   }, { passive: true })
+  window.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')snapshotQueue.resume().catch(()=>{})},{passive:true})
+  window.addEventListener('storage',event=>{if(event.key?.startsWith('mt_notification_sync_v2:'))snapshotQueue.resume().catch(()=>{})},{passive:true})
+  setInterval(()=>{if(document.visibilityState==='visible')snapshotQueue.resume().catch(()=>{})},60000)
   scheduleBackgroundNotificationSync('boot')
 })()

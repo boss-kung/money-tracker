@@ -3710,12 +3710,12 @@ App.render();
     if (over) insights.push({ icon:'⚠️', title:'งบประมาณเกิน', body:`${over.label} เกินงบ ${fmt(over.spent - over.monthlyLimit)} แล้ว ควรหยุดใช้หมวดนี้ชั่วคราวจนจบรอบเดือน` })
     const usable = Calc.getUsableMoney ? Calc.getUsableMoney(S.wallets || [], S) : null
     const upcoming = App.getUpcomingItems?.(14) || []
-    const upcomingCommitted = upcoming.filter(row => ['จ่ายบิลบัตรเครดิต', 'รายการประจำ', 'รายการที่รอจ่าย', 'ผ่อนชำระ'].includes(row.type)).reduce((sum, row) => sum + Number(row.amount || 0), 0)
+    const upcomingCommitted = App.getUpcomingCashRequirement(upcoming)
     if (usable && upcomingCommitted > 0 && usable.liquid < upcomingCommitted) {
       insights.push({ icon:'💸', title:'บิลใกล้ถึงเกินเงินพร้อมใช้', body:`14 วันข้างหน้ามีภาระประมาณ ${fmt(upcomingCommitted)} แต่เงินพร้อมใช้มี ${fmt(usable.liquid)} ควรเตรียมสภาพคล่องล่วงหน้า` })
     }
     const creditSoon = (S.wallets || []).filter(w => w.type === 'credit').map(card => ({ card, due: App.getCreditCardDueInfo?.(card) })).filter(row => row.due && Number(row.due.daysLeft) >= 0 && Number(row.due.daysLeft) <= 7)
-    if (creditSoon.length && usable && usable.liquid < creditSoon.reduce((sum, row) => sum + creditDebtBalance(row.card), 0)) {
+    if (creditSoon.length && usable && usable.liquid < creditSoon.reduce((sum, row) => sum + Number(row.due.amount || 0), 0)) {
       insights.push({ icon:'💳', title:'บัตรเครดิตครบกำหนดเร็ว ๆ นี้', body:`มีบัตรครบกำหนดภายใน 7 วันและเงินพร้อมใช้อาจไม่พอชำระเต็มจำนวน ควรจัดลำดับการจ่ายก่อนถึง due date` })
     }
     const behindGoal = (S.goals || []).filter(g => g.status === 'active').map(g => ({ goal: g, progress: App.getGoalProgress?.(g) })).find(row => row.progress && row.progress.remaining > 0 && ((row.goal.targetDate && row.progress.daysLeft < 0) || (row.goal.targetDate && row.goal.monthlyContribution > 0 && row.progress.suggestedMonthly > row.goal.monthlyContribution)))
@@ -17185,7 +17185,7 @@ App._pickMerchant = function(name, opts = {}) {
     ;(S.transactions || []).forEach(tx => {
       const txDate = String(tx.date || '')
       const isPosted = typeof App._isPostedTx === 'function' ? App._isPostedTx(tx) : (!txDate || txDate <= t)
-      if (isPosted || !txDate || txDate > end) return
+      if (isPosted || !txDate || txDate > end || tx.type === 'cc_payment') return
       const wallet = (S.wallets || []).find(row => row.id === tx.walletId)
       const cashflowKind = tx.type === 'income'
         ? 'income'
@@ -17197,13 +17197,8 @@ App._pickMerchant = function(name, opts = {}) {
       const amount = tx.type === 'cc_payment' ? Number(tx.cashAmount || tx.amount || 0) : Number(tx.amount || 0)
       rows.push({ id:`tx-${tx.id}`, date:tx.date, icon:tx.installmentGroupId ? '🧾' : '📅', title:tx.merchant || tx.note || App._txTypeLabel?.(tx.type) || 'รายการตามแผน', amount, type:tx.installmentGroupId ? 'installment' : 'scheduled', cashflowKind, walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', status:'upcoming' })
     })
-    ;(S.wallets || []).filter(w => w.type === 'credit').forEach(card => {
-      const due = App.getCreditCardDueInfo?.(card)
-      if (!due?.dateStr || due.dateStr > end) return
-      const amount = Math.max(0, Number(due.amount || due.statement?.balanceDue || 0))
-      if (amount <= 0) return
-      rows.push({ id:`cc-${card.id}:${due.statementId || due.dateStr}`, date:due.dateStr, icon:card.icon || '💳', title:`ชำระบัตร ${card.name}`, amount, type:'credit_due', cashflowKind:'settlement', toWalletId:card.id, status:due.daysLeft < 0 ? 'overdue' : 'upcoming', open:`App.openCCDetail('${esc(card.id)}')` })
-    })
+    const billingStates = (S.wallets || []).filter(w=>w.type==='credit').map(card=>({...App.getCreditCardBillingState(card),card}))
+    rows.push(...MTUpcomingObligations.projectCreditObligations({billingStates,transactions:S.transactions || [],refDate:t,endDate:end}).map(row=>({...row,open:`App.openCCBillingStatement('${esc(row.toWalletId)}','${esc(row.statementId || '')}')`})))
     ;(S.goals || []).forEach(g => {
       if (!g.targetDate || g.status === 'archived') return
       const p = App.getGoalProgress(g)
@@ -17231,6 +17226,15 @@ App._pickMerchant = function(name, opts = {}) {
     return rows.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.title).localeCompare(String(b.title)))
   }
 
+  App.getUpcomingCashRequirement = function(rows) { return MTUpcomingObligations.getUpcomingCashRequirement(rows) }
+  App.openCCBillingStatement = function(cardId,statementId) {
+    const card = walletById(cardId)
+    const rows = App.getCreditCardBillingState(card).statements
+    S.ccDetailCycleOffsets ||= {}
+    S.ccDetailCycleOffsets[cardId] = Math.max(0, rows.findIndex(st=>st.id===statementId))
+    App.openCCDetail(cardId)
+  }
+
   App.openUpcomingScreen = function() {
     ensureGoalsState()
     const rows = App.getUpcomingItems(90)
@@ -17243,11 +17247,12 @@ App._pickMerchant = function(name, opts = {}) {
     const order = ['ค้างอยู่', '7 วันข้างหน้า', 'เดือนนี้ / 30 วัน', 'ถัดไป']
     const itemHtml = row => `<div class="list-item upcoming-item ${row.status === 'overdue' ? 'overdue' : ''}" ${row.open ? `onclick="${row.open}"` : ''}>
       <div class="list-item-icon">${esc(row.icon)}</div>
-      <div class="list-item-info"><div class="list-item-name">${esc(row.title)}</div><div class="list-item-sub">${thaiDate(row.date)} · ${{ recurring:'รายการประจำ', installment:'ผ่อนชำระ', credit_due:'ชำระบัตรเครดิต', scheduled:'ตามแผน', upcoming_bill:'รายการรอจ่าย', goal:'เป้าหมาย', bnpl_due:'ผ่อน BNPL' }[row.type] || esc(row.type)} · ${row.status === 'overdue' ? 'เลยกำหนด' : 'กำลังจะถึง'}</div></div>
+      <div class="list-item-info"><div class="list-item-name">${esc(row.title)}</div><div class="list-item-sub">${thaiDate(row.date)} · ${{ recurring:'รายการประจำ', installment:'ผ่อนชำระ', credit_due:'ชำระบัตรเครดิต', scheduled:'ตามแผน', upcoming_bill:'รายการรอจ่าย', goal:'เป้าหมาย', bnpl_due:'ผ่อน BNPL' }[row.type] || esc(row.type)} · ${row.status === 'overdue' ? 'เลยกำหนด' : 'กำลังจะถึง'}${row.type==='credit_due' && row.plannedAmount>0?` · ตั้งชำระแล้ว ${fmtHidden(row.plannedAmount)}${row.plannedAfterDue?' (หลังครบกำหนด)':''} · ยังไม่ได้ตั้งชำระ ${fmtHidden(row.unplannedAmount)}`:''}</div></div>
       <div style="text-align:right"><strong>${fmtHidden(row.amount)}</strong>${row.action ? `<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();${row.action}" style="width:auto">บันทึก</button>${row.skip ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();${row.skip}" style="width:auto">ข้าม</button>` : ''}</div>` : ''}</div>
     </div>`
+    const summary = `<div class="card card-pad"><span>เงินที่ต้องเตรียม</span><strong>${fmtHidden(App.getUpcomingCashRequirement(rows))}</strong></div>`
     const html = order.filter(k => grouped[k]?.length).map(k => `<div class="sec-title">${k}</div><div class="card"><div style="padding:0 12px">${grouped[k].map(itemHtml).join('')}</div></div>`).join('')
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ปฏิทินบิล / รายการที่จะถึง</h2></div><div class="sub-scroll" style="padding:12px 16px 40px">${html || App._emptyState?.('📅','ยังไม่มีรายการที่จะถึง','รายการประจำ ผ่อนชำระ วันครบกำหนดบัตร และวันเป้าหมายจะแสดงที่นี่') || ''}</div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ปฏิทินบิล / รายการที่จะถึง</h2></div><div class="sub-scroll" style="padding:12px 16px 40px">${summary}${html || App._emptyState?.('📅','ยังไม่มีรายการที่จะถึง','รายการประจำ ผ่อนชำระ วันครบกำหนดบัตร และวันเป้าหมายจะแสดงที่นี่') || ''}</div>`)
   }
 
   function previewCount(payload, key) {

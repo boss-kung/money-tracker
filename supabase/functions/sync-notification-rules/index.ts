@@ -91,7 +91,7 @@ function normalizeRule(rule: CustomRule, installId: string, userId: string, appV
     route: resolvedRoute,
     action_label: cleanText(rule.actionLabel, 40) || 'เปิดแอป',
     trigger_type: triggerType,
-    trigger_config: rule.triggerConfig && typeof rule.triggerConfig === 'object' ? rule.triggerConfig : {},
+    trigger_config: {...(rule.triggerConfig && typeof rule.triggerConfig === 'object' ? rule.triggerConfig : {}), mode:rule.triggerConfig?.mode === 'overdue' ? 'overdue' : 'due'},
     app_version: appVersion || null,
     source: 'custom',
   }

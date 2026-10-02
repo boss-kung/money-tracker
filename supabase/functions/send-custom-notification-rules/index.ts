@@ -1,3 +1,5 @@
+import { deliverClaimedNotification } from '../_shared/notification_delivery.ts'
+import { evaluateNotificationRule } from '../_shared/notification_rules.ts'
 import { adminClient, requestErrorStatus, requireCronSecret } from '../_shared/supabase.ts'
 import { sendWebPush } from '../_shared/webpush.ts'
 import type { WebPushSubscription } from '../_shared/webpush.ts'
@@ -71,6 +73,7 @@ function shouldSend(rule: RuleRow, snapshot: SnapshotRow | undefined, now = bang
   const time = minutesOf(config.time || '09:00')
   const todayDedupe = `custom-rule:${rule.rule_id}:${now.date}`
   const snapshotTriggers = new Set(['no_transaction_today', 'upcoming_bill_due', 'credit_card_due', 'backup_stale', 'no_tx_streak', 'budget_over', 'recurring_due_today', 'privilege_expiry'])
+  if (['credit_card_due','upcoming_bill_due'].includes(rule.trigger_type)) return evaluateNotificationRule({rule,snapshot,nowBangkok:now}).dedupeKey
   // A stale snapshot describes a previous local day. Never send a data-driven
   // notification from it; the next client sync will make the decision again.
   if (snapshotTriggers.has(rule.trigger_type) && snapshot?.snapshot_date !== now.date) return ''
@@ -205,22 +208,29 @@ Deno.serve(async req => {
         continue
       }
 
-      const { data: existing, error: existingError } = await supabase
-        .from('mt_notification_logs')
-        .select('id, status')
-        .eq('install_id', rule.install_id)
-        .eq('notification_type', 'custom_rule')
-        .eq('dedupe_key', dedupeKey)
-        .maybeSingle()
-      if (existingError) throw existingError
-      if (existing?.status === 'sent') {
-        skipped++
-        continue
-      }
-
       const devicesForInstall = devicesByInstallId.get(rule.install_id) || []
       let sentForRule = 0
 
+      const delivery = await deliverClaimedNotification({
+        logStore: {
+          claim: async () => {
+            const {data,error}=await supabase.rpc('mt_claim_notification',{p_install_id:rule.install_id,p_user_id:rule.user_id,p_rule_id:rule.rule_id,p_dedupe_key:dedupeKey,p_title:rule.title,p_body:rule.body || ''})
+            if(error)throw error
+            return data as string | null
+          },
+          finish: async (token,status,errorMessage) => {
+            const {data,error}=await supabase.from('mt_notification_logs').update({status,error:errorMessage || null,sent_at:new Date().toISOString(),lease_until:null})
+              .eq('install_id',rule.install_id).eq('notification_type','custom_rule').eq('dedupe_key',dedupeKey).eq('lease_token',token).select('id')
+            if(error)throw error
+            if(!data?.length)throw new Error('Notification claim was superseded')
+          },
+        },
+        isStillCurrent: async () => {
+          const {data,error}=await supabase.from('mt_notification_snapshots').select('*').eq('install_id',rule.install_id).eq('user_id',rule.user_id).maybeSingle()
+          if(error)throw error
+          return shouldSend(rule,data as SnapshotRow | undefined)===dedupeKey
+        },
+        transport: async () => {
       for (const device of devicesForInstall) {
         if (!device.push_subscription) continue
         try {
@@ -251,18 +261,10 @@ Deno.serve(async req => {
         }
       }
 
-      await supabase.from('mt_notification_logs').upsert({
-        install_id: rule.install_id,
-        user_id: rule.user_id,
-        notification_type: 'custom_rule',
-        dedupe_key: dedupeKey,
-        title: rule.title,
-        body: rule.body || '',
-        status: sentForRule > 0 ? 'sent' : 'error',
-        fcm_message_id: null,
-        error: sentForRule > 0 ? null : 'No devices were sent successfully',
-      }, { onConflict: 'install_id,notification_type,dedupe_key' })
-
+          if (!sentForRule) throw new Error('No devices were sent successfully')
+        },
+      })
+      if (!delivery.sent) skipped++
       sent += sentForRule
     }
 

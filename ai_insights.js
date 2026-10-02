@@ -139,9 +139,8 @@ const InsightEngine = (() => {
     let upcoming = []
     try { if (typeof App !== 'undefined' && App.getUpcomingItems) upcoming = App.getUpcomingItems(14) } catch(_) {}
 
-    const upcomingCommitted = upcoming
-      .filter(r => ['credit_due','recurring','scheduled','installment'].includes(r.type))
-      .reduce((s, r) => s + Number(r.amount || 0), 0)
+    const upcomingCommitted = typeof App?.getUpcomingCashRequirement === 'function' ? App.getUpcomingCashRequirement(upcoming) : upcoming.filter(r=>['expense','settlement'].includes(r.cashflowKind) || (!r.cashflowKind && ['credit_due','recurring','scheduled','installment','bnpl_due','upcoming_bill'].includes(r.type))).reduce((sum,r)=>sum+Number(r.cashRequired ?? r.amount ?? 0),0)
+
 
     // Credit card statements
     const creditCards = wallets.filter(w => w.type === 'credit' && !w.archived)

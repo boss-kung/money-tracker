@@ -140,9 +140,7 @@ const FinanceIntelligence = (() => {
     const usable = Calc.getUsableMoney?.(state.wallets || [], state) || { liquid:0, creditDebt:0, upcomingReserved:0, net:0 }
     const credit = Calc.getCreditLiabilitySummary?.(state.wallets || []) || { cards:[], totals:{ statementDue:0, currentCycleSpending:0, committedInstallments:0, totalLiability:0 } }
     const upcoming = typeof App !== 'undefined' && App.getUpcomingItems ? App.getUpcomingItems(30) : []
-    const upcomingCommitted = upcoming
-      .filter(r => ['expense','settlement'].includes(r.cashflowKind) || (!r.cashflowKind && ['credit_due','recurring','scheduled','installment','bnpl_due'].includes(r.type)))
-      .reduce((s,r)=>s+Number(r.amount || 0),0)
+    const upcomingCommitted = typeof App?.getUpcomingCashRequirement === 'function' ? App.getUpcomingCashRequirement(upcoming) : upcoming.filter(r=>['expense','settlement'].includes(r.cashflowKind) || (!r.cashflowKind && ['credit_due','recurring','scheduled','installment','bnpl_due','upcoming_bill'].includes(r.type))).reduce((sum,r)=>sum+Number(r.cashRequired ?? r.amount ?? 0),0)
     const monthEndUpcoming = upcoming.filter(row => {
       const date = String(row.date || '')
       // Include overdue cash obligations too; they still need funding before
@@ -154,10 +152,10 @@ const FinanceIntelligence = (() => {
       .reduce((sum, row) => sum + Number(row.amount || 0), 0)
     const monthEndKnownExpense = monthEndUpcoming
       .filter(row => row.cashflowKind === 'expense')
-      .reduce((sum, row) => sum + Number(row.amount || 0), 0)
+      .reduce((sum, row) => sum + Number(row.cashRequired ?? row.amount ?? 0), 0)
     const monthEndSettlementOutflows = monthEndUpcoming
       .filter(row => row.cashflowKind === 'settlement')
-      .reduce((sum, row) => sum + Number(row.amount || 0), 0)
+      .reduce((sum, row) => sum + Number(row.cashRequired ?? row.amount ?? 0), 0)
     const recurring = (state.recurring || []).filter(r => !r.paused && !['inactive','cancelled'].includes(r.status))
     const recurringMonthlyTotal = recurring.reduce((s,r)=>s+recurringMonthlyAmount(r),0)
     const goals = (state.goals || []).filter(g => g.status === 'active').map(goal => {
