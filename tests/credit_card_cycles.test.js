@@ -67,11 +67,11 @@ test('opening card debt is carried into payable balance and combined with later 
     { id:'payment', type:'cc_payment', toWalletId:'ktc', amount:1000, date:'2026-06-01' },
   ]
   const rows = CC.getPayableStatements({ card:openingDebtCard, transactions:txs, refDate:'2026-06-03' })
-  assert.equal(rows.length, 1)
+  assert.equal(rows.length, 2)
   assert.equal(rows[0].openingDebt, 5000)
-  assert.equal(rows[0].creditTotal, 500)
-  assert.equal(rows[0].purchaseTotal, 10000)
-  assert.equal(rows[0].balanceDue, 8500)
+  assert.equal(rows.reduce((sum,row)=>sum+row.creditTotal,0), 500)
+  assert.equal(rows.reduce((sum,row)=>sum+row.purchaseTotal,0), 5000)
+  assert.equal(rows.reduce((sum,row)=>sum+row.balanceDue,0), 8500)
 })
 
 test('payments first consume the combined purchase and opening debt balance', () => {
@@ -199,15 +199,16 @@ test('history walks every adjacent closed cycle without skipping a month', () =>
   assert.equal(rows[2].balanceDue, 5000)
 })
 
-test('a payment assigned to one statement cannot also pay another by date fallback', () => {
+test('payment tagged to an empty statement carries forward without double allocation', () => {
   const transactions = [
     { id:'apr', type:'expense', walletId:'ktc', amount:1000, date:'2026-04-30' },
     { id:'may', type:'expense', walletId:'ktc', amount:1000, date:'2026-05-30' },
     { id:'payment', type:'cc_payment', toWalletId:'ktc', amount:1000, date:'2026-06-01', statementId:'ktc:2026-03-26:2026-04-25' },
   ]
   const statements = CC.getStatementHistory({ card, transactions, refDate:'2026-06-03', count:3 })
-  assert.equal(statements.find(row => row.end === '2026-04-25').paidTotal, 1000)
-  assert.equal(statements.find(row => row.end === '2026-05-25').paidTotal, 0)
+  assert.equal(statements.find(row => row.end === '2026-04-25').paidTotal, 0)
+  assert.equal(statements.find(row => row.end === '2026-05-25').paidTotal, 1000)
+  assert.equal(statements.reduce((sum,row)=>sum+row.paidTotal,0), 1000)
 })
 
 test('legacy payment without statement id is allocated to one oldest eligible statement', () => {

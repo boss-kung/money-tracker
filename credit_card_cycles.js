@@ -8,8 +8,9 @@
 
   function parseDate(dateStr) {
     const [y, m, d] = String(dateStr || '').slice(0, 10).split('-').map(Number)
-    if (!y || !m || !d) return null
-    return new Date(y, m - 1, d)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || '')) || !y || !m || !d) return null
+    const date = new Date(y, m - 1, d)
+    return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d ? date : null
   }
 
   function dateStr(date) {
@@ -174,164 +175,193 @@
     return addDays(statementEnd, clampDueAfter(card?.dueAfterCycleDays || 10))
   }
 
-  function legacyPaymentStatementId(card, payment, transactions = []) {
-    const paymentDate = String(payment?.date || '')
-    const parsedPayment = parseDate(paymentDate)
-    if (!parsedPayment || !card?.id) return ''
-    const cycleDay = clampCycleDay(card.cycleDay || 25)
-    const candidates = []
-    // A due date can be at most 60 days after a cycle end. Scan a generous
-    // window so legacy rows without statementId still get one deterministic
-    // allocation even when the card has not been opened for many months.
-    for (let offset = -12; offset <= 0; offset++) {
-      const month = new Date(parsedPayment.getFullYear(), parsedPayment.getMonth() + offset, 1)
-      const endDay = clampDay(month.getFullYear(), month.getMonth(), cycleDay)
-      const periodRef = dateStr(new Date(month.getFullYear(), month.getMonth(), endDay + 1))
-      const period = getStatementPeriod(card, periodRef, { includeOpen:false })
-      if (!period || String(period.end) >= paymentDate) continue
-      const dueDate = resolveDueDate(card, period.end)
-      if (!dueDate || paymentDate > dueDate) continue
-      const hasPurchase = transactions.some(tx => tx && tx.type === 'expense'
-        && String(tx.walletId || '') === String(card.id)
-        && String(tx.date || '') >= period.start
-        && String(tx.date || '') <= period.end)
-      if (hasPurchase) candidates.push({ id:statementId(card.id, period.start, period.end), dueDate, end:period.end })
-    }
-    candidates.sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)) || String(a.end).localeCompare(String(b.end)))
-    return candidates[0]?.id || ''
+  const cents = value => Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) : 0
+  const baht = value => value / 100
+  function parseStatementId(card, value) {
+    const prefix = `${card?.id}:`
+    if (!String(value || '').startsWith(prefix)) return null
+    const parts = String(value).slice(prefix.length).split(':')
+    if (parts.length !== 2 || !parseDate(parts[0]) || !parseDate(parts[1]) || parts[0] > parts[1] || daysBetween(parts[1], parts[0]) > 62) return null
+    return { id:value, start:parts[0], end:parts[1], dueDate:resolveDueDate(card, parts[1]) }
   }
 
-  function getCardStatement({ card, transactions = [], refDate, postedRefDate, rewardForTx, amountForTx, isPostedTx, includeOpen = false }) {
-    const period = getStatementPeriod(card, refDate, { includeOpen })
-    if (!period || !card?.id) return null
-    const dueDate = resolveDueDate(card, period.end)
-    const id = statementId(card.id, period.start, period.end)
-    const purchases = transactions.filter(t =>
-      t && t.type === 'expense' &&
-      String(t.walletId || '') === String(card.id) &&
-      String(t.date || '') >= period.start &&
-      String(t.date || '') <= period.end &&
-      isPostedAt(t, postedRefDate || refDate, isPostedTx)
-    )
-    const payments = transactions.filter(t => {
-      if (!t || t.type !== 'cc_payment' || String(t.toWalletId || '') !== String(card.id)) return false
-      if (!isPostedAt(t, postedRefDate || refDate, isPostedTx)) return false
-      if (String(t.statementId || '') === id) return true
-      const txDate = String(t.date || '')
-      // A non-empty statementId is an explicit allocation. Never let the
-      // date-based legacy fallback allocate that same payment to another
-      // statement as well.
-      if (String(t.statementId || '')) return false
-      return txDate > period.end && txDate <= dueDate
-        && legacyPaymentStatementId(card, t, transactions) === id
+  function prepareBillingMigration({ wallets = [], transactions = [], refDate }) {
+    let changed = false
+    const diagnostics = []
+    const next = wallets.map(card => {
+      if (card?.type !== 'credit' || !parseDate(refDate)) return card
+      const relevant = transactions.filter(tx => tx && (tx.walletId === card.id || tx.toWalletId === card.id))
+      const periods = new Map()
+      for (const p of card.ccBilling?.periods || []) {
+        const parsed = parseStatementId(card, p.id)
+        if (parsed && parsed.start === p.start && parsed.end === p.end && parseDate(p.dueDate)) periods.set(p.id, {...parsed, dueDate:p.dueDate})
+      }
+      for (const tx of relevant) {
+        const tagged = parseStatementId(card, tx.statementId)
+        if (tagged && !periods.has(tagged.id)) periods.set(tagged.id, tagged)
+        if (parseDate(tx.date) && String(tx.date) <= refDate && ['expense','transfer'].includes(tx.type) && tx.walletId === card.id) {
+          const period = getStatementPeriod(card, tx.date, {includeOpen:true})
+          if (period.end < refDate && ![...periods.values()].some(p => tx.date >= p.start && tx.date <= p.end)) {
+            const id = statementId(card.id, period.start, period.end)
+            periods.set(id, {id,...period,dueDate:resolveDueDate(card, period.end)})
+          }
+        }
+      }
+      // Freeze every closed boundary, even empty periods, before settings change.
+      let cursor = refDate
+      const earliest = relevant.map(tx => String(tx.date || '')).filter(d => parseDate(d) && d <= refDate).sort()[0] || refDate
+      for (let i=0; i<2400; i++) {
+        const p = getStatementPeriod(card,cursor)
+        if (!p) break
+        const id=statementId(card.id,p.start,p.end)
+        if (![...periods.values()].some(old => old.end === p.end)) periods.set(id,{id,...p,dueDate:resolveDueDate(card,p.end)})
+        if (p.end < earliest) break
+        cursor=p.start
+      }
+      const oldOpening = card.ccBilling?.opening
+      let opening = oldOpening && parseStatementId(card,oldOpening.statementId) && parseDate(oldOpening.dueDate)
+        ? {...oldOpening} : null
+      if (!opening) {
+        const tagged = relevant.map(tx=>parseStatementId(card,tx.statementId)).filter(Boolean).sort((a,b)=>a.end.localeCompare(b.end))[0]
+        const period = tagged || getStatementPeriod(card,earliest)
+        opening={statementId:tagged?.id || statementId(card.id,period.start,period.end),start:period.start,end:period.end,dueDate:tagged?.dueDate || resolveDueDate(card,period.end),provenance:'inferred'}
+      }
+      periods.set(opening.statementId,{id:opening.statementId,start:opening.start,end:opening.end,dueDate:opening.dueDate})
+      const ccBilling={version:2,opening,periods:[...periods.values()].sort((a,b)=>a.end.localeCompare(b.end)||a.id.localeCompare(b.id))}
+      if (JSON.stringify(card.ccBilling) === JSON.stringify(ccBilling)) return card
+      changed=true
+      diagnostics.push({cardId:card.id,code:'BILLING_METADATA_PREPARED'})
+      return {...card,ccBilling}
     })
-    const credits = transactions.filter(t =>
-      t && t.type === 'income' && String(t.walletId || '') === String(card.id) &&
-      String(t.date || '') >= period.start && String(t.date || '') <= period.end &&
-      isPostedAt(t, postedRefDate || refDate, isPostedTx)
-    )
-    const purchaseTotal = Math.round(purchases.reduce((sum, tx) => sum + Number(typeof amountForTx === 'function' ? amountForTx(tx) : tx.amount || 0), 0) * 100) / 100
-    const paidTotal = Math.round(payments.reduce((sum, tx) => sum + Number(tx.amount || 0), 0) * 100) / 100
-    const creditTotal = Math.round(credits.reduce((sum, tx) => sum + Number(tx.amount || 0), 0) * 100) / 100
-    const balanceDue = Math.max(0, Math.round((purchaseTotal - paidTotal - creditTotal) * 100) / 100)
-    const reward = purchases.reduce((sum, tx) => {
-      const est = typeof rewardForTx === 'function' ? rewardForTx(tx) : { points:0, cashback:0, discount:0 }
-      sum.points += Number(est.points || 0)
-      sum.cashback += Number(est.cashback || 0)
-      sum.discount += Number(est.discount || 0)
-      return sum
-    }, { points:0, cashback:0, discount:0 })
-    reward.points = Math.floor(reward.points)
-    reward.cashback = Math.round(reward.cashback * 100) / 100
-    reward.discount = Math.round(reward.discount * 100) / 100
-    return { id, cardId:card.id, start:period.start, end:period.end, dueDate, dueAfterCycleDays:clampDueAfter(card.dueAfterCycleDays || 10), purchases, payments, credits, purchaseTotal, paidTotal, creditTotal, balanceDue, paid:balanceDue <= 0 && purchaseTotal > 0, reward }
+    return {wallets:next,changed,diagnostics}
   }
 
-  function shiftStatementRef(statement, deltaCycles) {
-    // getStatementPeriod treats the cycle day itself as the closed period. The
-    // first day of the current period therefore selects the immediately prior
-    // period; subtracting one day skipped an entire statement every time.
-    return deltaCycles < 0 ? statement.start : addDays(statement.end, 1)
-  }
-
-  function getStatementHistory({ card, transactions = [], refDate, count = 6, rewardForTx, amountForTx, isPostedTx, includeOpen = false }) {
-    const rows = []
-    let cursor = refDate
-    let includeOpenForCursor = includeOpen
-    const seen = new Set()
-    for (let i = 0; i < count; i++) {
-      const st = getCardStatement({
-        card, transactions, refDate:cursor, postedRefDate:refDate,
-        rewardForTx, amountForTx, isPostedTx,
-        includeOpen:includeOpenForCursor,
-      })
-      if (!st || seen.has(st.id)) break
-      rows.push(st)
-      seen.add(st.id)
-      cursor = shiftStatementRef(st, -1)
-      // Only the first row may be the currently open cycle. Once the cursor
-      // moves to the previous boundary, use closed-cycle semantics so a
-      // cycle starting after the card's cycle day does not resolve forward.
-      includeOpenForCursor = false
-      if (!cursor) break
+  function buildCardBillingState({card,transactions=[],refDate,amountForTx,isPostedTx,rewardForTx,count=6}) {
+    const empty={statements:[],payableStatements:[],openStatement:null,allocations:[],creditBalance:0,postedDebt:0,reconciliation:{ok:true,diagnostics:[]}}
+    if (!card?.id || !parseDate(refDate)) return empty
+    const normalized=prepareBillingMigration({wallets:[card],transactions,refDate}).wallets[0]
+    const rows=new Map(), allocations=[], diagnostics=[]
+    const ensure = period => {
+      const id=period.id || period.statementId || statementId(card.id,period.start,period.end)
+      if (!rows.has(id)) rows.set(id,{id,cardId:card.id,start:period.start,end:period.end,dueDate:period.dueDate || resolveDueDate(card,period.end),purchases:[],payments:[],credits:[],purchaseTotal:0,openingDebt:0,paidTotal:0,creditTotal:0,balanceDue:0,reward:{points:0,cashback:0,discount:0},_balance:0})
+      return rows.get(id)
     }
-    return rows
-  }
-
-  function getPayableStatements({ card, transactions = [], refDate, lookback = 6, rewardForTx, amountForTx, isPostedTx, includeOverdue = true }) {
-    const refMonth = monthIndex(refDate)
-    const relevantDates = transactions
-      .filter(tx => tx && ['expense', 'cc_payment'].includes(tx.type))
-      .filter(tx => String(tx.walletId || tx.toWalletId || '') === String(card?.id || '') || String(tx.toWalletId || '') === String(card?.id || ''))
-      .filter(tx => isPostedAt(tx, refDate, isPostedTx))
-      .map(tx => monthIndex(tx.date))
-      .filter(value => value !== null)
-    const oldestMonth = relevantDates.length ? Math.min(...relevantDates) : refMonth
-    const historyCount = Math.max(Number(lookback) || 0, refMonth !== null && oldestMonth !== null
-      ? Math.max(0, refMonth - oldestMonth) + 3
-      : Number(lookback) || 0)
-    const rows = getStatementHistory({ card, transactions, refDate, count:historyCount, rewardForTx, amountForTx, isPostedTx })
-    // openingBalance is the signed card baseline. Carry an opening debt into
-    // the next payable statement once, so a card opened with an existing debt
-    // cannot appear debt-free until a new purchase is made.
-    const openingDebt = Math.max(0, -Number(card?.openingBalance || 0))
-    if (openingDebt > 0 && rows.length && !rows.some(row => row.openingDebtIncluded)) {
-      const first = rows[0]
-      const combinedBalance = Math.max(0, Math.round((Number(first.purchaseTotal || 0) + openingDebt - Number(first.paidTotal || 0) - Number(first.creditTotal || 0)) * 100) / 100)
-      rows[0] = { ...first, openingDebt, openingDebtIncluded:true, purchaseTotal:Math.round((Number(first.purchaseTotal || 0) + openingDebt) * 100) / 100, balanceDue:combinedBalance, paid:combinedBalance <= 0 }
+    normalized.ccBilling.periods.forEach(ensure)
+    const openPeriod=getStatementPeriod(card,refDate,{includeOpen:true})
+    const open=ensure(openPeriod)
+    let cursor=refDate
+    for (let i=0;i<Math.max(6,Math.min(2400,count));i++) {
+      const p=getStatementPeriod(card,cursor)
+      if (!p) break
+      if (![...rows.values()].some(r=>r.end===p.end)) ensure(p)
+      cursor=p.start
     }
-    return rows
-      .filter(st => Number(st.balanceDue || 0) > 0)
-      .filter(st => includeOverdue || String(st.dueDate || '') >= String(refDate || ''))
-      .map(st => ({ ...st, daysLeft:daysBetween(st.dueDate, refDate) }))
-      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))
+    const baseline=cents(card.openingBalance)
+    const baselineRow=ensure(normalized.ccBilling.opening)
+    baselineRow.openingDebt=baht(Math.max(0,-baseline))
+    baselineRow.openingDebtIncluded=baseline<0
+    baselineRow._balance=Math.max(0,-baseline)
+    const pools=baseline>0 ? [{transactionId:'opening-credit',remaining:baseline,kind:'credit'}] : []
+    const addAllocation = (pool,row,amount,tx) => {
+      if (!(amount>0)) return
+      row._balance-=amount
+      row[pool.kind==='payment'?'paidTotal':'creditTotal']+=baht(amount)
+      allocations.push({transactionId:pool.transactionId,statementId:row.id,amount:baht(amount),kind:pool.kind})
+      const list=pool.kind==='payment'?row.payments:row.credits
+      const source=tx || pool.tx
+      if (source && !list.some(t=>t.id===source.id)) list.push(source)
+    }
+    const spendCredit = row => {
+      for (const pool of pools) {
+        const amount=Math.min(row._balance,pool.remaining)
+        addAllocation(pool,row,amount)
+        pool.remaining-=amount
+      }
+    }
+    const events=transactions.filter(t=>t && (t.walletId===card.id || t.toWalletId===card.id) && isPostedAt(t,refDate,isPostedTx) && (!t.date || String(t.date)<=refDate))
+      .slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')) || Number(a.createdSequence||0)-Number(b.createdSequence||0) || String(a.createdAt||'').localeCompare(String(b.createdAt||'')) || String(a.id||'').localeCompare(String(b.id||'')))
+    let signed=-baseline
+    for (const tx of events) {
+      const amount=cents(tx.type==='expense' && typeof amountForTx==='function' ? amountForTx(tx) : tx.ledgerAmount ?? tx.amount)
+      if (!Number.isFinite(Number(tx.amount)) || amount<0) {diagnostics.push({transactionId:tx.id,code:'INVALID_AMOUNT'});continue}
+      let direction=0,kind='credit'
+      if (tx.walletId===card.id && (tx.type==='expense' || tx.type==='transfer')) direction=1
+      if ((tx.type==='income' && tx.walletId===card.id) || (['transfer','cc_payment'].includes(tx.type) && tx.toWalletId===card.id)) direction=-1
+      if (!direction || !amount) continue
+      signed+=direction*amount
+      if (direction>0) {
+        const date=parseDate(tx.date)?tx.date:refDate
+        const period=[...rows.values()].filter(p=>date>=p.start && date<=p.end).sort((a,b)=>a.end.localeCompare(b.end))[0] || getStatementPeriod(card,date,{includeOpen:true})
+        const row=ensure(period)
+        row._balance+=amount
+        row.purchaseTotal+=baht(amount)
+        row.purchases.push(tx)
+        spendCredit(row)
+      } else {
+        kind=tx.type==='cc_payment'?'payment':'credit'
+        const pool={transactionId:tx.id,kind,remaining:amount,tx}
+        const tagged=tx.statementId ? parseStatementId(card,tx.statementId) : null
+        if (tx.statementId && !tagged) diagnostics.push({transactionId:tx.id,code:'INVALID_STATEMENT_REFERENCE'})
+        const target=tagged ? ensure(tagged) : null
+        const eligible=[...rows.values()].filter(r=>r._balance>0).sort((a,b)=>a.dueDate.localeCompare(b.dueDate)||a.start.localeCompare(b.start)||a.id.localeCompare(b.id))
+        const ordered=target ? [target,...eligible.filter(r=>r.id!==target.id)] : eligible
+        for (const row of ordered) {
+          const used=Math.min(pool.remaining,row._balance)
+          addAllocation(pool,row,used,tx)
+          pool.remaining-=used
+          if (!pool.remaining) break
+        }
+        if (pool.remaining) pools.push(pool)
+      }
+    }
+    const statements=[...rows.values()].map(row=> {
+      row.balanceDue=baht(row._balance)
+      delete row._balance
+      row.purchaseTotal=baht(cents(row.purchaseTotal));row.paidTotal=baht(cents(row.paidTotal));row.creditTotal=baht(cents(row.creditTotal))
+      row.daysLeft=daysBetween(row.dueDate,refDate)
+      const isOpen=row.end>=refDate
+      row.paid=row.balanceDue<=0 && (row.purchaseTotal+row.openingDebt)>0
+      row.status=isOpen?'open':row.balanceDue<=0?'paid':row.daysLeft<0?'overdue':(row.paidTotal+row.creditTotal)>0?'partial':'unpaid'
+      row.reward=row.purchases.reduce((sum,tx)=> {
+        const reward=typeof rewardForTx==='function'?rewardForTx(tx):{}
+        for (const key of ['points','cashback','discount']) sum[key]+=Number(reward?.[key]||0)
+        return sum
+      },{points:0,cashback:0,discount:0})
+      row.reward.points=Math.floor(row.reward.points)
+      row.reward.cashback=baht(cents(row.reward.cashback));row.reward.discount=baht(cents(row.reward.discount))
+      return row
+    }).sort((a,b)=>b.end.localeCompare(a.end)||a.id.localeCompare(b.id))
+    const creditBalance=baht(pools.reduce((sum,p)=>sum+p.remaining,0))
+    const net=cents(statements.reduce((sum,row)=>sum+row.balanceDue,0))-cents(creditBalance)
+    return {statements,payableStatements:statements.filter(r=>r.end<refDate && r.balanceDue>0).sort((a,b)=>a.dueDate.localeCompare(b.dueDate)||a.id.localeCompare(b.id)),openStatement:statements.find(r=>r.id===open.id),allocations,creditBalance,postedDebt:baht(Math.max(0,signed)),reconciliation:{ok:net===signed,diagnostics}}
   }
 
-  function getNextPayableDueInfo({ card, transactions = [], refDate, rewardForTx, amountForTx, isPostedTx }) {
-    const st = getPayableStatements({ card, transactions, refDate, rewardForTx, amountForTx, isPostedTx })[0]
-    if (!st) return null
-    return { daysLeft:st.daysLeft, dueStr:st.dueDate, dateStr:st.dueDate, statementId:st.id, amount:st.balanceDue, statement:st }
+  function getCardStatement(options) {
+    const period=getStatementPeriod(options.card,options.refDate,{includeOpen:options.includeOpen})
+    if (!period) return null
+    const state=buildCardBillingState({...options,refDate:options.postedRefDate || options.refDate})
+    return state.statements.find(r=>r.end===period.end) || null
   }
-
-  function getCreditDueNotificationRows({ cards = [], transactions = [], refDate, hideAmounts = false, maxDays = 7, rewardForTx, amountForTx, isPostedTx }) {
-    return cards.flatMap(card =>
-      getPayableStatements({ card, transactions, refDate, rewardForTx, amountForTx, isPostedTx })
-        .filter(st => Number(st.daysLeft) <= Number(maxDays))
-        .map(st => ({
-          id: card.id,
-          statementId: st.id,
-          title: card.name,
-          dueDate: st.dueDate,
-          daysLeft: st.daysLeft,
-          amount: hideAmounts ? null : st.balanceDue,
-          amountDue: st.balanceDue,
-          cycleStart: st.start,
-          cycleEnd: st.end,
-        }))
-    ).slice(0, 25)
+  function shiftStatementRef(statement,deltaCycles) { return deltaCycles<0?statement.start:addDays(statement.end,1) }
+  function getStatementHistory(options) {
+    const state=buildCardBillingState(options)
+    const period=getStatementPeriod(options.card,options.refDate,{includeOpen:options.includeOpen})
+    return period ? state.statements.filter(r=>r.end<=period.end).slice(0,options.count ?? 6) : []
+  }
+  function getPayableStatements(options) {
+    return buildCardBillingState(options).payableStatements.filter(r=>options.includeOverdue!==false || r.daysLeft>=0)
+  }
+  function getNextPayableDueInfo(options) {
+    const st=getPayableStatements(options)[0]
+    return st ? {daysLeft:st.daysLeft,dueStr:st.dueDate,dateStr:st.dueDate,statementId:st.id,amount:st.balanceDue,statement:st}:null
+  }
+  function getCreditDueNotificationRows({cards=[],hideAmounts=false,maxDays=7,...options}) {
+    return cards.flatMap(card=>getPayableStatements({...options,card}).filter(s=>s.daysLeft<=maxDays).map(s=>({id:card.id,statementId:s.id,title:card.name,dueDate:s.dueDate,daysLeft:s.daysLeft,amount:hideAmounts?null:s.balanceDue,amountDue:s.balanceDue,cycleStart:s.start,cycleEnd:s.end})))
   }
 
   return {
+    buildCardBillingState,
+    prepareBillingMigration,
     addDays,
     daysBetween,
     buildFixedDueDateForCycleEnd,
