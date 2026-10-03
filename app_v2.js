@@ -24280,6 +24280,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // the race; a net non-zero change still performs exactly that many push/back calls.
   let pendingDelta = 0
   let flushScheduled = false
+  // Each history.back() we issue ourselves (closing a layer via its own UI, e.g. the
+  // confirm's OK/Cancel) fires a popstate later. By then the layer is already gone, so
+  // the listener must ignore it — otherwise closeTopLayer() would close the *next* layer
+  // down (e.g. the sub-screen under a confirm). Only real user/browser backs close layers.
+  let expectedSelfPops = 0
 
   function scheduleFlush() {
     if (flushScheduled) return
@@ -24294,7 +24299,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         }
       } else if (delta < 0) {
         for (let i = 0; i < -delta; i++) {
-          try { history.back() } catch (_) {}
+          try { history.back(); expectedSelfPops++ } catch (_) {}
         }
       }
     })
@@ -24338,6 +24343,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   window.addEventListener('popstate', () => {
+    if (expectedSelfPops > 0) { expectedSelfPops--; return } // echo of our own back()
     if (depth <= 0) return // nothing of ours was open — let default back navigation proceed
     poppingOurs = true
     try { closeTopLayer() } finally { poppingOurs = false }

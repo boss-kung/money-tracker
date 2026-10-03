@@ -5,7 +5,7 @@
   if (root) root.MT_RELEASE = manifest
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict'
-  const version = '2026.10.03-opening-r129'
+  const version = '2026.10.03-backnav-r130'
   const coreAssets = Object.freeze([
     './',
     './index.html',
