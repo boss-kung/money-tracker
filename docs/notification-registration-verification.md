@@ -13,12 +13,12 @@ Snapshot persistence/revisions and cross-tab locks remain in place. A separate i
 ## Verification evidence
 
 - Baseline Node suite: 266 passed, 0 failed.
-- Implemented Node suite: 301 passed, 0 failed, including 35 added behavioral tests across transport, lifecycle, queue and auth events.
+- Implemented Node suite: 307 passed, 0 failed, including 41 added behavioral tests across transport, lifecycle, queue and auth events.
 - Deno auth/snapshot/rule/delivery tests: 13 passed, 0 failed.
 - `deno check` passed for register device, update preferences, sync rules and sync snapshot.
 - `git diff --check` passed.
-- Browser synthetic fixtures: all six cases displayed PASS: reload recovery, delayed registration, failed activation, disabled switch, authentication arriving late, offline then online. The fixtures execute the release's actual notification code/queue/coordinator in browser frames; subscription, auth and HTTP responses are synthetic. Successful traces begin register → preferences → rules/snapshot. They do not send production API requests.
-- Browser application smoke: demo dashboard/settings loaded and showed r132; notification section rendered at 390×844 in light/dark without horizontal overflow; original theme/viewport restored. Production entry showed the Google authentication gate. An initial scratch fixture produced an IAB `MutationObserver.observe` instrumentation error; dynamic script loading was replaced with normal script loading, with no subsequent error logged during the repeated fixture/app smoke. None of the loaded notification modules uses MutationObserver. This is recorded separately from application assertions.
+- Browser synthetic fixtures: all nine cases displayed PASS: reload recovery, delayed registration, failed activation, disabled switch, authentication arriving late, offline then online, displayed settings failure, subscription loss, and hidden-page pending activation. The fixtures execute the release's actual notification code/queue/coordinator in browser frames; subscription, auth and HTTP responses are synthetic. Successful traces begin register → preferences → rules/snapshot. They do not send production API requests. Final fixtures used a fresh localhost port to avoid the app service worker's cached navigation fallback.
+- Browser application smoke: demo dashboard/settings loaded and showed r132; notification section rendered at 390×844 in light/dark without horizontal overflow; original theme/viewport restored. Production entry showed the Google authentication gate. IAB console capture recorded `MutationObserver.observe` errors during scratch fixture loading, including the final fixture run; all nine application assertions still passed. None of the loaded notification modules uses MutationObserver. These browser instrumentation errors are recorded separately and the browser run is not claimed to have an empty console.
 
 Tests were written and observed failing before fixes for transport identity/auth guarding, registration ordering, failed activation, disabled state, late auth scheduling, scope changes, bounded retries, pending disable, same-scope session response rejection, subscription lookup timeout and truthful registration status. The old queue's paid-debt/cross-tab/offline regression coverage is retained.
 
@@ -28,6 +28,18 @@ Tests were written and observed failing before fixes for transport identity/auth
 - Throttle automatic registration retries for 60 seconds and retain ownership conflict until lifecycle reset; bound browser subscription lookup to 10 seconds. Cost: a transient failure can delay recovery by up to a minute.
 - Add optional `readContext()` to the queue instead of changing its persistent user/install storage key. Cost: one optional interface; existing revision continuity remains intact.
 - Include the coordinator in the offline manifest with its integration, and wait for a pending registration before disable. Cost: disable can wait for the bounded in-flight request.
+
+## Final review and regression pass
+
+A fresh reviewer independently passed the initial 301-test suite and reproduced five material findings. All five were accepted and fixed in one regression pass; six new tests first failed on the reviewed code and then passed:
+
+- Keep the original activation scope through rules/snapshot sync, checking it after each await. An old activation cannot initiate registration for a new account/install.
+- Refresh the open notification settings fragment on device/snapshot status updates, comparing rendered content before replacement. Background failure is visible without reopening settings.
+- Read the actual browser subscription before reusing readiness; compare endpoint and keys. Subscription removal invalidates readiness; replacement is registered before sync.
+- Periodic/visibility recovery resumes both rules and snapshots through the existing scheduler, cooldown and hash/TTL checks.
+- Preserve successful device activation but warn when dependent sync returns false, instead of displaying complete success.
+
+Cost of these decisions: each required device readiness check reads the browser subscription; periodic recovery also checks the existing rules hash/TTL. Only the notification fragment is refreshed. No material review finding remains deferred. Live database/deployment ordering and closed-app push delivery remain outside local verification. The existing explicit activation's serviceWorker.ready wait is unchanged and remains a separate reliability limitation.
 
 ## Deployment checklist (not executed)
 

@@ -35,7 +35,6 @@
       const reason = readBlockReason()
       if (reason) return skipped(reason, scope)
       if (blocked?.key === scope.key && blocked.until > now() && !activation) throw blocked.error
-      if (ready && sameScope(ready.scope, scope)) return { status: 'ready', scope }
       if (pending && sameScope(pending.scope, scope)) return pending.promise
       const startingGeneration = generation
       const isCurrent = () => generation === startingGeneration && sameScope(scope, readScope())
@@ -47,11 +46,17 @@
           if (!activation && !isEnabled()) return skipped('disabled', scope)
           const currentReason = readBlockReason()
           if (currentReason) return skipped(currentReason, scope)
-          if (!subscription) return skipped('subscription-required', scope)
+          if (!subscription) {
+            ready = null
+            return skipped('subscription-required', scope)
+          }
+          const subscriptionKey = JSON.stringify([subscription.endpoint, subscription.keys?.p256dh, subscription.keys?.auth])
+          if (ready && sameScope(ready.scope, scope) && ready.subscriptionKey === subscriptionKey) return { status: 'ready', scope }
+          ready = null
           onStatus({ status: 'registering' })
           await registerDevice(scope, subscription)
           if (!isCurrent()) return { status: 'skipped', reason: 'scope-changed' }
-          ready = { scope }
+          ready = { scope, subscriptionKey }
           blocked = null
           onStatus({ status: 'ready' })
           return { status: 'ready', scope }

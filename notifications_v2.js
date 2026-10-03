@@ -368,7 +368,7 @@
       await callFunction('update-notification-preferences', preferencesPayload(scope), { scope, timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
       if (isCurrentNotificationScope(scope)) try { localStorage.setItem(PUSH_SUB_KEY, JSON.stringify(subscription)) } catch (_) {}
     },
-    onStatus: state => { App.notificationDeviceStatus = state },
+    onStatus: state => { App.notificationDeviceStatus = state; refreshNotificationSettings() },
   })
 
   async function requireRegisteredDevice(scope, options = {}) {
@@ -481,7 +481,7 @@
     scopedStorage: localStorage,
     canSync: () => notificationsMaySync() && document.visibilityState === 'visible' && navigator.onLine !== false && !!window.MTAuthSync?.state?.user?.id,
     withLock: (key,fn) => navigator.locks?.request ? navigator.locks.request(key,fn) : fn(),
-    onStatus: state => { App.notificationSnapshotStatus = state },
+    onStatus: state => { App.notificationSnapshotStatus = state; refreshNotificationSettings() },
     transport: async snapshot => {
       const scope = captureNotificationScope()
       const result = await runRegisteredMutation('sync-notification-snapshot', {
@@ -503,9 +503,10 @@
       return result
     },
   })
-  async function syncSnapshot({force=false}={}) {
-    if(!notificationsMaySync())return false
-    return snapshotQueue.flush({force})
+  async function syncSnapshot({force=false, scope=captureNotificationScope()}={}) {
+    if(!notificationsMaySync() || !isCurrentNotificationScope(scope))return false
+    const result = await snapshotQueue.flush({force})
+    return isCurrentNotificationScope(scope) && result
   }
   getStateCommit()?.addAfterCommit(() => snapshotQueue.markDirty())
 
@@ -637,9 +638,8 @@
     return route || 'dashboard'
   }
 
-  async function syncCustomRules({ force = false, timeoutMs = BACKGROUND_FETCH_TIMEOUT_MS } = {}) {
-    if (!notificationsMaySync()) return false
-    const scope = captureNotificationScope()
+  async function syncCustomRules({ force = false, timeoutMs = BACKGROUND_FETCH_TIMEOUT_MS, scope = captureNotificationScope() } = {}) {
+    if (!notificationsMaySync() || !isCurrentNotificationScope(scope)) return false
     const rules = getCustomRules()
     const payload = {
       installId: scope.installId,
@@ -710,11 +710,13 @@
     activationInFlight = activateNotificationDevice(scope)
     let enabled
     try { enabled = await activationInFlight } finally { activationInFlight = null }
-    if (!enabled) return false
-    await syncCustomRules({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
-    await syncSnapshot({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
+    if (!enabled || !isCurrentNotificationScope(scope)) return false
+    const rulesResult = await syncCustomRules({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS, scope })
     if (!isCurrentNotificationScope(scope)) return false
-    notify('เปิดการแจ้งเตือนแล้ว', 'success')
+    const snapshotResult = await syncSnapshot({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS, scope })
+    if (!isCurrentNotificationScope(scope)) return false
+    if (rulesResult === false || snapshotResult === false) notify('เปิดการแจ้งเตือนแล้ว มีข้อมูลรอซิงค์เมื่อพร้อม', 'warn')
+    else notify('เปิดการแจ้งเตือนแล้ว', 'success')
     App.renderMore?.()
     return true
   }
@@ -832,6 +834,14 @@
           <div class="s-value">${customCount} กฎ</div>
         </div>
       </div>`
+  }
+
+  function refreshNotificationSettings() {
+    if (S.page !== 'more') return
+    const fragment = document.getElementById?.('mt-notification-settings')
+    if (!fragment) return
+    const html = renderNotificationSettings()
+    if (fragment.innerHTML !== html) fragment.innerHTML = html
   }
 
   MTScreenHooks.register('more', 'notifications.settings', function() {
@@ -1282,8 +1292,8 @@
   window.addEventListener('pageshow', event => {
     if (event.persisted) scheduleBackgroundNotificationSync('pageshow')
   }, { passive: true })
-  window.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')snapshotQueue.resume().catch(()=>{})},{passive:true})
+  window.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleBackgroundNotificationSync('visible')},{passive:true})
   window.addEventListener('storage',event=>{if(event.key?.startsWith('mt_notification_sync_v2:'))snapshotQueue.resume().catch(()=>{})},{passive:true})
-  setInterval(()=>{if(document.visibilityState==='visible')snapshotQueue.resume().catch(()=>{})},60000)
+  setInterval(()=>{if(document.visibilityState==='visible')scheduleBackgroundNotificationSync('periodic')},60000)
   scheduleBackgroundNotificationSync('boot')
 })()

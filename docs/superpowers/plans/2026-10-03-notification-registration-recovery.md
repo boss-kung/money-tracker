@@ -49,12 +49,12 @@
 - `callFunction(name, payload, {scope, timeoutMs})` uses the supplied captured scope, verifies it is still current before dispatch, and throws an Error with `status`, `code`, and `functionName` for failed responses. It does not fall back to anon credentials for user mutations.
 - Legacy recovery recognition is exactly HTTP 403 plus `error === 'Notification device is not registered'`; retain compatibility with the current deployed backend.
 
-- [ ] Write backend tests for no row, correct owner, another owner, anonymous claim allowed only on registration, and table query error.
-- [ ] Write frontend tests for structured/legacy 403 distinction, missing session skipping dispatch, and a captured scope invalidated before dispatch.
-- [ ] Run the new tests before implementation and verify failures reflect absent error identity/auth guarding.
-- [ ] Implement the compatible error codes and transport contract; preserve existing server guard calls and messages.
-- [ ] Run `node --test tests/notification_lifecycle.test.js tests/notification_contract.test.js` and `deno test supabase/functions/_shared/notification_auth_test.ts`.
-- [ ] Review diff and commit this independently testable contract.
+- [x] Write backend tests for no row, correct owner, another owner, anonymous claim allowed only on registration, and table query error.
+- [x] Write frontend tests for structured/legacy 403 distinction, missing session skipping dispatch, and a captured scope invalidated before dispatch.
+- [x] Run the new tests before implementation and verify failures reflect absent error identity/auth guarding.
+- [x] Implement the compatible error codes and transport contract; preserve existing server guard calls and messages.
+- [x] Run `node --test tests/notification_lifecycle.test.js tests/notification_contract.test.js` and `deno test supabase/functions/_shared/notification_auth_test.ts`.
+- [x] Review diff and commit this independently testable contract.
 
 ### Task 2: Reconcile registration before every sync path
 
@@ -74,20 +74,20 @@
 - Registration itself calls raw `callFunction('register-notification-device', ...)` with captured scope to avoid recursive prerequisites.
 - Add a single auth lifecycle event, `mt:auth-state-changed`, dispatched when current user/session is ready or signed out. Notification listeners reset registration state and schedule reconciliation for the current authenticated context. Ensure the cached restore path also dispatches and avoid duplicating token-refresh scheduling.
 
-- [ ] Add failing behavioral tests for both sync requests with enabled/registered-missing state: expected network order starts with register, then preferences, then rules/snapshot; no sync is allowed before register resolves.
-- [ ] Add tests for initial activation register rejection, delayed registration plus commit debounce, concurrent snapshot/rules callers, and reload with a valid existing subscription.
-- [ ] Add tests for granted permission with disabled master, signed-out state, missing subscription despite cached JSON, and current browser subscription differing from cache.
-- [ ] Add tests for auth arriving after the boot delay, sign-out/account change/install change during awaited work, stale registration completion, and user-scoped rules TTL/hash invalidation.
-- [ ] Add tests for a row deleted after prior success: missing-device triggers one register+retry; persistent missing-device and ownership mismatch stop; transient offline/server failure leaves dirty snapshot/rules pending.
-- [ ] Add manual-action tests: skipped operations cannot show sync success; partial sync failure remains visible.
-- [ ] Run tests and verify baseline behavior fails the lifecycle assertions before writing coordinator/integration code.
-- [ ] Implement the coordinator and wire registration prerequisites into snapshot transport, custom rules, preferences, manual sync and enable/disable flows. Queue retries/visibility/storage/timers therefore use the same gate.
-- [ ] Use actual browser subscription reads for recovery; do not unsubscribe/recreate an existing subscription unnecessarily. Initial activation persists confirmed `enabled=true` after register succeeds; in-flight activation cannot open the background gate. Keep failed subscription available for explicit retry.
-- [ ] Send preferences after initial/recovered registration and before dependent sync, respecting that registration currently upserts defaults. Do not continuously re-register on every timer, which could reset preferences.
-- [ ] Scope custom-rule hash/time keys by user/install; do not adopt legacy global hashes as successful sync for a new scope.
-- [ ] Revalidate the captured scope after every awaited registration/preferences/mutation operation before writes to local success markers or status.
-- [ ] Keep original queue tests green, adding integration assertions rather than replacing revision/cross-tab coverage.
-- [ ] Run the focused lifecycle, queue, snapshot, contract and auth tests; review diff and commit.
+- [x] Add failing behavioral tests for both sync requests with enabled/registered-missing state: expected network order starts with register, then preferences, then rules/snapshot; no sync is allowed before register resolves.
+- [x] Add tests for initial activation register rejection, delayed registration plus commit debounce, concurrent snapshot/rules callers, and reload with a valid existing subscription.
+- [x] Add tests for granted permission with disabled master, signed-out state, missing subscription despite cached JSON, and current browser subscription differing from cache.
+- [x] Add tests for auth arriving after the boot delay, sign-out/account change/install change during awaited work, stale registration completion, and user-scoped rules TTL/hash invalidation.
+- [x] Add tests for a row deleted after prior success: missing-device triggers one register+retry; persistent missing-device and ownership mismatch stop; transient offline/server failure leaves dirty snapshot/rules pending.
+- [x] Add manual-action tests: skipped operations cannot show sync success; partial sync failure remains visible.
+- [x] Run tests and verify baseline behavior fails the lifecycle assertions before writing coordinator/integration code.
+- [x] Implement the coordinator and wire registration prerequisites into snapshot transport, custom rules, preferences, manual sync and enable/disable flows. Queue retries/visibility/storage/timers therefore use the same gate.
+- [x] Use actual browser subscription reads for recovery; do not unsubscribe/recreate an existing subscription unnecessarily. Initial activation persists confirmed `enabled=true` after register succeeds; in-flight activation cannot open the background gate. Keep failed subscription available for explicit retry.
+- [x] Send preferences after initial/recovered registration and before dependent sync, respecting that registration currently upserts defaults. Do not continuously re-register on every timer, which could reset preferences.
+- [x] Scope custom-rule hash/time keys by user/install; do not adopt legacy global hashes as successful sync for a new scope.
+- [x] Revalidate the captured scope after every awaited registration/preferences/mutation operation before writes to local success markers or status.
+- [x] Keep original queue tests green, adding integration assertions rather than replacing revision/cross-tab coverage.
+- [x] Run the focused lifecycle, queue, snapshot, contract and auth tests; review diff and commit.
 
 ### Task 3: Release verification and controlled rollout
 
@@ -99,12 +99,12 @@
 - Coordinator is loaded before notification consumers in both entrypoints and included in `coreAssets`.
 - Existing server/client error contracts remain compatible during staggered rollout.
 
-- [ ] Choose the next unused release version at execution time, update `release_manifest.js`, then run `node scripts/update-release-version.js`.
-- [ ] Run `node --test tests/*.test.js` and the backend auth/snapshot/rules/delivery Deno tests.
-- [ ] Run `deno check` on all four mutation handlers and `git diff --check`; verify production/demo/offline asset ordering.
-- [ ] Browser smoke with controlled fixtures: delayed registration, failed activation, reload recovery, disabled switch, late auth and offline/resume. Assert request ordering and truthful status. If settings markup changes, read `docs/UI_DESIGN_SPEC.md` first and check light/dark/mobile.
-- [ ] Record evidence and limitations. Local mocks do not certify production database state or real Push delivery.
-- [ ] Prepare a reviewable diff/PR and deployment checklist. Execution of remote deployment is a separate user-authorized action; no production changes are part of this planning request.
+- [x] Choose the next unused release version at execution time, update `release_manifest.js`, then run `node scripts/update-release-version.js`.
+- [x] Run `node --test tests/*.test.js` and the backend auth/snapshot/rules/delivery Deno tests.
+- [x] Run `deno check` on all four mutation handlers and `git diff --check`; verify production/demo/offline asset ordering.
+- [x] Browser smoke with controlled fixtures: delayed registration, failed activation, reload recovery, disabled switch, late auth and offline/resume. Assert request ordering and truthful status. If settings markup changes, read `docs/UI_DESIGN_SPEC.md` first and check light/dark/mobile.
+- [x] Record evidence and limitations. Local mocks do not certify production database state or real Push delivery.
+- [x] Prepare a reviewable diff/PR and deployment checklist. Execution of remote deployment is a separate user-authorized action; no production changes are part of this planning request.
 - [ ] On authorized rollout, deploy the shared helper plus four compatible mutation functions, retaining JWT verification; deploy Pages release afterward. Verify independently since Pages CI does not deploy Supabase.
 - [ ] Verify authenticated PWA Network trace: one successful registration before sync, successful rules/snapshot, no repeat 403 on reload/visibility/online. Confirm expected backend ownership mismatch remains rejected.
 

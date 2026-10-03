@@ -2,6 +2,74 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { notificationFixture, response, settle } = require('./helpers/notification_fixture.js')
 
+test('activation continuation cannot synchronize a newly selected account', async () => {
+  const f = notificationFixture({ enabled: false })
+  const persist = f.context.persist
+  f.context.persist = () => {
+    persist()
+    if (f.context.S.settings.notifications.enabled) Promise.resolve().then(() => {
+      f.context.MTAuthSync.state = { user: { id: 'user-b' }, session: { access_token: 'token-b' } }
+      f.store.set('mt_notification_install_id', 'install-b')
+      f.emit('mt:auth-state-changed')
+    })
+  }
+  assert.equal(await f.context.testNotifications.enableNotifications(), false)
+  assert.equal(f.calls.some(c => c.payload.installId === 'install-b'), false)
+})
+
+test('background registration failure updates the open settings fragment', async () => {
+  const f = notificationFixture({ fetch: () => response(500, { error: 'Registration unavailable' }) })
+  const fragment = { innerHTML: 'เปิดแล้ว' }
+  f.context.S.page = 'more'
+  f.context.document.getElementById = id => id === 'mt-notification-settings' ? fragment : null
+  await assert.rejects(f.context.testNotifications.syncCustomRules({ force: true }))
+  assert.match(fragment.innerHTML, /ยังซิงค์ไม่สำเร็จ/)
+})
+
+test('loss of actual subscription invalidates readiness before another snapshot', async () => {
+  const f = notificationFixture()
+  await f.context.testNotifications.syncCustomRules({ force: true })
+  f.pushManager.getSubscription = async () => null
+  await assert.rejects(f.context.testNotifications.syncSnapshot({ force: true }))
+  assert.equal(f.calls.some(c => c.name === 'sync-notification-snapshot'), false)
+  assert.match(f.context.testNotifications.statusLabel(), /ต้องเปิดแจ้งเตือนอีกครั้ง/)
+})
+
+test('replacement subscription is registered before dependent sync', async () => {
+  const f = notificationFixture()
+  await f.context.testNotifications.syncCustomRules({ force: true })
+  f.pushManager.getSubscription = async () => ({ toJSON: () => ({ endpoint: 'https://push.example/replaced', keys: { auth: 'new', p256dh: 'new' } }) })
+  await f.context.testNotifications.syncSnapshot({ force: true })
+  const registrations = f.calls.filter(c => c.name === 'register-notification-device')
+  assert.equal(registrations.length, 2)
+  assert.equal(registrations[1].payload.pushSubscription.endpoint, 'https://push.example/replaced')
+})
+
+test('periodic recovery retries rules as well as the dirty snapshot', async () => {
+  let failing = true
+  const f = notificationFixture({ fetch: c => failing ? response(500, { error: 'Temporary failure' }) : response(200, { accepted: true, revision: c.payload.snapshotRevision }) })
+  f.context.testNotifications.runBackgroundNotificationSync()
+  await settle()
+  failing = false
+  const future = Date.now() + 61000
+  f.context.Date = class extends Date { static now() { return future } }
+  for (const timer of f.intervals.values()) if (timer.delay === 60000) timer.fn()
+  for (const timer of [...f.timeouts.values()]) if (timer.delay === 1000) timer.fn()
+  for (const timer of [...f.timeouts.values()]) if (timer.delay === 1200) timer.fn()
+  await settle()
+  assert.ok(f.calls.some(c => c.name === 'sync-notification-rules'))
+  assert.ok(f.calls.some(c => c.name === 'sync-notification-snapshot'))
+})
+
+test('activation retains enabled device but reports pending hidden-page synchronization', async () => {
+  const f = notificationFixture({ enabled: false })
+  f.context.document.visibilityState = 'hidden'
+  assert.equal(await f.context.testNotifications.enableNotifications(), true)
+  assert.equal(f.context.S.settings.notifications.enabled, true)
+  assert.equal(f.messages.some(m => m.type === 'success'), false)
+  assert.ok(f.messages.some(m => m.type === 'warn' && /รอซิงค์/.test(m.message)))
+})
+
 test('transport preserves missing-device error identity for safe recovery', async () => {
   for (const body of [{ error: 'Notification device is not registered' }, { error: 'Notification device is not registered', code: 'DEVICE_NOT_REGISTERED' }]) {
     const f = notificationFixture({ fetch: () => response(403, body) })
