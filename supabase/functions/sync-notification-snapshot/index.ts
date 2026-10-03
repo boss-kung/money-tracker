@@ -1,5 +1,5 @@
 import { upsertSnapshotIfNewer } from '../_shared/notification_snapshot_store.ts'
-import { adminClient, requestErrorStatus, requireAuthenticatedUserId, requireInstallOwnership } from '../_shared/supabase.ts'
+import { adminClient, requestErrorBody, requestErrorStatus, requireAuthenticatedUserId, requireInstallOwnership } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
 import { sanitizeDaysLeft } from '../_shared/notification_rules.ts'
@@ -57,6 +57,6 @@ Deno.serve(async req => {
 
     return jsonResponse({ ok: true, ...result }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, requestErrorStatus(error), req)
+    return jsonResponse(requestErrorBody(error), requestErrorStatus(error), req)
   }
 })

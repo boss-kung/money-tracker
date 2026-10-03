@@ -11,11 +11,13 @@ export function adminClient() {
 
 export class RequestAuthError extends Error {
   status: number
+  code: string
 
-  constructor(message: string, status = 401) {
+  constructor(message: string, status = 401, code = 'UNAUTHORIZED') {
     super(message)
     this.name = 'RequestAuthError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -68,13 +70,20 @@ export async function requireInstallOwnership(
   if (error) throw error
   if (!data) {
     if (options.allowUnregistered) return
-    throw new RequestAuthError('Notification device is not registered', 403)
+    throw new RequestAuthError('Notification device is not registered', 403, 'DEVICE_NOT_REGISTERED')
   }
   if (data.user_id === userId) return
   if (data.user_id === null && options.allowClaimAnonymous) return
-  throw new RequestAuthError('Notification device belongs to another user', 403)
+  throw new RequestAuthError('Notification device belongs to another user', 403, 'DEVICE_OWNERSHIP_MISMATCH')
 }
 
 export function requestErrorStatus(error: unknown): number {
   return error instanceof RequestAuthError ? error.status : 500
+}
+
+export function requestErrorBody(error: unknown): { error: string; code?: string } {
+  return {
+    error: error instanceof Error ? error.message : String(error),
+    ...(error instanceof RequestAuthError ? { code: error.code } : {}),
+  }
 }

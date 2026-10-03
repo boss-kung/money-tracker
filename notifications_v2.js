@@ -16,6 +16,7 @@
   const MANUAL_FETCH_TIMEOUT_MS = 10000
   let backgroundSyncTimer = null
   let backgroundSyncInFlight = false
+  let notificationScopeGeneration = 0
   const SafeRender = globalThis.MTSafeRender || (typeof require === 'function' ? require('./safe_render.js') : null)
   const esc = SafeRender.escapeHtml
   const jsArg = SafeRender.jsArg
@@ -216,9 +217,31 @@
     return Boolean(cfg.functionsUrl && cfg.supabaseAnonKey && cfg.vapidKey)
   }
 
+  function captureNotificationScope() {
+    const auth = window.MTAuthSync?.state
+    if (!auth?.user?.id || !auth?.session?.access_token) return null
+    const userId = String(auth.user.id)
+    const installId = getInstallId()
+    return { userId, installId, accessToken: auth.session.access_token, key: `${userId}:${installId}`, generation: notificationScopeGeneration }
+  }
+
+  function isCurrentNotificationScope(scope) {
+    const current = captureNotificationScope()
+    return Boolean(scope && current && scope.key === current.key && (scope.generation === undefined || scope.generation === current.generation))
+  }
+
+  function notificationError(message, code, status = 0) {
+    return Object.assign(new Error(message), { code, status })
+  }
+
   async function callFunction(name, payload, options = {}) {
     const cfg = getConfig()
     if (!cfg.functionsUrl || !cfg.supabaseAnonKey) throw new Error('Supabase notification config is missing')
+    const scope = options.scope || captureNotificationScope()
+    if (!scope) throw notificationError('ต้องเข้าสู่ระบบก่อนซิงค์การแจ้งเตือน', 'UNAUTHORIZED', 401)
+    if (!isCurrentNotificationScope(scope) || (payload?.installId && payload.installId !== scope.installId)) {
+      throw notificationError('บัญชีหรืออุปกรณ์เปลี่ยนแล้ว กรุณาซิงค์ใหม่', 'SCOPE_CHANGED')
+    }
     const timeoutMs = Number(options.timeoutMs || BACKGROUND_FETCH_TIMEOUT_MS)
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
     const started = performance.now()
@@ -229,17 +252,21 @@
         method: 'POST',
         headers: {
           apikey: cfg.supabaseAnonKey,
-          Authorization: `Bearer ${window.MTAuthSync?.state?.session?.access_token || cfg.supabaseAnonKey}`,
+          Authorization: `Bearer ${scope.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           ...payload,
-          userId: window.MTAuthSync?.state?.user?.id || payload?.userId || null,
+          userId: scope.userId,
         }),
         signal: controller?.signal,
       })
       const data = await response.json().catch(() => ({}))
-      if (!response.ok || data.error) throw new Error(data.error || `Function ${name} failed`)
+      if (!isCurrentNotificationScope(scope)) throw notificationError('บัญชีหรืออุปกรณ์เปลี่ยนแล้ว กรุณาซิงค์ใหม่', 'SCOPE_CHANGED')
+      if (!response.ok || data.error) {
+        const code = data.code || (response.status === 403 && data.error === 'Notification device is not registered' ? 'DEVICE_NOT_REGISTERED' : '')
+        throw Object.assign(notificationError(data.error || data.message || `Function ${name} failed (${response.status})`, code, response.status), { functionName: name })
+      }
       bootMark(`${name}.done`, { duration: Math.round((performance.now() - started) * 10) / 10 })
       return data
     } catch (err) {

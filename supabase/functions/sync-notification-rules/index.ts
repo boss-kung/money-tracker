@@ -1,4 +1,4 @@
-import { adminClient, requestErrorStatus, requireAuthenticatedUserId, requireInstallOwnership } from '../_shared/supabase.ts'
+import { adminClient, requestErrorBody, requestErrorStatus, requireAuthenticatedUserId, requireInstallOwnership } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
 type CustomRule = {
@@ -130,6 +130,6 @@ Deno.serve(async req => {
 
     return jsonResponse({ ok: true, synced: rows.length }, 200, req)
   } catch (error) {
-    return jsonResponse({ error: error instanceof Error ? error.message : JSON.stringify(error) }, requestErrorStatus(error), req)
+    return jsonResponse(requestErrorBody(error), requestErrorStatus(error), req)
   }
 })
