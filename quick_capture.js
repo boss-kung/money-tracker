@@ -944,10 +944,6 @@
     )
   }
 
-  App._qcMicStop = function () {
-    if (_isListening) stopListening()
-  }
-
   // ── S.tx pre-fill ─────────────────────────────────────────
   function _applyToSxState(result) {
     S.txMode      = 'add'

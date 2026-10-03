@@ -177,11 +177,9 @@
       try { persist() } catch (_) {}
     }
     if (!S.settings.notifications.routedByTriggerV1) {
-      let changed = false
       S.settings.notifications.customRules = S.settings.notifications.customRules.map(rule => {
         const normalized = applyTriggerDefaultRoute(rule)
         const routeChanged = String(rule?.route || '') !== normalized.route
-        if (routeChanged) changed = true
         return routeChanged ? { ...normalized, updatedAt: new Date().toISOString() } : normalized
       })
       S.settings.notifications.routedByTriggerV1 = true
@@ -1036,12 +1034,6 @@
       .catch(err => notify(err.message || 'ซิงค์ไม่สำเร็จ', 'error'))
   }
 
-  App.syncCustomNotificationRules = function(showToast = false) {
-    syncCustomRules({ force: Boolean(showToast), timeoutMs: showToast ? MANUAL_FETCH_TIMEOUT_MS : BACKGROUND_FETCH_TIMEOUT_MS })
-      .then(ok => { if (showToast) notify(ok ? 'Sync กฎแจ้งเตือนแล้ว' : 'ยังไม่ได้ตั้งค่า Firebase/Supabase', ok ? 'success' : 'warn') })
-      .catch(err => notify(err.message || 'Sync กฎไม่สำเร็จ', 'error'))
-  }
-
   App.testCustomNotificationRule = async function(ruleId) {
     const rule = getCustomRules().find(item => item.id === ruleId)
     if (!rule) return notify('ไม่พบกฎแจ้งเตือน', 'error')
@@ -1071,12 +1063,6 @@
       data: { type: 'custom_rule', ruleId: rule.id, route: rule.route || 'dashboard' },
       actions: [{ action: rule.route || 'open', title: rule.actionLabel || 'เปิดแอป' }],
     })
-  }
-
-  App.syncNotificationSnapshot = function(force = false) {
-    syncSnapshot({ force: Boolean(force), timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
-      .then(ok => notify(ok ? 'ซิงค์การแจ้งเตือนแล้ว' : 'ยังไม่ได้ตั้งค่า Notification', ok ? 'success' : 'warn'))
-      .catch(err => notify(err.message || 'ซิงค์ไม่สำเร็จ', 'error'))
   }
 
   function runBackgroundNotificationSync(reason = 'boot') {

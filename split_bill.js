@@ -337,10 +337,6 @@
       || ''
   }
 
-  App.getSplitBillLinkState = function (billId) {
-    return splitBillLinkState(SbStore.getBill(billId))
-  }
-
   App.getSplitBillLinkStateByTxId = function (txId) {
     const tx = findTx(txId)
     if (!tx?.splitBillId) return null
