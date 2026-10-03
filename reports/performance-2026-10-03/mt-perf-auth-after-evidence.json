@@ -1,0 +1,28 @@
+{
+  "timeout": {
+    "at": 12240.5,
+    "restoring": false,
+    "error": "การเชื่อมต่อหมดเวลา กรุณาลองใหม่",
+    "gated": true,
+    "refreshPreserved": true,
+    "requests": [
+      {
+        "path": "/auth/v1/token",
+        "hasSignal": true,
+        "at": 180.20000000298023
+      },
+      {
+        "path": "/auth/v1/token",
+        "hasSignal": true,
+        "at": 8884.20000000298
+      }
+    ]
+  },
+  "retry": {
+    "restoring": false,
+    "error": null,
+    "hasSession": true,
+    "gated": false
+  },
+  "errors": []
+}

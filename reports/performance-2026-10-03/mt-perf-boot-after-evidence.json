@@ -1,0 +1,967 @@
+[
+  {
+    "rules": false,
+    "run": 1,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0.1,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 32
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 36.4
+      },
+      {
+        "name": "app_v2.version",
+        "at": 132.4,
+        "version": "2026.10.03-perf-r130"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 132.6
+      },
+      {
+        "name": "app.init.start",
+        "at": 132.8
+      },
+      {
+        "name": "storage.init.done",
+        "at": 133.4,
+        "duration": 0.6
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 146.3
+      },
+      {
+        "name": "app.init.done",
+        "at": 146.8,
+        "duration": 14
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 177.8,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 179.8
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 182.1,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 196.3,
+        "duration": 14.2
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 254.5,
+        "page": "dashboard",
+        "reasons": [
+          "initial",
+          "core-finance-ready",
+          "transaction-list-ready",
+          "transaction-detail-ready",
+          "add-transaction-ready",
+          "budget-editor-ready",
+          "financial-insights-ready",
+          "investment-pricing-ready",
+          "monthly-summary-ready",
+          "storage-meta-ready",
+          "credit-limits-ready",
+          "add-transaction-hotfix-ready",
+          "credit-card-state-ready",
+          "mobile-ux-ready",
+          "upcoming-bills-ready",
+          "privileges-ready",
+          "insight-engine-ready",
+          "responsive-polish-ready",
+          "onboarding-ready"
+        ],
+        "duration": 73.2
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 260.7,
+        "reason": "flag"
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 269.8,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 290.1,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 290.2,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 298.7,
+        "duration": 8.5
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 691.7,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 697.2,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1383.7,
+        "reason": "flag"
+      }
+    ],
+    "long": [
+      {
+        "start": 214.29999999701977,
+        "duration": 83
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 0
+  },
+  {
+    "rules": false,
+    "run": 2,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 28.5
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 28.7
+      },
+      {
+        "name": "app_v2.version",
+        "at": 100.1,
+        "version": "2026.10.03-perf-r130"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 100.3
+      },
+      {
+        "name": "app.init.start",
+        "at": 100.5
+      },
+      {
+        "name": "storage.init.done",
+        "at": 101,
+        "duration": 0.5
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 114.9
+      },
+      {
+        "name": "app.init.done",
+        "at": 115.5,
+        "duration": 15
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 181.5,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 185.2
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 187.9,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 202.4,
+        "duration": 14.5
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 258.1,
+        "page": "dashboard",
+        "reasons": [
+          "initial",
+          "core-finance-ready",
+          "transaction-list-ready",
+          "transaction-detail-ready",
+          "add-transaction-ready",
+          "budget-editor-ready",
+          "financial-insights-ready",
+          "investment-pricing-ready",
+          "monthly-summary-ready",
+          "storage-meta-ready",
+          "credit-limits-ready",
+          "add-transaction-hotfix-ready",
+          "credit-card-state-ready",
+          "mobile-ux-ready",
+          "upcoming-bills-ready",
+          "privileges-ready",
+          "insight-engine-ready",
+          "responsive-polish-ready",
+          "onboarding-ready"
+        ],
+        "duration": 71
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 264.3,
+        "reason": "flag"
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 283.3,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 295.2,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 295.3,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 304.6,
+        "duration": 9.3
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 692.1,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 697.6,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1389.4,
+        "reason": "flag"
+      }
+    ],
+    "long": [
+      {
+        "start": 109.79999999701977,
+        "duration": 83
+      },
+      {
+        "start": 197,
+        "duration": 81
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 0
+  },
+  {
+    "rules": false,
+    "run": 3,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0.1,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 13.5
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 13.5
+      },
+      {
+        "name": "app_v2.version",
+        "at": 130.8,
+        "version": "2026.10.03-perf-r130"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 131
+      },
+      {
+        "name": "app.init.start",
+        "at": 131.3
+      },
+      {
+        "name": "storage.init.done",
+        "at": 131.8,
+        "duration": 0.5
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 144.5
+      },
+      {
+        "name": "app.init.done",
+        "at": 145,
+        "duration": 13.7
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 211.5,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 215
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 217.7,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 232.5,
+        "duration": 14.8
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 296.7,
+        "page": "dashboard",
+        "reasons": [
+          "initial",
+          "core-finance-ready",
+          "transaction-list-ready",
+          "transaction-detail-ready",
+          "add-transaction-ready",
+          "budget-editor-ready",
+          "financial-insights-ready",
+          "investment-pricing-ready",
+          "monthly-summary-ready",
+          "storage-meta-ready",
+          "credit-limits-ready",
+          "add-transaction-hotfix-ready",
+          "credit-card-state-ready",
+          "mobile-ux-ready",
+          "upcoming-bills-ready",
+          "privileges-ready",
+          "insight-engine-ready",
+          "responsive-polish-ready",
+          "onboarding-ready"
+        ],
+        "duration": 79.7
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 302.5,
+        "reason": "flag"
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 319.3,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 334.1,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 334.2,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 342.6,
+        "duration": 8.4
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 724.3,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 729.3,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1424.8,
+        "reason": "flag"
+      }
+    ],
+    "long": [
+      {
+        "start": 140.79999999701977,
+        "duration": 82
+      },
+      {
+        "start": 227.09999999403954,
+        "duration": 89
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 0
+  },
+  {
+    "rules": true,
+    "run": 1,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0.1,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 27.3
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 27.3
+      },
+      {
+        "name": "app_v2.version",
+        "at": 109,
+        "version": "2026.10.03-perf-r130"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 109.2
+      },
+      {
+        "name": "app.init.start",
+        "at": 109.3
+      },
+      {
+        "name": "storage.init.done",
+        "at": 110,
+        "duration": 0.5
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 123.5
+      },
+      {
+        "name": "app.init.done",
+        "at": 124.1,
+        "duration": 14.8
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 464.5,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 468.4,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 483.6,
+        "duration": 15.2
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 546.4,
+        "page": "dashboard",
+        "reasons": [
+          "initial",
+          "core-finance-ready",
+          "transaction-list-ready",
+          "transaction-detail-ready",
+          "add-transaction-ready",
+          "budget-editor-ready",
+          "financial-insights-ready",
+          "investment-pricing-ready",
+          "monthly-summary-ready",
+          "storage-meta-ready",
+          "credit-limits-ready",
+          "add-transaction-hotfix-ready",
+          "credit-card-state-ready",
+          "mobile-ux-ready",
+          "upcoming-bills-ready",
+          "privileges-ready",
+          "insight-engine-ready",
+          "responsive-polish-ready"
+        ],
+        "duration": 78.8
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 821,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 826.6
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 829.2,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 839,
+        "duration": 9.8
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 861.8,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1141.3,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 1141.5,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 1149.8,
+        "duration": 8.3
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1602.8,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1855.4,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 2120.6,
+        "reason": "flag"
+      }
+    ],
+    "long": [
+      {
+        "start": 120.29999999701977,
+        "duration": 359
+      },
+      {
+        "start": 480.8999999910593,
+        "duration": 356
+      },
+      {
+        "start": 895.3999999910593,
+        "duration": 286
+      },
+      {
+        "start": 1340.5,
+        "duration": 528
+      },
+      {
+        "start": 1870.3999999910593,
+        "duration": 263
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 5
+  },
+  {
+    "rules": true,
+    "run": 2,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0.1,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 22.9
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 23
+      },
+      {
+        "name": "app_v2.version",
+        "at": 108.8,
+        "version": "2026.10.03-perf-r130"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 109.1
+      },
+      {
+        "name": "app.init.start",
+        "at": 109.2
+      },
+      {
+        "name": "storage.init.done",
+        "at": 109.8,
+        "duration": 0.5
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 122.2
+      },
+      {
+        "name": "app.init.done",
+        "at": 122.8,
+        "duration": 13.6
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 448.5,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 452.4,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 466.4,
+        "duration": 14
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 524,
+        "page": "dashboard",
+        "reasons": [
+          "initial",
+          "core-finance-ready",
+          "transaction-list-ready",
+          "transaction-detail-ready",
+          "add-transaction-ready",
+          "budget-editor-ready",
+          "financial-insights-ready",
+          "investment-pricing-ready",
+          "monthly-summary-ready",
+          "storage-meta-ready",
+          "credit-limits-ready",
+          "add-transaction-hotfix-ready",
+          "credit-card-state-ready",
+          "mobile-ux-ready",
+          "upcoming-bills-ready",
+          "privileges-ready",
+          "insight-engine-ready",
+          "responsive-polish-ready"
+        ],
+        "duration": 72.4
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 777.6,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 783.4
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 785.9,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 794.9,
+        "duration": 9
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 816.7,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1084.7,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 1084.9,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 1092.8,
+        "duration": 8
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1546.1,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1792.6,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 2043.9,
+        "reason": "flag"
+      }
+    ],
+    "long": [
+      {
+        "start": 118,
+        "duration": 341
+      },
+      {
+        "start": 460.90000000596046,
+        "duration": 330
+      },
+      {
+        "start": 843.1000000089407,
+        "duration": 277
+      },
+      {
+        "start": 1294,
+        "duration": 508
+      },
+      {
+        "start": 1803.6000000089407,
+        "duration": 249
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 5
+  },
+  {
+    "rules": true,
+    "run": 3,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0.1,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 20.9
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 20.9
+      },
+      {
+        "name": "app_v2.version",
+        "at": 103.8,
+        "version": "2026.10.03-perf-r130"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 104.1
+      },
+      {
+        "name": "app.init.start",
+        "at": 104.2
+      },
+      {
+        "name": "storage.init.done",
+        "at": 105.3,
+        "duration": 1.1
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 118.1
+      },
+      {
+        "name": "app.init.done",
+        "at": 118.7,
+        "duration": 14.5
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 440.9,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 444.6,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 458.7,
+        "duration": 14.1
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 514.3,
+        "page": "dashboard",
+        "reasons": [
+          "initial",
+          "core-finance-ready",
+          "transaction-list-ready",
+          "transaction-detail-ready",
+          "add-transaction-ready",
+          "budget-editor-ready",
+          "financial-insights-ready",
+          "investment-pricing-ready",
+          "monthly-summary-ready",
+          "storage-meta-ready",
+          "credit-limits-ready",
+          "add-transaction-hotfix-ready",
+          "credit-card-state-ready",
+          "mobile-ux-ready",
+          "upcoming-bills-ready",
+          "privileges-ready",
+          "insight-engine-ready",
+          "responsive-polish-ready"
+        ],
+        "duration": 70.5
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 769.2,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 775
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 777.5,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 786.1,
+        "duration": 8.6
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 808.1,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1071.5,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 1071.7,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 1079.7,
+        "duration": 8
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1551,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1801.2,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 2050.4,
+        "reason": "flag"
+      }
+    ],
+    "long": [
+      {
+        "start": 112.90000000596046,
+        "duration": 338
+      },
+      {
+        "start": 453.09999999403954,
+        "duration": 329
+      },
+      {
+        "start": 829.7999999970198,
+        "duration": 277
+      },
+      {
+        "start": 1284.2999999970198,
+        "duration": 526
+      },
+      {
+        "start": 1811.9000000059605,
+        "duration": 247
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 5
+  }
+]

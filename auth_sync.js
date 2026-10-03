@@ -6,11 +6,17 @@
   const DEVICE_KEY = 'mt_auth_sync_device'
   const PKCE_VERIFIER_KEY = 'mt_auth_sync_pkce_verifier'
   const DEVICE_RECOVERY_KEY = 'mt_auth_sync_recovery_key'
+  const PENDING_VAULTS_KEY = 'mt_auth_sync_pending_vaults'
   let _deviceRecoveryKeyMemory = '' // in-memory primary store; never touches localStorage
   let _deviceRecoveryKeyOwnerId = ''
   const FRESH_START_KEY = 'mt_auth_fresh_start'
   const DIRTY_DEBOUNCE_MS = 2500
   const STORAGE_BRIDGE_TIMEOUT_MS = 8000
+  // Include fetch AND response-body consumption; a refresh retry shares a 12s budget.
+  const AUTH_REQUEST_TIMEOUT_MS = 8000
+  const REFRESH_RETRY_TIMEOUT_MS = 12000
+  let initPromise = null
+  let authGeneration = 0
   const GOOGLE_AUTH_OPTIONS = Object.freeze({ provider: 'google' })
   const encoder = new TextEncoder()
 
@@ -253,27 +259,111 @@
     try { sessionStorage.removeItem(DEVICE_RECOVERY_KEY) } catch (_) {}
   }
 
+  function pendingVaults() {
+    try { return JSON.parse(localStorage.getItem(PENDING_VAULTS_KEY) || '{}') || {} } catch (_) { return {} }
+  }
+
+  function pendingVaultFor(ownerId) {
+    const pending = pendingVaults()[String(ownerId || '')]
+    return pending?.key && pending?.row?.user_id === ownerId ? pending : null
+  }
+
+  function savePendingVault(ownerId, pending) {
+    // A durable key is mandatory BEFORE sending an insert: the response may be lost.
+    // Let storage failures stop creation rather than leave an unrecoverable cloud row.
+    localStorage.setItem(PENDING_VAULTS_KEY, JSON.stringify({ ...pendingVaults(), [ownerId]: pending }))
+  }
+
+  function removePendingVault(ownerId) {
+    const all = pendingVaults()
+    delete all[ownerId]
+    localStorage.setItem(PENDING_VAULTS_KEY, JSON.stringify(all))
+  }
+
+  function pendingRowMatches(row, pendingRow) {
+    return Boolean(row && pendingRow) && [
+      'user_id', 'ciphertext', 'iv', 'salt', 'wrapped_key', 'wrapped_key_iv', 'checksum',
+    ].every(field => row[field] === pendingRow[field])
+  }
+
+  function pendingRestoreSkipApply(pending, freshStart = isFreshStart()) {
+    const newerLocalEdits = state.dirty
+      && Number(state.dirtyRevision || 0) > Number(pending.uploadRevision || 0)
+    return !currentDataLooksLikeDemo() && localPayloadHasUserContent()
+      && (newerLocalEdits || !freshStart)
+  }
+
+  function promotePendingVault(pending, generation) {
+    assertAuthGeneration(generation)
+    const ownerId = state.user?.id
+    if (!pending || !ownerId || pending.row.user_id !== ownerId || !pendingRowMatches(state.vaultMeta, pending.row)) return false
+    // Persist the confirmed key before removing its pending copy. Never replace
+    // another account's device key from a stale completion after logout/login.
+    localStorage.setItem(DEVICE_RECOVERY_KEY, JSON.stringify({ userId: ownerId, key: pending.key }))
+    saveDeviceRecoveryKey(pending.key)
+    removePendingVault(ownerId)
+    showRecoveryKeySheet(pending.key)
+    return true
+  }
+
   function esc(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]))
   }
 
-  async function requestAuth(path, options = {}) {
+  function requestTimeoutError() {
+    const error = new Error('การเชื่อมต่อหมดเวลา กรุณาลองใหม่')
+    error.code = 'AUTH_REQUEST_TIMEOUT'
+    return error
+  }
+
+  async function requestJson(url, options, fallback, timeoutMs = AUTH_REQUEST_TIMEOUT_MS) {
+    const controller = new AbortController()
+    let timer
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        // Reject independently of abort: some network implementations ignore the signal.
+        reject(requestTimeoutError())
+        controller.abort()
+      }, timeoutMs)
+    })
+    try {
+      return await Promise.race([
+        (async () => {
+          const response = await fetch(url, { ...options, signal: controller.signal })
+          const data = await response.json().catch(() => fallback)
+          return { response, data }
+        })(),
+        deadline,
+      ])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  async function requestAuth(path, options = {}, timeoutMs = AUTH_REQUEST_TIMEOUT_MS) {
     const cfg = getConfig()
-    const response = await fetch(`${cfg.supabaseUrl}/auth/v1${path}`, {
+    const { response, data } = await requestJson(`${cfg.supabaseUrl}/auth/v1${path}`, {
       ...options,
       headers: { apikey: cfg.anonKey, ...(options.headers || {}) },
-    })
-    const data = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(data.error_description || data.error || data.msg || `Auth request failed: ${path}`)
+    }, {}, timeoutMs)
+    if (!response.ok) {
+      const error = new Error(data.error_description || data.error || data.msg || `Auth request failed: ${path}`)
+      const code = String(data.error_code || data.code || data.error || '').toLowerCase()
+      const explicitRefreshRejection = ['refresh_token_not_found', 'refresh_token_already_used', 'refresh_token_expired', 'invalid_grant'].includes(code)
+        || /invalid refresh token|refresh token (?:has )?(?:expired|revoked|not found|already used)/i.test(error.message)
+      error.tokenRejected = path === '/token?grant_type=refresh_token'
+        && [400, 401, 403].includes(response.status) && explicitRefreshRejection
+      throw error
+    }
     return data
   }
 
-  async function refreshSession(refreshToken) {
+  async function refreshSession(refreshToken, timeoutMs) {
     return requestAuth('/token?grant_type=refresh_token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
-    })
+    }, timeoutMs)
   }
 
   async function exchangeCodeForSession(code) {
@@ -291,10 +381,9 @@
 
   async function fetchUser(session = state.session) {
     const cfg = getConfig()
-    const response = await fetch(`${cfg.supabaseUrl}/auth/v1/user`, {
+    const { response, data } = await requestJson(`${cfg.supabaseUrl}/auth/v1/user`, {
       headers: { apikey: cfg.anonKey, Authorization: `Bearer ${session?.access_token || ''}` },
-    })
-    const data = await response.json().catch(() => ({}))
+    }, {})
     if (!response.ok) throw new Error(data.error_description || data.error || 'Unable to load user')
     return data
   }
@@ -323,14 +412,24 @@
     return null
   }
 
-  async function setSession(session, { _silent = false } = {}) {
+  function assertAuthGeneration(generation) {
+    if (generation !== authGeneration) throw new Error('Session restore superseded')
+  }
+
+  async function setSession(session, { _silent = false, generation = authGeneration } = {}) {
     const savedBeforeSession = storageLoad()
-    state.session = session
-    state.user = await fetchUser(session)
-    if (!isGoogleSession(session, state.user)) {
+    assertAuthGeneration(generation)
+    // Token rotation may consume the previous refresh token. Keep the replacement even
+    // if user verification fails; do not enable cached local access before verification.
+    if (session.refresh_token) storageSave({ refreshToken: session.refresh_token, expiresAt: 0 })
+    const user = await fetchUser(session)
+    assertAuthGeneration(generation)
+    if (!isGoogleSession(session, user)) {
       await signOut({ clearLocalData: false })
       throw new Error('บัญชีนี้ไม่ได้เข้าสู่ระบบผ่าน Google')
     }
+    state.session = session
+    state.user = user
     storageSave({
       accessToken: session.access_token || '',
       refreshToken: session.refresh_token || storageLoad().refreshToken || '',
@@ -340,8 +439,11 @@
     })
     restoreDurableDirtyState(savedBeforeSession)
     await waitForStorageBridge()
-    await pullRemoteVault({ silent: true })
-    await ensureFirstRunBackup()
+    assertAuthGeneration(generation)
+    await pullRemoteVault({ silent: true, throwOnError: true, generation })
+    assertAuthGeneration(generation)
+    await ensureFirstRunBackup({ deferCreation: true, generation })
+    assertAuthGeneration(generation)
     // Case A: vault applied but data is still demo → vault was originally created from sample data.
     if (state.vaultMeta && !needsVaultUnlock() && currentDataLooksLikeDemo()) {
       console.warn('[MTAuthSync] vault contains demo data — showing reset dialog')
@@ -360,34 +462,39 @@
 
   // Returns true when Supabase has explicitly rejected the token (not a transient network error).
   function isTokenRejectedError(error) {
-    const msg = (error?.message || '').toLowerCase()
-    return msg.includes('invalid') || msg.includes('expired') ||
-           msg.includes('revoked') || msg.includes('not found') ||
-           msg.includes('already used') || msg.includes('token')
+    return error?.tokenRejected === true
   }
 
   // Retry refresh up to maxAttempts times with a short delay between attempts.
   // Throws immediately (no retry) when Supabase explicitly rejects the token.
   async function refreshSessionWithRetry(refreshToken, maxAttempts = 3) {
     let lastError
+    const deadline = Date.now() + REFRESH_RETRY_TIMEOUT_MS
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) throw lastError || requestTimeoutError()
       try {
-        return await refreshSession(refreshToken)
+        return await refreshSession(refreshToken, Math.min(AUTH_REQUEST_TIMEOUT_MS, remaining))
       } catch (err) {
         lastError = err
         if (isTokenRejectedError(err)) throw err   // Don't retry a rejected token
-        if (attempt < maxAttempts - 1) await new Promise(r => setTimeout(r, 700 * (attempt + 1)))
+        const retryDelay = 700 * (attempt + 1)
+        if (attempt < maxAttempts - 1) {
+          if (Date.now() + retryDelay >= deadline) throw err
+          await new Promise(r => setTimeout(r, retryDelay))
+        }
       }
     }
     throw lastError
   }
 
-  function scheduleBackgroundTokenRefresh(saved) {
+  function scheduleBackgroundTokenRefresh(saved, generation) {
     ;(async () => {
       try {
         const refreshed = await refreshSessionWithRetry(saved.refreshToken)
+        assertAuthGeneration(generation)
         refreshed.expires_at = Math.floor(Date.now() / 1000) + Number(refreshed.expires_in || 3600)
-        await setSession(refreshed, { _silent: true })
+        await setSession(refreshed, { _silent: true, generation })
       } catch (err) {
         console.warn('[MTAuthSync] background token refresh failed', err.message)
       }
@@ -395,34 +502,42 @@
   }
 
   async function restoreSession() {
-    const fromUrl = await parseSessionFromUrl()
-    if (fromUrl) return setSession(fromUrl)
-    const saved = storageLoad()
-    if (!saved.refreshToken) return null
-
-    // Fast path: cached token still valid — restore without a network round trip.
-    // Background refresh runs in parallel to update the token for the next boot.
-    const TOKEN_BUFFER_MS = 5 * 60 * 1000
-    if (saved.accessToken && saved.expiresAt &&
-        (saved.expiresAt * 1000) > (Date.now() + TOKEN_BUFFER_MS)) {
-      state.session = {
-        access_token: saved.accessToken,
-        refresh_token: saved.refreshToken,
-        expires_at: saved.expiresAt,
-        token_type: 'bearer',
-      }
-      state.user = { id: saved.userId, email: saved.email }
-      restoreDurableDirtyState(saved)
-      scheduleBackgroundTokenRefresh(saved)
-      return state
-    }
-
+    const generation = ++authGeneration
+    const previousSession = state.session
+    const previousUser = state.user
     try {
+      const fromUrl = await parseSessionFromUrl()
+      assertAuthGeneration(generation)
+      if (fromUrl) return await setSession(fromUrl, { generation })
+      const saved = storageLoad()
+      if (!saved.refreshToken) return null
+
+      // Fast path: cached token still valid — restore without a network round trip.
+      // Background refresh runs in parallel to update the token for the next boot.
+      const TOKEN_BUFFER_MS = 5 * 60 * 1000
+      if (saved.accessToken && saved.expiresAt &&
+          (saved.expiresAt * 1000) > (Date.now() + TOKEN_BUFFER_MS)) {
+        state.session = {
+          access_token: saved.accessToken,
+          refresh_token: saved.refreshToken,
+          expires_at: saved.expiresAt,
+          token_type: 'bearer',
+        }
+        state.user = { id: saved.userId, email: saved.email }
+        restoreDurableDirtyState(saved)
+        scheduleBackgroundTokenRefresh(saved, generation)
+        return state
+      }
+
       const refreshed = await refreshSessionWithRetry(saved.refreshToken)
+      assertAuthGeneration(generation)
       refreshed.expires_at = Math.floor(Date.now() / 1000) + Number(refreshed.expires_in || 3600)
       state.restoreError = null
-      return setSession(refreshed)
+      return await setSession(refreshed, { generation })
     } catch (error) {
+      if (generation !== authGeneration) throw error
+      state.session = previousSession
+      state.user = previousUser
       // CRITICAL: only wipe the saved token when Supabase explicitly says it's invalid.
       // Network errors / timeouts must NOT erase a valid refresh token —
       // otherwise every app restart on a slow mobile connection causes permanent logout.
@@ -430,6 +545,9 @@
         storageSave({ refreshToken: '', expiresAt: 0 })
         state.restoreError = null
       } else {
+        // A partially restored session must retry the full restore, rather than
+        // taking the cached-token shortcut while its vault is still unconfirmed.
+        if (!previousSession) storageSave({ expiresAt: 0 })
         state.restoreError = error.message || 'เชื่อมต่อไม่ได้'
       }
       throw error
@@ -454,6 +572,7 @@
   }
 
   async function signOut({ clearLocalData = true } = {}) {
+    authGeneration++
     clearTimeout(state.debounceTimer)
     state.session = null
     state.user = null
@@ -464,6 +583,7 @@
     state.dirtyRevision = 0
     state.syncing = false
     state.vaultConfirmedEmpty = false
+    state.creatingVault = false
     storageSave({
       accessToken: '', refreshToken: '', expiresAt: 0, userId: '', email: '',
       dirtyUserId: '', localRevision: 0, syncedRevision: 0,
@@ -535,7 +655,8 @@
     return 0
   }
 
-  async function ensureFirstRunBackup() {
+  async function ensureFirstRunBackup({ deferCreation = false, generation = authGeneration } = {}) {
+    assertAuthGeneration(generation)
     if (!state.session?.access_token || !state.user?.id) return null
 
     console.debug('[MTAuthSync] ensureFirstRunBackup', {
@@ -546,9 +667,11 @@
       looksLikeDemo: currentDataLooksLikeDemo(),
     })
 
-    if (state.vaultMeta || state.dataKey) {
-      const savedKey = readDeviceRecoveryKey()
-      if (state.vaultMeta && savedKey && !state.dataKey) {
+    const pending = pendingVaultFor(state.user.id)
+    if (state.vaultMeta || (state.dataKey && !pending)) {
+      const matchingPending = pendingRowMatches(state.vaultMeta, pending?.row) ? pending : null
+      const savedKey = matchingPending?.key || readDeviceRecoveryKey()
+      if (state.vaultMeta && savedKey && (!state.dataKey || matchingPending)) {
         const freshStart = isFreshStart()
         clearFreshStart()
         // Apply vault data when: (a) fresh start after logout, OR (b) local data is still demo,
@@ -557,12 +680,16 @@
         const localHasUserContent = localPayloadHasUserContent()
         const remoteVersion = Number(state.vaultMeta?.data_version || 0)
         const lastApplied = effectiveLastAppliedVaultVersion(remoteVersion, { freshStart, localIsDemo, localHasUserContent })
-        const skipApply = !freshStart && !localIsDemo && remoteVersion <= lastApplied
+        const skipApply = matchingPending
+          ? pendingRestoreSkipApply(matchingPending, freshStart)
+          : !freshStart && !localIsDemo && remoteVersion <= lastApplied
         console.debug('[MTAuthSync] unlocking vault', { skipApply, freshStart, localIsDemo, localHasUserContent, remoteVersion, lastApplied })
         try {
-          await unlockVault(savedKey, { skipApply, silent: true })
+          await unlockVault(savedKey, { skipApply, silent: true, generation })
+          if (matchingPending) promotePendingVault(matchingPending, generation)
           console.debug('[MTAuthSync] vault unlocked', { stillDemo: currentDataLooksLikeDemo() })
         } catch (err) {
+          if (generation !== authGeneration) throw err
           console.warn('[MTAuthSync] unlockVault failed', err.message)
           // Always surface the failure — silent errors leave the user confused with demo data.
           toastSafe('กู้ข้อมูลอัตโนมัติไม่สำเร็จ — ไปที่เมนูบัญชีเพื่อกรอกรหัสกู้ข้อมูล', 'warn')
@@ -584,6 +711,10 @@
       console.warn('[MTAuthSync] vault pull unconfirmed — skipping auto-create to prevent overwrite')
       return null
     }
+
+    // A prior creation owns an encrypted snapshot even if logout cleared all
+    // local data. Reconcile it before the demo/empty-data shortcuts below.
+    if (pending) return createFirstRunVault(generation, deferCreation)
 
     // Never back up demo/default data; wait until the user has entered real data.
     const looksLikeDemo = currentDataLooksLikeDemo()
@@ -615,14 +746,60 @@
     const walletCount = Array.isArray(payload?.wallets) ? payload.wallets.length : 0
     if (!txCount && !walletCount) return null
 
-    const recoveryKey = generateRecoveryKey()
-    // IMPORTANT: save the key only AFTER the vault row is successfully written.
-    // If createVaultFromLocalData throws, the key stays unchanged so the next
-    // unlock attempt still works with the existing vault.
-    const saved = await createVaultFromLocalData(recoveryKey, { silent: true })
-    saveDeviceRecoveryKey(recoveryKey)
-    showRecoveryKeySheet(recoveryKey)
-    return saved
+    return createFirstRunVault(generation, deferCreation)
+  }
+
+  function createFirstRunVault(generation, deferCreation) {
+    if (state.creatingVault) return null
+    // Reserve before scheduling so edits and manual backup actions share one write.
+    state.creatingVault = true
+    const create = async () => {
+      try {
+        assertAuthGeneration(generation)
+        const ownerId = state.user.id
+        const pending = pendingVaultFor(ownerId)
+        if (pending) {
+          // A previous request may have committed without returning a response.
+          const remote = await pullRemoteVault({ silent: true, throwOnError: true, generation })
+          if (remote) {
+            if (!pendingRowMatches(remote, pending.row)) throw new Error('พบ vault อื่นบน cloud กรุณาใช้รหัสกู้ข้อมูลเดิม')
+            await unlockVault(pending.key, { silent: true, generation, skipApply: pendingRestoreSkipApply(pending) })
+            promotePendingVault(pending, generation)
+            clearFreshStart()
+            return remote
+          }
+        }
+        const recoveryKey = pending?.key || generateRecoveryKey()
+        const saved = await createVaultFromLocalData(recoveryKey, {
+          silent: true, generation, pendingCreation: true, pendingRow: pending?.row, pendingUploadRevision: pending?.uploadRevision,
+        })
+        assertAuthGeneration(generation)
+        if (pending) {
+          await unlockVault(recoveryKey, {
+            silent: true, generation,
+            skipApply: pendingRestoreSkipApply(pending),
+          })
+        }
+        promotePendingVault(pendingVaultFor(ownerId), generation)
+        clearFreshStart()
+        return saved
+      } finally {
+        if (generation === authGeneration) {
+          state.creatingVault = false
+          if (state.dirty) setTimeout(autoSyncIfReady, 0)
+          render()
+        }
+      }
+    }
+    if (!deferCreation) return create()
+    // Authentication and confirmed vault reads finish boot first. A first backup
+    // stays in flight without holding the login gate or starting another write.
+    setTimeout(() => {
+      create().catch(error => {
+        if (generation === authGeneration) toastSafe(`บันทึกข้อมูลอัตโนมัติล้มเหลว: ${error.message}`, 'warn')
+      })
+    }, 0)
+    return null
   }
 
   async function vaultRequest(method, body, expectedVersion = null) {
@@ -635,23 +812,31 @@
       if (!Number.isFinite(Number(expectedVersion)) || Number(expectedVersion) < 1) throw new Error('Missing vault revision for update')
       query += `&data_version=eq.${encodeURIComponent(Number(expectedVersion))}`
     }
-    const response = await fetch(`${cfg.supabaseUrl}/rest/v1/${VAULT_TABLE}?${query}`, {
+    const url = `${cfg.supabaseUrl}/rest/v1/${VAULT_TABLE}?${query}`
+    const options = {
       method,
       headers: {
         ...authHeaders(),
         Prefer: 'return=representation',
       },
       body: body ? JSON.stringify(body) : undefined,
-    })
-    const data = await response.json().catch(() => null)
+    }
+    // Bound reads during login/sync; keep write semantics separate from restore deadlines.
+    const { response, data } = method === 'GET'
+      ? await requestJson(url, options, null)
+      : await (async () => {
+        const response = await fetch(url, options)
+        return { response, data: await response.json().catch(() => null) }
+      })()
     if (!response.ok) throw new Error(data?.message || data?.error || `Vault request failed: ${method}`)
     return data
   }
 
-  async function pullRemoteVault({ silent = false } = {}) {
+  async function pullRemoteVault({ silent = false, throwOnError = false, generation = authGeneration } = {}) {
     if (!state.session?.access_token || !state.user?.id) return null
     try {
       const rows = await vaultRequest('GET')
+      assertAuthGeneration(generation)
       const row = Array.isArray(rows) ? rows[0] : null
       state.vaultMeta = row || null
       // Don't re-lock a device that's already unlocked (has a dataKey) — re-locking on
@@ -668,6 +853,7 @@
       // so ensureFirstRunBackup won't risk overwriting an existing vault with a new key.
       console.warn('[MTAuthSync] pullRemoteVault failed', err.message)
       toastSafe(`ดึงข้อมูลจาก cloud ไม่สำเร็จ: ${err.message}`, 'warn')
+      if (throwOnError) throw err
       return null
     }
   }
@@ -682,7 +868,8 @@
     throw new Error('ยังเชื่อมต่อระบบกู้ข้อมูลไม่พร้อม')
   }
 
-  async function buildEncryptedRow(recoveryKey, payload, previousMeta = null) {
+  async function buildEncryptedRow(recoveryKey, payload, previousMeta = null, generation = authGeneration) {
+    const ownerId = state.user?.id
     const cryptoVault = root.MTCryptoVault
     if (!cryptoVault) throw new Error('Crypto vault module is not loaded')
     const salt = previousMeta?.salt || cryptoVault.bytesToBase64(cryptoVault.randomBytes(16))
@@ -700,9 +887,10 @@
     }
     if (!wrapped.wrappedKey || !wrapped.iv) wrapped = await cryptoVault.wrapDataKey(dataKey, recoveryKeyMaterial)
     const encrypted = await cryptoVault.encryptVault(payload, dataKey)
+    assertAuthGeneration(generation)
     state.dataKey = dataKey
     return {
-      user_id: state.user.id,
+      user_id: ownerId,
       ciphertext: encrypted.ciphertext,
       iv: encrypted.iv,
       salt,
@@ -717,15 +905,34 @@
   }
 
   async function createVaultFromLocalData(recoveryKey, options = {}) {
+    const generation = options.generation ?? authGeneration
+    assertAuthGeneration(generation)
     if (!String(recoveryKey || '').trim()) throw new Error('ต้องมีรหัสกู้ข้อมูลสำหรับปกป้องข้อมูล')
     await waitForStorageBridge()
-    const row = await buildEncryptedRow(recoveryKey, currentPayload(), state.vaultMeta)
+    assertAuthGeneration(generation)
+    const uploadRevision = options.pendingRow
+      ? Number(options.pendingUploadRevision || 0)
+      : Number(state.dirtyRevision || 0)
+    const row = options.pendingRow || await buildEncryptedRow(recoveryKey, currentPayload(), state.vaultMeta, generation)
+    assertAuthGeneration(generation)
+    if (options.pendingCreation) savePendingVault(state.user.id, { key: recoveryKey, row, uploadRevision })
     const saved = await vaultRequest('POST', row)
+    assertAuthGeneration(generation)
+    if (options.pendingCreation && (!Array.isArray(saved) || !pendingRowMatches(saved[0], row))) {
+      throw new Error('ยังยืนยันการสร้าง vault ไม่ได้ กรุณาลองเชื่อมต่อใหม่')
+    }
+    if (options.pendingRow && !state.dataKey) {
+      const material = await root.MTCryptoVault.deriveKey(recoveryKey, row.salt, row.kdf_params)
+      const dataKey = await root.MTCryptoVault.unwrapDataKey(row.wrapped_key, material, row.wrapped_key_iv)
+      assertAuthGeneration(generation)
+      state.dataKey = dataKey
+    }
     state.vaultMeta = Array.isArray(saved) ? saved[0] : row
     state.locked = false
-    state.dirty = false
-    acknowledgeDurableRevision(state.dirtyRevision)
+    state.dirty = Number(state.dirtyRevision || 0) !== uploadRevision
+    acknowledgeDurableRevision(uploadRevision, { dirty: state.dirty })
     rememberAppliedVaultVersion(state.vaultMeta)
+    if (state.dirty) setTimeout(autoSyncIfReady, 0)
     render()
     if (!options.silent) toastSafe('บันทึกข้อมูลไว้แล้ว', 'success')
     return state.vaultMeta
@@ -734,6 +941,7 @@
   async function deleteVault() {
     if (!state.session?.access_token || !state.user?.id) throw new Error('ต้องเข้าสู่ระบบก่อน')
     const cfg = getConfig()
+    const ownerId = state.user.id
     const response = await fetch(
       `${cfg.supabaseUrl}/rest/v1/${VAULT_TABLE}?user_id=eq.${encodeURIComponent(state.user.id)}`,
       { method: 'DELETE', headers: authHeaders() }
@@ -743,6 +951,7 @@
       throw new Error(data?.message || data?.error || 'ลบ vault ไม่สำเร็จ')
     }
     state.vaultMeta = null
+    removePendingVault(ownerId)
     state.dataKey = null
     state.locked = true
     console.debug('[MTAuthSync] vault deleted')
@@ -900,14 +1109,17 @@
   }
 
   async function unlockVault(recoveryKey, options = {}) {
+    const generation = options.generation ?? authGeneration
     const row = state.vaultMeta || await pullRemoteVault({ silent: true })
     if (!row) return createVaultFromLocalData(recoveryKey)
     const cryptoVault = root.MTCryptoVault
     const recoveryKeyMaterial = await cryptoVault.deriveKey(recoveryKey, row.salt, row.kdf_params)
     const dataKey = await cryptoVault.unwrapDataKey(row.wrapped_key, recoveryKeyMaterial, row.wrapped_key_iv)
     const payload = await cryptoVault.decryptVault(row.ciphertext, dataKey, row.iv, row.checksum)
+    assertAuthGeneration(generation)
     if (!options.skipApply) {
       await waitForStorageBridge()
+      assertAuthGeneration(generation)
       try { appStorage()?.createLocalBackup?.(root.App?._cloudState?.(), 'before-cloud-restore') } catch (_) {}
       try {
         applyPayload(payload)
@@ -1012,7 +1224,7 @@
   }
 
   async function syncNow({ direction = 'push', recoveryKey = '', silent = false } = {}) {
-    if (state.syncing) return false
+    if (state.syncing || state.creatingVault) return false
     state.syncing = true
     render()
     try {
@@ -1060,13 +1272,11 @@
 
   function markDirty() {
     if (!state.session?.access_token) return
-    if (state.locked) {
+    if (state.locked && !state.creatingVault) {
       // New user flow: no vault yet but user just added real data — create vault now
       if (!state.vaultMeta && state.vaultConfirmedEmpty && !currentDataLooksLikeDemo() && !state.creatingVault) {
-        state.creatingVault = true
         ensureFirstRunBackup()
           .catch(err => console.warn('[MTAuthSync] ensureFirstRunBackup in markDirty:', err.message))
-          .finally(() => { state.creatingVault = false })
       }
       return
     }
@@ -1114,7 +1324,7 @@
     const actionsEl = document.getElementById('mt-boot-actions')
     if (!subtitleEl) return false  // boot screen gone or missing IDs
 
-    if (state.session?.access_token) {
+    if (state.session?.access_token && !state.restoring) {
       document.documentElement.classList.remove('mt-auth-gated')
       window.MTBootScreen?.release?.('auth-done')
       return true
@@ -1125,6 +1335,7 @@
     const hasNetworkError = Boolean(state.restoreError) && hasSavedSession
 
     window.MTBootScreen?.hold?.()
+    document.documentElement.classList.add('mt-auth-gated')
 
     if (state.restoring) {
       subtitleEl.textContent = 'กำลังเชื่อมต่อบัญชี...'
@@ -1158,7 +1369,7 @@
 
     // Post-boot (boot screen already gone): use the auth gate as before
     let gate = document.getElementById('mt-auth-gate')
-    if (state.session?.access_token) {
+    if (state.session?.access_token && !state.restoring) {
       document.documentElement.classList.remove('mt-auth-gated')
       gate?.remove()
       return
@@ -1217,7 +1428,7 @@
   function accountMenuHtml() {
     const email = state.user?.email || storageLoad().email || 'Google'
     const recoverySaved = Boolean(readDeviceRecoveryKey())
-    const status = state.syncing ? 'กำลังบันทึก' : (state.dirty ? 'รอบันทึก' : 'บันทึกแล้ว')
+    const status = state.syncing || state.creatingVault ? 'กำลังบันทึก' : (state.dirty ? 'รอบันทึก' : 'บันทึกแล้ว')
     return `
       <div class="mt-account-menu-wrap${state.accountMenuOpen ? ' open' : ''}">
         <button class="mt-account-button" type="button" aria-label="บัญชีและการกู้ข้อมูล" aria-expanded="${state.accountMenuOpen ? 'true' : 'false'}" data-mt-auth-action="toggle-account-menu">
@@ -1369,6 +1580,7 @@
         } catch (_) {}
       }
       if (action === 'retry-restore') {
+        if (state.restoring) return
         state.restoring = true
         state.restoreError = null
         render()
@@ -1475,7 +1687,12 @@
     })
   }
 
-  async function initAuthSync() {
+  function initAuthSync() {
+    if (!initPromise) initPromise = initializeAuthSync()
+    return initPromise
+  }
+
+  async function initializeAuthSync() {
     bindUi()
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') autoSyncIfReady()
@@ -1486,8 +1703,7 @@
     if (!configured()) { renderAuthGate(); return state }
     // Show "กำลังเชื่อมต่อ..." while restoring so the full login gate
     // doesn't flash in the user's face on every app open.
-    const hasSavedSession = Boolean(storageLoad().refreshToken)
-    state.restoring = hasSavedSession
+    state.restoring = true
     state.restoreError = null
     renderAuthGate()
     try { await restoreSession() } catch (error) {

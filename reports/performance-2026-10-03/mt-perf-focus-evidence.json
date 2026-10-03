@@ -1,0 +1,149 @@
+[
+  {
+    "n": 250,
+    "measures": [
+      {
+        "rules": false,
+        "durations": [
+          53.79999999701977,
+          53.70000000298023,
+          54.099999994039536
+        ],
+        "tally": {
+          "getTransactionRewardEstimate": {
+            "count": 6000,
+            "ms": 2.399999976158142
+          },
+          "getCreditCardBillingState": {
+            "count": 30,
+            "ms": 28.19999998807907
+          }
+        }
+      },
+      {
+        "rules": true,
+        "durations": [
+          198.29999999701977,
+          190.20000000298023,
+          188
+        ],
+        "tally": {
+          "getRuleCycleUsage": {
+            "count": 6000,
+            "ms": 433.3999998867512
+          },
+          "calculateSelectedRewardEstimate": {
+            "count": 6000,
+            "ms": 488.399999961257
+          },
+          "getTransactionRewardEstimate": {
+            "count": 6000,
+            "ms": 490.7000000178814
+          },
+          "getCreditCardBillingState": {
+            "count": 30,
+            "ms": 316.2999999523163
+          }
+        }
+      }
+    ]
+  },
+  {
+    "n": 500,
+    "measures": [
+      {
+        "rules": false,
+        "durations": [
+          55.099999994039536,
+          65.5,
+          64.3999999910593
+        ],
+        "tally": {
+          "getTransactionRewardEstimate": {
+            "count": 12000,
+            "ms": 4.799999997019768
+          },
+          "getCreditCardBillingState": {
+            "count": 30,
+            "ms": 48.099999994039536
+          }
+        }
+      },
+      {
+        "rules": true,
+        "durations": [
+          560.3000000119209,
+          548.8999999910593,
+          543.2000000029802
+        ],
+        "tally": {
+          "getRuleCycleUsage": {
+            "count": 12000,
+            "ms": 1458.5000000298023
+          },
+          "calculateSelectedRewardEstimate": {
+            "count": 12000,
+            "ms": 1544.5000001192093
+          },
+          "getTransactionRewardEstimate": {
+            "count": 12000,
+            "ms": 1547.8000001311302
+          },
+          "getCreditCardBillingState": {
+            "count": 30,
+            "ms": 861.2999999970198
+          }
+        }
+      }
+    ]
+  },
+  {
+    "n": 1000,
+    "measures": [
+      {
+        "rules": false,
+        "durations": [
+          66.79999999701977,
+          78.29999999701977,
+          78.59999999403954
+        ],
+        "tally": {
+          "getTransactionRewardEstimate": {
+            "count": 24000,
+            "ms": 9.399999871850014
+          },
+          "getCreditCardBillingState": {
+            "count": 30,
+            "ms": 80.49999995529652
+          }
+        }
+      },
+      {
+        "rules": true,
+        "durations": [
+          1897.800000011921,
+          1886.4000000059605,
+          1886.7999999970198
+        ],
+        "tally": {
+          "getRuleCycleUsage": {
+            "count": 24000,
+            "ms": 5369.299999848008
+          },
+          "calculateSelectedRewardEstimate": {
+            "count": 24000,
+            "ms": 5525.499999985099
+          },
+          "getTransactionRewardEstimate": {
+            "count": 24000,
+            "ms": 5534.300000101328
+          },
+          "getCreditCardBillingState": {
+            "count": 30,
+            "ms": 2873
+          }
+        }
+      }
+    ]
+  }
+]

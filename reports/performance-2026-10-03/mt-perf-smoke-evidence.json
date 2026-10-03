@@ -1,0 +1,95 @@
+[
+  {
+    "scenario": "production-deep-link",
+    "pages": [
+      {
+        "page": "dashboard",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "transactions",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "wallets",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "reports",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "more",
+        "active": true,
+        "content": true
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "demo-navigation",
+    "pages": [
+      {
+        "page": "dashboard",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "transactions",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "wallets",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "reports",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "more",
+        "active": true,
+        "content": true
+      }
+    ],
+    "errors": []
+  },
+  {
+    "scenario": "pin-unlock",
+    "pages": [
+      {
+        "page": "dashboard",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "transactions",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "wallets",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "reports",
+        "active": true,
+        "content": true
+      },
+      {
+        "page": "more",
+        "active": true,
+        "content": true
+      }
+    ],
+    "errors": []
+  }
+]

@@ -437,8 +437,13 @@ const Calc = {
     const cards = (wallets || []).filter(w => w && w.type === 'credit' && !w.excludeFromNetWorth)
     const items = cards.map(card => {
       const billing = typeof App !== 'undefined' && App.getCreditCardBillingState ? App.getCreditCardBillingState(card, opts.refDate) : null
-      const statement = typeof App !== 'undefined' && typeof App.getCardStatement === 'function' ? App.getCardStatement(card.id, opts.refDate) : null
-      const due = typeof App !== 'undefined' && typeof App.getCreditCardDueInfo === 'function' ? App.getCreditCardDueInfo(card, opts.refDate) : null
+      const statement = billing
+        ? billing.statements.find(row => row.end < (opts.refDate || Calc.todayLocalISO())) || null
+        : (typeof App !== 'undefined' && typeof App.getCardStatement === 'function' ? App.getCardStatement(card.id, opts.refDate) : null)
+      const dueStatement = billing?.payableStatements?.[0] || null
+      const due = dueStatement
+        ? { dateStr:dueStatement.dueDate, dueStr:Calc.getDaysUntilDate(dueStatement.dueDate, opts.refDate).dueStr, daysLeft:dueStatement.daysLeft, statement:dueStatement }
+        : (billing ? null : (typeof App !== 'undefined' && typeof App.getCreditCardDueInfo === 'function' ? App.getCreditCardDueInfo(card, opts.refDate) : null))
       const committed = typeof App !== 'undefined' && typeof App._getUnpostedInstallmentDebt === 'function' ? Number(App._getUnpostedInstallmentDebt(card.id) || 0) : 0
       const availableLimit = typeof App !== 'undefined' && typeof App.getAvailableCreditForCard === 'function'
         ? Number(App.getAvailableCreditForCard(card) || 0)

@@ -1,0 +1,1318 @@
+[
+  {
+    "rules": false,
+    "run": 1,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0.1,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 32.8
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 32.8
+      },
+      {
+        "name": "app_v2.version",
+        "at": 141,
+        "version": "2026.10.03-opening-r129"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 141.1
+      },
+      {
+        "name": "app.init.start",
+        "at": 141.3
+      },
+      {
+        "name": "storage.init.done",
+        "at": 141.9,
+        "duration": 0.6
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 155.1,
+        "page": "dashboard",
+        "duration": 0.3
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 155.3
+      },
+      {
+        "name": "app.init.done",
+        "at": 155.8,
+        "duration": 14.5
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 158.3,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 176.7,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 183.8,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 185.2,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 192.8,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 205,
+        "duration": 12.2
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 209.9,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 217.1,
+        "duration": 7.2
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 217.5,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 225.8,
+        "duration": 8.3
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 226.5,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 234.7,
+        "duration": 8.2
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 235.1,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 242.7,
+        "duration": 7.6
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 243.2,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 243.9,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 252,
+        "duration": 8.1
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 259.3,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 314.8
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 315,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 322.9,
+        "duration": 7.9
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 366.6,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 392.1,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 392.3,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 400,
+        "duration": 7.7
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 831,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 841.1,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1399.2,
+        "reason": "flag"
+      }
+    ],
+    "long": [
+      {
+        "start": 174,
+        "duration": 112
+      },
+      {
+        "start": 286.90000000596046,
+        "duration": 59
+      },
+      {
+        "start": 348.30000001192093,
+        "duration": 50
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 0
+  },
+  {
+    "rules": false,
+    "run": 2,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0.1,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 18.4
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 18.5
+      },
+      {
+        "name": "app_v2.version",
+        "at": 99.2,
+        "version": "2026.10.03-opening-r129"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 99.3
+      },
+      {
+        "name": "app.init.start",
+        "at": 99.5
+      },
+      {
+        "name": "storage.init.done",
+        "at": 100,
+        "duration": 0.5
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 113,
+        "page": "dashboard",
+        "duration": 0.3
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 113
+      },
+      {
+        "name": "app.init.done",
+        "at": 113.6,
+        "duration": 14.1
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 152.2,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 170,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 176.8,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 178.2,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 187,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 199.6,
+        "duration": 12.6
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 204.3,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 211.5,
+        "duration": 7.2
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 211.8,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 219.1,
+        "duration": 7.3
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 219.7,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 226.8,
+        "duration": 7.1
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 227.1,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 234,
+        "duration": 6.9
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 234.4,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 234.9,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 241.8,
+        "duration": 6.9
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 249.9,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 301.6
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 301.9,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 310.1,
+        "duration": 8.3
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 353.4,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 381.5,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 381.6,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 389.1,
+        "duration": 7.5
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 817.5,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 828.7,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1404.3,
+        "reason": "flag"
+      }
+    ],
+    "long": [
+      {
+        "start": 107.8999999910593,
+        "duration": 144
+      },
+      {
+        "start": 253.29999999701977,
+        "duration": 55
+      },
+      {
+        "start": 310.69999998807907,
+        "duration": 50
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 0
+  },
+  {
+    "rules": false,
+    "run": 3,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0.1,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 18.5
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 19.4
+      },
+      {
+        "name": "app_v2.version",
+        "at": 100.7,
+        "version": "2026.10.03-opening-r129"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 100.9
+      },
+      {
+        "name": "app.init.start",
+        "at": 101.1
+      },
+      {
+        "name": "storage.init.done",
+        "at": 101.7,
+        "duration": 0.6
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 114.4,
+        "page": "dashboard",
+        "duration": 0.3
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 114.4
+      },
+      {
+        "name": "app.init.done",
+        "at": 115,
+        "duration": 13.9
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 152.9,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 170.7,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 177.8,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 179.2,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 188,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 200.5,
+        "duration": 12.6
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 205.6,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 213.1,
+        "duration": 7.5
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 213.4,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 220.9,
+        "duration": 7.5
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 221.4,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 228.9,
+        "duration": 7.5
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 229.3,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 236.1,
+        "duration": 6.9
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 236.6,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 237.1,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 244.3,
+        "duration": 7.2
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 252,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 302.6
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 302.8,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 310.4,
+        "duration": 7.6
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 351.7,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 376.1,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 376.3,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 384,
+        "duration": 7.7
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 822.4,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 833.4,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 1403.6,
+        "reason": "flag"
+      }
+    ],
+    "long": [
+      {
+        "start": 119,
+        "duration": 144
+      },
+      {
+        "start": 265.40000000596046,
+        "duration": 53
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 0
+  },
+  {
+    "rules": true,
+    "run": 1,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0.1,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 11.2
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 108.3
+      },
+      {
+        "name": "app_v2.version",
+        "at": 114.4,
+        "version": "2026.10.03-opening-r129"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 114.5
+      },
+      {
+        "name": "app.init.start",
+        "at": 114.7
+      },
+      {
+        "name": "storage.init.done",
+        "at": 115.9,
+        "duration": 1.1
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 129.2,
+        "page": "dashboard",
+        "duration": 0.3
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 129.3
+      },
+      {
+        "name": "app.init.done",
+        "at": 129.9,
+        "duration": 15.2
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 185.2,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 194,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 200.7,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 201.6,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 211.3,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 735.2,
+        "duration": 523.9
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 984.1,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 1473.9,
+        "duration": 489.8
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 1474.3,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 1960.3,
+        "duration": 486
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 1961,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 2457.2,
+        "duration": 496.2
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 2457.6,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 2946.1,
+        "duration": 488.5
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 2946.6,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 2947.3,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 3435.6,
+        "duration": 488.4
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 3687.6,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 3743.8
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 3744,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 4234.3,
+        "duration": 490.3
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 5735.9,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 5987.4,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 6225.8,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 6456.4,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 6699.3,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 6699.4,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 7157.2,
+        "duration": 457.8
+      }
+    ],
+    "long": [
+      {
+        "start": 127.5,
+        "duration": 3324
+      },
+      {
+        "start": 3453.4000000059605,
+        "duration": 303
+      },
+      {
+        "start": 3759,
+        "duration": 1991
+      },
+      {
+        "start": 5756,
+        "duration": 246
+      },
+      {
+        "start": 6005.9000000059605,
+        "duration": 465
+      },
+      {
+        "start": 6481.9000000059605,
+        "duration": 2086
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 5
+  },
+  {
+    "rules": true,
+    "run": 2,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0.2,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 16.8
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 16.9
+      },
+      {
+        "name": "app_v2.version",
+        "at": 98.7,
+        "version": "2026.10.03-opening-r129"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 98.8
+      },
+      {
+        "name": "app.init.start",
+        "at": 99
+      },
+      {
+        "name": "storage.init.done",
+        "at": 99.6,
+        "duration": 0.6
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 112.7,
+        "page": "dashboard",
+        "duration": 0.3
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 112.8
+      },
+      {
+        "name": "app.init.done",
+        "at": 113.4,
+        "duration": 14.4
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 153.4,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 171,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 177.8,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 179.2,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 188.2,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 697.7,
+        "duration": 509.5
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 943.5,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 1431.1,
+        "duration": 487.6
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 1431.4,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 1916.3,
+        "duration": 484.9
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 1916.8,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 2404.7,
+        "duration": 487.9
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 2405,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 2893,
+        "duration": 488
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 2893.4,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 2894,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 3384.2,
+        "duration": 490.2
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 3638.3,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 3691.6
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 3691.8,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 4189.2,
+        "duration": 497.4
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 5669.6,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 5919.4,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 6158.9,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 6390.6,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 6634.6,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 6634.7,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 7095.9,
+        "duration": 461.2
+      }
+    ],
+    "long": [
+      {
+        "start": 113.30000001192093,
+        "duration": 3286
+      },
+      {
+        "start": 3401.9000000059605,
+        "duration": 302
+      },
+      {
+        "start": 3706.6000000089407,
+        "duration": 1977
+      },
+      {
+        "start": 5687.9000000059605,
+        "duration": 246
+      },
+      {
+        "start": 5937.70000000298,
+        "duration": 467
+      },
+      {
+        "start": 6413.300000011921,
+        "duration": 2094
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 5
+  },
+  {
+    "rules": true,
+    "run": 3,
+    "errors": [],
+    "log": [
+      {
+        "name": "html.inline.start",
+        "at": 0.2,
+        "flags": {
+          "debugBoot": false,
+          "noServiceWorker": true,
+          "noNotifications": true,
+          "noAppLock": true,
+          "noFinanceRebuild": true
+        }
+      },
+      {
+        "name": "css.main.loaded",
+        "at": 12.6
+      },
+      {
+        "name": "boot.dom.inserted",
+        "at": 19.3
+      },
+      {
+        "name": "app_v2.version",
+        "at": 109.1,
+        "version": "2026.10.03-opening-r129"
+      },
+      {
+        "name": "appLock.disabledByFlag",
+        "at": 109.2
+      },
+      {
+        "name": "app.init.start",
+        "at": 109.3
+      },
+      {
+        "name": "storage.init.done",
+        "at": 110,
+        "duration": 0.7
+      },
+      {
+        "name": "app.firstRender.done",
+        "at": 122.4,
+        "page": "dashboard",
+        "duration": 0.3
+      },
+      {
+        "name": "serviceWorker.disabledByFlag",
+        "at": 122.4
+      },
+      {
+        "name": "app.init.done",
+        "at": 123,
+        "duration": 13.7
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 162.4,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 179.8,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 186.5,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 187.9,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 196.9,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 704.3,
+        "duration": 507.4
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 949.1,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 1435.2,
+        "duration": 486.1
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 1435.5,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 1916.8,
+        "duration": 481.3
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 1917.4,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 2404.3,
+        "duration": 486.9
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 2404.6,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 2891.6,
+        "duration": 487
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 2892.1,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 2892.6,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 3387.1,
+        "duration": 494.5
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 3634.2,
+        "reason": "flag"
+      },
+      {
+        "name": "notifications.backgroundSync.disabledByFlag",
+        "at": 3684.5
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 3684.7,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 4173.7,
+        "duration": 489
+      },
+      {
+        "name": "bootScreen.hideRequested",
+        "at": 5650.6,
+        "reason": "first-render"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 5899.6,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 6136.2,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 6367.3,
+        "reason": "flag"
+      },
+      {
+        "name": "financeApp.rebuild.schedule.skip",
+        "at": 6605.8,
+        "reason": "flag"
+      },
+      {
+        "name": "app.renderDashboard.start",
+        "at": 6605.9,
+        "month": "2026-10"
+      },
+      {
+        "name": "app.renderDashboard.done",
+        "at": 7068.9,
+        "duration": 463
+      }
+    ],
+    "long": [
+      {
+        "start": 120.70000000298023,
+        "duration": 3279
+      },
+      {
+        "start": 3401.8999999910593,
+        "duration": 292
+      },
+      {
+        "start": 3696.3999999910593,
+        "duration": 1965
+      },
+      {
+        "start": 5665.899999991059,
+        "duration": 245
+      },
+      {
+        "start": 5914.70000000298,
+        "duration": 464
+      },
+      {
+        "start": 6387.20000000298,
+        "duration": 2078
+      }
+    ],
+    "txCount": 1000,
+    "ruleCount": 5
+  }
+]

@@ -111,7 +111,7 @@ const FinanceIntelligence = (() => {
       .reduce((s,m)=>s+Number(m.amount || 0),0)
   }
 
-  function buildContext(S) {
+  function* contextSteps(S, opts = {}) {
     const state = S || {}
     const month = currentMonth()
     const previousMonth = prevMonth(month)
@@ -119,27 +119,46 @@ const FinanceIntelligence = (() => {
     const cats = state.categories || { expense: [], income: [] }
     const months = Calc.getMonths?.(6) || [month]
     const monthly = Calc.getMonthlyIncomeExpense(txs, month)
+    yield
     const previous = Calc.getMonthlyIncomeExpense(txs, previousMonth)
-    const history = months.map(m => {
+    yield
+    const history = []
+    for (const m of months) {
       const s = Calc.getMonthlyIncomeExpense(txs, m)
       const excludedExpense = excludedAmountForMonth(m, 'expense')
       const excludedIncome = excludedAmountForMonth(m, 'income')
       const adjustedIncome = Math.max(0, Number(s.income || 0) - excludedIncome)
       const adjustedExpense = Math.max(0, Number(s.expense || 0) - excludedExpense)
-      return {
+      history.push({
         month:m, income:s.income, expense:s.expense, net:s.netCashflow, savingsRate:s.savingsRate,
         excludedExpense, excludedIncome,
         adjustedIncome, adjustedExpense, adjustedNet: adjustedIncome - adjustedExpense,
-      }
-    })
+      })
+      yield
+    }
     const pastHistory = history.filter(h => h.month !== month && (h.income > 0 || h.expense > 0))
     const expenseCategories = Calc.getCategoryBreakdown(txs, month, { type:'expense', categories:cats.expense || [] })
+    yield
     const previousExpenseCategories = Calc.getCategoryBreakdown(txs, previousMonth, { type:'expense', categories:cats.expense || [] })
+    yield
     const merchantBreakdown = Calc.getMerchantBreakdown?.(txs, month) || []
+    yield
     const budgets = Calc.getBudgetProgress(txs, state.budgets || [], cats, month) || []
+    yield
+    // Aggregate liquidity/upcoming calls can request every card. Populate their
+    // shared billing memo one card at a time while running in the background.
+    if (opts.prewarmBilling && typeof App !== 'undefined' && App.getCreditCardBillingState) {
+      for (const card of (state.wallets || []).filter(wallet => wallet?.type === 'credit')) {
+        App.getCreditCardBillingState(card)
+        yield
+      }
+    }
     const usable = Calc.getUsableMoney?.(state.wallets || [], state) || { liquid:0, creditDebt:0, upcomingReserved:0, net:0 }
+    yield
     const credit = Calc.getCreditLiabilitySummary?.(state.wallets || []) || { cards:[], totals:{ statementDue:0, currentCycleSpending:0, committedInstallments:0, totalLiability:0 } }
+    yield
     const upcoming = typeof App !== 'undefined' && App.getUpcomingItems ? App.getUpcomingItems(30) : []
+    yield
     const upcomingCommitted = typeof App?.getUpcomingCashRequirement === 'function' ? App.getUpcomingCashRequirement(upcoming) : upcoming.filter(r=>['expense','settlement'].includes(r.cashflowKind) || (!r.cashflowKind && ['credit_due','recurring','scheduled','installment','bnpl_due','upcoming_bill'].includes(r.type))).reduce((sum,r)=>sum+Number(r.cashRequired ?? r.amount ?? 0),0)
     const monthEndUpcoming = upcoming.filter(row => {
       const date = String(row.date || '')
@@ -180,6 +199,7 @@ const FinanceIntelligence = (() => {
     const assets = (typeof App !== 'undefined' && App.getFinancialPosition?.())
       || Calc.getAssetBreakdown?.(state.wallets || [], { cryptoTotal:typeof App !== 'undefined' ? App.getCryptoPortfolioSummary?.()?.totalValueTHB || 0 : 0 })
       || null
+    yield
 
     return {
       month, previousMonth, txs, cats, monthly, previous, history, pastHistory,
@@ -190,6 +210,49 @@ const FinanceIntelligence = (() => {
       remainingExpense, remainingIncome, monthEndKnownIncome, monthEndKnownExpense, monthEndSettlementOutflows,
       snapshots, assets, events:currentEvents,
     }
+  }
+
+  function buildContext(S) {
+    const steps = contextSteps(S)
+    let step
+    do { step = steps.next() } while (!step.done)
+    return step.value
+  }
+
+  function abortBackground() {
+    const error = new Error('Finance background work cancelled')
+    error.name = 'AbortError'
+    throw error
+  }
+
+  function checkCancelled(opts = {}) {
+    if (opts.shouldCancel?.()) abortBackground()
+  }
+
+  async function yieldBackground(opts = {}) {
+    checkCancelled(opts)
+    if (opts.yieldControl) await opts.yieldControl()
+    // Unqualified scheduler.yield() boosts the continuation above ordinary
+    // queued work. Finance runs at background priority so foreground timers,
+    // rendering, and input can progress between its calculation phases.
+    else if (globalThis.scheduler?.postTask) await globalThis.scheduler.postTask(() => {}, { priority:'background' })
+    else await new Promise(resolve => setTimeout(resolve, 0))
+    checkCancelled(opts)
+  }
+
+  async function drainBackground(steps, opts) {
+    while (true) {
+      await yieldBackground(opts)
+      const step = steps.next()
+      if (step.done) {
+        checkCancelled(opts)
+        return step.value
+      }
+    }
+  }
+
+  async function buildContextAsync(S, opts = {}) {
+    return drainBackground(contextSteps(S, { prewarmBilling:true }), opts)
   }
 
   function healthScore(ctx) {
@@ -1199,17 +1262,17 @@ const FinanceIntelligence = (() => {
     }
   }
 
-  function featureForMonth(S, month, previousRow = null) {
+  function featureForMonth(S, month, previousRow = null, currentContext = null) {
     const state = S || {}
     const txs = state.transactions || []
     const cats = state.categories || { expense: [], income: [] }
-    const monthly = Calc.getMonthlyIncomeExpense(txs, month)
-    const expenseCategories = Calc.getCategoryBreakdown(txs, month, { type:'expense', categories:cats.expense || [] })
-    const previousExpenseCategories = Calc.getCategoryBreakdown(txs, prevMonth(month), { type:'expense', categories:cats.expense || [] })
-    const ctx = buildContext({ ...state, transactions:txs })
+    const isCurrent = month === currentMonth()
+    const ctx = isCurrent ? (currentContext || buildContext(state)) : null
+    const monthly = ctx?.monthly || Calc.getMonthlyIncomeExpense(txs, month)
+    const expenseCategories = ctx?.expenseCategories || Calc.getCategoryBreakdown(txs, month, { type:'expense', categories:cats.expense || [] })
+    const previousExpenseCategories = ctx?.previousExpenseCategories || Calc.getCategoryBreakdown(txs, prevMonth(month), { type:'expense', categories:cats.expense || [] })
     const previousMap = new Map(previousExpenseCategories.map(c => [c.id, c]))
     const categoryActuals = Object.fromEntries(expenseCategories.map(c => [c.id, round2(c.amount)]))
-    const isCurrent = month === currentMonth()
     const categoryForecasts = isCurrent
       ? Object.fromEntries(expenseCategories.map(c => [c.id, round2(c.amount / Math.max(0.05, ctx.elapsedRatio || 1))]))
       : { ...(previousRow?.categoryForecasts || {}) }
@@ -1272,29 +1335,44 @@ const FinanceIntelligence = (() => {
     })
   }
 
+  function* sourceSignatureSteps(S = {}) {
+    // Include every row's content: count/latest-marker signatures miss edits to
+    // an older purchase, a budget, or a card's billing settings. Hash small
+    // records separately so background callers can pause during large ledgers.
+    let hash = 2166136261
+    const multiply = Math.imul
+    const add = value => {
+      const text = JSON.stringify(value) ?? 'undefined'
+      for (let i = 0; i < text.length; i++) hash = multiply(hash ^ text.charCodeAt(i), 16777619) >>> 0
+      hash = multiply(hash ^ 255, 16777619) >>> 0
+    }
+    const fields = ['transactions','wallets','categories','budgets','incomeBudgets','settings','recurring','upcomingBills','merchants','ccBenefits','ccBenefitRules','goals','loans','bnplPlans','creditLimitGroups','netWorthSnapshots','marketPrices','cryptoAssets','cryptoHoldings','cryptoTransactions','splitBills','privileges']
+    for (const key of fields) {
+      add(key)
+      const value = S[key]
+      if (Array.isArray(value)) {
+        add(value.length)
+        for (let i = 0; i < value.length; i++) {
+          add(value[i])
+          if ((i + 1) % 200 === 0) yield
+        }
+      } else add(value)
+      yield
+    }
+    for (const key of [MEMORY_KEY,PROFILE_KEY,FEEDBACK_KEY,ACTION_LOG_KEY,LIFE_PLAN_KEY]) {
+      add(key)
+      add(loadJson(key, null))
+      yield
+    }
+    const date = Calc.todayLocalISO?.() || new Date().toISOString().slice(0,10)
+    return `${FEATURE_SCHEMA_VERSION}||${currentMonth()}||${date}||${hash.toString(16)}`
+  }
+
   function sourceSignature(S = {}) {
-    const txs = Array.isArray(S.transactions) ? S.transactions : []
-    let latestTx = ''
-    for (const tx of txs) {
-      const marker = `${tx?.updatedAt || tx?.createdAt || ''}|${tx?.date || ''}|${tx?.id || ''}|${tx?.amount || ''}|${tx?.type || ''}`
-      if (marker > latestTx) latestTx = marker
-    }
-    const memories = loadMemory()
-    let latestMemory = ''
-    for (const memory of memories) {
-      const marker = `${memory?.at || memory?.updatedAt || ''}|${memory?.month || ''}|${memory?.id || ''}|${memory?.amount || ''}`
-      if (marker > latestMemory) latestMemory = marker
-    }
-    return [
-      FEATURE_SCHEMA_VERSION,
-      currentMonth(),
-      `tx:${txs.length}:${latestTx}`,
-      `budgets:${(S.budgets || []).length}:${(S.incomeBudgets || []).length}`,
-      `wallets:${(S.wallets || []).length}`,
-      `goals:${(S.goals || []).length}`,
-      `recurring:${(S.recurring || []).length}`,
-      `memory:${memories.length}:${latestMemory}`,
-    ].join('||')
+    const steps = sourceSignatureSteps(S)
+    let step
+    do { step = steps.next() } while (!step.done)
+    return step.value
   }
 
   function hasFeatureMonths(store, months = []) {
@@ -1379,6 +1457,54 @@ const FinanceIntelligence = (() => {
     return rows
   }
 
+  async function rebuildFeatureStoreIncrementalAsync(S, opts = {}) {
+    const started = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    await yieldBackground(opts)
+    const monthsBack = Number(opts.monthsBack || 12)
+    const month = currentMonth()
+    const requested = Array.isArray(opts.months) ? opts.months : []
+    const sourceHash = await drainBackground(sourceSignatureSteps(S), opts)
+    const store = loadFeatureStore()
+    const meta = loadFeatureStoreMeta()
+    const full = opts.forceFull || store.version !== FEATURE_SCHEMA_VERSION || !(store.rows || []).length
+    const allowedMonths = Calc.getMonths?.(monthsBack) || [month]
+    const months = full ? allowedMonths : [...new Set([month, prevMonth(month), ...requested].filter(Boolean))]
+    if (!full && !opts.force && meta.schemaVersion === FEATURE_SCHEMA_VERSION && meta.builtForMonth === month && meta.sourceHash === sourceHash && hasFeatureMonths(store, months)) {
+      checkCancelled(opts)
+      if (sourceSignature(S) !== sourceHash) abortBackground()
+      checkCancelled(opts)
+      mark('rebuildIncremental.skip', { reason:'fresh', month })
+      return store.rows
+    }
+
+    mark(full ? 'rebuildFull.start' : 'rebuildIncremental.start', { months, background:true })
+    const previousRows = new Map((store.rows || []).map(row => [row.month, row]))
+    const rebuilt = full ? new Map() : new Map(previousRows)
+    const ctx = opts.ctx || await buildContextAsync(S, opts)
+    for (const featureMonth of months) {
+      await yieldBackground(opts)
+      rebuilt.set(featureMonth, featureForMonth(S, featureMonth, previousRows.get(featureMonth), ctx))
+    }
+    const allowed = new Set(allowedMonths)
+    const rows = [...rebuilt.values()]
+      .filter(row => allowed.has(row.month))
+      .sort((a,b) => String(b.month || '').localeCompare(String(a.month || '')))
+      .slice(0, monthsBack)
+    await yieldBackground(opts)
+    checkCancelled(opts)
+    // Keep this final comparison and both writes in one turn. Yielding while
+    // validating could miss an edit to a row already hashed in that pass.
+    if (sourceSignature(S) !== sourceHash) abortBackground()
+    checkCancelled(opts)
+    saveFeatureStore(rows)
+    saveFeatureStoreMeta({
+      schemaVersion:FEATURE_SCHEMA_VERSION, builtForMonth:month, monthsBack,
+      sourceHash, rebuiltMonths:months, mode:full ? 'full' : 'incremental',
+    })
+    mark(full ? 'rebuildFull.done' : 'rebuildIncremental.done', { months:months.length, totalRows:rows.length, background:true, duration:Math.round(((typeof performance !== 'undefined' ? performance.now() : Date.now()) - started) * 10) / 10 })
+    return rows
+  }
+
   function forecastAccuracyRows() {
     return loadFeatureStore().rows
       .map(r => ({
@@ -1402,14 +1528,14 @@ const FinanceIntelligence = (() => {
   }
 
   return {
-    buildContext, healthScore, forecasts, runScenario, compareScenarios, goalOptimization, goalRebalanceScenarios,
+    buildContext, buildContextAsync, healthScore, forecasts, runScenario, compareScenarios, goalOptimization, goalRebalanceScenarios,
     behaviorProfile, inferredArchetype, personalizedGuidance, loadProfile, saveProfile, loadMemory, remember,
     memoryForMonth, memoryById, updateMemory, deleteMemory,
     recommendationFeedback, recommendationFeedbackMap, recommendationFeedbackSummary, recordRecommendationOutcome,
     loadActionLog, recordActionLog, markActionUndone,
     adaptiveRecommendations, monthlyAutopilot, proactiveBrief, copilotBrief, proactiveAlertQueue, weeklyReview, monthlyCloseBrief, decisionLab, learningEngine, learningNudges, sharedFinance, actionProposals, featureForMonth,
     loadLifePlans, saveLifePlan, deleteLifePlan, lifePlanningSummary,
-    loadFeatureStore, loadFeatureStoreMeta, isFeatureStoreFresh, rebuildFeatureStore, rebuildFeatureStoreIncremental, forecastAccuracyRows, forecastAccuracySummary, categoryForecastAccuracy, categorySeasonality,
+    loadFeatureStore, loadFeatureStoreMeta, isFeatureStoreFresh, rebuildFeatureStore, rebuildFeatureStoreIncremental, rebuildFeatureStoreIncrementalAsync, forecastAccuracyRows, forecastAccuracySummary, categoryForecastAccuracy, categorySeasonality,
     confidenceMeta, forecastExplanation, recommendationExplanation,
   }
 })()

@@ -5,7 +5,7 @@
   if (root) root.MT_RELEASE = manifest
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict'
-  const version = '2026.10.03-opening-r129'
+  const version = '2026.10.03-perf-r131'
   const coreAssets = Object.freeze([
     './',
     './index.html',
@@ -17,6 +17,7 @@
     './state_commit.js',
     './ledger.js',
     './screen_hooks.js',
+    './derived_runtime.js',
     './gold_market.js',
     './storage_v2.js',
     './app_lock.js',

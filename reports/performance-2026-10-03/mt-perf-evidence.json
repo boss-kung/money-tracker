@@ -1,0 +1,2224 @@
+[
+  {
+    "n": 0,
+    "elapsed": 10334,
+    "errors": [],
+    "boot": {
+      "renderStarts": 12,
+      "calls": {
+        "CC.prepareBillingMigration": {
+          "count": 10,
+          "ms": 2,
+          "max": 0.5
+        },
+        "Calc.getMonthlyTransactions": {
+          "count": 52,
+          "ms": 0.09999999403953552,
+          "max": 0.09999999403953552
+        },
+        "Calc.getMonthlyIncomeExpense": {
+          "count": 44,
+          "ms": 0.4000000059604645,
+          "max": 0.10000000894069672
+        },
+        "Calc.getMonthlyStats": {
+          "count": 20,
+          "ms": 0.29999999701976776,
+          "max": 0.10000000894069672
+        },
+        "Calc.getPendingUpcomingBills": {
+          "count": 14,
+          "ms": 0.10000000894069672,
+          "max": 0.10000000894069672
+        },
+        "Calc.getUpcomingReservedTotal": {
+          "count": 14,
+          "ms": 0.10000000894069672,
+          "max": 0.10000000894069672
+        },
+        "Calc.getBudgetProgress": {
+          "count": 24,
+          "ms": 0.10000000894069672,
+          "max": 0.10000000894069672
+        },
+        "Calc.clampDay": {
+          "count": 5,
+          "ms": 0,
+          "max": 0
+        },
+        "Calc.getCreditCardDueDate": {
+          "count": 5,
+          "ms": 0,
+          "max": 0
+        },
+        "CC.buildCardBillingState": {
+          "count": 50,
+          "ms": 13.799999967217445,
+          "max": 11.200000002980232
+        },
+        "Calc.getMonths": {
+          "count": 14,
+          "ms": 0.09999999403953552,
+          "max": 0.09999999403953552
+        },
+        "Calc.monthLabel": {
+          "count": 48,
+          "ms": 0,
+          "max": 0
+        },
+        "Calc.getPreviousMonth": {
+          "count": 18,
+          "ms": 0.10000000894069672,
+          "max": 0.10000000894069672
+        },
+        "Calc.todayLocalISO": {
+          "count": 8,
+          "ms": 0.09999999403953552,
+          "max": 0.09999999403953552
+        },
+        "Calc.getWeeklyNetSeries": {
+          "count": 8,
+          "ms": 0.19999998807907104,
+          "max": 0.09999999403953552
+        },
+        "Calc.fmt": {
+          "count": 138,
+          "ms": 10.400000005960464,
+          "max": 8.599999994039536
+        },
+        "CC.getCardStatement": {
+          "count": 10,
+          "ms": 0.7999999821186066,
+          "max": 0.29999999701976776
+        },
+        "CC.getNextPayableDueInfo": {
+          "count": 10,
+          "ms": 0.40000002086162567,
+          "max": 0.10000000894069672
+        },
+        "Calc.getMerchantBreakdown": {
+          "count": 8,
+          "ms": 0.09999999403953552,
+          "max": 0.09999999403953552
+        },
+        "Calc.fmtNum": {
+          "count": 6,
+          "ms": 0.20000000298023224,
+          "max": 0.10000000894069672
+        }
+      },
+      "long": [
+        {
+          "start": 162.40000000596046,
+          "duration": 114
+        }
+      ],
+      "observers": [
+        {
+          "count": 138,
+          "ms": 0.5999999940395355,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:1046:3"
+        },
+        {
+          "count": 135,
+          "ms": 1.0000000149011612,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchInsights (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:21946:17)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:21950:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 135,
+          "ms": 0.30000001192092896,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22010:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 135,
+          "ms": 7.599999979138374,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchRecurringIcons (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22110:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22114:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 135,
+          "ms": 1.0000000149011612,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchTransferRows (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22225:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22233:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 135,
+          "ms": 8.79999989271164,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchDatePicker (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22238:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22257:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 135,
+          "ms": 0.10000000894069672,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchCCShimmer (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22316:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22319:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchSubScreenItems (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22475:7)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22479:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchStepDots (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22613:7)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22617:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        },
+        {
+          "count": 135,
+          "ms": 0.5,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchBudgetRingWarn (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22710:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22720:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        },
+        {
+          "count": 135,
+          "ms": 0.30000001192092896,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchSwatchGrid (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22817:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22833:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        }
+      ],
+      "tx": 0
+    },
+    "operations": [
+      {
+        "name": "dashboard",
+        "duration": 11.100000008940697,
+        "calls": {
+          "Calc.getMonthlyTransactions": {
+            "count": 15,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getMonthlyIncomeExpense": {
+            "count": 11,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getMonthlyStats": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 2,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "Calc.getUpcomingReservedTotal": {
+            "count": 2,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "Calc.getBudgetProgress": {
+            "count": 7,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "CC.buildCardBillingState": {
+            "count": 10,
+            "ms": 0.5,
+            "max": 0.10000000894069672
+          },
+          "App.getCreditCardBillingState": {
+            "count": 10,
+            "ms": 0.5,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonths": {
+            "count": 4,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.monthLabel": {
+            "count": 6,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getPreviousMonth": {
+            "count": 3,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.todayLocalISO": {
+            "count": 1,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getWeeklyNetSeries": {
+            "count": 1,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.fmt": {
+            "count": 18,
+            "ms": 0.5,
+            "max": 0.10000000894069672
+          },
+          "CC.getCardStatement": {
+            "count": 5,
+            "ms": 0.19999998807907104,
+            "max": 0.09999999403953552
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 5,
+            "ms": 0.20000000298023224,
+            "max": 0.10000000894069672
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 5,
+            "ms": 0.20000000298023224,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMerchantBreakdown": {
+            "count": 4,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.fmtNum": {
+            "count": 3,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "App.renderDashboard": {
+            "count": 1,
+            "ms": 10.399999991059303,
+            "max": 10.399999991059303
+          }
+        },
+        "long": [],
+        "observerMs": 8.5,
+        "observerCalls": 576,
+        "dom": 303,
+        "rows": 0
+      },
+      {
+        "name": "wallets",
+        "duration": 35.70000000298023,
+        "calls": {
+          "Calc.fmt": {
+            "count": 13,
+            "ms": 0.7999999970197678,
+            "max": 0.10000000894069672
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 5,
+            "ms": 0.4999999701976776,
+            "max": 0.19999998807907104
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 5,
+            "ms": 0.4999999701976776,
+            "max": 0.19999998807907104
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getUpcomingReservedByWallet": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getWalletAvailableBalance": {
+            "count": 1,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "App.renderWallets": {
+            "count": 1,
+            "ms": 5.799999997019768,
+            "max": 5.799999997019768
+          }
+        },
+        "long": [],
+        "observerMs": 15.299999967217445,
+        "observerCalls": 513,
+        "dom": 422,
+        "rows": 0
+      },
+      {
+        "name": "transactions",
+        "duration": 7.700000002980232,
+        "calls": {
+          "Calc.getMonths": {
+            "count": 2,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "Calc.monthLabel": {
+            "count": 6,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "Calc.fmt": {
+            "count": 4,
+            "ms": 0.29999999701976776,
+            "max": 0.20000000298023224
+          },
+          "App.renderTransactionsList": {
+            "count": 1,
+            "ms": 4.200000002980232,
+            "max": 4.200000002980232
+          }
+        },
+        "long": [],
+        "observerMs": 0.699999988079071,
+        "observerCalls": 12,
+        "dom": 464,
+        "rows": 0
+      },
+      {
+        "name": "persist",
+        "duration": 1.0999999940395355,
+        "ok": true,
+        "calls": {
+          "CC.prepareBillingMigration": {
+            "count": 1,
+            "ms": 0.29999999701976776,
+            "max": 0.29999999701976776
+          },
+          "App._ledgerFlows": {
+            "count": 1,
+            "ms": 0,
+            "max": 0
+          },
+          "Storage.saveAll": {
+            "count": 1,
+            "ms": 0.3999999910593033,
+            "max": 0.3999999910593033
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 0,
+        "dom": 464,
+        "rows": 0
+      },
+      {
+        "name": "finance",
+        "duration": 25.5,
+        "calls": {
+          "Calc.getPreviousMonth": {
+            "count": 25,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "Calc.getMonths": {
+            "count": 13,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonthlyTransactions": {
+            "count": 168,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonthlyIncomeExpense": {
+            "count": 108,
+            "ms": 0.20000000298023224,
+            "max": 0.10000000894069672
+          },
+          "Calc.getCategoryBreakdown": {
+            "count": 48,
+            "ms": 0.19999998807907104,
+            "max": 0.09999999403953552
+          },
+          "Calc.getMerchantBreakdown": {
+            "count": 12,
+            "ms": 0.29999999701976776,
+            "max": 0.10000000894069672
+          },
+          "Calc.getBudgetProgress": {
+            "count": 12,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 12,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getUpcomingReservedTotal": {
+            "count": 12,
+            "ms": 0,
+            "max": 0
+          },
+          "CC.buildCardBillingState": {
+            "count": 120,
+            "ms": 9.200000032782555,
+            "max": 1.2000000029802322
+          },
+          "App.getCreditCardBillingState": {
+            "count": 120,
+            "ms": 9.400000035762787,
+            "max": 1.2000000029802322
+          },
+          "CC.getCardStatement": {
+            "count": 60,
+            "ms": 4.400000035762787,
+            "max": 0.29999999701976776
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 60,
+            "ms": 3.4999999701976776,
+            "max": 0.29999999701976776
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 60,
+            "ms": 3.599999964237213,
+            "max": 0.29999999701976776
+          },
+          "Calc.getCreditLiabilitySummary": {
+            "count": 12,
+            "ms": 13.099999979138374,
+            "max": 1.699999988079071
+          },
+          "App.rebuildFinanceFeaturesIfNeeded": {
+            "count": 1,
+            "ms": 25.399999991059303,
+            "max": 25.399999991059303
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 0,
+        "dom": 464,
+        "rows": 0
+      },
+      {
+        "name": "quiet-dashboard",
+        "duration": 15.700000002980232,
+        "calls": {
+          "Calc.getMonthlyTransactions": {
+            "count": 15,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getMonthlyIncomeExpense": {
+            "count": 11,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonthlyStats": {
+            "count": 2,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getUpcomingReservedTotal": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getBudgetProgress": {
+            "count": 7,
+            "ms": 0,
+            "max": 0
+          },
+          "CC.buildCardBillingState": {
+            "count": 10,
+            "ms": 0.7000000029802322,
+            "max": 0.20000000298023224
+          },
+          "App.getCreditCardBillingState": {
+            "count": 10,
+            "ms": 0.7999999970197678,
+            "max": 0.20000000298023224
+          },
+          "Calc.getMonths": {
+            "count": 4,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.monthLabel": {
+            "count": 6,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getPreviousMonth": {
+            "count": 3,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.todayLocalISO": {
+            "count": 1,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getWeeklyNetSeries": {
+            "count": 1,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.fmt": {
+            "count": 18,
+            "ms": 0.4999999850988388,
+            "max": 0.10000000894069672
+          },
+          "CC.getCardStatement": {
+            "count": 5,
+            "ms": 0.30000001192092896,
+            "max": 0.10000000894069672
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 5,
+            "ms": 0.20000000298023224,
+            "max": 0.10000000894069672
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 5,
+            "ms": 0.20000000298023224,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMerchantBreakdown": {
+            "count": 4,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "Calc.fmtNum": {
+            "count": 3,
+            "ms": 0.19999998807907104,
+            "max": 0.09999999403953552
+          },
+          "App.renderDashboard": {
+            "count": 1,
+            "ms": 7.799999997019768,
+            "max": 7.799999997019768
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 0,
+        "dom": 463,
+        "rows": 0
+      },
+      {
+        "name": "quiet-transactions",
+        "duration": 5.700000002980232,
+        "calls": {
+          "Calc.getMonths": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.monthLabel": {
+            "count": 6,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.fmt": {
+            "count": 4,
+            "ms": 0.4000000059604645,
+            "max": 0.10000000894069672
+          },
+          "App.renderTransactionsList": {
+            "count": 1,
+            "ms": 3.5,
+            "max": 3.5
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 0,
+        "dom": 461,
+        "rows": 0
+      }
+    ]
+  },
+  {
+    "n": 1000,
+    "elapsed": 11312,
+    "errors": [],
+    "boot": {
+      "renderStarts": 12,
+      "calls": {
+        "CC.prepareBillingMigration": {
+          "count": 10,
+          "ms": 64.09999999403954,
+          "max": 11.299999997019768
+        },
+        "Calc.isPostedTx": {
+          "count": 10244,
+          "ms": 2.399999961256981,
+          "max": 0.10000000894069672
+        },
+        "Calc.getExpenseLedgerAmount": {
+          "count": 9238,
+          "ms": 1.7999999821186066,
+          "max": 0.10000000894069672
+        },
+        "Calc.getMonthlyTransactions": {
+          "count": 60,
+          "ms": 3.5000000447034836,
+          "max": 0.10000000894069672
+        },
+        "Calc.getMonthlyIncomeExpense": {
+          "count": 44,
+          "ms": 4.100000008940697,
+          "max": 0.3999999910593033
+        },
+        "Calc.getMonthlyStats": {
+          "count": 20,
+          "ms": 4.000000029802322,
+          "max": 0.7000000029802322
+        },
+        "Calc.getPendingUpcomingBills": {
+          "count": 14,
+          "ms": 0.09999999403953552,
+          "max": 0.09999999403953552
+        },
+        "Calc.getUpcomingReservedTotal": {
+          "count": 14,
+          "ms": 0.09999999403953552,
+          "max": 0.09999999403953552
+        },
+        "Calc.getBudgetProgress": {
+          "count": 24,
+          "ms": 2.3999999910593033,
+          "max": 0.29999999701976776
+        },
+        "Calc.clampDay": {
+          "count": 5,
+          "ms": 0,
+          "max": 0
+        },
+        "Calc.getCreditCardDueDate": {
+          "count": 5,
+          "ms": 0,
+          "max": 0
+        },
+        "CC.buildCardBillingState": {
+          "count": 50,
+          "ms": 52,
+          "max": 2.5999999940395355
+        },
+        "Calc.getMonths": {
+          "count": 14,
+          "ms": 0.09999999403953552,
+          "max": 0.09999999403953552
+        },
+        "Calc.monthLabel": {
+          "count": 64,
+          "ms": 0.09999999403953552,
+          "max": 0.09999999403953552
+        },
+        "Calc.getPreviousMonth": {
+          "count": 18,
+          "ms": 0,
+          "max": 0
+        },
+        "Calc.getCategoryBreakdown": {
+          "count": 8,
+          "ms": 1.2999999970197678,
+          "max": 0.29999999701976776
+        },
+        "Calc.fmt": {
+          "count": 306,
+          "ms": 6.299999967217445,
+          "max": 2.300000011920929
+        },
+        "Calc.todayLocalISO": {
+          "count": 8,
+          "ms": 0,
+          "max": 0
+        },
+        "Calc.getWeeklyNetSeries": {
+          "count": 8,
+          "ms": 2.2999999970197678,
+          "max": 0.5999999940395355
+        },
+        "CC.getCardStatement": {
+          "count": 10,
+          "ms": 9.299999982118607,
+          "max": 1.0999999940395355
+        },
+        "CC.getNextPayableDueInfo": {
+          "count": 10,
+          "ms": 9.200000017881393,
+          "max": 1.0999999940395355
+        },
+        "Calc.getDaysUntilDate": {
+          "count": 10,
+          "ms": 0.09999999403953552,
+          "max": 0.09999999403953552
+        },
+        "Calc.getMerchantBreakdown": {
+          "count": 8,
+          "ms": 1,
+          "max": 0.20000000298023224
+        },
+        "Calc.fmtNum": {
+          "count": 8,
+          "ms": 0,
+          "max": 0
+        }
+      },
+      "long": [
+        {
+          "start": 117.8999999910593,
+          "duration": 155
+        },
+        {
+          "start": 275.29999999701977,
+          "duration": 55
+        }
+      ],
+      "observers": [
+        {
+          "count": 268,
+          "ms": 0.699999988079071,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:1046:3"
+        },
+        {
+          "count": 265,
+          "ms": 2.2999999970197678,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchInsights (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:21946:17)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:21950:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 265,
+          "ms": 0.699999988079071,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22010:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 265,
+          "ms": 19.999999940395355,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchRecurringIcons (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22110:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22114:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 265,
+          "ms": 1.3999999910593033,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchTransferRows (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22225:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22233:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 265,
+          "ms": 19.400000005960464,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchDatePicker (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22238:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22257:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 265,
+          "ms": 0.6000000089406967,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchCCShimmer (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22316:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22319:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchSubScreenItems (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22475:7)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22479:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchStepDots (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22613:7)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22617:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        },
+        {
+          "count": 265,
+          "ms": 1.0999999791383743,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchBudgetRingWarn (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22710:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22720:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        },
+        {
+          "count": 265,
+          "ms": 0.8999999761581421,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchSwatchGrid (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22817:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22833:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        }
+      ],
+      "tx": 1000
+    },
+    "operations": [
+      {
+        "name": "dashboard",
+        "duration": 62.900000005960464,
+        "calls": {
+          "Calc.isPostedTx": {
+            "count": 2350,
+            "ms": 0.8999999761581421,
+            "max": 0.10000000894069672
+          },
+          "Calc.getExpenseLedgerAmount": {
+            "count": 2225,
+            "ms": 1.0999999940395355,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonthlyTransactions": {
+            "count": 16,
+            "ms": 1.5,
+            "max": 0.20000000298023224
+          },
+          "Calc.getMonthlyIncomeExpense": {
+            "count": 11,
+            "ms": 1.9000000059604645,
+            "max": 0.29999999701976776
+          },
+          "Calc.getMonthlyStats": {
+            "count": 2,
+            "ms": 0.9000000059604645,
+            "max": 0.5
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getUpcomingReservedTotal": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getBudgetProgress": {
+            "count": 7,
+            "ms": 1.0999999791383743,
+            "max": 0.29999999701976776
+          },
+          "App.getTransactionRewardEstimate": {
+            "count": 6664,
+            "ms": 3.4000000208616257,
+            "max": 0.10000000894069672
+          },
+          "CC.buildCardBillingState": {
+            "count": 10,
+            "ms": 20.100000008940697,
+            "max": 3.1000000089406967
+          },
+          "App.getCreditCardBillingState": {
+            "count": 10,
+            "ms": 20.100000008940697,
+            "max": 3.1000000089406967
+          },
+          "Calc.getMonths": {
+            "count": 4,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.monthLabel": {
+            "count": 8,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getPreviousMonth": {
+            "count": 3,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getCategoryBreakdown": {
+            "count": 1,
+            "ms": 0.29999999701976776,
+            "max": 0.29999999701976776
+          },
+          "Calc.fmt": {
+            "count": 39,
+            "ms": 0.7999999970197678,
+            "max": 0.10000000894069672
+          },
+          "Calc.todayLocalISO": {
+            "count": 1,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getWeeklyNetSeries": {
+            "count": 1,
+            "ms": 0.6000000089406967,
+            "max": 0.6000000089406967
+          },
+          "CC.getCardStatement": {
+            "count": 5,
+            "ms": 7.800000011920929,
+            "max": 1.7000000029802322
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 5,
+            "ms": 6.999999985098839,
+            "max": 1.5
+          },
+          "Calc.getDaysUntilDate": {
+            "count": 5,
+            "ms": 0,
+            "max": 0
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 5,
+            "ms": 6.999999985098839,
+            "max": 1.5
+          },
+          "Calc.getMerchantBreakdown": {
+            "count": 4,
+            "ms": 0.6000000089406967,
+            "max": 0.20000000298023224
+          },
+          "Calc.fmtNum": {
+            "count": 4,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "App.renderDashboard": {
+            "count": 1,
+            "ms": 62.29999999701977,
+            "max": 62.29999999701977
+          }
+        },
+        "long": [
+          {
+            "start": 1814.8999999910593,
+            "duration": 63
+          }
+        ],
+        "observerMs": 43.20000007748604,
+        "observerCalls": 2250,
+        "dom": 396,
+        "rows": 0
+      },
+      {
+        "name": "wallets",
+        "duration": 32.900000005960464,
+        "calls": {
+          "Calc.fmt": {
+            "count": 13,
+            "ms": 0.4000000059604645,
+            "max": 0.10000000894069672
+          },
+          "App.getTransactionRewardEstimate": {
+            "count": 1666,
+            "ms": 1.600000038743019,
+            "max": 0.10000000894069672
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 5,
+            "ms": 11.200000017881393,
+            "max": 2.7000000029802322
+          },
+          "Calc.getDaysUntilDate": {
+            "count": 5,
+            "ms": 0,
+            "max": 0
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 5,
+            "ms": 11.200000017881393,
+            "max": 2.7000000029802322
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getUpcomingReservedByWallet": {
+            "count": 2,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "Calc.getWalletAvailableBalance": {
+            "count": 1,
+            "ms": 0,
+            "max": 0
+          },
+          "App.renderWallets": {
+            "count": 1,
+            "ms": 15.099999994039536,
+            "max": 15.099999994039536
+          }
+        },
+        "long": [],
+        "observerMs": 26.39999996125698,
+        "observerCalls": 1008,
+        "dom": 535,
+        "rows": 0
+      },
+      {
+        "name": "transactions",
+        "duration": 215.90000000596046,
+        "calls": {
+          "Calc.getMonths": {
+            "count": 2,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "Calc.getExpenseLedgerAmount": {
+            "count": 168,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "Calc.monthLabel": {
+            "count": 6,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.fmt": {
+            "count": 90,
+            "ms": 3.7000000178813934,
+            "max": 0.20000000298023224
+          },
+          "Calc.labelDate": {
+            "count": 2,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "App.renderTransactionsList": {
+            "count": 1,
+            "ms": 12.5,
+            "max": 12.5
+          }
+        },
+        "long": [
+          {
+            "start": 4323.29999999702,
+            "duration": 216
+          }
+        ],
+        "observerMs": 9.799999967217445,
+        "observerCalls": 228,
+        "dom": 1339,
+        "rows": 84
+      },
+      {
+        "name": "persist",
+        "duration": 13.599999994039536,
+        "ok": true,
+        "calls": {
+          "CC.prepareBillingMigration": {
+            "count": 1,
+            "ms": 9.899999991059303,
+            "max": 9.899999991059303
+          },
+          "App.getTransactionRewardEstimate": {
+            "count": 833,
+            "ms": 0.4000000059604645,
+            "max": 0.10000000894069672
+          },
+          "App._ledgerFlows": {
+            "count": 1,
+            "ms": 1.699999988079071,
+            "max": 1.699999988079071
+          },
+          "Storage.saveAll": {
+            "count": 1,
+            "ms": 1.5999999940395355,
+            "max": 1.5999999940395355
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 0,
+        "dom": 1339,
+        "rows": 84
+      },
+      {
+        "name": "finance",
+        "duration": 280.09999999403954,
+        "calls": {
+          "Calc.getPreviousMonth": {
+            "count": 25,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getMonths": {
+            "count": 13,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "Calc.isPostedTx": {
+            "count": 14988,
+            "ms": 4.000000014901161,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonthlyTransactions": {
+            "count": 168,
+            "ms": 10.800000041723251,
+            "max": 0.30000001192092896
+          },
+          "Calc.getExpenseLedgerAmount": {
+            "count": 16274,
+            "ms": 3.499999985098839,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonthlyIncomeExpense": {
+            "count": 108,
+            "ms": 10.100000023841858,
+            "max": 0.30000001192092896
+          },
+          "Calc.getCategoryBreakdown": {
+            "count": 48,
+            "ms": 6.200000002980232,
+            "max": 0.5
+          },
+          "Calc.getMerchantBreakdown": {
+            "count": 12,
+            "ms": 1.2000000178813934,
+            "max": 0.29999999701976776
+          },
+          "Calc.getBudgetProgress": {
+            "count": 12,
+            "ms": 0.7999999970197678,
+            "max": 0.20000000298023224
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 12,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getUpcomingReservedTotal": {
+            "count": 12,
+            "ms": 0,
+            "max": 0
+          },
+          "App.getTransactionRewardEstimate": {
+            "count": 79968,
+            "ms": 26.40000008046627,
+            "max": 0.29999999701976776
+          },
+          "CC.buildCardBillingState": {
+            "count": 120,
+            "ms": 124.59999999403954,
+            "max": 3
+          },
+          "App.getCreditCardBillingState": {
+            "count": 120,
+            "ms": 124.79999999701977,
+            "max": 3
+          },
+          "CC.getCardStatement": {
+            "count": 60,
+            "ms": 63.299999967217445,
+            "max": 2.5
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 60,
+            "ms": 62.000000074505806,
+            "max": 2.4000000059604645
+          },
+          "Calc.getDaysUntilDate": {
+            "count": 60,
+            "ms": 0.29999999701976776,
+            "max": 0.10000000894069672
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 60,
+            "ms": 62.500000074505806,
+            "max": 2.4000000059604645
+          },
+          "Calc.getCreditLiabilitySummary": {
+            "count": 12,
+            "ms": 192.10000005364418,
+            "max": 32.30000001192093
+          },
+          "App.rebuildFinanceFeaturesIfNeeded": {
+            "count": 1,
+            "ms": 280,
+            "max": 280
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 0,
+        "dom": 1339,
+        "rows": 84
+      },
+      {
+        "name": "quiet-dashboard",
+        "duration": 73.29999999701977,
+        "calls": {
+          "Calc.isPostedTx": {
+            "count": 2350,
+            "ms": 1.1999999731779099,
+            "max": 0.10000000894069672
+          },
+          "Calc.getExpenseLedgerAmount": {
+            "count": 2225,
+            "ms": 1.2000000178813934,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonthlyTransactions": {
+            "count": 16,
+            "ms": 2.000000014901161,
+            "max": 0.20000000298023224
+          },
+          "Calc.getMonthlyIncomeExpense": {
+            "count": 11,
+            "ms": 2.2000000029802322,
+            "max": 0.30000001192092896
+          },
+          "Calc.getMonthlyStats": {
+            "count": 2,
+            "ms": 0.7999999970197678,
+            "max": 0.5
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getUpcomingReservedTotal": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getBudgetProgress": {
+            "count": 7,
+            "ms": 1.2000000178813934,
+            "max": 0.30000001192092896
+          },
+          "App.getTransactionRewardEstimate": {
+            "count": 6664,
+            "ms": 6.000000044703484,
+            "max": 0.10000000894069672
+          },
+          "CC.buildCardBillingState": {
+            "count": 10,
+            "ms": 24.799999997019768,
+            "max": 3.6000000089406967
+          },
+          "App.getCreditCardBillingState": {
+            "count": 10,
+            "ms": 24.899999991059303,
+            "max": 3.7000000029802322
+          },
+          "Calc.getMonths": {
+            "count": 4,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.monthLabel": {
+            "count": 8,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getPreviousMonth": {
+            "count": 3,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "Calc.getCategoryBreakdown": {
+            "count": 1,
+            "ms": 0.29999999701976776,
+            "max": 0.29999999701976776
+          },
+          "Calc.fmt": {
+            "count": 39,
+            "ms": 1.2999999821186066,
+            "max": 0.20000000298023224
+          },
+          "Calc.todayLocalISO": {
+            "count": 1,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getWeeklyNetSeries": {
+            "count": 1,
+            "ms": 0.699999988079071,
+            "max": 0.699999988079071
+          },
+          "CC.getCardStatement": {
+            "count": 5,
+            "ms": 8.5,
+            "max": 1.9000000059604645
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 5,
+            "ms": 7.5999999940395355,
+            "max": 1.6000000089406967
+          },
+          "Calc.getDaysUntilDate": {
+            "count": 5,
+            "ms": 0,
+            "max": 0
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 5,
+            "ms": 7.5999999940395355,
+            "max": 1.6000000089406967
+          },
+          "Calc.getMerchantBreakdown": {
+            "count": 4,
+            "ms": 0.6000000089406967,
+            "max": 0.20000000298023224
+          },
+          "Calc.fmtNum": {
+            "count": 4,
+            "ms": 0.19999998807907104,
+            "max": 0.09999999403953552
+          },
+          "App.renderDashboard": {
+            "count": 1,
+            "ms": 52.5,
+            "max": 52.5
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 0,
+        "dom": 1338,
+        "rows": 84
+      },
+      {
+        "name": "quiet-transactions",
+        "duration": 378,
+        "calls": {
+          "Calc.getMonths": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getExpenseLedgerAmount": {
+            "count": 168,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "Calc.monthLabel": {
+            "count": 6,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.fmt": {
+            "count": 90,
+            "ms": 3,
+            "max": 0.20000000298023224
+          },
+          "Calc.labelDate": {
+            "count": 2,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "App.renderTransactionsList": {
+            "count": 1,
+            "ms": 207.20000000298023,
+            "max": 207.20000000298023
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 0,
+        "dom": 1336,
+        "rows": 84
+      }
+    ]
+  },
+  {
+    "n": 5000,
+    "elapsed": 14783,
+    "errors": [],
+    "boot": {
+      "renderStarts": 12,
+      "calls": {
+        "CC.prepareBillingMigration": {
+          "count": 10,
+          "ms": 194.50000002980232,
+          "max": 35.20000000298023
+        },
+        "Calc.isPostedTx": {
+          "count": 50874,
+          "ms": 13.199999898672104,
+          "max": 0.20000000298023224
+        },
+        "Calc.getExpenseLedgerAmount": {
+          "count": 45900,
+          "ms": 7.100000038743019,
+          "max": 0.10000000894069672
+        },
+        "Calc.getMonthlyTransactions": {
+          "count": 60,
+          "ms": 16.69999997317791,
+          "max": 0.5
+        },
+        "Calc.getMonthlyIncomeExpense": {
+          "count": 44,
+          "ms": 17.400000005960464,
+          "max": 0.5999999940395355
+        },
+        "Calc.getMonthlyStats": {
+          "count": 20,
+          "ms": 15.900000020861626,
+          "max": 1.5
+        },
+        "Calc.getPendingUpcomingBills": {
+          "count": 14,
+          "ms": 0,
+          "max": 0
+        },
+        "Calc.getUpcomingReservedTotal": {
+          "count": 14,
+          "ms": 0,
+          "max": 0
+        },
+        "Calc.getBudgetProgress": {
+          "count": 24,
+          "ms": 8.099999979138374,
+          "max": 0.699999988079071
+        },
+        "Calc.clampDay": {
+          "count": 5,
+          "ms": 0,
+          "max": 0
+        },
+        "Calc.getCreditCardDueDate": {
+          "count": 5,
+          "ms": 0,
+          "max": 0
+        },
+        "CC.buildCardBillingState": {
+          "count": 50,
+          "ms": 212.09999999403954,
+          "max": 7
+        },
+        "Calc.getMonths": {
+          "count": 14,
+          "ms": 0.19999998807907104,
+          "max": 0.09999999403953552
+        },
+        "Calc.monthLabel": {
+          "count": 64,
+          "ms": 0.09999999403953552,
+          "max": 0.09999999403953552
+        },
+        "Calc.getPreviousMonth": {
+          "count": 18,
+          "ms": 0,
+          "max": 0
+        },
+        "Calc.getCategoryBreakdown": {
+          "count": 8,
+          "ms": 4.600000008940697,
+          "max": 0.7999999970197678
+        },
+        "Calc.fmt": {
+          "count": 306,
+          "ms": 7.30000002682209,
+          "max": 2.7000000029802322
+        },
+        "Calc.todayLocalISO": {
+          "count": 8,
+          "ms": 0.10000000894069672,
+          "max": 0.10000000894069672
+        },
+        "Calc.getWeeklyNetSeries": {
+          "count": 8,
+          "ms": 9.700000002980232,
+          "max": 1.4000000059604645
+        },
+        "CC.getCardStatement": {
+          "count": 10,
+          "ms": 38.79999999701977,
+          "max": 4.0999999940395355
+        },
+        "CC.getNextPayableDueInfo": {
+          "count": 10,
+          "ms": 38.99999998509884,
+          "max": 4.5
+        },
+        "Calc.getDaysUntilDate": {
+          "count": 10,
+          "ms": 0.30000001192092896,
+          "max": 0.10000000894069672
+        },
+        "Calc.getMerchantBreakdown": {
+          "count": 8,
+          "ms": 3.5999999940395355,
+          "max": 0.5
+        },
+        "Calc.fmtNum": {
+          "count": 8,
+          "ms": 0.20000000298023224,
+          "max": 0.10000000894069672
+        }
+      },
+      "long": [
+        {
+          "start": 116.09999999403954,
+          "duration": 355
+        },
+        {
+          "start": 472.59999999403954,
+          "duration": 69
+        },
+        {
+          "start": 544.0999999940395,
+          "duration": 122
+        },
+        {
+          "start": 690.2999999970198,
+          "duration": 126
+        },
+        {
+          "start": 1044.7999999970198,
+          "duration": 61
+        }
+      ],
+      "observers": [
+        {
+          "count": 264,
+          "ms": 0.7999999970197678,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:1046:3"
+        },
+        {
+          "count": 261,
+          "ms": 1.5000000447034836,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchInsights (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:21946:17)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:21950:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _setupChipPill (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22001:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:73\n    at Array.forEach (<anonymous>)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22009:9)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 261,
+          "ms": 0.29999999701976776,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _initPills (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22010:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22013:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 261,
+          "ms": 14.2000000923872,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchRecurringIcons (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22110:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22114:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 261,
+          "ms": 1.0000000149011612,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchTransferRows (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22225:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22233:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 261,
+          "ms": 16.099999979138374,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchDatePicker (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22238:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22257:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 261,
+          "ms": 0.7999999970197678,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchCCShimmer (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22316:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22319:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22354:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchSubScreenItems (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22475:7)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22479:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        },
+        {
+          "count": 0,
+          "ms": 0,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchStepDots (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22613:7)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22617:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        },
+        {
+          "count": 261,
+          "ms": 1.6999999284744263,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchBudgetRingWarn (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22710:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22720:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        },
+        {
+          "count": 261,
+          "ms": 0.3999999910593033,
+          "stack": "Error\n    at new window.MutationObserver (<anonymous>:6:140)\n    at _watchSwatchGrid (http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22817:5)\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22833:5\n    at http://127.0.0.1:8765/app_v2.js?v=2026.10.03-opening-r129:22958:3"
+        }
+      ],
+      "tx": 5000
+    },
+    "operations": [
+      {
+        "name": "dashboard",
+        "duration": 149.20000000298023,
+        "calls": {
+          "Calc.isPostedTx": {
+            "count": 11676,
+            "ms": 5.099999979138374,
+            "max": 0.10000000894069672
+          },
+          "Calc.getExpenseLedgerAmount": {
+            "count": 11058,
+            "ms": 2.80000002682209,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonthlyTransactions": {
+            "count": 16,
+            "ms": 6.499999985098839,
+            "max": 0.9000000059604645
+          },
+          "Calc.getMonthlyIncomeExpense": {
+            "count": 11,
+            "ms": 6.500000029802322,
+            "max": 1.1000000089406967
+          },
+          "Calc.getMonthlyStats": {
+            "count": 2,
+            "ms": 3.6000000089406967,
+            "max": 2.4000000059604645
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getUpcomingReservedTotal": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getBudgetProgress": {
+            "count": 7,
+            "ms": 3.8999999910593033,
+            "max": 1
+          },
+          "App.getTransactionRewardEstimate": {
+            "count": 33328,
+            "ms": 10.29999989271164,
+            "max": 0.29999999701976776
+          },
+          "CC.buildCardBillingState": {
+            "count": 10,
+            "ms": 66.19999998807907,
+            "max": 11
+          },
+          "App.getCreditCardBillingState": {
+            "count": 10,
+            "ms": 66.19999998807907,
+            "max": 11
+          },
+          "Calc.getMonths": {
+            "count": 4,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.monthLabel": {
+            "count": 8,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getPreviousMonth": {
+            "count": 3,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "Calc.getCategoryBreakdown": {
+            "count": 1,
+            "ms": 0.7999999970197678,
+            "max": 0.7999999970197678
+          },
+          "Calc.fmt": {
+            "count": 39,
+            "ms": 0.7000000029802322,
+            "max": 0.10000000894069672
+          },
+          "Calc.todayLocalISO": {
+            "count": 1,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getWeeklyNetSeries": {
+            "count": 1,
+            "ms": 1.699999988079071,
+            "max": 1.699999988079071
+          },
+          "CC.getCardStatement": {
+            "count": 5,
+            "ms": 21.899999991059303,
+            "max": 4.5
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 5,
+            "ms": 21.700000002980232,
+            "max": 4.799999997019768
+          },
+          "Calc.getDaysUntilDate": {
+            "count": 5,
+            "ms": 0.20000000298023224,
+            "max": 0.10000000894069672
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 5,
+            "ms": 22,
+            "max": 4.799999997019768
+          },
+          "Calc.getMerchantBreakdown": {
+            "count": 4,
+            "ms": 1.7999999970197678,
+            "max": 0.5999999940395355
+          },
+          "Calc.fmtNum": {
+            "count": 4,
+            "ms": 0.09999999403953552,
+            "max": 0.09999999403953552
+          },
+          "App.renderDashboard": {
+            "count": 1,
+            "ms": 148.70000000298023,
+            "max": 148.70000000298023
+          }
+        },
+        "long": [
+          {
+            "start": 2095.2000000029802,
+            "duration": 149
+          }
+        ],
+        "observerMs": 33.500000074505806,
+        "observerCalls": 2259,
+        "dom": 395,
+        "rows": 0
+      },
+      {
+        "name": "wallets",
+        "duration": 39.5,
+        "calls": {
+          "Calc.fmt": {
+            "count": 13,
+            "ms": 0.20000000298023224,
+            "max": 0.10000000894069672
+          },
+          "App.getTransactionRewardEstimate": {
+            "count": 8332,
+            "ms": 2.80000002682209,
+            "max": 0.10000000894069672
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 5,
+            "ms": 25.19999997317791,
+            "max": 5.899999991059303
+          },
+          "Calc.getDaysUntilDate": {
+            "count": 5,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 5,
+            "ms": 25.49999998509884,
+            "max": 6
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getUpcomingReservedByWallet": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getWalletAvailableBalance": {
+            "count": 1,
+            "ms": 0,
+            "max": 0
+          },
+          "App.renderWallets": {
+            "count": 1,
+            "ms": 28.099999994039536,
+            "max": 28.099999994039536
+          }
+        },
+        "long": [],
+        "observerMs": 10.700000062584877,
+        "observerCalls": 513,
+        "dom": 535,
+        "rows": 0
+      },
+      {
+        "name": "transactions",
+        "duration": 904.2999999970198,
+        "calls": {
+          "Calc.getMonths": {
+            "count": 2,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "Calc.getExpenseLedgerAmount": {
+            "count": 834,
+            "ms": 0.20000000298023224,
+            "max": 0.10000000894069672
+          },
+          "Calc.monthLabel": {
+            "count": 6,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.fmt": {
+            "count": 423,
+            "ms": 14.200000047683716,
+            "max": 0.20000000298023224
+          },
+          "Calc.labelDate": {
+            "count": 2,
+            "ms": 0.29999999701976776,
+            "max": 0.20000000298023224
+          },
+          "App.renderTransactionsList": {
+            "count": 1,
+            "ms": 30.900000005960464,
+            "max": 30.900000005960464
+          }
+        },
+        "long": [
+          {
+            "start": 4694.899999991059,
+            "duration": 906
+          }
+        ],
+        "observerMs": 2.7000000029802322,
+        "observerCalls": 30,
+        "dom": 4336,
+        "rows": 417
+      },
+      {
+        "name": "persist",
+        "duration": 47.599999994039536,
+        "ok": true,
+        "calls": {
+          "CC.prepareBillingMigration": {
+            "count": 1,
+            "ms": 37.70000000298023,
+            "max": 37.70000000298023
+          },
+          "App.getTransactionRewardEstimate": {
+            "count": 4166,
+            "ms": 1.699999988079071,
+            "max": 0.10000000894069672
+          },
+          "App._ledgerFlows": {
+            "count": 1,
+            "ms": 3.9000000059604645,
+            "max": 3.9000000059604645
+          },
+          "Storage.saveAll": {
+            "count": 1,
+            "ms": 5,
+            "max": 5
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 0,
+        "dom": 4336,
+        "rows": 417
+      },
+      {
+        "name": "finance",
+        "duration": 1157.800000011921,
+        "calls": {
+          "Calc.getPreviousMonth": {
+            "count": 25,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonths": {
+            "count": 13,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.isPostedTx": {
+            "count": 74631,
+            "ms": 19.90000008046627,
+            "max": 0.29999999701976776
+          },
+          "Calc.getMonthlyTransactions": {
+            "count": 168,
+            "ms": 46.09999996423721,
+            "max": 1.0999999940395355
+          },
+          "Calc.getExpenseLedgerAmount": {
+            "count": 81130,
+            "ms": 12.699999988079071,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonthlyIncomeExpense": {
+            "count": 108,
+            "ms": 40.79999999701977,
+            "max": 1.2000000029802322
+          },
+          "Calc.getCategoryBreakdown": {
+            "count": 48,
+            "ms": 25.5,
+            "max": 1.6000000089406967
+          },
+          "Calc.getMerchantBreakdown": {
+            "count": 12,
+            "ms": 4.5,
+            "max": 0.5
+          },
+          "Calc.getBudgetProgress": {
+            "count": 12,
+            "ms": 4.000000014901161,
+            "max": 0.4000000059604645
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 12,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getUpcomingReservedTotal": {
+            "count": 12,
+            "ms": 0,
+            "max": 0
+          },
+          "App.getTransactionRewardEstimate": {
+            "count": 399936,
+            "ms": 114.29999980330467,
+            "max": 0.20000000298023224
+          },
+          "CC.buildCardBillingState": {
+            "count": 120,
+            "ms": 533.5,
+            "max": 7.4000000059604645
+          },
+          "App.getCreditCardBillingState": {
+            "count": 120,
+            "ms": 533.9000000059605,
+            "max": 7.4000000059604645
+          },
+          "CC.getCardStatement": {
+            "count": 60,
+            "ms": 262.4000000208616,
+            "max": 5.5999999940395355
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 60,
+            "ms": 261.0999999642372,
+            "max": 5.0999999940395355
+          },
+          "Calc.getDaysUntilDate": {
+            "count": 60,
+            "ms": 0.29999999701976776,
+            "max": 0.10000000894069672
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 60,
+            "ms": 261.899999961257,
+            "max": 5.0999999940395355
+          },
+          "Calc.getCreditLiabilitySummary": {
+            "count": 12,
+            "ms": 794.4000000357628,
+            "max": 77.90000000596046
+          },
+          "App.rebuildFinanceFeaturesIfNeeded": {
+            "count": 1,
+            "ms": 1157.7000000029802,
+            "max": 1157.7000000029802
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 1,
+        "dom": 4336,
+        "rows": 417
+      },
+      {
+        "name": "quiet-dashboard",
+        "duration": 132.69999998807907,
+        "calls": {
+          "Calc.isPostedTx": {
+            "count": 11676,
+            "ms": 3.5,
+            "max": 0.10000000894069672
+          },
+          "Calc.getExpenseLedgerAmount": {
+            "count": 11058,
+            "ms": 2.0000000596046448,
+            "max": 0.10000000894069672
+          },
+          "Calc.getMonthlyTransactions": {
+            "count": 16,
+            "ms": 4.299999997019768,
+            "max": 0.4000000059604645
+          },
+          "Calc.getMonthlyIncomeExpense": {
+            "count": 11,
+            "ms": 4.0999999940395355,
+            "max": 0.5
+          },
+          "Calc.getMonthlyStats": {
+            "count": 2,
+            "ms": 1.800000011920929,
+            "max": 1
+          },
+          "Calc.getPendingUpcomingBills": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getUpcomingReservedTotal": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getBudgetProgress": {
+            "count": 7,
+            "ms": 2.7000000327825546,
+            "max": 0.4000000059604645
+          },
+          "App.getTransactionRewardEstimate": {
+            "count": 33328,
+            "ms": 12.800000056624413,
+            "max": 0.20000000298023224
+          },
+          "CC.buildCardBillingState": {
+            "count": 10,
+            "ms": 50.19999998807907,
+            "max": 6.5
+          },
+          "App.getCreditCardBillingState": {
+            "count": 10,
+            "ms": 50.19999998807907,
+            "max": 6.5
+          },
+          "Calc.getMonths": {
+            "count": 4,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.monthLabel": {
+            "count": 8,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getPreviousMonth": {
+            "count": 3,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getCategoryBreakdown": {
+            "count": 1,
+            "ms": 0.5,
+            "max": 0.5
+          },
+          "Calc.fmt": {
+            "count": 39,
+            "ms": 0.5999999940395355,
+            "max": 0.19999998807907104
+          },
+          "Calc.todayLocalISO": {
+            "count": 1,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getWeeklyNetSeries": {
+            "count": 1,
+            "ms": 1.5,
+            "max": 1.5
+          },
+          "CC.getCardStatement": {
+            "count": 5,
+            "ms": 21.5,
+            "max": 4.399999991059303
+          },
+          "CC.getNextPayableDueInfo": {
+            "count": 5,
+            "ms": 21.5,
+            "max": 4.399999991059303
+          },
+          "Calc.getDaysUntilDate": {
+            "count": 5,
+            "ms": 0,
+            "max": 0
+          },
+          "App.getCreditCardDueInfo": {
+            "count": 5,
+            "ms": 21.5,
+            "max": 4.399999991059303
+          },
+          "Calc.getMerchantBreakdown": {
+            "count": 4,
+            "ms": 1.7000000029802322,
+            "max": 0.5
+          },
+          "Calc.fmtNum": {
+            "count": 4,
+            "ms": 0.10000000894069672,
+            "max": 0.10000000894069672
+          },
+          "App.renderDashboard": {
+            "count": 1,
+            "ms": 110.20000000298023,
+            "max": 110.20000000298023
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 0,
+        "dom": 4335,
+        "rows": 417
+      },
+      {
+        "name": "quiet-transactions",
+        "duration": 1817.6000000089407,
+        "calls": {
+          "Calc.getMonths": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.getExpenseLedgerAmount": {
+            "count": 834,
+            "ms": 0.3999999910593033,
+            "max": 0.10000000894069672
+          },
+          "Calc.monthLabel": {
+            "count": 6,
+            "ms": 0,
+            "max": 0
+          },
+          "Calc.fmt": {
+            "count": 423,
+            "ms": 13.299999997019768,
+            "max": 0.20000000298023224
+          },
+          "Calc.labelDate": {
+            "count": 2,
+            "ms": 0,
+            "max": 0
+          },
+          "App.renderTransactionsList": {
+            "count": 1,
+            "ms": 957.2000000029802,
+            "max": 957.2000000029802
+          }
+        },
+        "long": [],
+        "observerMs": 0,
+        "observerCalls": 0,
+        "dom": 4333,
+        "rows": 417
+      }
+    ]
+  }
+]

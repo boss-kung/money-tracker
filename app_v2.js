@@ -794,8 +794,7 @@ window.__mountUpcomingBillsFeature = function() {
 
   try { ensureUpcomingBillsState() } catch (_) {}
   try { ensureUpcomingBillsStorageKey() } catch (_) {}
-  try { if (S.page === 'dashboard') App.renderDashboard?.() } catch (_) {}
-  try { if (S.page === 'wallets') App.renderWallets?.() } catch (_) {}
+  try { if (S.page === 'dashboard' || S.page === 'wallets') App.requestRender?.('upcoming-bills-ready') } catch (_) {}
 }
 
 /* ============================================================
@@ -939,6 +938,11 @@ let S = {
 
 let MT_STORAGE_HYDRATED = false
 let MT_STATE_COMMIT = null
+const MT_DERIVED_MEMO = window.MTDerivedRuntime?.createMemoStore?.({ readEpoch:() => getTODAY() }) || {
+  memoize(_namespace, _key, compute) { return compute() },
+  invalidate() { return 0 },
+  revision() { return 0 },
+}
 
 function getStateCommit() {
   if (MT_STATE_COMMIT) return MT_STATE_COMMIT
@@ -965,6 +969,7 @@ function persist(reason = 'app') {
     console.warn('[Money Tracker] persist skipped before storage hydration')
     return false
   }
+  if (typeof MT_DERIVED_MEMO !== 'undefined') MT_DERIVED_MEMO.invalidate(reason)
   const previousBillingWallets = S.wallets
   if (typeof CreditCardCycles !== 'undefined') S.wallets = CreditCardCycles.prepareBillingMigration({ wallets:S.wallets, transactions:S.transactions, refDate:getTODAY() }).wallets
   const stateCommit = getStateCommit()
@@ -974,6 +979,8 @@ function persist(reason = 'app') {
   const ok = result.ok === true
   if (!ok) {
     S.wallets = previousBillingWallets
+    // Commit preparation may populate caches before storage rejects the write.
+    if (typeof MT_DERIVED_MEMO !== 'undefined') MT_DERIVED_MEMO.invalidate('commit-rollback')
     if (result.error) console.error('[Money Tracker] state commit failed:', result.error)
     try { toast('บันทึกไม่สำเร็จ — แนะนำสำรองข้อมูลก่อนลองใหม่', 'error') } catch (_) {}
   }
@@ -1549,6 +1556,26 @@ const App = {
   },
 }
 
+let MT_FIRST_RENDER_DONE = false
+const MT_RENDER_COORDINATOR = window.MTDerivedRuntime?.createRenderCoordinator?.({
+  schedule: callback => requestAnimationFrame(callback),
+  render: reasons => {
+    if (!MT_STORAGE_HYDRATED) return
+    const renderStart = performance.now()
+    App.showPage(S.page)
+    if (MT_FIRST_RENDER_DONE) return
+    MT_FIRST_RENDER_DONE = true
+    window.MTBoot?.mark?.('app.firstRender.done', {
+      page: S.page,
+      reasons,
+      duration: Math.round((performance.now() - renderStart) * 10) / 10,
+    })
+    requestAnimationFrame(() => requestAnimationFrame(() => requestHideBootScreen('first-render')))
+  },
+}) || { request() { if (MT_STORAGE_HYDRATED) App.showPage(S.page) } }
+App.requestRender = reason => MT_RENDER_COORDINATOR.request(reason)
+App.invalidateDerivedState = reason => MT_DERIVED_MEMO.invalidate(reason)
+
 /* ============================================================
    Core Calculation Overrides
    Shared Calc/App helpers required before later feature blocks
@@ -2021,11 +2048,9 @@ function init() {
     try { App.showPage(next.page) } finally { App._suppressHashRoute = false }
   }, { passive: true })
 
-  // Initial render
-  const renderStart = performance.now()
-  App.showPage(S.page)
-  window.MTBoot?.mark?.('app.firstRender.done', { page: S.page, duration: Math.round((performance.now() - renderStart) * 10) / 10 })
-  requestAnimationFrame(() => requestAnimationFrame(() => requestHideBootScreen('first-render')))
+  // Initial render is deferred so feature modules loaded later in this file can
+  // register their adapters without rebuilding the same screen repeatedly.
+  App.requestRender('initial')
 
   // If opened via notification with an open= param (e.g. #more?open=upcomingBills),
   // trigger the sub-screen after the initial render completes.
@@ -2189,7 +2214,7 @@ App.pickEmoji=(p,e)=>{
   if (preview) preview.textContent = e
   App.toggleEmojiPanel(p)
 };
-App.render();
+App.requestRender('core-finance-ready');
 })();
 
 /* Wallet drilldown + investment valuation */
@@ -2367,7 +2392,7 @@ App.render();
     })
   }
 
-  App.render()
+  App.requestRender('transaction-list-ready')
 })();
 
 /* ============================================================
@@ -2586,7 +2611,7 @@ App.render();
       </div>`
   }
 
-  App.render()
+  App.requestRender('transaction-detail-ready')
 })();
 
 /* ============================================================
@@ -2815,7 +2840,7 @@ App.render();
     App.openOverlay('overlay-add-tx')
   }
 
-  App.render()
+  App.requestRender('add-transaction-ready')
 })();
 
 /* ============================================================
@@ -2985,7 +3010,7 @@ App.render();
   }
 
   // Re-render current page so patched wallet cards are applied immediately.
-  try { App.render() } catch (_) {}
+  try { App.requestRender?.('budget-editor-ready') } catch (_) {}
 })();
 
 /* ============================================================
@@ -3560,7 +3585,7 @@ App.render();
     return insights.slice(0, 6)
   }
 
-  try { if (S.page === 'transactions') App.renderTransactions(); else App.render?.() } catch (_) {}
+  try { App.requestRender?.('financial-insights-ready') } catch (_) {}
 })();
 
 /* ============================================================
@@ -3686,7 +3711,7 @@ App.render();
     priceBox.innerHTML = `<div><strong>ราคาจริง</strong><span>${esc(marketSourceLabel(type))}${unitPrice ? ` · ${fmt(unitPrice)}/${esc(assetUnitLabel(type))}` : ' · ยังไม่อัปเดต'}</span></div><a href="${esc(marketUrlFor(type, w))}" target="_blank" rel="noopener noreferrer">เปิดดูราคา ↗</a>`
   }
 
-  try { App.render?.() } catch (_) {}
+  try { App.requestRender?.('investment-pricing-ready') } catch (_) {}
 })()
 
 /* ============================================================
@@ -4645,8 +4670,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   // Apply to current page immediately
-  try { if (S.page === 'dashboard') App.renderDashboard() } catch (_) {}
-  try { if (S.page === 'more') App.renderMore() } catch (_) {}
+  try { if (S.page === 'dashboard' || S.page === 'more') App.requestRender?.('monthly-summary-ready') } catch (_) {}
 
 })();
 
@@ -4770,8 +4794,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   // Apply immediately
-  try { if (S.page === 'wallets') App.renderWallets() } catch (_) {}
-  try { if (S.page === 'reports') App.renderReports() } catch (_) {}
+  try { if (S.page === 'wallets' || S.page === 'reports') App.requestRender?.('wallet-report-polish-ready') } catch (_) {}
 
 })();
 
@@ -4854,7 +4877,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
   // ── 6. Wallet monthly spend summary ──────────────────────────
 
-  try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
+  try { if (S.page === 'transactions') App.requestRender?.('transaction-tools-ready') } catch (_) {}
 })();
 
 /* ============================================================
@@ -5072,8 +5095,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     }, () => persist())
   }
 
-  try { if (S.page === 'more')         App.renderMore()         } catch (_) {}
-  try { if (S.page === 'transactions') App.renderTransactions()  } catch (_) {}
+  try { if (S.page === 'more' || S.page === 'transactions') App.requestRender?.('merchant-tools-ready') } catch (_) {}
 })();
 
 // ── v32: Custom merchant picker (replaces unreliable <datalist>) ─────────────
@@ -5245,6 +5267,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App.recalculateWalletBalances = function({ save = false, recordSnapshot = false } = {}) {
+    App.invalidateDerivedState?.('ledger-reconciliation')
     ensureV4State()
     const issues = App._validateLedgerIntegrity()
     if (issues.length > 0) console.warn('[MoneyTracker] ledger integrity issues found:', issues)
@@ -5326,6 +5349,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App.refreshTransactionRewardEstimates = function(options = {}) {
+    App.invalidateDerivedState?.('reward-refresh')
     const save = options?.save === true
     const txs = Array.isArray(S.transactions) ? S.transactions : []
     let changed = 0
@@ -5337,6 +5361,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       const after = tx?.rewardEstimate ? JSON.stringify(tx.rewardEstimate) : ''
       if (before !== after) changed += 1
     })
+    App.invalidateDerivedState?.('reward-refresh-complete')
     if (save) {
       try { persist() } catch (_) {}
     }
@@ -6025,7 +6050,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   try { persist() } catch (_) {}
-  try { App.render() } catch (_) {}
+  try { App.requestRender?.('storage-meta-ready') } catch (_) {}
   try { App.maybeShowBackupReminder() } catch (_) {}
 })();
 
@@ -6961,9 +6986,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (changed) App._renderAddTxDetail?.()
   }
 
-  try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
-  try { if (S.page === 'reports') App.renderReports() } catch (_) {}
-  try { if (S.page === 'more') App.renderMore() } catch (_) {}
+  try { if (['transactions', 'reports', 'more'].includes(S.page)) App.requestRender?.('suggestions-ready') } catch (_) {}
 })();
 
 /* ============================================================
@@ -7297,8 +7320,7 @@ App._pickMerchant = function(name, opts = {}) {
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>ศูนย์ผ่อนชำระ</h2></div><div class="sub-scroll installment-compact-screen">${groups.length ? `<div class="compact-card-list">${groups.map(g => { const w = walletById(g.walletId); const next = g.next; return `<div class="installment-compact-row installment-compact-row-edit"><div class="icr-main"><b>${esc(g.merchant)}</b><span style="text-wrap: auto;">${esc(w?.name || '')}${next ? ` · งวด ${next.installmentNo}/${next.installmentMonths} · ${thaiDateShort(next.date)}` : ' · ครบแล้ว'}</span></div><div class="icr-amount"><strong>${money(g.remaining || 0)}</strong><span>เหลือ</span></div><button class="icon-btn" onclick="App.openEditInstallmentGroup('${esc(g.id)}','${esc(cardId)}')">✏️</button><button class="icon-btn icon-btn-danger" onclick="App.deleteInstallmentGroup('${esc(g.id)}')">🗑</button></div>` }).join('')}</div>` : App._emptyState('🧾','ยังไม่มีรายการผ่อน','เพิ่มรายการจ่ายแล้วเลือก “ผ่อนชำระ”')}</div>`)
   }
 
-  try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
-  try { if (S.page === 'reports') App.renderReports() } catch (_) {}
+  try { if (S.page === 'transactions' || S.page === 'reports') App.requestRender?.('installments-ready') } catch (_) {}
 })();
 
 /* ============================================================
@@ -11670,7 +11692,7 @@ App._pickMerchant = function(name, opts = {}) {
 
   // ── Apply ──────────────────────────────────────────────────
   try { persist() } catch (_) {}
-  try { App.render?.() } catch (_) {}
+  try { App.requestRender?.('credit-limits-ready') } catch (_) {}
 })();
 
 /* ============================================================
@@ -11731,7 +11753,7 @@ App._pickMerchant = function(name, opts = {}) {
   }, { passive: true })
 
   // ── Apply ─────────────────────────────────────────────────────────────────
-  try { App.render?.() } catch(_) {}
+  try { App.requestRender?.('add-transaction-hotfix-ready') } catch(_) {}
 })();
 
 /* ============================================================
@@ -15193,7 +15215,13 @@ App._pickMerchant = function(name, opts = {}) {
       .sort((a, b) => Number(b.suggested) - Number(a.suggested) || Number(b.suggestionScore || 0) - Number(a.suggestionScore || 0) || String(a.name || '').localeCompare(String(b.name || '')))
   }
 
-  App.getRuleCycleUsage = function(ruleId, cardId, cycleStart, cycleEnd, excludeTxId = '', trackChannels = [], txMerchant = '', txChannel = '', rule = null, refDate = '') {
+  App.getRuleCycleUsage = function(ruleId, cardId, cycleStart, cycleEnd, excludeTxId = '', trackChannels = [], txMerchant = '', txChannel = '', rule = null, refDate = '', skipMemo = false) {
+    if (!skipMemo) {
+      const memoKey = JSON.stringify([ruleId, cardId, cycleStart, cycleEnd, excludeTxId, trackChannels, txMerchant, txChannel, refDate, rule])
+      return MT_DERIVED_MEMO.memoize('rule-cycle-usage', memoKey, () =>
+        App.getRuleCycleUsage(ruleId, cardId, cycleStart, cycleEnd, excludeTxId, trackChannels, txMerchant, txChannel, rule, refDate, true)
+      )
+    }
     let eligibleSpendUsed = 0
     let cashbackUsed = 0
     let discountUsed = 0
@@ -16005,7 +16033,11 @@ App._pickMerchant = function(name, opts = {}) {
     }
   }
 
-  App.getTransactionRewardEstimate = function(tx = {}) {
+  App.getTransactionRewardEstimate = function(tx = {}, skipMemo = false) {
+    if (!skipMemo) {
+      const memoKey = JSON.stringify(tx)
+      return MT_DERIVED_MEMO.memoize('transaction-reward', memoKey, () => App.getTransactionRewardEstimate(tx, true))
+    }
     if (Array.isArray(tx?.rewardRuleIds) && tx.rewardRuleIds.length && App.calculateSelectedRewardEstimate) {
       const live = App.calculateSelectedRewardEstimate({ ...tx, amount: benefitCalculationAmount(tx) }, tx.rewardRuleIds)
       if (live) return live
@@ -16083,8 +16115,12 @@ App._pickMerchant = function(name, opts = {}) {
     return false
   }
 
-  App.getCreditCardBillingState = function(card, refDate = today()) {
-    return CreditCardCycles.buildCardBillingState(App._creditCycleOptions(card,refDate))
+  App.getCreditCardBillingState = function(card, refDate = today(), count = 6) {
+    if (!card || typeof CreditCardCycles === 'undefined') return null
+    const memoKey = JSON.stringify([refDate, card, count])
+    return MT_DERIVED_MEMO.memoize('credit-card-billing', memoKey, () =>
+      CreditCardCycles.buildCardBillingState({ ...App._creditCycleOptions(card,refDate), count })
+    )
   }
   App.getCreditCardPayableStatements = function(card, refDate = today()) {
     return App.getCreditCardBillingState(card,refDate).payableStatements
@@ -16098,7 +16134,8 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.getCreditCardDueInfo = function(card, refDate = today()) {
     if (!card || typeof CreditCardCycles === 'undefined') return null
-    const info = CreditCardCycles.getNextPayableDueInfo(App._creditCycleOptions(card, refDate))
+    const statement = App.getCreditCardBillingState(card, refDate)?.payableStatements?.[0]
+    const info = statement ? { daysLeft:statement.daysLeft, dueStr:statement.dueDate, dateStr:statement.dueDate, statementId:statement.id, amount:statement.balanceDue, statement } : null
     if (!info?.dateStr || typeof Calc?.getDaysUntilDate !== 'function') return info
     return { ...info, ...Calc.getDaysUntilDate(info.dateStr, refDate), statementId: info.statementId, amount: info.amount, statement: info.statement }
   }
@@ -16106,7 +16143,8 @@ App._pickMerchant = function(name, opts = {}) {
   App.getCardStatement = function(cardId, refDate = today()) {
     const card = walletById(cardId)
     if (!card || typeof CreditCardCycles === 'undefined') return null
-    return CreditCardCycles.getCardStatement(App._creditCycleOptions(card, refDate))
+    const period = CreditCardCycles.getStatementPeriod(card, refDate, { includeOpen:false })
+    return period ? App.getCreditCardBillingState(card, refDate)?.statements?.find(row => row.end === period.end) || null : null
   }
 
   App._getCCDetailCycleOffset = function(cardId) {
@@ -16130,11 +16168,11 @@ App._pickMerchant = function(name, opts = {}) {
 
   App._getCCDetailStatementAtOffset = function(card, offset = 0) {
     if (!card || typeof CreditCardCycles === 'undefined') return null
-    const rows = CreditCardCycles.getStatementHistory({
-      ...App._creditCycleOptions(card, today()),
-      count: Math.max(6, Number(offset || 0) + 2),
-      includeOpen: true,
-    })
+    const refDate = today()
+    const period = CreditCardCycles.getStatementPeriod(card, refDate, { includeOpen:true })
+    const rows = period
+      ? (App.getCreditCardBillingState(card, refDate, Math.max(6, Number(offset || 0) + 2))?.statements || []).filter(row => row.end <= period.end).slice(0, Math.max(6, Number(offset || 0) + 2))
+      : []
     return rows[Math.max(0, Number(offset || 0))] || null
   }
 
@@ -17029,10 +17067,7 @@ App._pickMerchant = function(name, opts = {}) {
   setTimeout(() => {
     try { App.maybeAutoSyncCryptoPrices?.('startup') } catch (_) {}
   }, 1200)
-  try {
-    if (S.page === 'dashboard') App.renderDashboard?.()
-    else if (S.page === 'wallets') App.renderWallets?.()
-  } catch (_) {}
+  try { if (S.page === 'dashboard' || S.page === 'wallets') App.requestRender?.('credit-card-state-ready') } catch (_) {}
   persist()
 })()
 
@@ -17514,9 +17549,7 @@ App._pickMerchant = function(name, opts = {}) {
   // ════════════════════════════════════════════════════════════
   // Re-render current page if already visible
   // ════════════════════════════════════════════════════════════
-  try { if (S.page === 'dashboard')     App.renderDashboard?.()     } catch (_) {}
-  try { if (S.page === 'transactions')  App.renderTransactions?.()  } catch (_) {}
-  try { if (S.page === 'reports')       App.renderReports?.()       } catch (_) {}
+  try { if (['dashboard', 'transactions', 'reports'].includes(S.page)) App.requestRender?.('mobile-ux-ready') } catch (_) {}
 
 })()
 
@@ -18536,8 +18569,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   ensurePrivilegesState()
   ensurePrivilegesStorageKey()
-  try { if (S.page === 'dashboard') App.renderDashboard?.() } catch (_) {}
-  try { if (S.page === 'more') App.renderMore?.() } catch (_) {}
+  try { if (S.page === 'dashboard' || S.page === 'more') App.requestRender?.('privileges-ready') } catch (_) {}
 })()
 
 /* ============================================================
@@ -18822,8 +18854,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // ── Apply ─────────────────────────────────────────────────
-  try { if (S.page === 'more')    App.renderMore()    } catch(_) {}
-  try { if (S.page === 'reports') App.renderReports() } catch(_) {}
+  try { if (S.page === 'more' || S.page === 'reports') App.requestRender?.('feature-pack-ready') } catch(_) {}
 })()
 
 /* ============================================================
@@ -19160,8 +19191,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   })
 
   // ── Init ─────────────────────────────────────────────────
-  try { if (S.page === 'dashboard') App.renderDashboard?.() } catch(_) {}
-  try { if (S.page === 'reports')   App.renderReports?.()   } catch(_) {}
+  try { if (S.page === 'dashboard' || S.page === 'reports') App.requestRender?.('insight-engine-ready') } catch(_) {}
 })()
 
 /* ============================================================
@@ -20503,11 +20533,14 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   App.openFeatureHistory = function() {
-    let store = FinanceIntelligence.loadFeatureStore()
+    const store = FinanceIntelligence.loadFeatureStore()
+    App._renderFeatureHistory(store, !store.rows?.length)
     if (!store.rows?.length) {
-      App.rebuildFinanceFeaturesIfNeeded?.({ reason: 'feature-history', force: true, forceFull: true })
-      store = FinanceIntelligence.loadFeatureStore()
+      App.rebuildFinanceFeaturesIfNeeded({ reason: 'feature-history', force: true, forceFull: true })
     }
+  }
+
+  App._renderFeatureHistory = function(store, loading = false) {
     const trendRows = store.rows.slice(0, 6)
     const recent3 = trendRows.slice(0, 3)
     const older3 = trendRows.slice(3)
@@ -20523,8 +20556,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
         <h2>ประวัติย้อนหลัง</h2>
       </div>
-      <div class="sub-scroll" style="padding:16px 16px 40px">
-        ${App._financeScreenIntro('เทรนด์รายจ่าย', store.rows.length ? `มีข้อมูล ${store.rows.length} เดือน` : 'ยังไม่มีข้อมูลย้อนหลัง', false, { icon:'📈', tone: store.rows.length ? 'info' : 'warn' })}
+      <div id="finance-feature-history" class="sub-scroll" aria-busy="${loading}" style="padding:16px 16px 40px">
+        ${App._financeScreenIntro('เทรนด์รายจ่าย', loading ? 'กำลังเตรียมข้อมูลย้อนหลัง...' : store.rows.length ? `มีข้อมูล ${store.rows.length} เดือน` : 'ยังไม่มีข้อมูลย้อนหลัง', false, { icon:'📈', tone: store.rows.length ? 'info' : 'warn' })}
         <div class="card card-pad">
           ${store.rows.length ? `
             <div style="font-size:13px;font-weight:600;margin-bottom:10px">${trendText}</div>
@@ -20532,7 +20565,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
               ${App._financeSparkBars(store.rows.slice().reverse(), r => r.metrics?.expense, { color:'var(--expense)', labelFn:r => mlbl(r.month) })}
             </div>
             <div style="font-size:12px;color:var(--muted);margin-top:8px">แท่งสูง = รายจ่ายสูง · ✦ คือมีเหตุการณ์พิเศษ</div>
-          ` : App._financeEmptyVisual('📈', 'ยังไม่มีแนวโน้ม', 'ใช้งานต่ออีกสักระยะ แล้วระบบจะวาดภาพย้อนหลังให้')}
+          ` : loading ? '<div class="list-item-sub" role="status">กำลังเตรียมข้อมูลย้อนหลัง...</div>' : App._financeEmptyVisual('📈', 'ยังไม่มีแนวโน้ม', 'ใช้งานต่ออีกสักระยะ แล้วระบบจะวาดภาพย้อนหลังให้')}
         </div>
         ${App._financeJourneyLinks([
           ['ถามได้เลย','App.openAskMyMoney()'],
@@ -21157,7 +21190,20 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return typeof now === 'function' ? now() : new Date().toISOString().slice(0, 7)
   }
 
-  App.rebuildFinanceFeaturesIfNeeded = function(opts = {}) {
+  let financeDataRevision = 0
+  let financeRebuildGeneration = 0
+  let financeBriefGeneration = 0
+
+  function mergeFinanceRebuildOptions(previous, next) {
+    return {
+      ...previous, ...next,
+      force: Boolean(previous?.force || next?.force),
+      forceFull: Boolean(previous?.forceFull || next?.forceFull),
+      months: [...new Set([...(previous?.months || []), ...(next?.months || [])])],
+    }
+  }
+
+  App.rebuildFinanceFeaturesIfNeeded = async function(opts = {}) {
     if (window.MT_DEBUG_FLAGS?.noFinanceRebuild) {
       financeMark('rebuild.skip', { reason: 'flag' })
       return []
@@ -21165,45 +21211,102 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const force = Boolean(opts.force)
     const months = Array.isArray(opts.months) ? opts.months : []
     const started = performance.now()
+    const revision = financeDataRevision
+    const generation = ++financeRebuildGeneration
+    const month = currentFinanceMonth()
+    const shouldCancel = () => revision !== financeDataRevision || generation !== financeRebuildGeneration
+      || document.visibilityState !== 'visible' || month !== currentFinanceMonth()
+    App._financeActiveRebuild = opts
     try {
-      if (!force && FinanceIntelligence.isFeatureStoreFresh?.(S, { requiredMonths: [currentFinanceMonth(), Calc.getPreviousMonth?.(currentFinanceMonth())].filter(Boolean) })) {
-        financeMark('rebuild.skip', { reason: 'fresh' })
-        return FinanceIntelligence.loadFeatureStore?.().rows || []
-      }
-      const rows = FinanceIntelligence.rebuildFeatureStoreIncremental
-        ? FinanceIntelligence.rebuildFeatureStoreIncremental(S, { force, forceFull: Boolean(opts.forceFull), months, monthsBack: 12 })
-        : FinanceIntelligence.rebuildFeatureStore(S, 12)
+      if (shouldCancel()) return []
+      const rows = await FinanceIntelligence.rebuildFeatureStoreIncrementalAsync(S, {
+        force, forceFull: Boolean(opts.forceFull), months, monthsBack: 12, shouldCancel,
+      })
+      if (shouldCancel()) return []
+      // An initial history request can be superseded by a commit or suspended
+      // while hidden. Its replacement must finish the same visible screen.
+      const history = document.getElementById('finance-feature-history')
+      if (history?.getAttribute?.('aria-busy') === 'true') App._renderFeatureHistory?.({ rows }, false)
       financeMark('rebuild.done', { reason: opts.reason || '', rows: rows?.length || 0, duration: Math.round((performance.now() - started) * 10) / 10 })
       return rows
     } catch (err) {
+      if (err?.name === 'AbortError') {
+        financeMark('rebuild.cancel', { reason: opts.reason || '' })
+        return []
+      }
       financeMark('rebuild.error', { message: err?.message || String(err || '') })
+      const history = document.getElementById('finance-feature-history')
+      if (!shouldCancel() && history?.getAttribute?.('aria-busy') === 'true') {
+        App._renderFeatureHistory?.(FinanceIntelligence.loadFeatureStore(), false)
+      }
       return []
+    } finally {
+      if (generation === financeRebuildGeneration) App._financeActiveRebuild = null
     }
   }
 
   App.scheduleFinanceFeatureRebuild = function(opts = {}) {
+    // A save can edit an existing row without changing transaction count.
+    financeDataRevision += 1
+    financeRebuildGeneration += 1
+    financeBriefGeneration += 1
+    App._financeBriefCache = null
+    const isDataChange = opts.reason && opts.reason !== 'boot' && opts.reason !== 'resume'
+    const requested = {
+      ...opts,
+      force: Boolean(opts.force || isDataChange),
+      months: opts.months || (isDataChange ? Calc.getMonths?.(12) || [] : []),
+    }
+    App._financePendingRebuild = mergeFinanceRebuildOptions(
+      mergeFinanceRebuildOptions(App._financePendingRebuild, App._financeActiveRebuild), requested,
+    )
+    App._financeActiveRebuild = null
     if (window.MT_DEBUG_FLAGS?.noFinanceRebuild) {
       financeMark('rebuild.schedule.skip', { reason: 'flag' })
       return
     }
     clearTimeout(App._financeFeatureRebuildTimer)
+    const generation = financeRebuildGeneration
     const delay = Number(opts.delayMs ?? (opts.reason === 'boot' ? 7000 : 1200))
     financeMark('rebuild.schedule', { reason: opts.reason || '', delay })
     App._financeFeatureRebuildTimer = setTimeout(() => {
+      if (generation !== financeRebuildGeneration) return
       if (document.visibilityState !== 'visible') {
         financeMark('rebuild.skip', { reason: 'hidden' })
         return
       }
-      runWhenIdle(() => App.rebuildFinanceFeaturesIfNeeded(opts), 8000)
+      runWhenIdle(() => {
+        if (generation !== financeRebuildGeneration || document.visibilityState !== 'visible') return
+        const pending = App._financePendingRebuild
+        App._financePendingRebuild = null
+        App.rebuildFinanceFeaturesIfNeeded(pending || requested)
+      }, 8000)
     }, delay)
   }
 
-  function computeFinanceBriefCached() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') {
+      financeRebuildGeneration += 1
+      financeBriefGeneration += 1
+      if (App._financeActiveRebuild) {
+        App._financePendingRebuild = mergeFinanceRebuildOptions(App._financePendingRebuild, App._financeActiveRebuild)
+        App._financeActiveRebuild = null
+      }
+      return
+    }
+    if (App._financePendingRebuild) App.scheduleFinanceFeatureRebuild({ reason:'resume', delayMs:0 })
+    if (document.getElementById('finance-summary-row')) App.scheduleFinanceBriefRefresh('resume')
+  }, { passive:true })
+
+  async function computeFinanceBriefCached(shouldCancel) {
     const started = performance.now()
-    const ctx = FinanceIntelligence.buildContext(S)
+    const ctx = await FinanceIntelligence.buildContextAsync(S, { shouldCancel })
+    if (shouldCancel()) return null
     const brief = FinanceIntelligence.proactiveBrief(ctx)
+    if (shouldCancel()) return null
     App._financeBriefCache = {
       month: currentFinanceMonth(),
+      revision: financeDataRevision,
       sourceSize: (S.transactions || []).length,
       brief,
       at: Date.now(),
@@ -21214,17 +21317,30 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   App.getCachedFinanceBrief = function() {
     const cache = App._financeBriefCache
-    if (cache && cache.month === currentFinanceMonth() && cache.sourceSize === (S.transactions || []).length) return cache.brief
+    if (cache && cache.revision === financeDataRevision && cache.month === currentFinanceMonth() && cache.sourceSize === (S.transactions || []).length) return cache.brief
     return null
   }
 
   App.scheduleFinanceBriefRefresh = function(reason = 'more-render') {
     clearTimeout(App._financeBriefTimer)
+    const generation = ++financeBriefGeneration
+    const revision = financeDataRevision
+    const month = currentFinanceMonth()
+    const shouldCancel = () => generation !== financeBriefGeneration || revision !== financeDataRevision
+      || document.visibilityState !== 'visible' || month !== currentFinanceMonth()
     financeMark('brief.schedule', { reason })
     App._financeBriefTimer = setTimeout(() => {
-      if (document.visibilityState !== 'visible') return financeMark('brief.skip', { reason: 'hidden' })
-      runWhenIdle(() => {
-        const brief = computeFinanceBriefCached()
+      if (shouldCancel()) return financeMark('brief.skip', { reason: 'cancelled' })
+      runWhenIdle(async () => {
+        if (shouldCancel()) return
+        let brief
+        try {
+          brief = await computeFinanceBriefCached(shouldCancel)
+        } catch (err) {
+          if (err?.name !== 'AbortError') financeMark('brief.error', { message:err?.message || String(err) })
+          return
+        }
+        if (!brief || shouldCancel()) return
         const row = document.getElementById('finance-summary-row')
         if (!row) return
         const value = row.querySelector('.s-value')
@@ -21326,7 +21442,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   })
 
   // ── Init ─────────────────────────────────────────────────────
-  try { if (S.page === 'more') App.renderMore?.() } catch(_) {}
+  try { if (S.page === 'more') App.requestRender?.('more-tools-ready') } catch(_) {}
 })()
 
 /* ================================================================
@@ -23280,7 +23396,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
   }
 
-  try { if (S.page === 'reports') App.renderReports() } catch (_) {}
+  try { if (S.page === 'reports') App.requestRender?.('report-extensions-ready') } catch (_) {}
 })()
 
 /* ============================================================
@@ -23732,9 +23848,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   document.head.appendChild(style)
 
   // ── Init ─────────────────────────────────────────────────────────────
-  try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
-  try { if (S.page === 'more') App.renderMore() } catch (_) {}
-  try { if (S.page === 'dashboard') App.renderDashboard() } catch (_) {}
+  try { if (['transactions', 'more', 'dashboard'].includes(S.page)) App.requestRender?.('responsive-polish-ready') } catch (_) {}
 })()
 
 // ── Sheet swipe-to-dismiss ──────────────────────────────────────────────────

@@ -1,0 +1,28 @@
+[
+  {
+    "at": 1304.199999988079,
+    "restoring": true,
+    "restoreError": null,
+    "requests": [
+      {
+        "path": "/auth/v1/token",
+        "hasSignal": false
+      }
+    ],
+    "body": "กำลังเชื่อมต่อบัญชี...",
+    "gated": true
+  },
+  {
+    "at": 10309.09999999404,
+    "restoring": true,
+    "restoreError": null,
+    "requests": [
+      {
+        "path": "/auth/v1/token",
+        "hasSignal": false
+      }
+    ],
+    "body": "กำลังเชื่อมต่อบัญชี...",
+    "gated": true
+  }
+]

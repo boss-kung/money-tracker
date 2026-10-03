@@ -1,0 +1,15 @@
+const fs=require('fs');const {chromium}=require('/Users/bosskung/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+(async()=>{const b=await chromium.launch({channel:'chrome',headless:true});const results=[];
+for(const rules of [false,true])for(let run=1;run<=3;run++){
+ const c=await b.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});await c.addInitScript(({rules})=>{
+ const wallets=[{id:'bank',type:'bank',name:'Test bank',openingBalance:50000,balance:50000},...Array.from({length:5},(_,i)=>({id:'c'+i,type:'credit',name:'Test '+i,creditLimit:100000,openingBalance:0,balance:0,cycleDay:25,dueAfterCycleDays:10}))];
+ const txs=Array.from({length:1000},(_,i)=>{const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-(i%6));return {id:'t'+i,type:'expense',walletId:'c'+i%5,amount:100,ledgerAmount:100,date:[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),'01'].join('-'),categoryId:'food',createdSequence:i+1,merchant:'Test',rewardRuleIds:rules?['r'+i%5]:[]}});
+ const cfg=rules?Array.from({length:5},(_,i)=>({id:'r'+i,cardId:'c'+i,name:'Cashback test',active:true,type:'cashback',cashback:{mode:'percent',rate:1},limits:{maxRewardAmountPerCycle:100}})):[];
+ for(const [key,val]of Object.entries({mt_wallets:wallets,mt_transactions:txs,mt_cc_benefit_rules:cfg,mt_cc_benefits:{},mt_categories:{expense:[{id:'food',name:'Food',icon:'🍜'}],income:[]}}))localStorage.setItem(key,JSON.stringify(val));
+ window.__long=[];new PerformanceObserver(l=>__long.push(...l.getEntries().map(e=>({start:e.startTime,duration:e.duration})))).observe({type:'longtask',buffered:true});
+ },{rules});const p=await c.newPage();const errors=[];p.on('pageerror',e=>errors.push(e.message));await p.route('**/*',r=>r.request().url().startsWith('http://127.0.0.1:8765/')?r.continue():r.abort());
+ const cdp=await c.newCDPSession(p);await cdp.send('Profiler.enable');if(rules&&run===1)await cdp.send('Profiler.start');
+ await p.goto('http://127.0.0.1:8765/index.html?nosw=1&nonoti=1&noapplock=1&noFinanceRebuild=1',{waitUntil:'load',timeout:120000});await p.waitForTimeout(1500);
+ const out=await p.evaluate(()=>({log:__mtBootLog,long:__long,txCount:S.transactions.length,ruleCount:S.ccBenefitRules.length}));if(rules&&run===1){const {profile}=await cdp.send('Profiler.stop');fs.writeFileSync('/private/tmp/mt-perf-boot.cpuprofile',JSON.stringify(profile))}
+ results.push({rules,run,errors,...out});console.log(JSON.stringify({rules,run,errors,tx:out.txCount,rulesCount:out.ruleCount,renders:out.log.filter(x=>x.name==='app.renderDashboard.start').length,completed:out.log.filter(x=>x.name==='app.renderDashboard.done').length,lastRender:out.log.filter(x=>x.name==='app.renderDashboard.done').at(-1)?.at,longest:Math.max(...out.long.map(x=>x.duration)),longTotal:out.long.reduce((s,x)=>s+x.duration,0)}));await c.close();}
+fs.writeFileSync('/private/tmp/mt-perf-boot-evidence.json',JSON.stringify(results,null,2));await b.close()})().catch(e=>{console.error(e);process.exit(1)});
