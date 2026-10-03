@@ -2183,7 +2183,6 @@ App.pickEmoji=(p,e)=>{
   if (preview) preview.textContent = e
   App.toggleEmojiPanel(p)
 };
-App.render();
 })();
 
 /* Wallet drilldown + investment valuation */
@@ -2360,8 +2359,6 @@ App.render();
       }, { passive: true })
     })
   }
-
-  App.render()
 })();
 
 /* ============================================================
@@ -2574,8 +2571,6 @@ App.render();
         ${S.deleteConfirm ? '' : `<button class="btn btn-outline tx-detail-delete" onclick="App.deleteTx()">ลบรายการ</button>`}
       </div>`
   }
-
-  App.render()
 })();
 
 /* ============================================================
@@ -2799,8 +2794,6 @@ App.render();
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
   }
-
-  App.render()
 })();
 
 /* ============================================================
@@ -2960,8 +2953,6 @@ App.render();
     toast(`บันทึกงบ${active === 'income' ? 'รายรับ' : 'รายจ่าย'}แล้ว`, 'success')
   }
 
-  // Re-render current page so patched wallet cards are applied immediately.
-  try { App.render() } catch (_) {}
 })();
 
 /* ============================================================
@@ -3470,18 +3461,7 @@ App.render();
     }
   }
 
-  try { if (S.page === 'transactions') App.renderTransactions(); else App.render?.() } catch (_) {}
 })();
-
-/* ============================================================
-   Investment pricing + gold sync
-   Presentation and market-price robustness
-   ============================================================ */
-;(function(){
-
-
-  try { App.render?.() } catch (_) {}
-})()
 
 /* ============================================================
    Aurora gold bridge
@@ -3585,7 +3565,6 @@ App.render();
     return null;
   };
 
-  try { if (S.page === 'wallets') App.renderWallets?.(); } catch (err) { console.warn('wallet rollback render failed', err); }
 })();
 
 /* ============================================================
@@ -4428,9 +4407,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
     })
   }
 
-  // Apply to current page immediately
-  try { if (S.page === 'dashboard') App.renderDashboard() } catch (_) {}
-  try { if (S.page === 'more') App.renderMore() } catch (_) {}
 
 })();
 
@@ -4546,9 +4522,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
     </div>`
   }
 
-  // Apply immediately
-  try { if (S.page === 'wallets') App.renderWallets() } catch (_) {}
-  try { if (S.page === 'reports') App.renderReports() } catch (_) {}
 
 })();
 
@@ -4622,7 +4595,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
   // ── 6. Wallet monthly spend summary ──────────────────────────
 
-  try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
 })();
 
 /* ============================================================
@@ -4839,8 +4811,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
     }, () => persist())
   }
 
-  try { if (S.page === 'more')         App.renderMore()         } catch (_) {}
-  try { if (S.page === 'transactions') App.renderTransactions()  } catch (_) {}
 })();
 
 // ── v32: Custom merchant picker (replaces unreliable <datalist>) ─────────────
@@ -4850,10 +4820,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
   // ── helpers ─────────────────────────────────────────────────
   // ── Override _renderAddTxDetail to clean up datalist/dropdown leftovers ──
 
-  // Re-apply to current render if add-tx sheet is open
-  try {
-    if (document.getElementById('tx-merchant')) App._renderAddTxDetail()
-  } catch (_) {}
 })();
 
 /* ============================================================
@@ -5787,7 +5753,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   try { persist() } catch (_) {}
-  try { App.render() } catch (_) {}
   try { App.maybeShowBackupReminder() } catch (_) {}
 })();
 
@@ -6704,9 +6669,6 @@ App._pickMerchant = function(name, opts = {}) {
     if (changed) App._renderAddTxDetail?.()
   }
 
-  try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
-  try { if (S.page === 'reports') App.renderReports() } catch (_) {}
-  try { if (S.page === 'more') App.renderMore() } catch (_) {}
 })();
 
 /* ============================================================
@@ -7033,8 +6995,6 @@ App._pickMerchant = function(name, opts = {}) {
     } else apply()
   }
 
-  try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
-  try { if (S.page === 'reports') App.renderReports() } catch (_) {}
 })();
 
 /* ============================================================
@@ -11244,7 +11204,6 @@ App._pickMerchant = function(name, opts = {}) {
 
   // ── Apply ──────────────────────────────────────────────────
   try { persist() } catch (_) {}
-  try { App.render?.() } catch (_) {}
 })();
 
 /* ============================================================
@@ -11283,9 +11242,6 @@ App._pickMerchant = function(name, opts = {}) {
       el.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
     })
   }, { passive: true })
-
-  // ── Apply ─────────────────────────────────────────────────────────────────
-  try { App.render?.() } catch(_) {}
 })();
 
 /* ============================================================
@@ -11384,12 +11340,6 @@ App._pickMerchant = function(name, opts = {}) {
   App._initRecurringLiteDefaults = initRecurringDefaults
   App._createRecurringFromDraft = createRecurringFromDraft
 
-  try {
-    if (document.getElementById('overlay-add-tx')?.classList.contains('open')) {
-      if (S.tx?.step === 'detail') App._renderAddTxDetail?.()
-      else App._renderAddTxAmount?.()
-    }
-  } catch (_) {}
 })()
 
 /* ============================================================
@@ -16528,10 +16478,6 @@ App._pickMerchant = function(name, opts = {}) {
   setTimeout(() => {
     try { App.maybeAutoSyncCryptoPrices?.('startup') } catch (_) {}
   }, 1200)
-  try {
-    if (S.page === 'dashboard') App.renderDashboard?.()
-    else if (S.page === 'wallets') App.renderWallets?.()
-  } catch (_) {}
   persist()
 })()
 
@@ -16999,13 +16945,6 @@ App._pickMerchant = function(name, opts = {}) {
   // which is correct for the payment reminder context.
   // The wallet card itself now shows totalOwed (phase 2 CC fix).
   // ════════════════════════════════════════════════════════════
-
-  // ════════════════════════════════════════════════════════════
-  // Re-render current page if already visible
-  // ════════════════════════════════════════════════════════════
-  try { if (S.page === 'dashboard')     App.renderDashboard?.()     } catch (_) {}
-  try { if (S.page === 'transactions')  App.renderTransactions?.()  } catch (_) {}
-  try { if (S.page === 'reports')       App.renderReports?.()       } catch (_) {}
 
 })()
 
@@ -18001,8 +17940,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   ensurePrivilegesState()
   ensurePrivilegesStorageKey()
-  try { if (S.page === 'dashboard') App.renderDashboard?.() } catch (_) {}
-  try { if (S.page === 'more') App.renderMore?.() } catch (_) {}
 })()
 
 /* ============================================================
@@ -18284,10 +18221,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const walletGroup = box.querySelector('#tx-wallet')?.closest('.form-group')
     walletGroup?.insertAdjacentHTML('beforebegin', widget)
   }
-
-  // ── Apply ─────────────────────────────────────────────────
-  try { if (S.page === 'more')    App.renderMore()    } catch(_) {}
-  try { if (S.page === 'reports') App.renderReports() } catch(_) {}
 })()
 
 /* ============================================================
@@ -18615,10 +18548,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   getStateCommit()?.addAfterCommit(() => {
     try { InsightEngine.invalidate() } catch (_) {}
   })
-
-  // ── Init ─────────────────────────────────────────────────
-  try { if (S.page === 'dashboard') App.renderDashboard?.() } catch(_) {}
-  try { if (S.page === 'reports')   App.renderReports?.()   } catch(_) {}
 })()
 
 /* ============================================================
@@ -20487,9 +20416,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   getStateCommit()?.addAfterCommit((_state, context) => {
     App.scheduleFinanceFeatureRebuild?.({ reason: context.reason || 'saveAll' })
   })
-
-  // ── Init ─────────────────────────────────────────────────────
-  try { if (S.page === 'more') App.renderMore?.() } catch(_) {}
 })()
 
 /* ================================================================
@@ -22407,7 +22333,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
   }
 
-  try { if (S.page === 'reports') App.renderReports() } catch (_) {}
 })()
 
 /* ============================================================
@@ -22838,11 +22763,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     }
   `
   document.head.appendChild(style)
-
-  // ── Init ─────────────────────────────────────────────────────────────
-  try { if (S.page === 'transactions') App.renderTransactions() } catch (_) {}
-  try { if (S.page === 'more') App.renderMore() } catch (_) {}
-  try { if (S.page === 'dashboard') App.renderDashboard() } catch (_) {}
 })()
 
 // ── Sheet swipe-to-dismiss ──────────────────────────────────────────────────
@@ -23423,6 +23343,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     el?.addEventListener('click', e => { if (e.target === el) popLayer() })
   }
 })()
+
+// init() rendered the first page before the feature blocks above patched the
+// renderers. Render it once more now that they are all installed; screen hooks
+// attach right below, so this render (like the old per-block ones) runs without them.
+try { App.render() } catch (err) { console.warn('[Money Tracker] boot render failed', err) }
 
 // Stable extension Seam: feature modules register named post-render Adapters.
 window.MTScreenHooks?.install?.(App, {
