@@ -234,6 +234,7 @@
       }
       periods.set(opening.statementId,{id:opening.statementId,start:opening.start,end:opening.end,dueDate:opening.dueDate})
       const ccBilling={version:2,opening,periods:[...periods.values()].sort((a,b)=>a.end.localeCompare(b.end)||a.id.localeCompare(b.id))}
+      if (Array.isArray(card.ccBilling?.carryovers) && card.ccBilling.carryovers.length) ccBilling.carryovers=card.ccBilling.carryovers
       if (JSON.stringify(card.ccBilling) === JSON.stringify(ccBilling)) return card
       changed=true
       diagnostics.push({cardId:card.id,code:'BILLING_METADATA_PREPARED'})
@@ -249,7 +250,7 @@
     const rows=new Map(), allocations=[], diagnostics=[]
     const ensure = period => {
       const id=period.id || period.statementId || statementId(card.id,period.start,period.end)
-      if (!rows.has(id)) rows.set(id,{id,cardId:card.id,start:period.start,end:period.end,dueDate:period.dueDate || resolveDueDate(card,period.end),purchases:[],payments:[],credits:[],purchaseTotal:0,openingDebt:0,paidTotal:0,creditTotal:0,balanceDue:0,reward:{points:0,cashback:0,discount:0},_balance:0})
+      if (!rows.has(id)) rows.set(id,{id,cardId:card.id,start:period.start,end:period.end,dueDate:period.dueDate || resolveDueDate(card,period.end),purchases:[],payments:[],credits:[],purchaseTotal:0,openingDebt:0,paidTotal:0,creditTotal:0,carriedIn:0,carriedOut:0,balanceDue:0,reward:{points:0,cashback:0,discount:0},_balance:0})
       return rows.get(id)
     }
     normalized.ccBilling.periods.forEach(ensure)
@@ -323,14 +324,31 @@
         if (pool.remaining) pools.push(pool)
       }
     }
+    // Carry-forward moves an unpaid statement remainder into a later statement.
+    // It only relocates debt between rows, so postedDebt and the ledger are unchanged.
+    const carryovers=(normalized.ccBilling.carryovers || []).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.id||'').localeCompare(String(b.id||'')))
+    for (const co of carryovers) {
+      if (co?.date && String(co.date)>refDate) continue
+      const from=parseStatementId(card,co?.fromStatementId), to=parseStatementId(card,co?.toStatementId)
+      if (!from || !to || to.end<=from.end || !(cents(co.amount)>0)) {diagnostics.push({carryoverId:co?.id,code:'INVALID_CARRYOVER'});continue}
+      const fromRow=ensure(from), moved=Math.min(cents(co.amount),fromRow._balance)
+      if (!(moved>0)) continue
+      const toRow=ensure(to)
+      fromRow._balance-=moved
+      fromRow.carriedOut+=baht(moved)
+      toRow._balance+=moved
+      toRow.carriedIn+=baht(moved)
+      spendCredit(toRow)
+    }
     const statements=[...rows.values()].map(row=> {
       row.balanceDue=baht(row._balance)
       delete row._balance
       row.purchaseTotal=baht(cents(row.purchaseTotal));row.paidTotal=baht(cents(row.paidTotal));row.creditTotal=baht(cents(row.creditTotal))
+      row.carriedIn=baht(cents(row.carriedIn));row.carriedOut=baht(cents(row.carriedOut))
       row.daysLeft=daysBetween(row.dueDate,refDate)
       const isOpen=row.end>=refDate
       row.paid=row.balanceDue<=0 && (row.purchaseTotal+row.openingDebt)>0
-      row.status=isOpen?'open':row.balanceDue<=0?'paid':row.daysLeft<0?'overdue':(row.paidTotal+row.creditTotal)>0?'partial':'unpaid'
+      row.status=isOpen?'open':row.balanceDue<=0?(row.carriedOut>0?'carried':'paid'):row.daysLeft<0?'overdue':(row.paidTotal+row.creditTotal)>0?'partial':'unpaid'
       row.reward=row.purchases.reduce((sum,tx)=> {
         const reward=typeof rewardForTx==='function'?rewardForTx(tx):{}
         for (const key of ['points','cashback','discount']) sum[key]+=Number(reward?.[key]||0)
