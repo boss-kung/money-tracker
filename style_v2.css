@@ -2209,14 +2209,6 @@ textarea.form-input:focus {
   #fab { right: max(14px, var(--safe-r)) !important; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: .001ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-duration: .001ms !important;
-  }
-}
 
 /* ============================================================
    Compact density and readable hierarchy

@@ -351,7 +351,6 @@
     const state=buildCardBillingState({...options,refDate:options.postedRefDate || options.refDate})
     return state.statements.find(r=>r.end===period.end) || null
   }
-  function shiftStatementRef(statement,deltaCycles) { return deltaCycles<0?statement.start:addDays(statement.end,1) }
   function getStatementHistory(options) {
     const state=buildCardBillingState(options)
     const period=getStatementPeriod(options.card,options.refDate,{includeOpen:options.includeOpen})

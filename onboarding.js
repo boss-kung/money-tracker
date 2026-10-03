@@ -120,20 +120,19 @@
   // Shows a one-time toast 600ms after saving the first transaction
   // ════════════════════════════════════════════════════════════
 
-  const _prevSaveTxOB = App.saveTx?.bind(App)
-  App.saveTx = function (...args) {
-    const txCountBefore = (S.transactions || []).length
-    const isEdit        = S.txMode === 'edit' && !!S.editingTxId
-    if (_prevSaveTxOB) _prevSaveTxOB(...args)
-    if (!isEdit && txCountBefore === 0 && (S.transactions || []).length > 0) {
-      if (!_obGet().firstTxNudgeSeen) {
-        _obPatch({ firstTxNudgeSeen: true })
-        setTimeout(function () {
-          try { toast('บันทึกรายการแรกแล้ว 🎉 ดูสรุปได้ที่ Reports', 'success') } catch (_) {}
-        }, 600)
-      }
+  MTScreenHooks.register('transactionSave', 'onboarding.capture-first-save', function (context) {
+    context.metadata.onboardingFirstSave = (S.transactions || []).length === 0 && !(S.txMode === 'edit' && S.editingTxId)
+  }, { phase:'before', priority:30 })
+
+  MTScreenHooks.register('transactionSave', 'onboarding.first-save-nudge', function (context) {
+    if (context.result !== true || !context.metadata.onboardingFirstSave || !(S.transactions || []).length) return
+    if (!_obGet().firstTxNudgeSeen) {
+      _obPatch({ firstTxNudgeSeen:true })
+      setTimeout(function () {
+        try { toast('บันทึกรายการแรกแล้ว 🎉 ดูสรุปได้ที่ Reports', 'success') } catch (_) {}
+      }, 600)
     }
-  }
+  }, { priority:60 })
 
   // ════════════════════════════════════════════════════════════
   // PRIORITY 3: Smart Empty State — Wallets Tab

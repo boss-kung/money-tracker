@@ -71,10 +71,11 @@
     },
 
     _commit() {
+      // persist owns reconciliation and snapshots through State Commit.
+      if (typeof persist === 'function') return persist('loan')
       if (typeof App !== 'undefined' && typeof App.recalculateWalletBalances === 'function') {
         App.recalculateWalletBalances({ save:false, recordSnapshot:true })
       }
-      if (typeof persist === 'function') persist()
     },
 
     create(data) {

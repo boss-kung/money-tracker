@@ -89,3 +89,16 @@ test('split bill uses item subtotal as the single source of truth with fees', ()
   assert.equal(shareTotal, previewTotal)
   assert.equal(result.warnings.length, 0)
 })
+
+test('Transaction linking can defer Split Bill storage until the enclosing commit', () => {
+  const bill = { id:'deferred', title:'Meal', linkedTransactionId:'' }
+  localStorage.setItem('mt_split_bills', JSON.stringify([bill]))
+  global.S = { splitBills:[bill] }
+  try {
+    assert.equal(App.linkSplitBillToTransaction('deferred', 'tx-new', { save:false }), true)
+    assert.equal(S.splitBills[0].linkedTransactionId, 'tx-new')
+    assert.equal(JSON.parse(localStorage.getItem('mt_split_bills'))[0].linkedTransactionId, '')
+    assert.equal(App.linkSplitBillToTransaction('deferred', 'tx-direct'), true)
+    assert.equal(JSON.parse(localStorage.getItem('mt_split_bills'))[0].linkedTransactionId, 'tx-direct')
+  } finally { delete global.S }
+})

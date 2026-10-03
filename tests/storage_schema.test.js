@@ -16,6 +16,8 @@ function fakeLocalStorage() {
 global.localStorage = fakeLocalStorage()
 const Storage = require('../storage_v2.js')
 
+test.beforeEach(() => { global.localStorage = fakeLocalStorage() })
+
 test('Storage schema drives State save and hydration for every State collection', () => {
   const state = {}
   for (const name of Storage.collectionNames) {
@@ -55,4 +57,61 @@ test('Storage reset is schema-complete', () => {
     const fallback = `missing:${name}`
     assert.equal(Storage.loadCollection(name, fallback), fallback, `${name} survived reset`)
   }
+})
+
+test('saving unchanged collections avoids rewriting them while changed data persists', () => {
+  const state = { transactions:[], wallets:[], settings:{} }
+  assert.equal(Storage.saveAll(state), true)
+  const writes = []
+  const write = localStorage.setItem
+  localStorage.setItem = (key, value) => { writes.push(key); write(key, value) }
+  assert.equal(Storage.saveAll(state), true)
+  assert.deepEqual(writes, [])
+  state.transactions.push({ id:'new', amount:10 })
+  assert.equal(Storage.saveAll(state), true)
+  assert.deepEqual(writes, ['mt_transactions'])
+  assert.deepEqual(Storage.loadCollection('transactions'), state.transactions)
+})
+
+test('a failed changed collection restores the last coherent snapshot including earlier writes', () => {
+  const state = { transactions:[{ id:'old' }], wallets:[{ id:'bank', balance:100 }], settings:{ theme:'light' } }
+  assert.equal(Storage.saveAll(state), true)
+  const previous = new Map(Array.from({ length:localStorage.length }, (_, i) => {
+    const key = localStorage.key(i)
+    return [key, localStorage.getItem(key)]
+  }))
+  const write = localStorage.setItem
+  let reject = true
+  localStorage.setItem = (key, value) => {
+    if (key === 'mt_wallets' && reject) { reject = false; throw new Error('quota exceeded') }
+    write(key, value)
+  }
+  state.transactions.push({ id:'new' })
+  state.wallets[0].balance = 200
+  assert.equal(Storage.saveAll(state), false)
+  for (const [key, value] of previous) assert.equal(localStorage.getItem(key), value, key)
+})
+
+test('an unchanged payload is still checked against storage during save verification', () => {
+  const state = { transactions:[], wallets:[], settings:{} }
+  assert.equal(Storage.saveAll(state), true)
+  const read = localStorage.getItem
+  let reads = 0
+  localStorage.getItem = key => {
+    if (key === 'mt_transactions' && ++reads > 1) return '[{"id":"unexpected"}]'
+    return read(key)
+  }
+  assert.equal(Storage.saveAll(state), false)
+})
+
+test('skipped Loan payload still has per-collection readback verification', () => {
+  const state = { transactions:[], wallets:[], settings:{}, loans:[{ id:'loan' }] }
+  assert.equal(Storage.saveAll(state), true)
+  const read = localStorage.getItem
+  let reads = 0
+  localStorage.getItem = key => {
+    if (key === 'mt_loans' && ++reads > 1) return '[]'
+    return read(key)
+  }
+  assert.equal(Storage.saveAll(state), false)
 })

@@ -53,14 +53,9 @@ window.location.reload(true)
 
 ### Storage Layer (`storage_v2.js`)
 
-`Storage.init()` loads all collections from `localStorage` into a plain object and returns it. `Storage.saveAll(state)` serialises everything back. Adding a new collection requires **5 touch points** in `storage_v2.js`:
-1. `KEYS` object — add `key: 'mt_your_key'`
-2. `BACKUP_SCHEMA_KEYS` array
-3. `BACKUP_DEFAULTS` object
-4. `Storage.init()` — load line
-5. `Storage.saveAll()` — save line
+`Storage.init()` hydrates state collections from the `COLLECTIONS` schema. `Storage.saveAll(state)` serialises state collections, skips unchanged localStorage payloads, verifies the saved state, and restores the previous snapshot on failure. Serialization still runs for every state collection; no persistent dirty-cache is used.
 
-Also add `S.yourKey = data.yourKey || []` in app_v2.js where `S` is hydrated (~line 1870 range).
+To add a collection, add its descriptor (`key`, `state`, `defaultValue`, and optional backup policy) to `COLLECTIONS`. Keys, backup inclusion/defaults, hydration, save, and reset derive from that schema. Collections with `state:false` own their in-memory model and use the Storage collection interface. Preserve backward-compatible defaults and add backup round-trip coverage for new financial data.
 
 ### `app_v2.js` Structure
 
@@ -82,12 +77,9 @@ Key sections (by line):
 
 **Critical**: `App._computeWalletFlows` (line ~5043) immediately delegates to `App._ledgerFlows` — they are NOT the same function. Always add new tx type handling to `App._ledgerFlows`.
 
-`loans_v2.js` patches `App._ledgerFlows` at load time by wrapping it:
-```js
-const prevLedger = App._ledgerFlows.bind(App)
-App._ledgerFlows = function() { return _addLoanFlows(prevLedger()) }
-```
-`bnpl.js` must NOT do the same — it adds its `bnpl_payment` handling directly inside the original `_ledgerFlows` body.
+`MTLedger.compute()` receives `S.transactions`, `S.wallets`, and `S.loans` directly, including BNPL payments and Loan repayments. Satellite modules must not wrap `_ledgerFlows` to add those flows again. One reconciliation shares the same ephemeral flows with baseline initialization; future reconciliations recompute them for date changes and edits.
+
+`persist(reason)` owns reconciliation/snapshots through State Commit. Loan changes call it once. Transaction list extensions and Transaction save feedback use named `MTScreenHooks` adapters. Save hooks must require `context.result === true` before success effects. `App.saveTx()` returns a boolean and retains the duplicate-confirmation guard. Transaction BNPL plan creation defers persistence to the enclosing commit; standalone plan creation still saves by default.
 
 ### Satellite Modules
 
@@ -95,7 +87,7 @@ Loaded after `app_v2.js` via `<script defer>`, each follows the IIFE pattern and
 
 | File | Global | Pattern |
 |------|--------|---------|
-| `loans_v2.js` | `window.LoanStore` | IIFE, patches `App._ledgerFlows` |
+| `loans_v2.js` | `window.LoanStore` | IIFE, commits Loan state through `persist()` |
 | `bnpl.js` | `window.BNPL` | IIFE, exposes `{ store, calc, ui }` |
 | `split_bill.js` | — | IIFE, adds `App.*` methods |
 | `credit_card_cycles.js` | — | IIFE, adds CC cycle logic |

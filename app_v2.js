@@ -115,131 +115,6 @@ function nextTransactionCreationSequence() {
 })()
 
 /* ============================================================
-   Focused motion + UX refinements requested in May 2026
-   Non-invasive wrappers around the final render paths.
-   ============================================================ */
-;(function () {
-  if (!window.App || !window.S) return
-
-  const nextFrame = fn => requestAnimationFrame(() => requestAnimationFrame(fn))
-  const monthDirection = (from, to) => {
-    if (!from || !to || from === 'all' || to === 'all' || from === to) return 'next'
-    return String(to).localeCompare(String(from)) > 0 ? 'next' : 'prev'
-  }
-  const cssEscape = value => window.CSS?.escape ? CSS.escape(String(value)) : String(value).replace(/["\\]/g, '\\$&')
-
-  const prevSetTxMonth = App.setTxMonth?.bind(App)
-  App.setTxMonth = function (month) {
-    const list = document.getElementById('tx-list-content')
-    const dir = monthDirection(S.txMonth, month)
-    if (!list || !prevSetTxMonth) return prevSetTxMonth?.(month)
-    list.classList.remove('mt-month-in-next', 'mt-month-in-prev')
-    list.classList.add(`mt-month-out-${dir}`)
-    setTimeout(() => {
-      prevSetTxMonth(month)
-      const fresh = document.getElementById('tx-list-content')
-      fresh?.classList.remove(`mt-month-out-${dir}`)
-      fresh?.classList.add(`mt-month-in-${dir}`)
-      setTimeout(() => fresh?.classList.remove(`mt-month-in-${dir}`), 240)
-    }, 140)
-  }
-
-  let paidBillId = ''
-  const prevConfirmUpcomingBillPayment = App.confirmUpcomingBillPayment?.bind(App)
-  App.confirmUpcomingBillPayment = function (billId, ...rest) {
-    paidBillId = billId
-    return prevConfirmUpcomingBillPayment?.(billId, ...rest)
-  }
-  const prevOpenUpcomingBillsScreen = App.openUpcomingBillsScreen?.bind(App)
-  App.openUpcomingBillsScreen = function (...args) {
-    prevOpenUpcomingBillsScreen?.(...args)
-    if (!paidBillId) return
-    nextFrame(() => {
-      document.querySelector(`.upcoming-bill-card[data-bill-id="${cssEscape(paidBillId)}"]`)?.classList.add('mt-paid-complete')
-      paidBillId = ''
-    })
-  }
-
-  let toggledRecurringId = ''
-  const prevToggleRecurring = App.toggleRecurring?.bind(App)
-  App.toggleRecurring = function (id, ...rest) {
-    toggledRecurringId = id
-    return prevToggleRecurring?.(id, ...rest)
-  }
-  const prevOpenRecurringScreen = App.openRecurringScreen?.bind(App)
-  App.openRecurringScreen = function (...args) {
-    prevOpenRecurringScreen?.(...args)
-    if (!toggledRecurringId) return
-    nextFrame(() => {
-      document.querySelector(`.recurring-item[data-recurring-id="${cssEscape(toggledRecurringId)}"]`)?.classList.add('mt-recurring-state')
-      toggledRecurringId = ''
-    })
-  }
-
-  const rewardSnapshots = new Map()
-  const prevOpenCCDetail = App.openCCDetail?.bind(App)
-  App.openCCDetail = function (cardId, ...rest) {
-    const before = rewardSnapshots.get(cardId) || []
-    prevOpenCCDetail?.(cardId, ...rest)
-    nextFrame(() => {
-      const values = [...document.querySelectorAll('.cc-detail-screen .reward-grid .reward-tile strong')]
-      const current = values.map(el => el.textContent.trim())
-      values.forEach((el, i) => {
-        if (!before.length || before[i] === current[i]) return
-        el.classList.remove('mt-reward-replace')
-        void el.offsetWidth
-        el.classList.add('mt-reward-replace')
-      })
-      rewardSnapshots.set(cardId, current)
-    })
-  }
-
-  let ccbrDirection = 'next'
-  const prevCcbrNext = App._ccbrNext?.bind(App)
-  App._ccbrNext = function (...args) {
-    ccbrDirection = 'next'
-    return prevCcbrNext?.(...args)
-  }
-  const prevCcbrBack = App._ccbrBack?.bind(App)
-  App._ccbrBack = function (...args) {
-    ccbrDirection = 'prev'
-    return prevCcbrBack?.(...args)
-  }
-  const prevCcbrRenderStep = App._ccbrRenderStep?.bind(App)
-  App._ccbrRenderStep = function (...args) {
-    prevCcbrRenderStep?.(...args)
-    nextFrame(() => {
-      const scroll = document.querySelector('#sub-screen .sub-scroll')
-      if (!scroll) return
-      const cls = ccbrDirection === 'prev' ? 'ccbr-panel-prev' : 'ccbr-panel-next'
-      scroll.classList.add(cls)
-      setTimeout(() => scroll.classList.remove('ccbr-panel-prev', 'ccbr-panel-next'), 500)
-    })
-  }
-
-  const prevMonthlyReview = App.openMonthlyReview?.bind(App)
-  App.openMonthlyReview = function (month, animate = true) {
-    const currentMonth = S._mtMonthlyReviewMonth || ''
-    const targetMonth = month || currentMonth
-    const dir = monthDirection(currentMonth, targetMonth)
-    const screen = document.querySelector('#sub-screen .sub-scroll')
-    if (!animate && screen && currentMonth && targetMonth && currentMonth !== targetMonth) {
-      screen.classList.add(`monthly-review-out-${dir}`)
-      setTimeout(() => {
-        prevMonthlyReview?.(month, false)
-        S._mtMonthlyReviewMonth = targetMonth
-        const fresh = document.querySelector('#sub-screen .sub-scroll')
-        fresh?.classList.add(`monthly-review-in-${dir}`)
-        setTimeout(() => fresh?.classList.remove(`monthly-review-in-${dir}`), 240)
-      }, 140)
-      return
-    }
-    prevMonthlyReview?.(month, animate)
-    S._mtMonthlyReviewMonth = targetMonth || currentMonth
-  }
-})()
-
-/* ============================================================
    Upcoming Bills / รายการรอจ่าย
    Manual future payables that reserve available cash only
    ============================================================ */
@@ -1105,15 +980,6 @@ function persist(reason = 'app') {
   return ok
 }
 function moneyFmt(n) { return S.settings?.hideMoney ? '฿*****' : Calc.fmt(n || 0) }
-
-function plainNumberFmt(n, digits = 8) {
-  const value = Number(n || 0)
-  if (!Number.isFinite(value)) return ''
-  return value.toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: digits,
-  })
-}
 
 function stripNumberCommas(value) {
   return String(value ?? '').replace(/,/g, '')
@@ -2288,8 +2154,6 @@ App.setUIV2 = function(on) {
 
 /* Core finance primitives */
 ;(function(){
-const COLORS10=['#2563EB','#7C3AED','#DC2626','#059669','#D97706','#0891B2','#BE185D','#16A34A','#EA580C','#475569'];
-const EMOJIS30=['🍔','🚗','🛍️','💊','🎬','💡','📚','📦','💼','💻','📈','💰','🏠','☕','🍱','✈️','🧾','🎮','🐶','🎁','💄','🏋️','🚌','🛒','📱','💳','🏦','🥇','₿','💱'];
 
 App._benefit=id=>S.ccBenefits?.[id]||{points:{},cashback:{}};App._rewardForTx=tx=>{const card=S.wallets.find(w=>w.id===tx.walletId&&w.type==='credit');if(!(card&&tx.type==='expense'))return{points:0,cashback:0};if(App.getTransactionRewardEstimate){const est=App.getTransactionRewardEstimate(tx)||{points:0,cashback:0};return{points:Number(est.points||0),cashback:Number(est.cashback||0)}}return Calc.getCardRewards([tx],App._benefit(card.id))};
 
@@ -2529,10 +2393,8 @@ App.render();
     if (type === 'transfer' || type === 'cc_payment' || type === 'bnpl_payment') return '↔ ' + Calc.fmt(n)
     return Calc.fmt(n)
   }
-  const amountClass = type => type === 'income' ? 'c-income' : type === 'transfer' ? 'c-primary' : 'c-expense'
   const cssAmountColor = type => type === 'income' ? 'var(--income)' : type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
   const walletValue = w => App._walletValueTHB ? App._walletValueTHB(w) : Number(w?.balance || 0)
-  const walletTypeLabelMap = { bank:'ธนาคาร', cash:'เงินสด', ewallet:'E-Wallet', credit:'บัตรเครดิต', saving:'ออมทรัพย์', gold:'ทองคำ', crypto:'Crypto', fcd:'เงินฝากต่างประเทศ', bnpl:'BNPL' }
 
   App._esc = esc
   App._jsArg = jsArg
@@ -2739,9 +2601,7 @@ App.render();
   const typeLabel = type => type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'
   const typeSign = type => type === 'income' ? '+' : type === 'transfer' ? '' : '-'
   const signedFmt = (n, type) => `${typeSign(type)}${fmt(Math.abs(Number(n) || 0))}`
-  const activeColorClass = type => type === 'income' ? 'income' : type === 'expense' ? 'expense' : 'transfer'
   const primaryWallet = () => S.wallets.find(w => w.type !== 'credit' && w.type !== 'bnpl')?.id || S.wallets[0]?.id || ''
-  const maybeSectionHeader = (title, actionLabel, action) => App._sectionHeader ? App._sectionHeader(title, actionLabel, action) : `<div class="section-header"><h3>${esc(title)}</h3>${actionLabel ? `<button onclick="${esc(action)}">${esc(actionLabel)}</button>` : ''}</div>`
   const txToday = () => (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
 
   function formatDraftAmount(raw) {
@@ -2866,35 +2726,6 @@ App.render();
     }
   }
 
-  const originalShowPage = App.showPage?.bind(App) || function(){}
-
-  function getSmartQuickAmounts(type) {
-    const recent = (S.transactions || [])
-      .filter(t => t.type === type && Number(t.amount) > 0)
-      .slice(-80)
-    const freq = {}
-    recent.forEach(t => {
-      const a = Math.round(Number(t.amount))
-      if (a > 0) freq[a] = (freq[a] || 0) + 1
-    })
-    const sorted = Object.entries(freq)
-      .sort((a, b) => b[1] - a[1] || Number(a[0]) - Number(b[0]))
-      .slice(0, 5)
-      .map(([a]) => Number(a))
-    if (sorted.length >= 3) return sorted
-    const defaults = type === 'income'
-      ? [3000, 5000, 10000, 20000, 50000]
-      : type === 'transfer'
-        ? [500, 1000, 2000, 5000, 10000]
-        : [50, 100, 200, 500, 1000]
-    return defaults
-  }
-
-  function fmtQuickAmt(n) {
-    if (n >= 1000000) return `${(n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1)}M`
-    if (n >= 10000)   return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`
-    return `฿${n.toLocaleString('en-US')}`
-  }
 
   App._renderAddTxAmount = function() {
     const title = S.txMode === 'edit' ? 'แก้ไขรายการ' : S.txMode === 'duplicate' ? 'ทำซ้ำรายการ' : 'เพิ่มรายการ'
@@ -3412,7 +3243,6 @@ App.render();
   App.openChannelScreen = function() {
     S.settings ||= {}
     const labels = S.settings.channelLabels || {}
-    const customValues = new Set((S.settings.customChannels || []).map(c => c.value))
     const allChannels = [
       ...DEFAULT_CHANNELS_LIST.map(([v, l]) => ({ value: v, label: labels[v] || l, isDefault: true })),
       ...(S.settings.customChannels || []).map(c => ({ value: c.value, label: labels[c.value] || c.label, isDefault: false })),
@@ -3864,27 +3694,6 @@ App.render();
    Proxy / JSONP bridge for browser-safe gold-price access
    ============================================================ */
 ;(function(){
-  const AURORA_GOLD_URL = 'https://www.aurora.co.th/price/gold_pricelist'
-  const toastSafe = (msg, type='info') => { try { toast(msg, type) } catch { console.log(msg) } }
-  const toNumber = (s) => Number(String(s || '').replace(/,/g, '').replace(/[^\d.-]/g, '')) || 0
-  const normaliseGoldData = (payload) => {
-    if (!payload) return null
-    if (typeof payload === 'string') return window.MTGoldMarket?.parseAuroraGold?.(payload) || App._parseAuroraGold?.(payload) || null
-    const jewelryBuy = toNumber(payload.jewelryBuy ?? payload.auroraJewelryBuy ?? payload.buyJewelry ?? payload.price)
-    const barBuy = toNumber(payload.barBuy ?? payload.goldBarBuy ?? payload.buy)
-    const barSell = toNumber(payload.barSell ?? payload.goldBarSell ?? payload.sell)
-    if (!jewelryBuy) return null
-    return {
-      jewelryBuy,
-      barBuy,
-      barSell,
-      source: payload.source || 'Aurora',
-      url: payload.url || AURORA_GOLD_URL,
-      fetchedAt: payload.fetchedAt || new Date().toISOString(),
-      fetchedVia: payload.fetchedVia || payload.via || 'custom-proxy'
-    }
-  }
-
   App._fetchJsonp = function(url, timeoutMs = 15000) {
     return new Promise((resolve, reject) => {
       const cb = '__mtGoldCb_' + Date.now() + '_' + Math.random().toString(36).slice(2)
@@ -3923,73 +3732,6 @@ App.render();
 })();
 
 /* ============================================================
-   Gold source switch
-   Gold Traders / Thai gold API normalization with legacy compatibility
-   ============================================================ */
-;(function(){
-  const GTA_URL = 'https://classic.goldtraders.or.th/'
-  const THAI_GOLD_API_URL = 'https://api.chnwt.dev/thai-gold-api/latest'
-  const toastSafe = (msg, type='info') => { try { toast(msg, type) } catch { console.log(msg) } }
-  const toNumber = (s) => Number(String(s || '').replace(/,/g, '').replace(/[^\d.\-]/g, '')) || 0
-  const fmtMoney = (n) => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
-  const dateNow = () => new Date().toISOString()
-
-  function normaliseThaiGoldPayload(payload) {
-    if (!payload) return null
-    if (typeof payload === 'string') {
-      try { payload = JSON.parse(payload) } catch { return null }
-    }
-
-    const root = payload.response || payload.data || payload
-    const price = root.price || root.prices || {}
-    const gold = price.gold || root.gold || {}
-    const goldBar = price.gold_bar || price.goldBar || root.gold_bar || root.goldBar || {}
-
-    // Thai Gold API shape:
-    // response.price.gold.buy = ornament/jewelry buy reference
-    // response.price.gold_bar.buy/sell = gold bar buy/sell
-    const jewelryBuy = toNumber(
-      payload.jewelryBuy ?? payload.goldBuy ?? payload.ornamentBuy ?? payload.price ??
-      root.jewelryBuy ?? root.goldBuy ?? root.ornamentBuy ??
-      gold.buy ?? gold.bid ?? gold.taxBase
-    )
-    const jewelrySell = toNumber(payload.jewelrySell ?? root.jewelrySell ?? gold.sell ?? gold.ask)
-    const barBuy = toNumber(payload.barBuy ?? root.barBuy ?? goldBar.buy ?? goldBar.bid)
-    const barSell = toNumber(payload.barSell ?? root.barSell ?? goldBar.sell ?? goldBar.ask)
-
-    if (!jewelryBuy && !barBuy && !barSell) return null
-
-    return {
-      jewelryBuy: jewelryBuy || barBuy || 0,
-      jewelrySell: jewelrySell || 0,
-      barBuy: barBuy || 0,
-      barSell: barSell || 0,
-      source: payload.source || root.source || 'Gold Traders Association',
-      url: payload.url || root.url || GTA_URL,
-      fetchedAt: payload.fetchedAt || root.fetchedAt || dateNow(),
-      latestDate: payload.latestDate || root.latestDate || root.update_date || payload.update_date || '',
-      latestTime: payload.latestTime || root.latestTime || root.update_time || payload.update_time || '',
-      fetchedVia: payload.fetchedVia || payload.via || 'direct-json'
-    }
-  }
-
-  function isInvestType(type) { return ['gold','crypto','fcd'].includes(type) }
-  function assetUnitLabel(w) {
-    if (w?.type === 'gold') return 'บาททอง'
-    if (w?.type === 'fcd') return w.currency || w.symbol || 'USD'
-    return w?.symbol || 'หน่วย'
-  }
-  function marketUrlFor(w) {
-    if (w?.type === 'gold') return GTA_URL
-    if (w?.type === 'crypto') return 'https://www.coingecko.com/'
-    if (w?.type === 'fcd') return 'https://www.frankfurter.app/'
-    return '#'
-  }
-
-  try { App.render?.() } catch (_) {}
-})();
-
-/* ============================================================
    Wallet market rendering + Gold Traders hardening
    ============================================================ */
 ;(function(){
@@ -4002,8 +3744,6 @@ App.render();
   const isInvest = w => INVEST_TYPES.has(w?.type);
   const walletTypeLabel = type => ({ bank:'ธนาคาร', cash:'เงินสด', ewallet:'E-Wallet', saving:'ออมทรัพย์', credit:'บัตรเครดิต', gold:'ทองคำ', crypto:'Crypto', fcd:'เงินฝากต่างประเทศ', bnpl:'BNPL' })[type] || type || 'กระเป๋า';
   const unitLabel = w => w?.type === 'gold' ? 'บาททอง' : w?.type === 'fcd' ? (w.currency || w.symbol || 'USD') : (w?.symbol || 'หน่วย');
-  const marketUrl = w => w?.type === 'gold' ? GOLDTRADERS_URL : w?.type === 'crypto' ? 'https://www.coingecko.com/' : w?.type === 'fcd' ? 'https://www.frankfurter.app/' : '#';
-  const goldData = () => S.marketPrices?.thaiGold || S.marketPrices?.auroraGold || null;
   App._walletTypeLabel = App._walletTypeLabel || walletTypeLabel;
 
   function netWorthGroups(){
@@ -4068,16 +3808,11 @@ App.render();
 ;(function() {
 
   // ── P0: CC payment source-balance check ──
-  const _origSaveCCPay = App.saveCCPay?.bind(App) || function(){}
 
   // ── P1: Search debounce ──
-  let _txSearchTimer = null
-  const _origRenderTx = App.renderTransactions?.bind(App) || function(){}
 
   // ── P1: FAB visible on Transactions tab ──
-  const _origShowPage = App.showPage?.bind(App) || function(){}
 
-  const _origRender = App.render?.bind(App) || function(){}
 
   function _syncFab(page) {
     const fab = document.getElementById('fab')
@@ -4091,23 +3826,6 @@ App.render();
   }
 
   // ── P1: Merchant autocomplete in add-tx ──
-  const _origDetailRender = App._renderAddTxDetail?.bind(App) || function(){}
-
-  function _injectMerchantDatalist() {
-    const input = document.getElementById('tx-merchant')
-    if (!input || !S.merchants?.length) return
-    const listId = 'tx-merchant-suggestions'
-    let dl = document.getElementById(listId)
-    if (!dl) {
-      dl = document.createElement('datalist')
-      dl.id = listId
-      document.body.appendChild(dl)
-    }
-    dl.innerHTML = S.merchants
-      .map(m => `<option value="${String(m.name).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">`)
-      .join('')
-    input.setAttribute('list', listId)
-  }
 
   // ── P2: getDueDate in local timezone ──
   // Original uses toISOString() which is UTC; in UTC+7 an 11 PM local
@@ -4270,45 +3988,6 @@ App.render();
   }
 
   // ── 2. Export CSV ────────────────────────────────────────────
-  App.exportCSVLegacy = function() {
-    const typeLabel = { expense: 'รายจ่าย', income: 'รายรับ', transfer: 'โอนเงิน', cc_payment: 'ชำระบัตร', bnpl_payment: 'จ่าย BNPL' }
-    const headers = ['วันที่','ประเภท','หมวดหมู่','ร้านค้า/แหล่งที่มา','จำนวนเงิน','กระเป๋าเงิน','หมายเหตุ']
-    const rows = [...S.transactions]
-      .sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
-      .map(t => {
-        const cat = App._findCat?.(t.categoryId)
-        const wallet = S.wallets.find(w => w.id === t.walletId)
-        const toWallet = S.wallets.find(w => w.id === t.toWalletId)
-        const sign = (t.type === 'expense' || t.type === 'cc_payment') ? -1 : 1
-        const exportAmount = t.type === 'cc_payment'
-          ? (App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(t) : Number(t.cashAmount || t.amount || 0))
-          : Number(t.amount || 0)
-        const walletName = t.type === 'transfer'
-          ? `${wallet?.name || ''} → ${toWallet?.name || ''}`
-          : (wallet?.name || '')
-        return [
-          t.date || '',
-          typeLabel[t.type] || t.type,
-          cat?.label || '',
-          t.merchant || '',
-          (sign * exportAmount).toFixed(2),
-          walletName,
-          t.note || ''
-        ].map(v => `"${String(v).replace(/"/g, '""')}"`)
-      })
-    const csv = '﻿' + [headers.map(h => `"${h}"`).join(','), ...rows.map(r => r.join(','))].join('\r\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `money-tracker-${getTODAY()}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    toast('ส่งออก CSV สำเร็จ', 'success')
-  }
-
   // ── 3. Recurring due-alert helpers ──────────────────────────
   function getOverdueRecurring() {
     if (App._getOverdueRecurringLite) return App._getOverdueRecurringLite()
@@ -4614,10 +4293,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
     const hasUsableBreakdown = (usable.creditDebt > 0 || usable.upcomingReserved > 0)
     const unpaidBillTotal = Number(usable.upcomingReserved || 0)
-    const pendingUpcomingBills = typeof Calc.getPendingUpcomingBills === 'function'
-      ? Calc.getPendingUpcomingBills(S)
-      : (S.upcomingBills || []).filter(b => b && b.status === 'pending')
-    const unpaidBillCount = pendingUpcomingBills.length
     const debtTotal = Number(currentNetWorth.liabilities || usable.creditDebt || 0)
     const prevMonth = Calc.getPreviousMonth?.(dm) || Calc.getMonths?.(2)?.[1] || ''
     const prevMonthly = prevMonth ? Calc.getMonthlyIncomeExpense(S.transactions, prevMonth, S.loans, S.wallets) : null
@@ -4634,7 +4309,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
     }
     const incomeCompareSub = monthCompareSub(stats.income, prevMonthly?.income, 'ยังไม่มีรายรับ')
     const expenseCompareSub = monthCompareSub(stats.expense, prevMonthly?.expense, 'ยังไม่มีรายจ่าย')
-    const billSub = unpaidBillCount > 0 ? `${unpaidBillCount} รายการ` : 'ไม่มีรายการ'
 
     html += `
       <div class="mt-net-card" aria-label="สรุปการเงิน">
@@ -5153,134 +4827,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
     })
   }
 
-  const _renderWallets = App.renderWallets?.bind(App)
-  if (_renderWallets) {
-
-  }
 
   try { if (S.page === 'wallets') ensureCreditPayPlacement() } catch (_) {}
-})();
-
-/* ============================================================
-   V2.4.2 FCD FX sync polish
-   - Fetch FX quotes based on actual FCD wallet currencies.
-   - Keep the existing gold/crypto sync behavior.
-   - Revalue investment wallets that have units after fresh prices arrive.
-   ============================================================ */
-;(function() {
-  const COMMON_FCD_QUOTES = ['THB', 'EUR', 'JPY', 'GBP', 'CNY', 'SGD', 'HKD', 'AUD', 'NZD', 'CAD', 'CHF'];
-  const cleanCurrency = value => String(value || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
-  const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : `฿${(Number(n) || 0).toLocaleString('en-US')}`);
-  const notify = (msg, type) => (typeof toast === 'function' ? toast(msg, type) : console.log(msg));
-
-  function getFcdCurrencies() {
-    const set = new Set(['USD', ...COMMON_FCD_QUOTES]);
-    (S.wallets || [])
-      .filter(w => w?.type === 'fcd')
-      .forEach(w => {
-        const cur = cleanCurrency(w.currency || w.symbol || 'USD');
-        if (cur) set.add(cur);
-      });
-    return [...set].filter(Boolean);
-  }
-
-  function normaliseBulkFxPayload(data, requested) {
-    const rates = data?.rates || {};
-    const thbPerUsd = Number(rates.THB || 0);
-    if (!thbPerUsd) return null;
-
-    const fcdRatesTHB = { THB: 1, USD: thbPerUsd };
-    requested.forEach(cur => {
-      if (cur === 'THB') fcdRatesTHB.THB = 1;
-      else if (cur === 'USD') fcdRatesTHB.USD = thbPerUsd;
-      else if (Number(rates[cur]) > 0) fcdRatesTHB[cur] = thbPerUsd / Number(rates[cur]);
-    });
-
-    return {
-      ...data,
-      base: data?.base || 'USD',
-      rates: { ...rates, THB: thbPerUsd },
-      requestedQuotes: requested,
-      fcdRatesTHB,
-      fetchedAt: new Date().toISOString(),
-      source: 'Frankfurter'
-    };
-  }
-
-  async function fetchBulkFx(currencies) {
-    const quotes = [...new Set(['THB', ...currencies.filter(cur => cur !== 'USD' && cur !== 'THB')])];
-    const query = quotes.join(',');
-    const urls = [
-      `https://api.frankfurter.dev/v2/rates?base=USD&quotes=${query}`,
-      `https://api.frankfurter.dev/v1/latest?base=USD&symbols=${query}`
-    ];
-
-    for (const url of urls) {
-      try {
-        const r = await fetch(url, { cache: 'no-store' });
-        if (!r.ok) continue;
-        const normalised = normaliseBulkFxPayload(await r.json(), currencies);
-        if (normalised) return normalised;
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  async function fetchPairFx(currencies) {
-    const fcdRatesTHB = { THB: 1 };
-    const requested = [...new Set(currencies.filter(cur => cur && cur !== 'THB'))];
-
-    for (const cur of requested) {
-      try {
-        const r = await fetch(`https://api.frankfurter.dev/v2/rate/${encodeURIComponent(cur)}/THB`, { cache: 'no-store' });
-        if (!r.ok) continue;
-        const data = await r.json();
-        const rate = Number(data?.rate || data?.rates?.THB || 0);
-        if (rate > 0) fcdRatesTHB[cur] = rate;
-      } catch (_) {}
-    }
-
-    if (!fcdRatesTHB.USD) return null;
-    return {
-      base: 'USD',
-      rates: { THB: fcdRatesTHB.USD },
-      requestedQuotes: currencies,
-      fcdRatesTHB,
-      fetchedAt: new Date().toISOString(),
-      source: 'Frankfurter'
-    };
-  }
-
-  async function fetchFcdFx() {
-    const currencies = getFcdCurrencies();
-    return (await fetchBulkFx(currencies)) || (await fetchPairFx(currencies));
-  }
-
-  function fcdRateTHB(cur) {
-    const cc = cleanCurrency(cur || 'USD');
-    const p = S.marketPrices || {};
-    if (cc === 'THB') return 1;
-    if (Number(p.fcdRatesTHB?.[cc]) > 0) return Number(p.fcdRatesTHB[cc]);
-    if (Number(p.fx?.fcdRatesTHB?.[cc]) > 0) return Number(p.fx.fcdRatesTHB[cc]);
-
-    const rates = p.fx?.rates || {};
-    const thbPerUsd = Number(rates.THB || 0);
-    if (cc === 'USD') return thbPerUsd || 0;
-    if (thbPerUsd && Number(rates[cc]) > 0) return thbPerUsd / Number(rates[cc]);
-    return 0;
-  }
-
-  function revalueInvestmentWallets() {
-    (S.wallets || []).forEach(w => {
-      if (!['gold', 'crypto', 'fcd'].includes(w?.type)) return;
-      const units = Number(w.units || 0);
-      if (!units || !App._investmentUnitPriceTHB) return;
-      const unitPrice = Number(App._investmentUnitPriceTHB(w) || 0);
-      if (unitPrice > 0) w.balance = units * unitPrice;
-    });
-  }
-
-  try { if (S.page === 'wallets') App.renderWallets?.(); } catch (_) {}
 })();
 
 /* ============================================================
@@ -5302,17 +4850,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   // Local date-group label for transaction list (replaces inaccessible closure)
-  function txDateLabel(dateStr) {
-    if (!dateStr) return ''
-    const today = getTODAY()
-    const d = new Date(); d.setDate(d.getDate() - 1)
-    const yest = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-    const base = Calc.shortDate(dateStr)
-    if (dateStr === today) return `วันนี้ ${base}`
-    if (dateStr === yest)  return `เมื่อวาน ${base}`
-    return base
-  }
-
   // ── 2. Merchant datalist autocomplete ────────────────────────
 
   // ── 6. Wallet monthly spend summary ──────────────────────────
@@ -5544,10 +5081,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
   'use strict'
 
   // ── helpers ─────────────────────────────────────────────────
-  function esc32(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-  }
-
   // ── Override _renderAddTxDetail to clean up datalist/dropdown leftovers ──
 
   // Re-apply to current render if add-tx sheet is open
@@ -5682,8 +5215,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     })
   }
 
-  App.ensureLedgerBaselines = function(force = false) {
-    const flows = App._ledgerFlows()
+  App.ensureLedgerBaselines = function(force = false, flows = App._ledgerFlows()) {
     ;(S.wallets || []).forEach(w => {
       if (isInvestWallet(w)) {
         if (force || w.openingUnits === undefined) {
@@ -5716,8 +5248,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
     ensureV4State()
     const issues = App._validateLedgerIntegrity()
     if (issues.length > 0) console.warn('[MoneyTracker] ledger integrity issues found:', issues)
-    App.ensureLedgerBaselines(false)
     const flows = App._ledgerFlows()
+    App.ensureLedgerBaselines(false, flows)
     const reconciled = window.MTLedger.reconcileWallets({
       wallets:S.wallets || [],
       flows,
@@ -5749,7 +5281,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App.recalculateWalletBalances({ save:false, recordSnapshot:true })
   if (repairedInstallmentLedgerAmounts > 0) persist()
 
-  const baseRender = App.render?.bind(App)
 
   // ── Validation / import / backup status ─────────────────────
 
@@ -6047,6 +5578,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App.saveTx = function() {
+    let saved = false
+    const commitTransaction = () => {
+      if (persist('transaction')) { saved = true; return true }
+      // Storage rolled back the durable snapshot; restore financial state while
+      // keeping the draft and open form available for another attempt.
+      Object.assign(S, Storage.init())
+      return false
+    }
     const beforeTxIds = new Set((S.transactions || []).map(t => t.id))
     const beforeRecIds = new Set((S.recurring || []).map(r => r.id))
     const isEdit = S.txMode === 'edit' && !!S.editingTxId
@@ -6067,7 +5606,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     }
     try {
       const err = App.validateTransactionDraft(draft, { isEdit, editingTxId: S.editingTxId })
-      if (err) { toast(err, 'error'); return }
+      if (err) { toast(err, 'error'); return false }
       if (draft.type === 'income' && draft.reimbursesSharedExpenseTxId) {
         const parentSettlement = App.getSharedReceivableForTx?.(draft.reimbursesSharedExpenseTxId)
         const currentEditingAmount = isEdit
@@ -6077,7 +5616,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         if (maxSafe >= 0 && Number(draft.amount || 0) > maxSafe + 0.005 && S.tx.allowOverReimbursement !== true) {
           S.tx.allowOverReimbursement = true
           toast(`ยอดรับคืนเกินยอดค้าง ${money(Number(draft.amount || 0) - maxSafe)} กดบันทึกอีกครั้งเพื่อยืนยัน`, 'warn')
-          return
+          return false
         }
       }
 
@@ -6120,8 +5659,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         S.transactions.unshift(...txs)
         App._registerMerchantFromTx?.(txs[0])
         App.refreshTransactionRewardEstimates?.()
-        App.recalculateWalletBalances({ save:false, recordSnapshot:true })
-        persist()
+        if (!commitTransaction()) return false
         resetAfterSaveChrome()
         App.closeOverlay('overlay-add-tx')
         if (S.txMode === 'add') {
@@ -6131,7 +5669,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         else App.render()
         toast(`สร้างรายการผ่อน ${months} งวดแล้ว`, 'success')
         S.txMode = 'add'; S.editingTxId = null
-        return
+        return true
       }
 
       const tx = cleanTxFromDraft(isEdit ? S.editingTxId : Calc.genId())
@@ -6149,7 +5687,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         App._syncSharedExpenseSettlement?.(previousTx.reimbursesSharedExpenseTxId)
       }
       if (tx.type === 'expense' && tx.splitBillId) {
-        App.linkSplitBillToTransaction?.(tx.splitBillId, tx.id)
+        App.linkSplitBillToTransaction?.(tx.splitBillId, tx.id, { save:false })
       }
       App._registerMerchantFromTx?.(tx)
       App.refreshTransactionRewardEstimates?.()
@@ -6159,12 +5697,11 @@ Calc.getUsableMoney = function(wallets, state = null) {
         const _bnplWallet = (S.wallets || []).find(w => w.id === tx.walletId)
         const _bnplN = Number(draft.bnplInstallments || 0)
         if (_bnplWallet?.type === 'bnpl' && _bnplN >= 2) {
-          BNPL.store.createPlan({ walletId: tx.walletId, txId: tx.id, merchant: tx.merchant || '', purchaseDate: tx.date, totalAmount: Number(tx.amount), installments: _bnplN })
+          BNPL.store.createPlan({ walletId: tx.walletId, txId: tx.id, merchant: tx.merchant || '', purchaseDate: tx.date, totalAmount: Number(tx.amount), installments: _bnplN }, { save:false })
         }
       }
 
-      App.recalculateWalletBalances({ save:false, recordSnapshot:true })
-      persist()
+      if (!commitTransaction()) return false
       resetAfterSaveChrome()
       App.closeOverlay('overlay-add-tx')
       if (isEdit) App.render()
@@ -6175,7 +5712,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       toast(isEdit ? 'แก้ไขรายการแล้ว' : 'บันทึกรายการแล้ว', 'success')
       S.txMode = 'add'; S.editingTxId = null
 
-      if (modeBefore === 'edit' || !draft.isRecurring || draft.type !== 'expense') return
+      if (modeBefore === 'edit' || !draft.isRecurring || draft.type !== 'expense') return true
       const createdTx = (S.transactions || []).find(t => {
         if (beforeTxIds.has(t.id) || t.type !== draft.type || t.walletId !== draft.walletId) return false
         const txBaseAmount = App.getBenefitCalculationAmount?.(t) ?? Number(t.amount || 0)
@@ -6196,14 +5733,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
         createdTx.isRecurring = true
         App._updateRecurringNext?.(createdRec)
         App.refreshTransactionRewardEstimates?.()
-        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-        persist()
+        if (!persist('transaction.recurring')) Object.assign(S, Storage.init())
       }
     } catch (err) {
       console.error('saveTx failed', err)
       notify(`บันทึกรายการไม่สำเร็จ: ${err?.message || err}`, 'error')
       console.warn('V6.5 recurring metadata sync failed', err)
     }
+    return saved
   }
 
   function isValidImportDate(value) {
@@ -6568,15 +6105,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(Math.min(d || 1, last)).padStart(2,'0')}`
   }
 
-  function cleanupRewardReceivedForTx(tx) {
-    if (!tx || !tx.isRewardReceived) return
-    S.rewardLedger = (S.rewardLedger || []).filter(r => {
-      if (tx.rewardLedgerId && r.id === tx.rewardLedgerId) return false
-      if (tx.statementId && r.statementId === tx.statementId && r.type === 'cashback_received') return false
-      return true
-    })
-  }
-
   // ── 1. Compact transaction search/filter header ───────────────────────────
   App.toggleTxFilterPanel = function() { S.txFilterOpen = !S.txFilterOpen; App.renderTransactions() }
   App.clearTxFilters = function() {
@@ -6776,7 +6304,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const cryptoSummary = App.getCryptoPortfolioSummary?.() || { totalValueTHB: 0, holdings: [] }
     const assetBreakdown = App.getFinancialPosition()
     const postedMonthTx = Calc.getMonthlyTransactions(S.transactions, month)
-    const expenseTxCount = postedMonthTx.filter(t => t.type === 'expense').length
     const incomeTxCount = postedMonthTx.filter(t => t.type === 'income' && !(Calc.isReimbursementTx?.(t) || App.isReimbursementTx?.(t))).length
     const hasPrevData = !!(previous && (previous.income || previous.expense))
     const isCurrentMonth = month === today().slice(0, 7)
@@ -6984,15 +6511,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
     } else if (S.rptView === 'networth') {
       html += renderNetWorthView()
     } else if (S.rptView === 'assets') {
-      const cryptoStatus = cryptoSummary.holdings?.length
-        ? (App.getMarketFreshnessText?.('crypto') || (S.cryptoSyncMeta?.lastSuccessAt ? 'ราคา crypto มีการ sync แล้ว' : cryptoSummary.holdings.some(h => Number(h.manualPriceTHB || 0) > 0) ? 'Crypto บางรายการใช้ราคาสำรอง' : 'Crypto บางรายการอาจยังไม่มีราคาตลาด'))
-        : 'ยังไม่มี crypto'
-      const goldStatus = (S.wallets || []).some(w => w.type === 'gold')
-        ? (App.getMarketFreshnessText?.('gold') || (S.marketPrices?.thaiGold?.jewelryBuy ? 'ทองใช้ราคาตลาดล่าสุด' : 'ทองบางรายการอาจใช้ราคาสำรอง'))
-        : 'ยังไม่มีทองคำ'
-      const fcdStatus = (S.wallets || []).some(w => w.type === 'fcd')
-        ? (App.getMarketFreshnessText?.('fcd') || (S.marketPrices?.fx?.rates?.THB ? 'FCD ใช้อัตราแลกเปลี่ยนล่าสุด' : 'FCD บางรายการอาจใช้ราคาสำรอง'))
-        : 'ยังไม่มี FCD'
       html += `<div class="card card-pad nw-card" style="margin-bottom:12px"><div class="nw-label">ความมั่งคั่งสุทธิ</div><div class="nw-value ${assetBreakdown.netWorth>=0?'c-income':'c-expense'}">${assetBreakdown.netWorth<0?'-':''}${money(Math.abs(assetBreakdown.netWorth))}</div><div class="nw-detail"><span class="nw-item">สินทรัพย์ <strong class="c-income">${money(assetBreakdown.assets)}</strong></span><span class="nw-item">หนี้ <strong class="c-expense">${money(assetBreakdown.liabilities)}</strong></span></div></div>`
       if (!(assetBreakdown.assets || assetBreakdown.liabilities)) html += App._emptyState('🏦', 'ยังไม่มีข้อมูลสินทรัพย์', 'เพิ่มกระเป๋าเงินหรือพอร์ตลงทุนเพื่อดูภาพรวมสินทรัพย์')
       else html += `<div class="card card-pad">
@@ -8399,7 +7917,6 @@ App._pickMerchant = function(name, opts = {}) {
 
   function detectBenefitSourceType(siteKey = 'unknown', html = '', mainText = '') {
     const rawHtml = String(html || '')
-    const flatHtml = flattenImportText(html)
     const flatText = flattenImportText(mainText)
     if (siteKey === 'cardx' && /<div id="root"><\/div>/i.test(rawHtml)) return 'spa-shell'
     if (siteKey === 'unionpay') return 'merchant-offer-directory'
@@ -9252,9 +8769,6 @@ App._pickMerchant = function(name, opts = {}) {
         </div>
       </div>`
     }).join('')
-    const diagHtml = diagnostics.length
-      ? `<div class="card card-pad" style="margin-top:10px"><div class="list-item-name">Diagnostics</div>${diagnostics.map(msg => `<div class="form-hint">${esc(msg)}</div>`).join('')}</div>`
-      : ''
     const aiLabel = preview.usedAI ? `<div class="form-hint" style="margin-top:8px;margin-bottom:4px">✨ วิเคราะห์ด้วย Gemini AI</div>` : ''
     const selectionBar = drafts.length > 1 ? `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding:8px 0">
@@ -10609,8 +10123,6 @@ App._pickMerchant = function(name, opts = {}) {
   const genId = () => (typeof Calc !== 'undefined' && Calc.genId) ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2))
   const nowISO = () => new Date().toISOString()
   const notify = (msg, type = 'info') => { try { toast(msg, type) } catch { console.log(msg) } }
-  const loadV5JSON = (key, def) => { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : def } catch { return def } }
-  const saveV5JSON = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)) } catch (_) {} }
 
   const TRANSFERABLE_MONEY_TYPES = new Set(['bank', 'cash', 'ewallet', 'saving'])
   function isTransferableMoneyWallet(w) { return TRANSFERABLE_MONEY_TYPES.has(String(w?.type || '').toLowerCase()) }
@@ -14514,24 +14026,6 @@ App._pickMerchant = function(name, opts = {}) {
     return clampDueAfter(diff > 0 ? diff : 10)
   }
 
-  function buildNextDueDateFromDay(dueDay, refDate = today()) {
-    const numericDueDay = Math.max(1, Math.min(31, Number(dueDay) || 0))
-    if (!numericDueDay) return ''
-    const [ry, rm, rd] = String(refDate || today()).split('-').map(Number)
-    const baseYear = ry || new Date().getFullYear()
-    const baseMonthIndex = (rm || 1) - 1
-    const buildDateStr = (year, monthIndex) => {
-      const day = Calc.clampDay(year, monthIndex, numericDueDay)
-      return `${year}-${String(monthIndex + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
-    }
-    let dueDate = buildDateStr(baseYear, baseMonthIndex)
-    if (String(dueDate) < String(refDate || today())) {
-      const nextBase = new Date(baseYear, baseMonthIndex + 1, 1)
-      dueDate = buildDateStr(nextBase.getFullYear(), nextBase.getMonth())
-    }
-    return dueDate
-  }
-
   function buildNextDueDateFromCycle(card, refDate = today()) {
     if (!card) return ''
     const cycleDay = clampCycleDay(card.cycleDay || 25)
@@ -14874,17 +14368,6 @@ App._pickMerchant = function(name, opts = {}) {
     return !!ruleCat && String(ruleCat.id || '') === String(txCategoryId || '')
   }
 
-  function inferMerchantNamesFromText(text = '') {
-    const hay = normalizeCompareText(text)
-    if (!hay) return []
-    return (S.merchants || [])
-      .filter(merchant => {
-        const name = normalizeCompareText(merchant?.name || '')
-        return name && hay.includes(name)
-      })
-      .map(merchant => merchant.name)
-  }
-
   function inferChannelsFromText(text = '') {
     const hay = normalizeCompareText(text)
     const channels = []
@@ -14961,19 +14444,6 @@ App._pickMerchant = function(name, opts = {}) {
     return values.map(value => opts.find(([v]) => v === value)?.[1] || value).join(', ')
   }
 
-  function extractMinSpendFromText(text = '') {
-    const patterns = [
-      /ขั้นต่ำ\s*([0-9][0-9,]*(?:\.\d+)?)\s*บาท/i,
-      /เมื่อ(?:มียอด|ใช้จ่าย|ชำระ)\s*(?:ตั้งแต่|ครบ)?\s*([0-9][0-9,]*(?:\.\d+)?)\s*บาท/i,
-      /ยอด(?:ซื้อ|ใช้จ่าย)?ขั้นต่ำ\s*([0-9][0-9,]*(?:\.\d+)?)\s*บาท/i,
-    ]
-    for (const pattern of patterns) {
-      const match = String(text || '').match(pattern)
-      if (match?.[1]) return Number(match[1].replace(/,/g, '')) || null
-    }
-    return null
-  }
-
   function parseDateToISO(raw = '', fallbackYear = new Date().getFullYear()) {
     const value = String(raw || '').trim()
     if (!value) return ''
@@ -14998,16 +14468,6 @@ App._pickMerchant = function(name, opts = {}) {
       }
     }
     return ''
-  }
-
-  function extractValidityFromText(text = '') {
-    const src = String(text || '')
-    const fullRange = src.match(/(?:ตั้งแต่|ระหว่าง)\s*([0-9]{1,2}[\/.-][0-9]{1,2}(?:[\/.-][0-9]{2,4})?|[0-9]{4}[\/.-][0-9]{1,2}[\/.-][0-9]{1,2})\s*(?:ถึง|-|–)\s*([0-9]{1,2}[\/.-][0-9]{1,2}(?:[\/.-][0-9]{2,4})?|[0-9]{4}[\/.-][0-9]{1,2}[\/.-][0-9]{1,2})/i)
-    if (!fullRange) return { mode: 'always', startDate: '', endDate: '' }
-    const startDate = parseDateToISO(fullRange[1])
-    const endDate = parseDateToISO(fullRange[2])
-    if (!startDate && !endDate) return { mode: 'always', startDate: '', endDate: '' }
-    return { mode: 'range', startDate, endDate }
   }
 
   function getRuleEligibility(txDraft = {}, rule = {}) {
@@ -15554,25 +15014,6 @@ App._pickMerchant = function(name, opts = {}) {
 
   function benefitValueAtOrAboveCap(ruleType = '', value = 0, cap = 0) {
     return normalizeBenefitCompareValue(ruleType, value) >= normalizeBenefitCompareValue(ruleType, cap)
-  }
-
-  function describeBenefitCapReason(capReason = '') {
-    const labels = {
-      maxEligibleSpendPerTx: 'ยอดใช้จ่ายที่นำมาคิดต่อรายการ',
-      maxEligibleSpendPerCycle: 'ยอดใช้จ่ายที่นำมาคิดต่อรอบบิล',
-      maxRewardAmountPerTx: 'สิทธิประโยชน์สูงสุดต่อรายการ',
-      maxRewardAmountPerCycle: 'สิทธิประโยชน์สูงสุดต่อรอบบิล',
-      maxEligibleSpendPerMerchantPerCycle: 'ยอดใช้จ่ายที่นำมาคิดสูงสุดต่อร้านค้า/เดือน',
-      maxRewardAmountPerMerchantPerCycle: 'เงินคืนสูงสุดต่อร้านค้า/เดือน',
-      maxEligibleSpendPerChannelPerCycle: 'ยอดใช้จ่ายที่นำมาคิดสูงสุดต่อช่องทาง/เดือน',
-      maxRewardAmountPerChannelPerCycle: 'เงินคืนสูงสุดต่อช่องทาง/เดือน',
-    }
-    return String(capReason || '')
-      .split(',')
-      .map(v => String(v || '').trim())
-      .filter(Boolean)
-      .map(v => labels[v] || v)
-      .join(', ')
   }
 
   function buildBenefitCapAppliedText(row = {}) {
@@ -17555,7 +16996,7 @@ App._pickMerchant = function(name, opts = {}) {
   const _prevSaveTx = App.saveTx?.bind(App)
   App.saveTx = function(forceSkipDuplicateCheck) {
     // Rapid double-tap guard — cleared after 600 ms
-    if (App._txSaveInProgress) return
+    if (App._txSaveInProgress) return false
     App._txSaveInProgress = true
     setTimeout(() => { App._txSaveInProgress = false }, 600)
 
@@ -17579,15 +17020,16 @@ App._pickMerchant = function(name, opts = {}) {
           },
           onCancel: () => { App._txSaveInProgress = false },
         })
-        return
+        return false
       }
     }
 
     try {
-      if (_prevSaveTx) _prevSaveTx()
+      return _prevSaveTx ? _prevSaveTx() : false
     } catch (err) {
       console.error('[Phase 2] saveTx failed', err)
       App._txSaveInProgress = false
+      return false
     }
   }
 
@@ -17723,9 +17165,7 @@ App._pickMerchant = function(name, opts = {}) {
   // button inside the empty state so the user can escape easily.
   // ════════════════════════════════════════════════════════════
 
-  const _prevRenderTransactionsList = App.renderTransactionsList?.bind(App)
-  App.renderTransactionsList = function() {
-    if (_prevRenderTransactionsList) _prevRenderTransactionsList()
+  MTScreenHooks.register('transactionList', 'transactions.empty-filter-hint', function() {
 
     const listEl = document.getElementById('tx-list-content')
     if (!listEl) return
@@ -17743,7 +17183,7 @@ App._pickMerchant = function(name, opts = {}) {
       btn.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="App.clearTxFilters()">ล้างตัวกรอง / ค้นหา</button>`
       listEl.appendChild(btn)
     }
-  }
+  }, { priority:10 })
 
   // ════════════════════════════════════════════════════════════
   // 5. RECURRING — Overdue date choice modal
@@ -18200,17 +17640,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (privilege.valueType === 'amount') return money(privilege.value || 0)
     if (privilege.valueType === 'free_item') return privilege.freeItemName ? `ฟรี ${privilege.freeItemName}` : 'ฟรีสินค้า'
     return valueTypeLabel(privilege.valueType)
-  }
-
-  function privilegeSecondaryText(privilege) {
-    const parts = []
-    const source = [privilege.platform, privilege.merchant].filter(Boolean).join(' · ')
-    if (source) parts.push(source)
-    const value = privilegeValueText(privilege)
-    if (value) parts.push(value)
-    if (Number(privilege.minSpend || 0) > 0) parts.push(`ขั้นต่ำ ${money(privilege.minSpend)}`)
-    if (Number(privilege.quantity || 1) > 1) parts.push(`เหลือ ${Number(privilege.quantity).toLocaleString('en-US')} สิทธิ์`)
-    return parts.join(' · ')
   }
 
   function getPrivilegeRows(filter = S.privilegesFilter || 'active', query = S.privilegeSearch || '', opts = {}) {
@@ -19038,12 +18467,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // ── 3.1 Quick Amounts — customizable + haptic ─────────────
-  const DEFAULT_QUICK_AMOUNTS = [50, 100, 200, 500, 1000]
 
-  const _prevRenderAddTxAmount = App._renderAddTxAmount?.bind(App)
-  App._renderAddTxAmount = function() {
-    _prevRenderAddTxAmount?.()
-  }
 
   // Haptic feedback on every numpad key press
   const _prevNumpad = App._numpad?.bind(App)
@@ -21999,11 +21423,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     })
   }
 
-  const _origRTL = App.renderTransactionsList?.bind(App)
-  App.renderTransactionsList = function (...args) {
-    _origRTL?.(...args)
+  MTScreenHooks.register('transactionList', 'animations.row-stagger', function () {
     try { _staggerTxRows() } catch (_) {}
-  }
+  }, { priority:100 })
 
   // ─────────────────────────────────────────────────────────────
   // P2-A  Category button pop on tap
@@ -22084,19 +21506,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // P3-A  Flash newly-saved tx row green + W5 FAB particles +
   //       W12 checkmark — only when save actually succeeds
   // ─────────────────────────────────────────────────────────────
-  const _origSaveTx = App.saveTx?.bind(App)
-  App.saveTx = function (...args) {
-    // Intercept toast to detect real success (saveTx returns early on error)
-    let _succeeded = false
-    const _savedTxDraft = { ...(S.tx || {}) }
-    const _origToast = window.toast
-    window.toast = function (msg, type, ...rest) {
-      if (type === 'success') _succeeded = true
-      return _origToast?.(msg, type, ...rest)
-    }
-    try { _origSaveTx?.(...args) } finally { window.toast = _origToast }
-
-    if (!_succeeded) return
+  MTScreenHooks.register('transactionSave', 'animations.save-feedback', function (context) {
+    if (context.result !== true) return
 
     // W12: checkmark overlay immediately on success
     _showCheckmark()
@@ -22114,7 +21525,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         setTimeout(() => first.classList.remove('mt-tx-flash'), 1700)
       } catch (_) {}
     }, 220)
-  }
+  }, { priority:10 })
 
   // ─────────────────────────────────────────────────────────────
   // P3-B  Wallet card 3-D tilt on desktop hover
@@ -22259,28 +21670,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // ─────────────────────────────────────────────────────────────
   // W5: FAB particle burst
   // ─────────────────────────────────────────────────────────────
-  const _TX_COLORS = { income: '#16A34A', expense: '#EF4444', transfer: '#3B82F6' }
-  function _fabParticles(cx, cy, tx) {
-    const color = _TX_COLORS[tx?.type] || '#6366F1'
-    for (let i = 0; i < 14; i++) {
-      const angle = (i / 14) * Math.PI * 2
-      const dist  = 40 + Math.random() * 50
-      const px    = (Math.cos(angle) * dist).toFixed(1)
-      const py    = (Math.sin(angle) * dist).toFixed(1)
-      const el    = document.createElement('div')
-      el.className = 'mt-fab-particle'
-      el.style.cssText = [
-        `left:${cx}px`, `top:${cy}px`,
-        `background:${color}`,
-        `--px:${px}px`, `--py:${py}px`,
-        `animation-delay:${(Math.random() * 60).toFixed(0)}ms`,
-        `animation-duration:${(700 + Math.random() * 300).toFixed(0)}ms`,
-      ].join(';')
-      document.body.appendChild(el)
-      setTimeout(() => el.remove(), 1100)
-    }
-  }
-
   // ─────────────────────────────────────────────────────────────
   // W6: Typewriter on AI insight text
   // ─────────────────────────────────────────────────────────────
@@ -22599,17 +21988,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   })()
 
   // ── N10: Transaction summary count-up ──────────────────────
-  ;(function _patchRTLSummary() {
-    const _prev = App.renderTransactionsList?.bind(App)
-    App.renderTransactionsList = function (...args) {
-      _prev?.(...args)
-      try {
-        document.querySelectorAll('#tx-summary strong, #tx-summary b, #tx-summary .sum-val').forEach(el => {
-          _countUp(el, 800)
-        })
-      } catch (_) {}
-    }
-  })()
+  MTScreenHooks.register('transactionList', 'animations.legacy-summary', function (context) {
+    try {
+      document.querySelectorAll('#tx-summary strong, #tx-summary b, #tx-summary .sum-val').forEach(el => {
+        _countUp(el, 800)
+      })
+    } catch (_) {}
+  }, { priority:110 })
 
   // ── N11: Recurring icon slow spin ─────────────────────────
   ;(function _watchRecurringIcons() {
@@ -22836,33 +22221,35 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   })()
 
   // ── N26: Wallet mini flash after successful save ────────────
-  ;(function _patchSaveTxWalletFlash() {
-    const _prev = App.saveTx?.bind(App)
-    App.saveTx = function (...args) {
-      const _snap = {}
-      document.querySelectorAll('#dashboard-content .mt-wallet-mini').forEach(card => {
-        const key = card.dataset.walletId || card.dataset.id || card.dataset.wid
-        const val = card.querySelector('.value, [class*="balance"], [class*="amount"]')?.textContent.trim()
-        if (key) _snap[key] = val
-      })
-      _prev?.(...args)
-      setTimeout(() => {
-        try {
-          document.querySelectorAll('#dashboard-content .mt-wallet-mini').forEach(card => {
-            const key    = card.dataset.walletId || card.dataset.id || card.dataset.wid
-            const newVal = card.querySelector('.value, [class*="balance"], [class*="amount"]')?.textContent.trim()
-            if (!key || !newVal || _snap[key] === newVal) return
-            const pv = parseFloat((_snap[key] || '').replace(/[^0-9.-]/g, ''))
-            const cv = parseFloat(newVal.replace(/[^0-9.-]/g, ''))
-            card.classList.remove('mt-wallet-flash-pos', 'mt-wallet-flash-neg')
-            void card.offsetWidth
-            card.classList.add(cv >= pv ? 'mt-wallet-flash-pos' : 'mt-wallet-flash-neg')
-            setTimeout(() => card.classList.remove('mt-wallet-flash-pos', 'mt-wallet-flash-neg'), 1400)
-          })
-        } catch (_) {}
-      }, 320)
-    }
-  })()
+  MTScreenHooks.register('transactionSave', 'animations.wallet-snapshot', function (context) {
+    const _snap = {}
+    document.querySelectorAll('#dashboard-content .mt-wallet-mini').forEach(card => {
+      const key = card.dataset.walletId || card.dataset.id || card.dataset.wid
+      const val = card.querySelector('.value, [class*="balance"], [class*="amount"]')?.textContent.trim()
+      if (key) _snap[key] = val
+    })
+    context.metadata.walletValues = _snap
+  }, { phase:'before', priority:10 })
+
+  MTScreenHooks.register('transactionSave', 'animations.wallet-flash', function (context) {
+    if (context.result !== true) return
+    const _snap = context.metadata.walletValues || {}
+    setTimeout(() => {
+      try {
+        document.querySelectorAll('#dashboard-content .mt-wallet-mini').forEach(card => {
+          const key    = card.dataset.walletId || card.dataset.id || card.dataset.wid
+          const newVal = card.querySelector('.value, [class*="balance"], [class*="amount"]')?.textContent.trim()
+          if (!key || !newVal || _snap[key] === newVal) return
+          const pv = parseFloat((_snap[key] || '').replace(/[^0-9.-]/g, ''))
+          const cv = parseFloat(newVal.replace(/[^0-9.-]/g, ''))
+          card.classList.remove('mt-wallet-flash-pos', 'mt-wallet-flash-neg')
+          void card.offsetWidth
+          card.classList.add(cv >= pv ? 'mt-wallet-flash-pos' : 'mt-wallet-flash-neg')
+          setTimeout(() => card.classList.remove('mt-wallet-flash-pos', 'mt-wallet-flash-neg'), 1400)
+        })
+      } catch (_) {}
+    }, 320)
+  }, { priority:20 })
 
   // N30: Empty state multi-bounce handled by CSS override of .empty-icon
 
@@ -23235,28 +22622,17 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   })()
 
   // ── B16: Save button flash on successful saveTx ───────────────
-  ;(function _patchSaveTxBtnFlash() {
-    const _prev = App.saveTx?.bind(App)
-    if (!_prev) return
-    App.saveTx = function (...args) {
-      let _ok = false
-      const _orig = window.toast
-      window.toast = function (msg, type, ...rest) {
-        if (type === 'success') _ok = true
-        return _orig?.(msg, type, ...rest)
-      }
-      try { _prev?.(...args) } finally { window.toast = _orig }
-      if (!_ok) return
-      const btn = document.querySelector(
-        '#add-tx-content .btn-primary, #sheet-add-tx .btn-primary'
-      )
-      if (!btn) return
-      btn.classList.remove('mt-btn-saved')
-      void btn.offsetWidth
-      btn.classList.add('mt-btn-saved')
-      setTimeout(() => btn.classList.remove('mt-btn-saved'), 620)
-    }
-  })()
+  MTScreenHooks.register('transactionSave', 'animations.save-button', function (context) {
+    if (context.result !== true) return
+    const btn = document.querySelector(
+      '#add-tx-content .btn-primary, #sheet-add-tx .btn-primary'
+    )
+    if (!btn) return
+    btn.classList.remove('mt-btn-saved')
+    void btn.offsetWidth
+    btn.classList.add('mt-btn-saved')
+    setTimeout(() => btn.classList.remove('mt-btn-saved'), 620)
+  }, { priority:30 })
 
   // ── B18: Notification rule & recurring row toggle flash ───────
   document.addEventListener('click', function (e) {
@@ -23413,45 +22789,31 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // ── D7 + D38: tx-summary count-up + new-row slide-in ──────────
   let _mt_txJustSaved = false
 
-  ;(function _patchRenderTxListD7D38() {
-    const _prev = App.renderTransactionsList?.bind(App)
-    App.renderTransactionsList = function (...args) {
-      _prev?.(...args)
-      try {
-        const incEl = document.getElementById('tx-income-total')
-        const expEl = document.getElementById('tx-expense-total')
-        if (incEl) _cu(incEl, 550)
-        if (expEl) _cu(expEl, 550)
-      } catch (_) {}
-      if (!_mt_txJustSaved) return
-      _mt_txJustSaved = false
-      try {
-        const first = document.querySelector(
-          '#tx-list-content .tx-group-card .tx-row, ' +
-          '#tx-list-content .tx-group-card .tx-row-modern'
-        )
-        if (!first) return
-        first.classList.remove('mt-tx-new')
-        void first.offsetWidth
-        first.classList.add('mt-tx-new')
-        setTimeout(() => first.classList.remove('mt-tx-new'), 500)
-      } catch (_) {}
-    }
-  })()
+  MTScreenHooks.register('transactionList', 'animations.summary-and-new-row', function (context) {
+    try {
+      const incEl = document.getElementById('tx-income-total')
+      const expEl = document.getElementById('tx-expense-total')
+      if (incEl) _cu(incEl, 550)
+      if (expEl) _cu(expEl, 550)
+    } catch (_) {}
+    if (!_mt_txJustSaved) return
+    _mt_txJustSaved = false
+    try {
+      const first = document.querySelector(
+        '#tx-list-content .tx-group-card .tx-row, ' +
+        '#tx-list-content .tx-group-card .tx-row-modern'
+      )
+      if (!first) return
+      first.classList.remove('mt-tx-new')
+      void first.offsetWidth
+      first.classList.add('mt-tx-new')
+      setTimeout(() => first.classList.remove('mt-tx-new'), 500)
+    } catch (_) {}
+  }, { priority:130 })
 
-  ;(function _patchSaveTxD38() {
-    const _prev = App.saveTx?.bind(App)
-    App.saveTx = function (...args) {
-      let _ok = false
-      const _origToast = window.toast
-      window.toast = function (msg, type, ...rest) {
-        if (type === 'success') _ok = true
-        return _origToast?.(msg, type, ...rest)
-      }
-      try { _prev?.(...args) } finally { window.toast = _origToast }
-      if (_ok) _mt_txJustSaved = true
-    }
-  })()
+  MTScreenHooks.register('transactionSave', 'animations.saved-row-state', function (context) {
+    if (context.result === true) _mt_txJustSaved = true
+  }, { priority:40 })
 
   // ── D11: Amount summary card exit animation before back ────────
   ;(function _patchBackToAmountD11() {
@@ -23668,7 +23030,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     })
 
     const vals       = Object.values(dailySpend)
-    const maxSpend   = vals.length ? Math.max(...vals) : 0
     const totalSpend = vals.reduce((s, v) => s + v, 0)
     const daysWithSpend = vals.filter(v => v > 0).length
     const avgSpend   = daysWithSpend > 0 ? totalSpend / daysWithSpend : 0
@@ -24213,12 +23574,15 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (anyNew) persist()
   }
 
-  const _prevSaveTx4 = App.saveTx?.bind(App)
-  App.saveTx = function (...args) {
-    const txMonth = (S.tx?.date || (typeof today === 'function' ? today() : new Date().toISOString().slice(0, 10))).slice(0, 7)
-    _prevSaveTx4?.(...args)
+  MTScreenHooks.register('transactionSave', 'budgets.capture-month', function (context) {
+    context.metadata.transactionMonth = (S.tx?.date || today()).slice(0, 7)
+  }, { phase:'before', priority:20 })
+
+  MTScreenHooks.register('transactionSave', 'budgets.check-after-save', function (context) {
+    if (context.result !== true) return
+    const txMonth = context.metadata.transactionMonth
     setTimeout(() => { try { checkBudgetAlerts(txMonth) } catch (_) {} }, 200)
-  }
+  }, { priority:50 })
 
   // ── Inject CSS (back gesture indicator + More tab strip) ──────────────
   const style = document.createElement('style')
@@ -24930,6 +24294,11 @@ window.MTScreenHooks?.install?.(App, {
   wallets: 'renderWallets',
   reports: 'renderReports',
   transactions: 'renderTransactions',
+  transactionList: 'renderTransactionsList',
+  transactionSave: 'saveTx',
   more: 'renderMore',
   addTransactionDetail: '_renderAddTxDetail',
 })
+
+// Apply list extensions to the already-rendered startup DOM without rebuilding it.
+if (S.page === 'transactions') window.MTScreenHooks?.run?.('transactionList')

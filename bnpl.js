@@ -109,7 +109,7 @@
       return (plan?.schedule || []).filter(s => !s.paidTxId).reduce((sum, s) => sum + Number(s.amount || 0), 0)
     },
 
-    createPlan({ walletId, txId, merchant, purchaseDate, totalAmount, installments }) {
+    createPlan({ walletId, txId, merchant, purchaseDate, totalAmount, installments }, { save = true } = {}) {
       const wallet = (typeof S !== 'undefined' ? S.wallets : [])?.find(w => w.id === walletId)
       const payDay = wallet?.payDay || null
       const plan = {
@@ -129,7 +129,7 @@
         S.bnplPlans = S.bnplPlans || []
         S.bnplPlans.unshift(plan)
       }
-      if (typeof persist === 'function') persist()
+      if (save && typeof persist === 'function') persist()
       return plan
     },
 

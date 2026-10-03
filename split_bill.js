@@ -374,12 +374,12 @@
     return { ...state, tx }
   }
 
-  App.linkSplitBillToTransaction = function (billId, txId) {
-    const bill = SbStore.getBill(billId)
+  App.linkSplitBillToTransaction = function (billId, txId, { save = true } = {}) {
+    const bill = save ? SbStore.getBill(billId) : (typeof S !== 'undefined' ? S.splitBills || [] : []).find(b => b.id === billId)
     if (!bill) return false
     bill.linkedTransactionId = txId
     bill.updatedAt = nowISO()
-    return SbStore.upsertBill(bill)
+    return save ? SbStore.upsertBill(bill) : true
   }
 
   App.openSplitBillLinkedTxForm = function (billId) {

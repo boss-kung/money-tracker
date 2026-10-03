@@ -322,7 +322,9 @@ const Storage = {
     let committed = false
     try {
       for (const [key, payload] of serialized) {
-        localStorage.setItem(key, payload)
+        // The full snapshot remains available for verification and rollback.
+        // Avoid synchronous storage writes for collections that did not change.
+        if (previous.get(key) !== payload) localStorage.setItem(key, payload)
         if (localStorage.getItem(key) !== payload) throw new Error(`readback mismatch after save: ${key}`)
       }
       const verification = Storage.verifyState(state, ['transactions', 'wallets', 'settings', 'upcomingBills'])

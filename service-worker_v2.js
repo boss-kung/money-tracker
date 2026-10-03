@@ -58,18 +58,6 @@ function timeoutResult(ms) {
   return new Promise(resolve => setTimeout(() => resolve(null), ms))
 }
 
-async function networkFirst(request, fallbackUrl = '') {
-  const cache = await caches.open(CACHE_NAME)
-  try {
-    const response = await fetch(request)
-    const saved = await putIfUsable(cache, request, response)
-    // Fall back to cache on 5xx/4xx so a transient server error never breaks the app.
-    return saved || (await matchCached(request, fallbackUrl)) || response
-  } catch (_) {
-    return (await matchCached(request, fallbackUrl)) || Response.error()
-  }
-}
-
 async function networkFirstWithTimeout(request, fallbackUrl = '', timeoutMs = CORE_NETWORK_TIMEOUT_MS) {
   const cache = await caches.open(CACHE_NAME)
   const cached = await matchCached(request, fallbackUrl)
