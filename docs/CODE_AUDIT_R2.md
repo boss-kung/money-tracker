@@ -30,6 +30,9 @@
 | B7 | hook `budgets.capture-month` (~23676) | ถ้า draft ไม่มีวันที่ hook โยน ReferenceError และ budget check หลังบันทึกไม่ทำงาน | `today` ไม่มีใน scope | ใช้ `getTODAY()` |
 | B8 | Wallet form ทอง/FCD (~10543) | มีกล่องขอบว่างสูง 22px ใต้ช่องราคาสำรอง | `#wf-market-price-link` ถูกเติมโดย `syncInvestmentWalletForm` ซึ่งอยู่คนละ scope และไม่เคยรันได้ | ลบกล่องว่าง + helper ที่ตาย (ดู D) — ฟีเจอร์ price box ไม่เคยทำงานใน UI ปัจจุบัน |
 | B9 | Wallet form `wf-symbol` (~10540) | ค่า symbol ที่มี `"` ทำให้ attribute แตก | ใส่ user input ลง `value="..."` โดยไม่ escape | ใช้ `esc()` |
+| B10 | Notification deep link ตอน cold start (`init()`) | กดแจ้งเตือนที่เปิด `#more?open=goals` / `budgets` / `upcomingBills` / `addTx` แล้วไปแค่หน้า More ไม่เปิดหน้าย่อย | `showPage()` เขียน hash ใหม่เป็น `#more` ก่อน `parseAppHashRoute()` รอบสองจะอ่าน `open=` | ใช้ route ที่ parse ไว้ต้น `init()` |
+| B11 | วันที่ UTC อีกหลายจุด (พบระหว่างแก้ B6) | ช่วง 00:00–06:59 ช่วง "3 เดือน" ใน wallet, ป้าย "เมื่อวาน", รอบ sheet สิทธิ์บัตร และเดือนปัจจุบันของ Monthly Review เลื่อนไปหนึ่งวัน/เดือน | ใช้ `toISOString().slice()` | ใช้ `getTODAY()` / `getTHISMONTH()` / `_localDateStr()` |
+| B12 | ค่าคงที่ `TODAY` / `THIS_MONTH` ตอน runtime | เปิดแอปค้างข้ามวัน (iOS PWA) แล้วกด "ทำซ้ำ" รายการ ได้วันที่ของวันที่เปิดแอป; Monthly Review/Finance month ค้างเดือนเก่า | ค่าคงที่คำนวณครั้งเดียวตอนโหลด (`sample-data_v2.js` เองระบุว่าห้ามใช้ตอน runtime) | ใช้ `getTODAY()` / `getTHISMONTH()` |
 
 ## 2. โค้ดเก่าที่ถูกเขียนทับแล้ว (ลบ/รวม)
 
@@ -77,3 +80,40 @@
 ## เกณฑ์ผ่าน
 
 `node --test tests/*.test.js` ผ่านทั้งหมด (เพิ่ม regression tests ของ bug ข้อ 1), `node --check` ทุกไฟล์, ESLint `no-undef` ไม่มีชื่อนอก scope เหลือ, harness: DOM + computed style ของทุกหน้าและ sheet เท่าเดิมทั้ง light/dark/production/demo ยกเว้นจุดที่ตั้งใจแก้ (B8), ไม่มี page error, และ bump release version ตาม `release_manifest.js`
+
+## ผลลัพธ์
+
+ดำเนินการครบตามแผนบน branch นี้ · release `2026.10.03-audit-r131`
+
+| ตัวชี้วัด | ก่อน (r130) | หลัง (r131) |
+| --- | --- | --- |
+| `app_v2.js` | 24,408 บรรทัด / 1,441,348 bytes | 23,357 บรรทัด / 1,365,876 bytes |
+| JS + CSS ใน core assets | 2,423,029 bytes | 2,316,726 bytes (−106 KB, −4.4%) |
+| `style_v2.css` / `ui_v2.css` | 273,952 / 71,395 bytes | 245,398 / 70,664 bytes |
+| Dashboard render ต่อการเปิดแอป (2,675 รายการ) | 11–12 ครั้ง | 3 ครั้ง |
+| DOMContentLoaded แบบ warm (desktop, 2,675 รายการ) | ~445–457 ms | ~340–372 ms |
+| `App.*` definition ที่ตาย/ถูกเขียนทับ | 55 | 0 (เหลือ debug hooks 3 ตัวที่ตั้งใจเก็บ) |
+| ตัวแปร/helper ที่ไม่ใช้ (ESLint) | 79+ | 0 |
+| การอ้างชื่อนอก scope (ESLint `no-undef`, ไม่นับ module globals) | 24 จุด (13 ชื่อ) | 0 |
+| สำเนา `esc` / `jsArg` ใน `app_v2.js` | 33 / 3 | 0 (ใช้ `MTSafeRender`) |
+| CSS rule ที่ไม่มีวันตรง / declaration ที่ถูกทับเสมอ | 147 rules + 25 selectors / 398 | 0 (ยกเว้น design-system library) |
+| Node tests | 263 ผ่าน | 266 ผ่าน (เพิ่ม 3 ไฟล์, ปรับ 2 ไฟล์) |
+
+### การตรวจสอบ
+
+- `node --test tests/*.test.js`: 266/266 ผ่าน · `node --check` 89 ไฟล์ผ่าน · ESLint `no-undef` = 0, `no-unused-vars` = 0 (เหลือ 2 false positive: comma-ternary และ loop ที่มี guard)
+- Tests ใหม่: `block_scope_references` (จับ helper ที่เรียกข้าม block — รันกับโค้ดเดิมแล้วจับ B1–B4, B6, B7 ได้ครบ), `notification_deeplink_static` (B10), `local_date_static` (B6/B11) · `credit_billing_migration` ย้ายไปทดสอบ rollback ของ `persist()` จริง (mutation test: ลบบรรทัด rollback แล้ว test fail)
+- Browser (Playwright, Chromium, 430×932, ข้อมูลสังเคราะห์ 8 กระเป๋าทุกชนิด/107 รายการ/Loan/Goal/Recurring, ปิด network ภายนอก, เวลาคงที่): เทียบกับโค้ดเดิม `8384fe0` ที่ serve คู่กัน
+  - boot ตรงผ่าน hash ทั้ง 5 หน้า + หลังสลับหน้า 5 หน้า + 44 sheet/sub-screen × light/dark × production/demo: DOM และ computed style **เท่าเดิมทุกจุด** ยกเว้น (1) กล่องราคาว่างที่ตั้งใจลบ (B8) และ (2) เลขเวอร์ชันในหน้า More; ความต่างอื่นที่พบคือ animation ที่ยังเล่นอยู่ (aurora card, overdue pulse, count-up) ซึ่งเมื่อรอให้จบได้ค่าเดียวกัน
+  - localStorage หลัง boot เท่าเดิมทุก key (ยกเว้น timestamp และ `mt_boot_last_log` ที่สั้นลงเพราะ render น้อยลง); CSV export ตรงกันทุก byte; shared-expense settlement ตรงกัน
+  - ยืนยันว่า bug แก้แล้วใน browser: crypto form เปิดได้, แก้ชุดผ่อนบันทึกได้, save ล้มเหลวมี toast, import โปรได้หมวด `food`, deep link เปิด Goals/Budgets/Add-Tx, เวลา 02:00 วันที่ 1 ปฏิทินชี้วันที่ 1
+  - ไม่มี page error / console error ใหม่
+
+### ข้อสังเกตที่ไม่ได้แก้ (ต้องตัดสินใจเชิง product)
+
+- `#wf-market-price-link` เดิมตั้งใจแสดงราคาตลาด + ลิงก์ในฟอร์มทอง/FCD แต่ไม่เคยทำงาน — ลบกล่องว่างแล้ว ถ้าต้องการฟีเจอร์นี้ต้องทำใหม่ในฟอร์มปัจจุบัน
+- badge "วงเงินร่วม" บนการ์ดบัตรเครดิตถูกคำนวณแต่ไม่เคยแสดง (ตั้งแต่ history ที่มี) — ลบส่วนคำนวณ ไม่ได้เพิ่ม UI
+- CSV export ให้ `bnpl_payment` / `investment_*` เป็นค่าบวก ขณะที่ `cc_payment` เป็นลบ — คงพฤติกรรมเดิม
+- `persist()` ตอน boot ยังมี 4 ครั้ง (เกี่ยวกับ migration) — คงไว้เพื่อความปลอดภัยข้อมูล
+- `docs/SDD/*` เป็น snapshot ที่อ้างบรรทัด/ฟังก์ชันเดิม (บางฟังก์ชันถูกลบในรอบนี้) — ไม่ได้แก้
+- เครื่องมือ `find_dead_css.py` / `remove_dead_css.py` ใช้ path บนเครื่องผู้ใช้ และ `codex-skills` เป็น gitlink ที่ไม่มี `.gitmodules` — คงไว้ตามการตัดสินใจรอบแรก

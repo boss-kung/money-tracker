@@ -9236,13 +9236,6 @@ App._pickMerchant = function(name, opts = {}) {
     const txHasRule = tx => {
       try {
         return App._txShouldCountForRule(tx, rule, ruleId)
-        const explicitIds = Array.isArray(tx?.rewardRuleIds)
-          ? tx.rewardRuleIds.map(id => String(id || '')).filter(Boolean)
-          : null
-        if (explicitIds && explicitIds.length > 0) return explicitIds.includes(String(ruleId || rule.id || ''))
-        const estimateRows = Array.isArray(tx?.rewardEstimate?.rules) ? tx.rewardEstimate.rules : []
-        if (estimateRows.some(row => String(row.ruleId || '') === String(ruleId || rule.id || ''))) return true
-        return getEligibility(tx).matched
       } catch (err) {
         console.warn('[Benefits] check tx rule match failed', { ruleId, txId: tx?.id, err })
         return false
@@ -16375,7 +16368,6 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   App.exportCSV = function() {
-    const typeLabel = { expense:'expense', income:'income', transfer:'transfer', cc_payment:'cc_payment' }
     const headers = ['date','benefitDateOverride','type','amount','wallet','toWallet','category','merchant','note','status','budgetAmount','sharedBill','sharedPeople','myShare','reimbursed','reimbursableRemaining','reimbursesSharedExpenseTxId','incomeTreatment','reimbursementSource','reimbursementSplitBillId','fromSplitPersonId','toSplitPersonId','splitBillId','recurringId','installmentGroupId','installmentNo','rewardRuleIds','createdAt']
     const csvCell = value => `"${String(value ?? '').replace(/"/g, '""')}"`
     const rows = [...(S.transactions || [])]
@@ -16398,7 +16390,7 @@ App._pickMerchant = function(name, opts = {}) {
         return [
           t.date || '',
           t.benefitDateOverride || '',
-          typeLabel[t.type] || t.type || '',
+          t.type || '',
           Number.isFinite(signedAmount) ? signedAmount : 0,
           wallet?.name || '',
           toWallet?.name || '',
