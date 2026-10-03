@@ -16154,13 +16154,17 @@ App._pickMerchant = function(name, opts = {}) {
 
   App._renderCCStatementPanel = function(cardId, st) {
     if (!st) return `<div class="statement-compact statement-compact-th"><div class="empty-state">ยังไม่มีข้อมูลรอบบิล</div></div>`
-    const status = ({open:'รอบกำลังสะสม',partial:'ชำระบางส่วน',overdue:'เลยกำหนด',paid:'ชำระแล้ว',unpaid:'ค้างชำระ'})[st.status] || 'ไม่มียอดต้องจ่าย'
+    const status = ({open:'รอบกำลังสะสม',partial:'ชำระบางส่วน',overdue:'เลยกำหนด',paid:'ชำระแล้ว',unpaid:'ค้างชำระ',carried:'ยกยอดแล้ว'})[st.status] || 'ไม่มียอดต้องจ่าย'
+    const carryTarget = st.status !== 'open' && Number(st.balanceDue || 0) > 0 ? App._getCreditCarryTarget(cardId, st.id) : null
     return `<div class="statement-compact statement-compact-th">
       <div class="statement-main">
         <div><b>สรุปรอบบัตรเครดิต</b><span>รอบ ${thaiDate(st.start)} – ${thaiDate(st.end)}</span><span>วันกำหนดชำระ ${thaiDate(st.dueDate)}</span></div>
         <em class="status-pill ${st.paid || Number(st.balanceDue || 0) <= 0 ? 'ok' : 'warn'}">${status}</em>
       </div>
-      ${st.openingDebt>0?`<div class="form-hint">หนี้ตั้งต้น ${money(st.openingDebt)}${walletById(cardId)?.ccBilling?.opening?.provenance==='inferred'?' · วันครบกำหนดประมาณการ':''}</div><button class="btn btn-secondary btn-sm" onclick="App.openCreditOpeningForm('${esc(cardId)}')">แก้วันครบกำหนดหนี้ตั้งต้น</button>`:''}
+      ${walletById(cardId)?.ccBilling?.opening?.statementId===st.id?`<div class="form-hint">${st.openingDebt>0?`หนี้ตั้งต้น ${money(st.openingDebt)}`:'รอบเริ่มต้นของบัตร'}${walletById(cardId)?.ccBilling?.opening?.provenance==='inferred'?' · วันครบกำหนดประมาณการ':''}</div><button class="btn btn-secondary btn-sm" onclick="App.openCreditOpeningForm('${esc(cardId)}')">แก้หนี้ตั้งต้น</button>`:''}
+      ${st.carriedIn>0?`<div class="form-hint">รวมยอดยกมาจากรอบก่อน ${money(st.carriedIn)}</div>`:''}
+      ${st.carriedOut>0?`<div class="form-hint">ยกยอด ${money(st.carriedOut)} ไปรอบถัดไปแล้ว</div><button class="btn btn-secondary btn-sm" onclick="App.undoCreditCarryForward('${esc(cardId)}','${esc(st.id)}')">ยกเลิกการยกยอด</button>`:''}
+      ${carryTarget?`<button class="btn btn-secondary btn-sm" onclick="App.carryForwardCreditStatement('${esc(cardId)}','${esc(st.id)}')">ยกยอดค้างไปรอบถัดไป</button>`:''}
       <div class="statement-metrics">
         <div><span>ยอดใช้ในรอบ</span><strong>${money(st.purchaseTotal)}</strong></div>
         <div><span>ชำระแล้ว</span><strong>${money(st.paidTotal)}</strong></div>
@@ -16170,21 +16174,115 @@ App._pickMerchant = function(name, opts = {}) {
     </div>`
   }
 
+  // Carry-forward relocates a closed statement's remainder into the next statement.
+  // Total card debt and the ledger never change; only the bill it belongs to does.
+  App._getCreditCarryTarget = function(cardId, statementId) {
+    const card = walletById(cardId)
+    if (!card?.ccBilling) return null
+    const rows = App.getCreditCardBillingState(card)?.statements || []
+    const from = rows.find(r=>r.id===statementId)
+    if (!from) return null
+    // Skip later bills that are already past due so the carried amount is not instantly overdue again.
+    return rows.filter(r=>r.end>from.end && (r.status==='open' || r.daysLeft>=0)).sort((a,b)=>a.end.localeCompare(b.end))[0] || null
+  }
+  App.carryForwardCreditStatement = function(cardId, statementId) {
+    const card = walletById(cardId)
+    const from = (App.getCreditCardBillingState(card)?.statements || []).find(r=>r.id===statementId)
+    const target = App._getCreditCarryTarget(cardId, statementId)
+    if (!card?.ccBilling || !from || !(from.balanceDue > 0) || !target) return
+    App.showConfirm({
+      title:'ยกยอดค้างไปรอบถัดไป',
+      body:`ยอดค้าง ${money(from.balanceDue)} ของรอบ ${thaiDate(from.start)} – ${thaiDate(from.end)} จะย้ายไปรวมกับรอบ ${thaiDate(target.start)} – ${thaiDate(target.end)} (กำหนดชำระ ${thaiDate(target.dueDate)}) ยอดหนี้บัตรรวมไม่เปลี่ยน`,
+      confirmLabel:'ยกยอด',
+      onConfirm() {
+        const previous = card.ccBilling
+        const id = typeof Calc?.genId === 'function' ? Calc.genId() : Date.now().toString(36) + Math.random().toString(36).slice(2)
+        const carryover = {id:`co_${id}`,fromStatementId:from.id,toStatementId:target.id,amount:from.balanceDue,date:today(),createdAt:new Date().toISOString()}
+        card.ccBilling = {...previous,carryovers:[...(previous.carryovers || []),carryover]}
+        if (!persist('credit-carryover')) {card.ccBilling=previous;return}
+        toast('ยกยอดไปรอบถัดไปแล้ว','success')
+        // Re-render in place: reopening the sub screen here gets closed by the confirm sheet's back-layer pop.
+        App._setCCDetailCycleOffset(cardId, App._getCCDetailCycleOffset(cardId))
+      },
+    })
+  }
+  App.undoCreditCarryForward = function(cardId, statementId) {
+    const card = walletById(cardId)
+    if (!card?.ccBilling?.carryovers?.some(c=>c.fromStatementId===statementId)) return
+    App.showConfirm({
+      title:'ยกเลิกการยกยอด',
+      body:'ยอดที่ยกไปจะกลับมาค้างในรอบนี้ตามเดิม ยอดหนี้บัตรรวมไม่เปลี่ยน',
+      confirmLabel:'ยกเลิกการยกยอด',
+      onConfirm() {
+        const previous = card.ccBilling
+        const carryovers = previous.carryovers.filter(c=>c.fromStatementId!==statementId)
+        card.ccBilling = {...previous,carryovers}
+        if (!carryovers.length) delete card.ccBilling.carryovers
+        if (!persist('credit-carryover-undo')) {card.ccBilling=previous;return}
+        toast('ยกเลิกการยกยอดแล้ว','success')
+        App._setCCDetailCycleOffset(cardId, App._getCCDetailCycleOffset(cardId))
+      },
+    })
+  }
+
+  // Opening debt editor: which statement the starting debt belongs to, that bill's
+  // due date, and the starting amount itself (the only field that changes total debt).
   App.openCreditOpeningForm = function(cardId) {
     const card = walletById(cardId)
     const opening = card?.ccBilling?.opening
     if (!opening) return
-    App.openDynamicSheet('cc-opening-date', 'วันครบกำหนดหนี้ตั้งต้น', `<div class="form-group"><label class="form-label">วันครบกำหนดตามใบแจ้งยอด</label><input id="cc-opening-due" class="form-input" type="date" value="${esc(opening.dueDate)}"></div>`, `<button class="btn btn-primary" onclick="App.saveCreditOpeningDate('${esc(cardId)}')">บันทึก</button>`)
+    const rows = (App.getCreditCardBillingState(card)?.statements || []).slice().sort((a,b)=>a.end.localeCompare(b.end))
+    if (!rows.some(r=>r.id===opening.statementId)) rows.unshift({id:opening.statementId,start:opening.start,end:opening.end,dueDate:opening.dueDate,status:''})
+    const options = rows.map(r=>`<option value="${esc(r.id)}" data-due="${esc(r.id===opening.statementId?opening.dueDate:r.dueDate)}" ${r.id===opening.statementId?'selected':''}>${esc(`${thaiDate(r.start)} – ${thaiDate(r.end)}${r.status==='open'?' (รอบปัจจุบัน)':''}`)}</option>`).join('')
+    const debt = Math.round(-Number(card.openingBalance || 0) * 100) / 100
+    App.openDynamicSheet('cc-opening-date', 'แก้หนี้ตั้งต้น', `
+      <div class="form-group"><label class="form-label">ยอดหนี้ตั้งต้น (฿)</label><input id="cc-opening-amount" class="form-input" type="number" inputmode="decimal" step="0.01" value="${esc(debt)}" oninput="App._previewCreditOpening('${esc(cardId)}')"><div class="form-hint">ใส่ติดลบถ้าเริ่มต้นมีเครดิตเหลือในบัตร</div><div class="form-hint" id="cc-opening-preview"></div></div>
+      <div class="form-group"><label class="form-label">หนี้ตั้งต้นอยู่ในรอบบิล</label><select id="cc-opening-statement" class="form-input" onchange="const o=this.selectedOptions[0];document.getElementById('cc-opening-due').value=o?.dataset.due||''">${options}</select><div class="form-hint">เลือกรอบที่ยอดนี้ถูกเรียกเก็บจริงตามใบแจ้งยอด</div>${card.ccBilling.carryovers?.length?'<div class="form-hint">บัตรนี้มีการยกยอดค้างอยู่ ถ้าย้ายรอบ ยอดที่ยกไว้อาจเปลี่ยน ควรตรวจรอบบิลอีกครั้งหลังบันทึก</div>':''}</div>
+      <div class="form-group"><label class="form-label">วันครบกำหนดตามใบแจ้งยอด</label><input id="cc-opening-due" class="form-input" type="date" value="${esc(opening.dueDate)}"></div>`,
+      `<button class="btn btn-primary" onclick="App.saveCreditOpening('${esc(cardId)}')">บันทึก</button>`)
+    App._previewCreditOpening(cardId)
   }
-  App.saveCreditOpeningDate = function(cardId) {
-    const card = walletById(cardId), dueDate = document.getElementById('cc-opening-due')?.value
-    if (!card?.ccBilling || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate || '') || !Number.isFinite(new Date(`${dueDate}T00:00:00`).getTime())) return
-    const previous = card.ccBilling
-    const opening = {...previous.opening,dueDate,provenance:'explicit'}
-    card.ccBilling = {...previous,opening,periods:previous.periods.map(p=>p.id===opening.statementId?{...p,dueDate}:p)}
-    if (!persist('credit-opening-date')) {card.ccBilling=previous;return}
+  App._previewCreditOpening = function(cardId) {
+    const card = walletById(cardId), el = document.getElementById('cc-opening-preview')
+    if (!card || !el) return
+    const nextDebt = Number(stripNumberCommas(document.getElementById('cc-opening-amount')?.value).trim() || NaN)
+    if (!Number.isFinite(nextDebt)) { el.textContent = ''; return }
+    const delta = Math.round((nextDebt + Number(card.openingBalance || 0)) * 100) / 100
+    const current = Math.round(-Number(card.balance || 0) * 100) / 100
+    el.textContent = delta ? `ยอดหนี้บัตรปัจจุบันจะเปลี่ยนจาก ${money(current)} เป็น ${money(current + delta)}` : 'ยอดหนี้บัตรปัจจุบันไม่เปลี่ยน'
+  }
+  App.saveCreditOpening = function(cardId) {
+    const card = walletById(cardId)
+    const statementId = document.getElementById('cc-opening-statement')?.value
+    const dueDate = document.getElementById('cc-opening-due')?.value
+    const amountRaw = document.getElementById('cc-opening-amount')?.value
+    const nextDebt = Number(stripNumberCommas(amountRaw).trim() || NaN)
+    if (!card?.ccBilling) return
+    const parts = String(statementId || '').startsWith(`${card.id}:`) ? String(statementId).slice(card.id.length + 1).split(':') : []
+    if (parts.length !== 2 || !/^\d{4}-\d{2}-\d{2}$/.test(parts[0]) || !/^\d{4}-\d{2}-\d{2}$/.test(parts[1])) return toast('รอบบิลไม่ถูกต้อง', 'error')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate || '') || !Number.isFinite(new Date(`${dueDate}T00:00:00`).getTime()) || dueDate < parts[1]) return toast('วันครบกำหนดต้องไม่ก่อนวันตัดรอบ', 'error')
+    if (!Number.isFinite(nextDebt)) return toast('กรุณาระบุยอดหนี้ตั้งต้น', 'error')
+    const previous = {ccBilling:card.ccBilling, openingBalance:card.openingBalance, balance:card.balance}
+    const opening = {statementId,start:parts[0],end:parts[1],dueDate,provenance:'explicit'}
+    const periods = previous.ccBilling.periods.some(p=>p.id===statementId)
+      ? previous.ccBilling.periods.map(p=>p.id===statementId?{...p,dueDate}:p)
+      : [...previous.ccBilling.periods,{id:statementId,start:opening.start,end:opening.end,dueDate}].sort((a,b)=>a.end.localeCompare(b.end)||a.id.localeCompare(b.id))
+    card.ccBilling = {...previous.ccBilling,opening,periods}
+    const nextOpeningBalance = Math.round(-nextDebt * 100) / 100
+    const amountChanged = Math.abs(nextOpeningBalance - Number(previous.openingBalance || 0)) > 0.004
+    if (amountChanged) {
+      card.openingBalance = nextOpeningBalance
+      App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+    }
+    if (!persist('credit-opening')) {
+      Object.assign(card, previous)
+      return
+    }
+    toast('บันทึกหนี้ตั้งต้นแล้ว', 'success')
     App.closeDynamicSheet('cc-opening-date');App.openCCDetail(cardId)
   }
+  // Kept for older inline handlers; the sheet now saves through saveCreditOpening.
+  App.saveCreditOpeningDate = function(cardId) { return App.saveCreditOpening(cardId) }
 
   App._renderCCBenefitPanel = function(cardId, st, rewardAcctHtml) {
     const rewards = st?.reward || { points:0, cashback:0, discount:0 }
