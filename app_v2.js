@@ -119,8 +119,8 @@ function nextTransactionCreationSequence() {
    Manual future payables that reserve available cash only
    ============================================================ */
 window.__mountUpcomingBillsFeature = function() {
-  const esc = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch]))
-  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
+  const esc = MTSafeRender.escapeHtml
+  const today = () => getTODAY()
   const nowISO = () => new Date().toISOString()
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const round2 = n => Math.round((Number(n) || 0) * 100) / 100
@@ -918,16 +918,16 @@ let S = {
     categoryId: '',
     merchant: '',
     note: '',
-    date: TODAY,
+    date: getTODAY(),
   },
 
   // Filters
-  txMonth: THIS_MONTH,
+  txMonth: getTHISMONTH(),
   txType: 'all',
   txSearch: '',
 
   // Reports
-  rptMonth: THIS_MONTH,
+  rptMonth: getTHISMONTH(),
   rptView: 'assets',
 
   // Misc
@@ -1100,12 +1100,36 @@ function toast(msg, type = 'info') {
 }
 
 // ── Overlay helpers ───────────────────────────────────────────
+// Pending close-animation timers keyed by overlay id
+const overlayCloseTimers = {}
+
 const App = {
   saveAll(reason = 'app') { return persist(reason) },
-  openOverlay(id)  { document.getElementById(id)?.classList.add('open') },
+  openOverlay(id) {
+    clearTimeout(overlayCloseTimers[id])
+    delete overlayCloseTimers[id]
+    const el = document.getElementById(id)
+    if (!el) return
+    el.classList.remove('mt-closing')
+    el.classList.add('open')
+    if (id === 'overlay-add-tx') {
+      document.getElementById('fab')?.classList.add('fab-open')
+    }
+  },
   closeOverlay(id) {
-    document.getElementById(id)?.classList.remove('open')
+    if (id === 'overlay-add-tx') {
+      document.getElementById('fab')?.classList.remove('fab-open')
+    }
     if (id === 'overlay-tx-detail') S.deleteConfirm = false
+    const el = document.getElementById(id)
+    if (!el?.classList.contains('open')) return
+    App._suppressNextSubScreenAnimationUntil = Date.now() + 700
+    clearTimeout(overlayCloseTimers[id])
+    el.classList.add('mt-closing')
+    overlayCloseTimers[id] = setTimeout(() => {
+      el.classList.remove('open', 'mt-closing')
+      delete overlayCloseTimers[id]
+    }, 380)
   },
   openSubScreen(html, opts = {}) {
     const ss = document.getElementById('sub-screen')
@@ -1235,7 +1259,7 @@ const App = {
       categoryId: '',
       merchant: '',
       note: '',
-      date: TODAY,
+      date: getTODAY(),
       isRecurring: false,
       isInstallment: false,
       installmentMonths: '',
@@ -1386,7 +1410,7 @@ const App = {
       ? Math.max(0, Number(editingTx.amount || 0))
       : Math.max(0, Number(selected?.balanceDue ?? due?.amount ?? creditDebtBalance(card)))
     const sources = S.wallets.filter(w => w.id !== cardId && isCCPaymentSourceWallet(w))
-    const esc     = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch])))
+    const esc = MTSafeRender.escapeHtml
     const hasDiscount = !!editingTx && Number(editingTx.discountAmount || 0) > 0
     const cashAmount = editingTx ? Number(editingTx.cashAmount ?? editingTx.amount ?? 0) : owed
     const discountAmount = editingTx ? Number(editingTx.discountAmount || 0) : 0
@@ -1597,7 +1621,7 @@ Object.assign(App, {
   toggleRecurring(id) { const r = S.recurring.find(x => x.id === id); if (r) r.paused = !r.paused; persist(); App.openRecurringScreen() },
 
   openCategoryScreen(type='expense', q='') {
-    const esc = App._esc || (s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])))
+    const esc = MTSafeRender.escapeHtml
     S.catManageType = type
     const cats = (S.categories[type] || []).filter(c => !q || c.label.toLowerCase().includes(q.toLowerCase()))
     const listHtml = cats.map(c => {
@@ -1618,7 +1642,7 @@ Object.assign(App, {
   saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { App._showFieldError('cat-name', 'กรุณากรอกชื่อหมวดหมู่'); return } const _cErr = _fieldTooLong(label, FIELD_MAX.label, 'ชื่อหมวดหมู่'); if (_cErr) { App._showFieldError('cat-name', _cErr); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); document.getElementById('category-form-overlay')?.remove(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
 
   openMerchantScreen(q='') {
-    const esc = App._esc || (s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])))
+    const esc = MTSafeRender.escapeHtml
     App._ensureV2State()
     const usage = Calc.getMerchantUsage(S.transactions || [])
     const list = S.merchants.filter(m => !q || m.name.toLowerCase().includes(q.toLowerCase()))
@@ -1998,9 +2022,9 @@ function init() {
   requestAnimationFrame(() => requestAnimationFrame(() => requestHideBootScreen('first-render')))
 
   // If opened via notification with an open= param (e.g. #more?open=upcomingBills),
-  // trigger the sub-screen after the initial render completes.
-  const _initRoute = parseAppHashRoute()
-  const _initOpen = _initRoute.params.get('open')
+  // trigger the sub-screen after the initial render completes. Read it from the
+  // route parsed before showPage(), which rewrites the hash to the bare page.
+  const _initOpen = route.params.get('open')
   if (_initOpen) {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (_initOpen === 'upcomingBills') App.openUpcomingBillsScreen?.()
@@ -2077,7 +2101,7 @@ setTimeout(() => {
     const bar = document.createElement('div')
     bar.id = 'mt-undo-bar'
     bar.className = 'mt-undo-bar'
-    const escLabel = App._esc ? App._esc(label) : String(label ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch]))
+    const escLabel = MTSafeRender.escapeHtml(label)
     bar.innerHTML = `<span class="mt-undo-bar-label">${escLabel}</span><button class="mt-undo-bar-btn" onclick="App._doUndo()">ยกเลิก</button>`
     document.body.appendChild(bar)
     App._undoState = {
@@ -2176,7 +2200,7 @@ App.render();
 
   App.getFinancialPosition = function() {
     const wallets = S.wallets || []
-    const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    const todayStr = getTODAY()
     const amountForTx = tx => typeof App._expectedLedgerAmountForTx === 'function'
       ? App._expectedLedgerAmountForTx(tx)
       : window.MTLedger.getLedgerAmountForTx(tx, { wallets })
@@ -2241,8 +2265,8 @@ App.render();
     const range = S.walletTxRange || 'all'
     const today = new Date()
     let start = '', end = ''
-    if (range === 'month') start = THIS_MONTH + '-01'
-    if (range === '3m') { const d = new Date(today); d.setMonth(d.getMonth() - 3); start = d.toISOString().slice(0,10) }
+    if (range === 'month') start = getTHISMONTH() + '-01'
+    if (range === '3m') { const d = new Date(today); d.setMonth(d.getMonth() - 3); start = _localDateStr(d) }
     if (range === 'year') start = `${today.getFullYear()}-01-01`
     if (range === 'custom') { start = S.walletTxStart || ''; end = S.walletTxEnd || '' }
     return S.transactions
@@ -2393,7 +2417,7 @@ App.render();
     }
     S.txMode = 'edit'
     S.editingTxId = id
-    S.tx = { step:'detail', type:tx.type, amount:String(tx.benefitBaseAmount || tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || TODAY, benefitDateOverride:tx.benefitDateOverride || '', isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:tx.splitBillId || '', splitBillOwnerPersonId:tx.splitBillOwnerPersonId || '', splitBillOwnerShare:Number(tx.ledgerAmount || 0), splitBillOwnerPaidAmount:Number(tx.amount || 0), reimbursesSharedExpenseTxId:tx.reimbursesSharedExpenseTxId || '', reimbursementSource:tx.reimbursementSource || '', incomeTreatment:tx.incomeTreatment || '', reimbursementSplitBillId:tx.reimbursementSplitBillId || '', fromSplitPersonId:tx.fromSplitPersonId || '', toSplitPersonId:tx.toSplitPersonId || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:tx.rewardRulesTouched === true, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'detail', type:tx.type, amount:String(tx.benefitBaseAmount || tx.amount), walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:tx.date || getTODAY(), benefitDateOverride:tx.benefitDateOverride || '', isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:tx.splitBillId || '', splitBillOwnerPersonId:tx.splitBillOwnerPersonId || '', splitBillOwnerShare:Number(tx.ledgerAmount || 0), splitBillOwnerPaidAmount:Number(tx.amount || 0), reimbursesSharedExpenseTxId:tx.reimbursesSharedExpenseTxId || '', reimbursementSource:tx.reimbursementSource || '', incomeTreatment:tx.incomeTreatment || '', reimbursementSplitBillId:tx.reimbursementSplitBillId || '', fromSplitPersonId:tx.fromSplitPersonId || '', toSplitPersonId:tx.toSplitPersonId || '', rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:tx.rewardRulesTouched === true, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxDetail()
     App.openOverlay('overlay-add-tx')
@@ -2404,7 +2428,7 @@ App.render();
     if (!tx) return
     S.txMode = 'duplicate'
     S.editingTxId = null
-    S.tx = { step:'amount', type:tx.type, amount:String(tx.benefitBaseAmount || tx.amount), calcOp:'', calcLeft:'', walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:TODAY, benefitDateOverride:'', isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
+    S.tx = { step:'amount', type:tx.type, amount:String(tx.benefitBaseAmount || tx.amount), calcOp:'', calcLeft:'', walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', categoryId:tx.categoryId || '', merchant:tx.merchant || '', channel:tx.channel || '', note:tx.note || '', date:getTODAY(), benefitDateOverride:'', isRecurring:!!tx.isRecurring, isInstallment:!!tx.isInstallment, installmentMonths:tx.installmentMonths || '', sharedExpense:App._sharedExpenseFromTx?.(tx) || { enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' }, splitBillId:'', splitBillOwnerPersonId:'', splitBillOwnerShare:0, splitBillOwnerPaidAmount:0, rewardRuleIds:Array.isArray(tx.rewardRuleIds)?tx.rewardRuleIds:[], rewardRulesTouched:false, txSuggestedFields:{}, rewardEstimate:tx.rewardEstimate || null, rewardIncludePoints:tx.rewardIncludePoints !== false, rewardIncludeCashback:tx.rewardIncludeCashback !== false }
     App.closeOverlay('overlay-tx-detail')
     App._renderAddTxAmount()
     App.openOverlay('overlay-add-tx')
@@ -2446,7 +2470,7 @@ App.render();
     const toWal = S.wallets.find(w => w.id === tx.toWalletId)
     const r = App._rewardForTx ? App._rewardForTx(tx) : {points:0,cashback:0}
     const transferLine = tx.type === 'transfer' && wallet && toWal ? `${wallet.icon} ${wallet.name} → ${toWal.icon} ${toWal.name}` : ''
-    const todayNow = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    const todayNow = getTODAY()
     const isScheduledFuture = tx.scheduled === true && String(tx.date || '') > todayNow
     const ccCashAmount = tx.type === 'cc_payment' ? (App.getCCPaymentCashAmount ? App.getCCPaymentCashAmount(tx) : Number(tx.cashAmount || tx.amount || 0)) : 0
     const ccDiscount = tx.type === 'cc_payment' ? Number(tx.discountAmount || 0) : 0
@@ -2559,11 +2583,11 @@ App.render();
    Amount keypad / detail step / recurring inline controls
    ============================================================ */
 ;(function uiStyleForV22(){
-  const esc = App._esc
+  const esc = MTSafeRender.escapeHtml
   const typeColor = type => type === 'income' ? 'var(--income)' : type === 'transfer' ? 'var(--primary)' : 'var(--expense)'
   const typeLabel = type => type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'
   const primaryWallet = () => S.wallets.find(w => w.type !== 'credit' && w.type !== 'bnpl')?.id || S.wallets[0]?.id || ''
-  const txToday = () => (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
+  const txToday = () => getTODAY()
 
   function formatDraftAmount(raw) {
     let s = String(raw ?? '0').trim()
@@ -2882,7 +2906,7 @@ App.render();
    Number formatting, wallet editor stacking, budget tabs, color pickers
    ============================================================ */
 ;(function(){
-  const esc = App._esc
+  const esc = MTSafeRender.escapeHtml
   const fmt = n => moneyFmt(Number(n) || 0)
 
   // Budget screen with separate income/expense tabs.
@@ -2895,10 +2919,11 @@ App.render();
     const verb = active === 'income' ? 'รับแล้ว' : 'ใช้ไปแล้ว'
     const cats = S.categories[active] || []
     const posted = (S.transactions || []).filter(t => (typeof Calc.isPostedTx === 'function' ? Calc.isPostedTx(t) : App._isPostedTx?.(t) !== false))
+    const currentMonth = getTHISMONTH()
     const rows = cats.map(cat => {
       const b = S[listKey].find(x => x.categoryId === cat.id)
       const spent = posted
-        .filter(t => (t.date || '').startsWith(THIS_MONTH) && t.type === active && t.categoryId === cat.id)
+        .filter(t => (t.date || '').startsWith(currentMonth) && t.type === active && t.categoryId === cat.id)
         .filter(t => active !== 'income' || !(Calc.isReimbursementTx?.(t) || App.isReimbursementTx?.(t)))
         .reduce((sum, t) => sum + (active === 'expense' ? Number(Calc.getExpenseLedgerAmount?.(t) ?? t.ledgerAmount ?? t.amount ?? 0) : Number(t.amount || 0)), 0)
       return { cat, limit: b?.monthlyLimit || 0, spent }
@@ -2944,7 +2969,7 @@ App.render();
    Editors, wallet cards, tx list UI, advisor helpers
    ============================================================ */
 ;(function(){
-  const esc = App._esc
+  const esc = MTSafeRender.escapeHtml
   const fmt = n => moneyFmt(Number(n) || 0)
   const EMOJIS = ['🍜','☕','🛒','🛍️','🚗','⛽','🏠','💡','📱','🎬','💊','🏥','🎁','💰','💼','📈','🍱','🥗','✈️','🚆','🐶','🎮','🧾','🏪','💳','🏦','🥇','₿','📦','✨','🔁','🛡️']
   const COLORS = ['#2563EB','#16A34A','#DC2626','#F59E0B','#7C3AED','#0891B2','#BE185D']
@@ -3128,7 +3153,7 @@ App.render();
     const bg = v.merchant?.color ? `${v.merchant.color}66` : (v.cat?.color ? `${v.cat.color}66` : 'rgba(37,99,235,.4)')
     // Show a clear "ตามแผน" badge for future-scheduled transactions so the user
     // always knows these rows have NOT yet reduced their real balance.
-    const todayNow = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    const todayNow = getTODAY()
     const isScheduledFuture = tx.scheduled === true && String(tx.date || '') > todayNow
     const scheduledPill = isScheduledFuture ? `<span class="tx-meta-pill tx-scheduled-pill" style="background:rgba(100,116,139,.15);color:var(--muted)">📅 ตามแผน</span>` : ''
     const dateLabel = opts.showDate && tx.date ? (Calc.labelDate ? Calc.labelDate(tx.date) : tx.date) : ''
@@ -3340,7 +3365,7 @@ App.render();
               const _card = S.wallets.find(w => w.id === S.tx.walletId)
               if (!_card || _card.type !== 'credit') return ''
               const _amt = Number(S.tx.amount || 0); if (!_amt) return ''
-              const _today = (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
+              const _today = getTODAY()
               const _draftTx = { id:S.editingTxId || '', type:'expense', amount:_amt, walletId:S.tx.walletId, categoryId:S.tx.categoryId, merchant:S.tx.merchant, note:S.tx.note, date:S.tx.date || _today, benefitDateOverride:S.tx.benefitDateOverride || '', channel:S.tx.channel || '' }
               const _rules = App.getSuggestedBenefitRules?.(_draftTx) || []
               S.tx.rewardRuleIds = Array.isArray(S.tx.rewardRuleIds) ? S.tx.rewardRuleIds : []
@@ -3627,7 +3652,7 @@ App.render();
 ;(function() {
 
   // ── Shared helpers ──────────────────────────────────────────
-  const ESC = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const ESC = MTSafeRender.escapeHtml
   const FMT = n => moneyFmt(Number(n) || 0)
 
   function mlabel(ym) {
@@ -4204,8 +4229,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
     html += secHdr('รายการล่าสุด', 'ดูทั้งหมด', "App.showPage('transactions')")
     if (v2 && recent.length) {
       // v2: group by calendar day with day labels
-      const todayStr2 = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10)
-      const yestStr = (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10) })()
+      const todayStr2 = getTODAY()
+      const yestStr = (() => { const d = new Date(); d.setDate(d.getDate()-1); return _localDateStr(d) })()
       const seenDays = {}; const dayGroups = []
       recent.forEach(t => {
         const day = (t.date || '').slice(0,10)
@@ -4247,7 +4272,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App._showHealthyBreakdown = function() {
     const b = S._lastHealthyBreakdown
     if (!b) return
-    const ESC2 = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+    const ESC2 = MTSafeRender.escapeHtml
     const pct = n => `${Math.round(Math.max(0, Math.min(100, n)))}%`
     const savingsPctText = b.savingsRate > 0 ? `ออม ${pct(b.savingsRate * 100)} ของรายรับ` : 'รายจ่ายมากกว่ารายรับ'
     App.showConfirm({
@@ -4301,7 +4326,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   // ── Monthly Financial Summary Banner ───────────────────────────
   App._checkMonthlySummary = function() {
     // เงื่อนไข 1: วันที่ 1-5 ของเดือน
-    const today = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10)
+    const today = getTODAY()
     const dayOfMonth = parseInt(today.slice(8))
     if (dayOfMonth > 5) return null
 
@@ -4345,7 +4370,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const catBreakdown = Calc.getCategoryBreakdown(S.transactions, month, {
       type: 'expense', categories: expCats
     }).slice(0, 5)
-    const ESC2 = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+    const ESC2 = MTSafeRender.escapeHtml
     const FMT2 = n => moneyFmt(Number(n) || 0)
     const net = stats.net || 0
     const isDeficit = net < 0
@@ -4418,7 +4443,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
    Wallet cards + reports polish
    ============================================================ */
 ;(function() {
-  const ESC = v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]))
+  const ESC = MTSafeRender.escapeHtml
   const MONEY = n => moneyFmt(Number(n) || 0)
   const NUM = (n, d = 4) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: d })
   const isInvest = w => w && new Set(['gold','crypto','fcd']).has(w.type)
@@ -4606,7 +4631,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
    2. deleteMerchant with showConfirm (replaces base confirm())
    ============================================================ */
 ;(function() {
-  const esc = App._esc
+  const esc = MTSafeRender.escapeHtml
   const fmt = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const isInvestWalletForRepair = w => ['gold','crypto','fcd'].includes(String(w?.type || '').toLowerCase())
   const round2Repair = n => Math.round((Number(n) || 0) * 100) / 100
@@ -4838,9 +4863,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
 ;(function(){
   const VERSION = APP_VERSION
   const INVEST_TYPES = new Set(['gold','crypto','fcd'])
-  const esc = App._esc
+  const esc = MTSafeRender.escapeHtml
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
-  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
+  const today = () => getTODAY()
   const localNow = () => new Date().toISOString()
   const round2 = n => Math.round((Number(n) || 0) * 100) / 100
 
@@ -4904,7 +4929,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   // Only Posted Transactions affect real Wallet balances. Any future-dated
   // Transaction remains Scheduled until its date, regardless of legacy flags.
   App._isPostedTx = function(tx) {
-    const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    const todayStr = getTODAY()
     return window.MTLedger.isPostedTx(tx, todayStr)
   }
 
@@ -5781,7 +5806,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return Math.max(1, Math.min(Number(day) || 1, new Date(year, monthIndex + 1, 0).getDate()))
   }
   function _today() {
-    return typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    return getTODAY()
   }
   function _addDays(dateStr, days) {
     const [y, m, d] = String(dateStr || _today()).split('-').map(Number)
@@ -5820,9 +5845,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
    Filters, merchant dropdown, recurring screens, installment editing
    ============================================================ */
 ;(function(){
-  const esc = App._esc
+  const esc = MTSafeRender.escapeHtml
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
-  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
+  const today = () => getTODAY()
 
 
 
@@ -5848,7 +5873,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   function renderNetWorthView() {
     const snapshots = (S.netWorthSnapshots || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)))
     const range = S.nwRange || '3M'
-    const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    const todayStr = getTODAY()
 
     function addMonthsToDateStr(dateStr, months) {
       const [y, m, d] = dateStr.split('-').map(Number)
@@ -6440,9 +6465,7 @@ App._showMerchantDropdown = function(q = '') {
   const recentPopularMerchants = (() => {
     if (norm) return []
 
-    const todayStr = typeof getTODAY === 'function'
-      ? getTODAY()
-      : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0, 10))
+    const todayStr = getTODAY()
     const end = new Date(`${todayStr}T00:00:00`)
     const start = new Date(end)
     start.setDate(start.getDate() - 13)
@@ -6695,10 +6718,10 @@ App._pickMerchant = function(name, opts = {}) {
    - installment group edit flow
    ============================================================ */
 ;(function(){
-  const esc = App._esc
+  const esc = MTSafeRender.escapeHtml
   const nowISO = () => new Date().toISOString()
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
-  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
+  const today = () => getTODAY()
   const walletById = App.utils.walletById
   const catById = id => App._findCat?.(id) || null
   const isInvestWallet = w => ['gold','crypto','fcd'].includes(w?.type)
@@ -7024,7 +7047,7 @@ App._pickMerchant = function(name, opts = {}) {
    Benefit rules, reward confirmation, and credit-card wallet UI
    ============================================================ */
 ;(function() {
-  const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  const esc = MTSafeRender.escapeHtml
   const fmt = n => Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits:2, maximumFractionDigits:2 })
   const money = n => `฿${fmt(n)}`
   const walletById = id => (S.wallets || []).find(w => w.id === id)
@@ -8798,7 +8821,7 @@ App._pickMerchant = function(name, opts = {}) {
   // _direction: 'next' | 'prev' | '' (filter/toggle change) | undefined (full openSubScreen)
   App.openCCBenefitOverviewScreen = function (refMonth, filter, _direction, showAll) {
     App.ensureCCBenefitRulesState?.()
-    const todayStr = (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
+    const todayStr = getTODAY()
     const todayMonth = todayStr.slice(0, 7)
     if (!refMonth) refMonth = todayMonth
     S._ccOverviewMonth = refMonth
@@ -8850,14 +8873,7 @@ App._pickMerchant = function(name, opts = {}) {
       return `รอบบัตร: ${fmtDateShort(cycle.start)} – ${fmtDateShort(cycle.end)}`
     }
 
-    function jsArg(value) {
-      return JSON.stringify(String(value ?? '')).replace(/[&<>"]/g, ch => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-      }[ch]))
-    }
+    const jsArg = MTSafeRender.jsArg
 
     function getRuleStatus(cardId, rule) {
       const cycle      = getCyclePeriod(cardId, rule)
@@ -9109,8 +9125,8 @@ App._pickMerchant = function(name, opts = {}) {
     const rule = (S.ccBenefitRules || []).find(r => r.id === ruleId)
     if (!rule) return
 
-    const esc = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])))
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const esc = MTSafeRender.escapeHtml
+    const todayStr = getTODAY()
     const cycle = App.getBenefitRuleSheetCyclePeriod?.(cardId, refDate || todayStr, rule)
       || App.getCyclePeriodForDate(cardId, refDate || todayStr, rule)
     const limits = rule.limits || {}
@@ -9210,8 +9226,8 @@ App._pickMerchant = function(name, opts = {}) {
     const rule = (S.ccBenefitRules || []).find(r => String(r.id || '') === String(ruleId || ''))
     if (!rule) return
 
-    const esc = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])))
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const esc = MTSafeRender.escapeHtml
+    const todayStr = getTODAY()
     const cycleForRuleSheet = App.getBenefitRuleSheetCyclePeriod?.(cardId, refDate || todayStr, rule)
       || App.getCyclePeriodForDate?.(cardId, refDate || todayStr, rule)
       || { start: todayStr, end: todayStr }
@@ -9390,7 +9406,7 @@ App._pickMerchant = function(name, opts = {}) {
     }
     const fmtMoney = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : `฿${Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`)
     const fmtReward = n => isPoints ? `${Math.floor(Number(n)||0).toLocaleString('en-US')} คะแนน` : fmtMoney(n)
-    const jsArg = value => JSON.stringify(String(value ?? '')).replace(/[&<>"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[ch]))
+    const jsArg = MTSafeRender.jsArg
     const rewardLabel = { cashback:'เงินคืน', discount:'ส่วนลด', points:'คะแนน', both:'เงินคืน' }[rule.type] || 'รางวัล'
     const spendConditionLabel = (() => {
       const cond = rule.suggestedConditions || {}
@@ -9543,7 +9559,7 @@ App._pickMerchant = function(name, opts = {}) {
       return App._openRuleTransactionsSheetImpl(ruleId, cardId, refDate)
     } catch (err) {
       console.error('[Benefits] open rule transactions sheet failed', err)
-      const esc = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch])))
+      const esc = MTSafeRender.escapeHtml
       const rule = (S.ccBenefitRules || []).find(r => String(r.id || '') === String(ruleId || ''))
       const titleEl = document.getElementById('rule-transactions-title')
       if (titleEl) titleEl.textContent = rule?.name || 'รายการที่นับยอด'
@@ -9580,7 +9596,7 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.getBenefitRuleDebugData = function(ruleId, cardId, refDate = '') {
     App.ensureCCBenefitRulesState?.()
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const todayStr = getTODAY()
     const rule = (S.ccBenefitRules || []).find(r => String(r.id || '') === String(ruleId || ''))
     if (!rule) {
       return null
@@ -9722,9 +9738,9 @@ App._pickMerchant = function(name, opts = {}) {
   'use strict'
 
   // ── Shared micro-helpers ────────────────────────────────────
-  const esc = App._esc
+  const esc = MTSafeRender.escapeHtml
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
-  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
+  const today = () => getTODAY()
   const walletById = App.utils.walletById
   const genId = () => (typeof Calc !== 'undefined' && Calc.genId) ? Calc.genId() : (Date.now().toString(36) + Math.random().toString(36).slice(2))
   const nowISO = () => new Date().toISOString()
@@ -9793,7 +9809,7 @@ App._pickMerchant = function(name, opts = {}) {
   // day 1 even though only ฿1,000/month flows through the ledger.  This function returns
   // the "committed-but-not-yet-posted" portion so callers can show realistic credit usage.
   App._getUnpostedInstallmentDebt = function(walletId) {
-    const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    const todayStr = getTODAY()
     return (S.transactions || []).reduce((sum, tx) => {
       if (
         tx.installmentGroupId &&
@@ -10797,7 +10813,7 @@ App._pickMerchant = function(name, opts = {}) {
   // ══════════════════════════════════════════════════════════
   App.runDataHealthCheck = function() {
     const warnings = [], errors = []
-    const todayStr = typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)
+    const todayStr = getTODAY()
 
     const txns     = S.transactions  || []
     const wallets  = S.wallets        || []
@@ -11279,7 +11295,7 @@ App._pickMerchant = function(name, opts = {}) {
    - Create/update a recurring schedule when saving a recurring tx
    ============================================================ */
 ;(function(){
-  const today = () => (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
+  const today = () => getTODAY()
 
   function pad2(n) { return String(n).padStart(2, '0') }
   function clampDay(year, monthIndex, day) { return Math.min(Number(day) || 1, new Date(year, monthIndex + 1, 0).getDate()) }
@@ -11386,8 +11402,8 @@ App._pickMerchant = function(name, opts = {}) {
    Occurrence metadata, skipped exceptions, recurring delete choices
    ============================================================ */
 ;(function(){
-  const esc = App._esc
-  const today = () => (typeof getTODAY === 'function' ? getTODAY() : (typeof TODAY !== 'undefined' ? TODAY : new Date().toISOString().slice(0,10)))
+  const esc = MTSafeRender.escapeHtml
+  const today = () => getTODAY()
   const notify = (msg, type='info') => { try { toast(msg, type) } catch { try { App.showToast?.(msg, type) } catch { console.log(msg) } } }
   const money = n => { try { return moneyFmt(Number(n) || 0) } catch { return `฿${(Number(n)||0).toLocaleString('th-TH')}` } }
   const dateLabel = d => { try { return Calc.labelDate(d) } catch { return d || '' } }
@@ -11935,9 +11951,9 @@ App._pickMerchant = function(name, opts = {}) {
    Holdings/assets/transactions, legacy migration, wallet/report integration
    ============================================================ */
 ;(function() {
-  const esc = App._esc
+  const esc = MTSafeRender.escapeHtml
   const jsArg = MTSafeRender.jsArg
-  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
+  const today = () => getTODAY()
   const nowISO = () => new Date().toISOString()
   const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
@@ -13507,8 +13523,8 @@ App._pickMerchant = function(name, opts = {}) {
    Reward rules, due selection, import/export, app-height sync
    ============================================================ */
 ;(function(){
-  const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
-  const esc = App._esc
+  const today = () => getTODAY()
+  const esc = MTSafeRender.escapeHtml
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
   const walletById = App.utils.walletById
@@ -16529,10 +16545,10 @@ App._pickMerchant = function(name, opts = {}) {
   'use strict'
 
   // ── Local helpers ────────────────────────────────────────
-  const esc    = s  => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  const esc = MTSafeRender.escapeHtml
   const money  = n  => (typeof moneyFmt === 'function' ? moneyFmt(Number(n)||0) : Calc.fmt(Number(n)||0))
-  const today  = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0,10))
-  const thisMonth = () => (typeof getTHISMONTH === 'function' ? getTHISMONTH() : new Date().toISOString().slice(0,7))
+  const today  = () => getTODAY()
+  const thisMonth = () => getTHISMONTH()
   const persist = () => { try { return App.saveAll?.('daily-ux') === true } catch (_) { return false } }
   const walletById = id => (S.wallets||[]).find(w => w.id === id)
   const TH_MONTHS_P2 = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
@@ -16996,7 +17012,7 @@ App._pickMerchant = function(name, opts = {}) {
 try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upcoming bills feature failed to mount', err) }
 
 ;(function() {
-  const esc = App._esc || (v => String(v ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch])))
+  const esc = MTSafeRender.escapeHtml
   const money = n => moneyFmt(Number(n) || 0)
   const nowISO = () => new Date().toISOString()
   const todayLocalISO = () => {
@@ -17995,9 +18011,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
    ============================================================ */
 ;(function(){
   'use strict'
-  const esc = App._esc || (s => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const esc = MTSafeRender.escapeHtml
   const money = n => '฿' + Math.abs(Number(n||0)).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2})
-  const today = () => (typeof getTODAY==='function' ? getTODAY() : typeof TODAY!=='undefined' ? TODAY : new Date().toISOString().slice(0,10))
+  const today = () => getTODAY()
 
   // ── 3.2 Filter State Bug ──────────────────────────────────
   // Reset transaction filters when navigating away from transactions tab
@@ -18282,7 +18298,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   'use strict'
   if (typeof InsightEngine === 'undefined') return
 
-  const esc = App._esc || (s => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const esc = MTSafeRender.escapeHtml
   const SEV_ICON = { critical:'🔴', warning:'🟡', info:'💡', positive:'🟢' }
 
   // ── Insight action handlers (global) ─────────────────────
@@ -18565,8 +18581,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       const amount = shared?.enabled ? Number(shared.myShare || 0) : grossAmount
       if (!catId || !amount) return
 
-      const month = typeof THIS_MONTH !== 'undefined' ? THIS_MONTH
-        : (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` })()
+      const month = getTHISMONTH()
       const bItems = Calc.getBudgetProgress(S.transactions||[], S.budgets||[], S.categories||[], month) || []
       const b = bItems.find(b => b.categoryId === catId)
       if (!b || !b.monthlyLimit) return
@@ -18612,10 +18627,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 ;(function(){
   'use strict'
 
-  const esc = App._esc || (s => String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const esc = MTSafeRender.escapeHtml
   const fmt  = n => '฿' + Math.round(Math.abs(Number(n)||0)).toLocaleString('en-US')
   const mlbl = m => Calc.monthLabel?.(m) || m
-  const now  = () => (typeof THIS_MONTH !== 'undefined' ? THIS_MONTH : new Date().toISOString().slice(0,7))
+  const now  = () => getTHISMONTH()
   const prevM = m => {
     if (Calc.getPreviousMonth) return Calc.getPreviousMonth(m)
     const d = new Date(m+'-01'); d.setMonth(d.getMonth()-1)
@@ -18645,7 +18660,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
   App.openMonthlyReview = function(month, animate = true) {
     month = month || now()
-    const today = new Date().toISOString().slice(0,7)
+    const today = getTHISMONTH()
     const isCurrent    = month === today
     const prev         = prevM(month)
     const next         = nextM(month)
@@ -20302,7 +20317,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   function currentFinanceMonth() {
-    return typeof now === 'function' ? now() : new Date().toISOString().slice(0, 7)
+    return now()
   }
 
   App.rebuildFinanceFeaturesIfNeeded = function(opts = {}) {
@@ -20487,9 +20502,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   'use strict'
   if (typeof App === 'undefined' || typeof S === 'undefined') return
 
-  // ── Pending close-animation timers keyed by overlay id ───────
-  const _closeTimers = {}
-
   // ─────────────────────────────────────────────────────────────
   // P1-A  Count-up animation for numbers in dashboard
   // ─────────────────────────────────────────────────────────────
@@ -20540,39 +20552,6 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       el.style.transition = 'width 1.2s cubic-bezier(.34, 1.56, .64, 1)'
       el.style.width = target
     })
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // P1-C  FAB icon + overlay close animation
-  // ─────────────────────────────────────────────────────────────
-  App.openOverlay = function (id) {
-    clearTimeout(_closeTimers[id])
-    delete _closeTimers[id]
-    const el = document.getElementById(id)
-    if (!el) return
-    el.classList.remove('mt-closing')
-    el.classList.add('open')
-    if (id === 'overlay-add-tx') {
-      document.getElementById('fab')?.classList.add('fab-open')
-    }
-  }
-
-  App.closeOverlay = function (id) {
-    if (id === 'overlay-add-tx') {
-      document.getElementById('fab')?.classList.remove('fab-open')
-    }
-    if (id === 'overlay-tx-detail') {
-      try { S.deleteConfirm = false } catch (_) {}
-    }
-    const el = document.getElementById(id)
-    if (!el?.classList.contains('open')) return
-    App._suppressNextSubScreenAnimationUntil = Date.now() + 700
-    clearTimeout(_closeTimers[id])
-    el.classList.add('mt-closing')
-    _closeTimers[id] = setTimeout(() => {
-      el.classList.remove('open', 'mt-closing')
-      delete _closeTimers[id]
-    }, 380)
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -22237,7 +22216,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 ;(function () {
   'use strict'
 
-  const esc   = App._esc || (s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const esc = MTSafeRender.escapeHtml
   const money = n => moneyFmt(Number(n) || 0)
   const TH_MONTHS  = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
   const TH_DAYS    = ['อา','จ','อ','พ','พฤ','ศ','ส']
@@ -22444,7 +22423,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   'use strict'
   if (typeof App === 'undefined' || typeof S === 'undefined') return
 
-  const esc = App._esc || (s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const esc = MTSafeRender.escapeHtml
   let demoEntryTapCount = 0
   let demoEntryTapTimer = null
 
@@ -22960,7 +22939,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   'use strict'
   if (typeof App === 'undefined' || typeof S === 'undefined') return
 
-  const esc = App._esc || (s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
+  const esc = MTSafeRender.escapeHtml
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
   const round2 = n => Math.round((Number(n) || 0) * 100) / 100
   const defaultShared = () => ({ enabled:false, peopleCount:2, myShare:0, reimbursableAmount:0, status:'pending' })
@@ -23048,7 +23027,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       merchant: 'คืนเงินจากเพื่อน',
       channel: '',
       note: `รับคืนจาก ${sourceName}${settlement?.received ? ` (รับแล้ว ${money(settlement.received)})` : ''}`,
-      date: (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10)),
+      date: getTODAY(),
       isRecurring: false,
       isInstallment: false,
       installmentMonths: '',
