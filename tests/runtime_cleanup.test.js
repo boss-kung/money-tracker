@@ -50,7 +50,7 @@ function runtime(wallets, transactions = []) {
   context.App._investmentUnitPriceTHB = () => 100
   context.App.recordNetWorthSnapshot = () => { snapshots++ }
   vm.createContext(context)
-  vm.runInContext(section('  function isInvestWallet(w)', '  function isTransferableMoneyWallet(w)'), context)
+  vm.runInContext(section('  function isInvestWallet(w)', '  // ── Extra persisted state outside early Storage keys'), context)
   vm.runInContext(section('  App.ensureLedgerBaselines = function(', '  App.recordNetWorthSnapshot = function('), context)
   vm.runInContext(section('  App._beforePersistV40 = function()', '  // ── Ledger balance source of truth'), context)
   vm.runInContext(section('function getStateCommit()', 'function moneyFmt('), context)

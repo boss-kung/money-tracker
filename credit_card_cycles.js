@@ -35,11 +35,6 @@
     return Math.round((date - ref) / DAY_MS)
   }
 
-  function monthIndex(dateIso) {
-    const date = parseDate(dateIso)
-    return date ? date.getFullYear() * 12 + date.getMonth() : null
-  }
-
   function clampCycleDay(day) { return Math.min(31, Math.max(1, Number(day || 25))) }
   function clampDueAfter(days) { return Math.min(60, Math.max(1, Number(days || 10))) }
   function clampFixedDueDay(day) { return Math.min(31, Math.max(1, Number(day || 23))) }
@@ -219,7 +214,6 @@
       for (let i=0; i<2400; i++) {
         const p = getStatementPeriod(card,cursor)
         if (!p) break
-        const id=statementId(card.id,p.start,p.end)
         addClosedPeriod(p)
         if (p.end < earliest) break
         cursor=p.start

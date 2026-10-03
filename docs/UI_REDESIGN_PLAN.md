@@ -99,7 +99,6 @@
 - [ ] ฟอร์มกลุ่มวงเงิน (F) · `openCreditLimitGroupForm`
 - [ ] บัญชีคะแนน/Reward ledger (S) · `openRewardLedgerScreen`
 - [ ] ฟอร์มบัญชีคะแนน (F) · `openRewardAccountForm`
-- [ ] ปรับคะแนน (F) · `openAdjustPointsForm`
 - [ ] รายการตามกฎ (Sh) · `openRuleTransactionsSheet`
 - [ ] หน้าสิทธิพิเศษ (S) · `openPrivilegesScreen`
 - [ ] รายละเอียดสิทธิพิเศษ (S) · `openPrivilegeDetail`
@@ -113,10 +112,7 @@
 - [ ] ศูนย์โค้ชชิ่ง (S) · `openCoachingHub`
 - [ ] รีวิวรายเดือน (S) · `openMonthlyReview`
 - [ ] สรุปการเงิน (S) · `openFinanceSummary`
-- [ ] โปรไฟล์โค้ชการเงิน (S) · `openFinanceCoachProfile`
 - [ ] ความจำการเงิน (S) · `openFinancialMemory`
-- [ ] Proactive brief (Sh) · `openProactiveBrief`
-- [ ] วิเคราะห์ feedback (S) · `openFeedbackAnalytics`
 - [ ] เหตุผล feedback (D) · `openRecommendationFeedbackReason`
 - [ ] พรีวิว action การเงิน (Sh) · `openFinanceActionPreview`, `renderFinanceAssumptionPreview`
 - [ ] ถามเรื่องเงิน / Ask My Money (Sh) · `openAskMyMoney`
@@ -125,8 +121,7 @@
 - [ ] วางแผนชีวิต (S) · `openLifePlanning`
 - [ ] ฟอร์มแผนชีวิต (F) · `openAddLifePlanForm`
 - [ ] Planning Lab (S) · `openPlanningLab`
-- [ ] Scenario Lab (S) · `openScenarioLab`
-- [ ] เทียบ scenario (S) · `openScenarioCompare`, `renderScenarioPreview`
+- [ ] Scenario Lab (S) · `openScenarioLab`, `renderScenarioPreview`
 
 ### C7. Goals / Budget — เฟส 5
 - [ ] เป้าหมายการออม (S) · `openGoalsScreen`
@@ -163,7 +158,6 @@
 - [ ] ฟอร์มหารบิล (F) · `openSplitBillForm`
 - [ ] จัดการคน (S) · `openSplitPeopleScreen`
 - [ ] ผูกรายการ (S/D) · `openSplitBillLinkedTransaction`, `openSplitBillLinkedTxForm`
-- [ ] หารบิลจาก add-tx (Sh) · `openSplitBillFromAddTx`
 - [ ] ขอรับคืน (Sh) · `openSharedExpenseReimbursement`
 - [ ] แดชบอร์ดการเงินร่วม (S) · `openSharedFinanceDashboard`
 

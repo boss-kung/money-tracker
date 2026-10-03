@@ -7,9 +7,7 @@
     return
   }
 
-  const esc = App._esc || (s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])))
   const today = () => (typeof getTODAY === 'function' ? getTODAY() : new Date().toISOString().slice(0, 10))
-  const month = () => today().slice(0, 7)
   const dateInMonth = (offset, day) => {
     const d = new Date()
     d.setMonth(d.getMonth() + offset)
