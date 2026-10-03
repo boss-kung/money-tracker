@@ -457,7 +457,6 @@ const FinanceIntelligence = (() => {
 
   function goalOptimization(ctx) {
     const rows = ctx.goals.map(({goal, progress}) => {
-      const remaining = Number(progress?.remaining || 0)
       const daysLeft = Number(progress?.daysLeft ?? 9999)
       const current = Number(goal.monthlyContribution || 0)
       const required = Number(progress?.suggestedMonthly || 0)

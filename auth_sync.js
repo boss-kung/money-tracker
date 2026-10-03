@@ -412,6 +412,10 @@
     return null
   }
 
+  function publishAuthStateChanged() {
+    try { root.dispatchEvent(new Event('mt:auth-state-changed')) } catch (_) {}
+  }
+
   function assertAuthGeneration(generation) {
     if (generation !== authGeneration) throw new Error('Session restore superseded')
   }
@@ -457,6 +461,7 @@
     }
     if (!_silent) toastSafe(`เข้าสู่ระบบสำเร็จ: ${state.user.email || ''}`, 'success')
     render()
+    publishAuthStateChanged()
     return state
   }
 
@@ -525,6 +530,7 @@
         }
         state.user = { id: saved.userId, email: saved.email }
         restoreDurableDirtyState(saved)
+        publishAuthStateChanged()
         scheduleBackgroundTokenRefresh(saved, generation)
         return state
       }
@@ -576,6 +582,7 @@
     clearTimeout(state.debounceTimer)
     state.session = null
     state.user = null
+    publishAuthStateChanged()
     state.locked = true
     state.dataKey = null
     state.vaultMeta = null

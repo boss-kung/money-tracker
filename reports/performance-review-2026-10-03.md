@@ -201,3 +201,14 @@ Transaction list (`app_v2.js:7074`) สร้าง DOM ทั้งเดือ
 เริ่ม `python3 -m http.server 8765 --bind 127.0.0.1` ที่ root แล้วรัน `node reports/performance-2026-10-03/mt-perf-boot.cjs` เป็นต้น Scripts ใช้ Playwright ที่ติดตั้งใน bundled runtime ของเครื่องนี้ และ paths เฉพาะเครื่อง; ต้องปรับ path เมื่อใช้เครื่องอื่น Outputs ปัจจุบันเขียน `/private/tmp/` และหลักฐานใน reports เป็นสำเนาของ run นี้
 
 Background benchmark ต้องเตรียม Finance source ก่อนข้อ 3–4 ที่ `/private/tmp/mt-finance-before-r131.js` ด้วย `git show 6f8a981eb182b3763ac8aebb8dd88eec36e66ce3:finance_intelligence.js > /private/tmp/mt-finance-before-r131.js` (SHA-256 `79a2d718524506fafc809fdb3111e2cf56278e7366324be49a909f38782abe6c`) Browser route ใช้ source นี้เฉพาะ before condition; after ใช้ source workspace ปัจจุบัน
+
+
+## Production integration — 2026-10-04 / r133
+
+- Integrated with production `main` at `33c80a7`, including the r132 notification device lifecycle, auth-state events, local-calendar dates, and cold-start deep-link fixes.
+- Release contract: `2026.10.04-perf-r133`; offline shell includes both `derived_runtime.js` and `notification_device_lifecycle.js`.
+- Preserved main's removal of obsolete feature blocks and per-block startup paints. The initial render and onboarding now join one frame coordinator after screen adapters are installed; the extra synchronous final paint was removed.
+- Fresh merged suite: **370/370 passed**, no failures. Syntax checks and whitespace validation passed.
+- Chrome smoke checks passed: production cold-start add-transaction deep link, demo navigation through all five pages, PIN unlock, and finance history cancellation/resume with 12 complete rows. No browser page errors.
+- Synthetic network hang test released account restoration at approximately **12.2 seconds**, retained the refresh token, and successfully restored through the retry action once the mock network recovered. No real user account or financial data was used.
+- These checks validate the release candidate locally; production deployment is verified separately through GitHub Actions and the served release manifest.

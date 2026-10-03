@@ -122,11 +122,11 @@ Specifically check:
 When adding a new tx type (e.g. `bnpl_payment`), check all of these:
 
 1. `App._ledgerFlows` — `addCash` logic
-2. `TX_TYPE_LABELS` and all `typeLabel` maps (3+ locations, search `bnpl_payment` to find them)
+2. `App._txTypeLabel` (the type-label map) and display branches (search `bnpl_payment` to find them)
 3. `txAmountStr` / `txVisual` — display formatting and icon
 4. `_validateImportPayload` `validTypes` Set — **import will silently drop unknown types**
 5. `hideMoney` display branch — bidirectional `↔` pattern
-6. CSV export `typeLabel` map
+6. CSV export (`App.exportCSV`) — amount sign rule; the `type` column exports the raw type
 
 ### Wallet Tab Bar (once-injection guard)
 

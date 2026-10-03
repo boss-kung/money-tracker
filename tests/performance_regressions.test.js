@@ -30,7 +30,8 @@ test('persist invalidates derived calculations and reward and billing paths use 
 test('initial page render is scheduled through the coalescing coordinator', () => {
   assert.match(app, /createRenderCoordinator/)
   assert.match(app, /App\.requestRender\('initial'\)/)
-  assert.match(app, /App\.requestRender\?\.\('credit-card-state-ready'\)/)
+  assert.match(app, /App\.requestRender\('features-ready'\)/)
+  assert.doesNotMatch(app, /try \{ App\.render\(\) \} catch \(err\) \{ console\.warn\('\[Money Tracker\] boot render failed'/)
   assert.doesNotMatch(app, /\/\/ Initial render\s+const renderStart = performance\.now\(\)\s+App\.showPage\(S\.page\)/)
   assert.match(onboarding, /App\.requestRender\('onboarding-ready'\)/)
   assert.doesNotMatch(onboarding, /if\s*\(p === 'dashboard'\)\s*App\.renderDashboard\(\)/)

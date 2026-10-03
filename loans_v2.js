@@ -199,7 +199,6 @@
     const outstanding = LoanStore.outstanding().sort((a, b) => b.date.localeCompare(a.date))
     const settled = LoanStore.settled().sort((a, b) => b.date.localeCompare(a.date))
     const total = LoanStore.totalOutstanding()
-    const hideMoney = typeof S !== 'undefined' && S.settings?.hideMoney
 
     const loanCard = (l) => {
       const rem = LoanStore.remaining(l)
@@ -270,7 +269,6 @@
   }
 
   function _renderLoanDetail(loan) {
-    const hideMoney = typeof S !== 'undefined' && S.settings?.hideMoney
     const rem = LoanStore.remaining(loan)
     const isSettled = LoanStore.isSettled(loan)
     const overdue = isOverdue(loan)

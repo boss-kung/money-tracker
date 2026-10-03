@@ -161,7 +161,7 @@
 /* ── Quick-action grid (icon circles) ─────────────────────────────────────── */
 .ui-v2 .v2-qa { display: flex; justify-content: space-between; gap: 8px; text-align: center; }
 .ui-v2 .v2-qa > button { flex: 1; background: none; border: none; padding: 0; color: var(--text); }
-.ui-v2 .v2-qa .v2-qic { width: 44px; height: 44px; margin: 0 auto 4px; background: var(--surface); border-radius: 14px; display: flex; align-items: center; justify-content: center; color: var(--primary); font-size: 19px; box-shadow: var(--shadow-xs); }
+.ui-v2 .v2-qa .v2-qic { width: 44px; height: 44px; margin: 0 auto 4px; background: var(--surface); display: flex; align-items: center; justify-content: center; color: var(--primary); font-size: 19px; box-shadow: var(--shadow-xs); }
 .ui-v2 .v2-qa .v2-qlbl { font-size: 10px; color: var(--text); }
 
 /* ── Pills / badges ───────────────────────────────────────────────────────── */
@@ -276,7 +276,6 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 .ui-v2 .mt-net-value { font-size: 32px; line-height: 1.1; font-weight: 500; }
 
 /* Stat bento (health / debt / unpaid-bill) sits in the body sheet */
-.ui-v2 .mt-dash-stat-bento { margin: 12px 0 4px; }
 .ui-v2 .mt-dash-stat-bento .v2-bento-card:active { transform: scale(.97); }
 
 /* Net metrics → header bento (inside the blue card) */
@@ -305,7 +304,6 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 .ui-v2 .tx-title { font-weight: 400; }
 
 /* Mini wallet grid + budget card radii */
-.ui-v2 .mt-wallet-mini { border-radius: 14px; }
 .ui-v2 #dashboard-content .card { border-radius: 16px; }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -331,13 +329,12 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 .ui-v2 #wallets-summary .wallet-summary-card strong { color: #fff !important; }
 
 /* Tab bar → seg-pill on blue */
-.ui-v2 .wallet-tab-bar { margin-top: 12px; gap: 6px; }
-.ui-v2 .wallet-tab { background: #ffffff24; color: #fff; border: 0; border-radius: 999px; font-size: 11px; padding: 5px 12px; opacity: 1; font-weight: 400; }
-.ui-v2 .wallet-tab.active { background: #fff; color: var(--primary); font-weight: 500; }
+.ui-v2 .wallet-tab-bar { margin-top: 12px; }
+.ui-v2 .wallet-tab { opacity: 1; }
 
 /* Content + section labels */
 .ui-v2 #wallets-content { padding-top: 14px; }
-.ui-v2 .wallet-section-title { font-size: 11px !important; font-weight: 500 !important; color: var(--muted) !important; letter-spacing: .4px; margin: 16px 0 8px !important; }
+.ui-v2 .wallet-section-title { color: var(--muted) !important; letter-spacing: .4px; margin: 16px 0 8px !important; }
 
 /* Wallet cards (already gradient) — v2 radius/shadow polish */
 .ui-v2 .wallet-card { border-radius: 16px; box-shadow: var(--shadow-sm); }
@@ -409,7 +406,7 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 .ui-v2 .reward-grid { gap: 8px; }
 .ui-v2 .reward-tile { background: var(--purple-soft); border-radius: 12px; border: 0; }
 .ui-v2 .reward-tile strong { color: var(--purple); }
-.ui-v2 .cc-cycle, .ui-v2 .wc-prog { border-radius: 12px; }
+.ui-v2 .cc-cycle { border-radius: 12px; }
 
 /* ════════════════════════════════════════════════════════════════════════════
    PHASE 3 — CC Benefits cluster (privileges · reward ledger · benefit rules ·
@@ -430,7 +427,7 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 .ui-v2 .privilege-card-actions .btn { border-radius: 10px; }
 
 /* Reward ledger / reward account rows */
-.ui-v2 .reward-account-card, .ui-v2 .ledger-row { border-radius: 14px; }
+.ui-v2 .ledger-row { border-radius: 14px; }
 
 /* CC benefit rule form (.ccbr-*) */
 .ui-v2 .ccbr-section-label { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: .3px; }
@@ -440,7 +437,7 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 .ui-v2 .ccbr-type-grid > button.active { border-color: var(--primary); background: var(--primary-soft); }
 
 /* Credit-limit group cards */
-.ui-v2 .credit-limit-group-card, .ui-v2 .clg-card { border-radius: 14px; }
+.ui-v2 .credit-limit-group-card { border-radius: 14px; }
 
 /* ════════════════════════════════════════════════════════════════════════════
    PHASE 4 — Insight / Coaching cluster
@@ -479,9 +476,6 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 /* ── Finance sub-scroll card radii ─────────────────────────────────────── */
 .ui-v2 .finance-sub-scroll > .card     { border-radius: 16px; }
 .ui-v2 .finance-mini-stat              { border-radius: 14px; }
-.ui-v2 .finance-risk-strip             { border-radius: 12px; }
-.ui-v2 .finance-range-card             { border-radius: 14px; }
-.ui-v2 .finance-ring-card              { border-radius: 16px; }
 .ui-v2 .finance-visual-card            { border-radius: 16px; }
 .ui-v2 .finance-decision-card          { border-radius: 14px; }
 .ui-v2 .finance-scenario-pill          { border-radius: 12px; }
@@ -736,7 +730,6 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 
 /* ── Button groups & flex-rows in forms ──────────────────────────────── */
 .ui-v2 .flex-row .btn     { border-radius: 14px; }
-.ui-v2 .form-inline-row .btn { border-radius: 12px; }
 /* Save button at bottom of any sheet */
 .ui-v2 .sheet-body .btn-primary { border-radius: 16px; }
 .ui-v2 .sheet-body .btn-secondary,
@@ -873,7 +866,6 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 /* P3-11  Section header label tokens */
 .ui-v2 #dashboard-content .section-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin: 14px 0 8px;
 }
 .ui-v2 #dashboard-content .section-header h3 {
   font-size: 14px !important; font-weight: 500 !important;

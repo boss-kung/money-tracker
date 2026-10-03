@@ -5,7 +5,7 @@
   if (root) root.MT_RELEASE = manifest
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict'
-  const version = '2026.10.03-perf-r131'
+  const version = '2026.10.04-perf-r133'
   const coreAssets = Object.freeze([
     './',
     './index.html',
@@ -30,6 +30,7 @@
     './notifications_v2.js',
     './notification_snapshot.js',
     './notification_sync.js',
+    './notification_device_lifecycle.js',
     './onboarding.js',
     './loans_v2.js',
     './auth_sync.js',
