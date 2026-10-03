@@ -61,3 +61,19 @@ test('late authentication cannot adopt a revision written after tab initializati
  await a.flush();value={...value,creditDue:[]};a.markDirty();await a.flush();scope='u:i';await b.resume()
  assert.equal(sent.length,2);assert.deepEqual(sent.at(-1).creditDue,[])
 })
+
+test('failed old-account transport cannot overwrite the new-account sync status',async()=> {
+ const statuses=[];let scope='u:i',reject
+ const q=require('../notification_sync.js').create({readScope:()=>scope,readSnapshot:()=>({creditDue:[]}),transport:()=>new Promise((_,r)=>reject=r),scopedStorage:{getItem:()=>null,setItem(){}},onStatus:s=>statuses.push(s)})
+ const pending=q.flush();await new Promise(r=>setImmediate(r));const before=statuses.length
+ scope='other:i';reject(new Error('Old scope rejected'));await assert.rejects(pending)
+ assert.equal(statuses.length,before)
+})
+
+test('sign-out and sign-in to the same persisted scope cannot accept an old lifecycle response',async()=> {
+ const store=new Map(),statuses=[];let context=1,release
+ const q=require('../notification_sync.js').create({readScope:()=> 'u:i',readContext:()=>context,readSnapshot:()=>({creditDue:[]}),transport:s=>new Promise(r=>release=()=>r({accepted:true,revision:s.snapshotRevision})),scopedStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)},onStatus:s=>statuses.push(s)})
+ const pending=q.flush();await new Promise(r=>setImmediate(r));const before=statuses.length
+ context=2;release();assert.equal(await pending,false)
+ assert.equal(statuses.length,before);assert.equal(JSON.parse(store.get('mt_notification_sync_v2:u:i')).dirty,true)
+})

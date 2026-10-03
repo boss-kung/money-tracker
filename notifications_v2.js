@@ -17,6 +17,7 @@
   let backgroundSyncTimer = null
   let backgroundSyncInFlight = false
   let notificationScopeGeneration = 0
+  let activationInFlight = null
   const SafeRender = globalThis.MTSafeRender || (typeof require === 'function' ? require('./safe_render.js') : null)
   const esc = SafeRender.escapeHtml
   const jsArg = SafeRender.jsArg
@@ -302,19 +303,103 @@
     return Uint8Array.from([...rawData].map(ch => ch.charCodeAt(0)))
   }
 
-  function storedPushSub() {
-    try {
-      const raw = localStorage.getItem(PUSH_SUB_KEY)
-      return raw ? JSON.parse(raw) : null
-    } catch (_) { return null }
-  }
-
   function notificationsMaySync() {
     if (isDisabledByDebugFlag()) return false
     if (!isConfigured()) return false
     const prefs = S.settings?.notifications
     const permission = typeof Notification !== 'undefined' ? Notification.permission : ''
-    return Boolean(prefs?.enabled || permission === 'granted' || storedPushSub())
+    return Boolean(prefs?.enabled && permission === 'granted' && captureNotificationScope() && !activationInFlight && navigator.onLine !== false)
+  }
+
+  function preferencesPayload(scope) {
+    return {
+      installId: scope.installId,
+      preferences: {
+        ...ensureSettings(),
+        daily_expense_enabled: false,
+        upcoming_bill_enabled: false,
+        credit_card_due_enabled: false,
+        recurring_enabled: false,
+        backup_reminder_enabled: false,
+        monthly_summary_enabled: false,
+      },
+    }
+  }
+
+  async function readBrowserSubscription() {
+    if (!navigator.serviceWorker || !('PushManager' in window)) return null
+    let timer
+    try {
+      return await Promise.race([
+        (async () => {
+          const registration = await navigator.serviceWorker.ready
+          const subscription = await registration.pushManager.getSubscription()
+          return subscription?.toJSON() || null
+        })(),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(notificationError('ยังเชื่อมต่อระบบแจ้งเตือนในเบราว์เซอร์ไม่ได้ กรุณาลองใหม่', 'SUBSCRIPTION_UNAVAILABLE')), MANUAL_FETCH_TIMEOUT_MS)
+        }),
+      ])
+    } finally { clearTimeout(timer) }
+  }
+
+  function devicePayload(scope, subscription, enabled = true) {
+    const prefs = ensureSettings()
+    return {
+      installId: scope.installId,
+      pushSubscription: subscription,
+      platform: platform(), browser: browserName(),
+      timezone: prefs.timezone,
+      permission: typeof Notification !== 'undefined' ? Notification.permission : 'default',
+      enabled, hideAmounts: Boolean(prefs.hide_amounts_in_notification),
+      appVersion: window.MT_APP_VERSION || '', userAgent: navigator.userAgent || '',
+    }
+  }
+
+  const deviceLifecycle = MTNotificationDeviceLifecycle.create({
+    readScope: captureNotificationScope,
+    isEnabled: () => S.settings?.notifications?.enabled === true && !activationInFlight,
+    readBlockReason: () => isDisabledByDebugFlag() ? 'debug-disabled' : !isConfigured() ? 'not-configured' : navigator.onLine === false ? 'offline' :
+      typeof Notification === 'undefined' || Notification.permission !== 'granted' ? 'permission-required' : '',
+    readSubscription: readBrowserSubscription,
+    registerDevice: async (scope, subscription) => {
+      await callFunction('register-notification-device', devicePayload(scope, subscription), { scope, timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
+      // Registration seeds defaults. Restore this user's preferences before sending signals.
+      await callFunction('update-notification-preferences', preferencesPayload(scope), { scope, timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
+      if (isCurrentNotificationScope(scope)) try { localStorage.setItem(PUSH_SUB_KEY, JSON.stringify(subscription)) } catch (_) {}
+    },
+    onStatus: state => { App.notificationDeviceStatus = state },
+  })
+
+  async function requireRegisteredDevice(scope, options = {}) {
+    const result = await deviceLifecycle.ensureReady({ ...options, scope })
+    if (result.status !== 'ready') {
+      const message = result.reason === 'subscription-required' ? 'กรุณาเปิดการแจ้งเตือนอีกครั้งเพื่อลงทะเบียนอุปกรณ์' : 'ยังไม่พร้อมซิงค์การแจ้งเตือน'
+      throw notificationError(message, result.reason === 'scope-changed' ? 'SCOPE_CHANGED' : 'NOTIFICATION_SYNC_SKIPPED')
+    }
+    if (!isCurrentNotificationScope(scope)) throw notificationError('บัญชีหรืออุปกรณ์เปลี่ยนแล้ว กรุณาซิงค์ใหม่', 'SCOPE_CHANGED')
+    return result
+  }
+
+  async function runRegisteredMutation(name, payload, options = {}) {
+    const scope = options.scope || captureNotificationScope()
+    await requireRegisteredDevice(scope)
+    const run = () => {
+      if (!notificationsMaySync()) throw notificationError('ยังไม่พร้อมซิงค์การแจ้งเตือน', 'NOTIFICATION_SYNC_SKIPPED')
+      return callFunction(name, payload, { ...options, scope })
+    }
+    try { return await run() } catch (error) {
+      if (error.status !== 403 || error.code !== 'DEVICE_NOT_REGISTERED') {
+        if (error.status === 403) deviceLifecycle.block(scope.key, error)
+        throw error
+      }
+      deviceLifecycle.invalidate(scope.key)
+      await requireRegisteredDevice(scope)
+      try { return await run() } catch (retryError) {
+        deviceLifecycle.block(scope.key, retryError)
+        throw retryError
+      }
+    }
   }
 
   function todayStr() { return MTNotificationSnapshot.bangkokDate() }
@@ -390,14 +475,16 @@
   }
 
   const snapshotQueue = MTNotificationSync.create({
-    readScope: () => window.MTAuthSync?.state?.user?.id ? `${window.MTAuthSync.state.user.id}:${getInstallId()}` : '',
+    readScope: () => captureNotificationScope()?.key || '',
+    readContext: () => notificationScopeGeneration,
     readSnapshot: buildSnapshot,
     scopedStorage: localStorage,
     canSync: () => notificationsMaySync() && document.visibilityState === 'visible' && navigator.onLine !== false && !!window.MTAuthSync?.state?.user?.id,
     withLock: (key,fn) => navigator.locks?.request ? navigator.locks.request(key,fn) : fn(),
     onStatus: state => { App.notificationSnapshotStatus = state },
     transport: async snapshot => {
-      const result = await callFunction('sync-notification-snapshot', {
+      const scope = captureNotificationScope()
+      const result = await runRegisteredMutation('sync-notification-snapshot', {
         installId: snapshot.installId,
         snapshotDate: snapshot.snapshotDate,
         todayTxCount: snapshot.todayTxCount,
@@ -411,8 +498,8 @@
         appVersion: snapshot.appVersion,
         snapshotSchemaVersion: snapshot.snapshotSchemaVersion,
         snapshotRevision: snapshot.snapshotRevision,
-      }, {timeoutMs: MANUAL_FETCH_TIMEOUT_MS})
-      if(result.accepted)try {localStorage.setItem(LAST_SYNC_KEY,String(Date.now()))}catch(_){}
+      }, {scope, timeoutMs: MANUAL_FETCH_TIMEOUT_MS})
+      if(result.accepted && isCurrentNotificationScope(scope))try {localStorage.setItem(`${LAST_SYNC_KEY}:${scope.key}`,String(Date.now()))}catch(_){}
       return result
     },
   })
@@ -421,25 +508,6 @@
     return snapshotQueue.flush({force})
   }
   getStateCommit()?.addAfterCommit(() => snapshotQueue.markDirty())
-
-  async function savePreferences() {
-    const prefs = ensureSettings()
-    persist()
-    if (!isConfigured()) return false
-    await callFunction('update-notification-preferences', {
-      installId: getInstallId(),
-      preferences: {
-        ...prefs,
-        daily_expense_enabled: false,
-        upcoming_bill_enabled: false,
-        credit_card_due_enabled: false,
-        recurring_enabled: false,
-        backup_reminder_enabled: false,
-        monthly_summary_enabled: false,
-      },
-    }, { timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
-    return true
-  }
 
   function normalizeCustomRule(raw = {}) {
     const triggerType = [
@@ -571,24 +639,26 @@
 
   async function syncCustomRules({ force = false, timeoutMs = BACKGROUND_FETCH_TIMEOUT_MS } = {}) {
     if (!notificationsMaySync()) return false
+    const scope = captureNotificationScope()
     const rules = getCustomRules()
     const payload = {
-      installId: getInstallId(),
+      installId: scope.installId,
       rules,
       appVersion: window.MT_APP_VERSION || '',
     }
     const hash = simpleHash(payload)
     const now = Date.now()
-    const last = Number(localStorage.getItem(LAST_RULES_SYNC_KEY) || 0)
-    const lastHash = localStorage.getItem(LAST_RULES_HASH_KEY) || ''
+    const last = Number(localStorage.getItem(`${LAST_RULES_SYNC_KEY}:${scope.key}`) || 0)
+    const lastHash = localStorage.getItem(`${LAST_RULES_HASH_KEY}:${scope.key}`) || ''
     if (!force && hash === lastHash && now - last < RULES_SYNC_TTL_MS) {
       bootMark('syncCustomRules.skipped', { reason: 'unchanged' })
       return true
     }
-    const data = await callFunction('sync-notification-rules', payload, { timeoutMs })
+    const data = await runRegisteredMutation('sync-notification-rules', payload, { scope, timeoutMs })
+    if (!isCurrentNotificationScope(scope)) throw notificationError('บัญชีหรืออุปกรณ์เปลี่ยนแล้ว กรุณาซิงค์ใหม่', 'SCOPE_CHANGED')
     try {
-      localStorage.setItem(LAST_RULES_HASH_KEY, hash)
-      localStorage.setItem(LAST_RULES_SYNC_KEY, String(now))
+      localStorage.setItem(`${LAST_RULES_HASH_KEY}:${scope.key}`, hash)
+      localStorage.setItem(`${LAST_RULES_SYNC_KEY}:${scope.key}`, String(now))
     } catch (_) {}
     return data
   }
@@ -631,6 +701,25 @@
   }
 
   async function enableNotifications() {
+    if (activationInFlight) return activationInFlight
+    const scope = captureNotificationScope()
+    if (!scope) {
+      notify('ต้องเข้าสู่ระบบก่อนเปิดการแจ้งเตือน', 'warn')
+      return false
+    }
+    activationInFlight = activateNotificationDevice(scope)
+    let enabled
+    try { enabled = await activationInFlight } finally { activationInFlight = null }
+    if (!enabled) return false
+    await syncCustomRules({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
+    await syncSnapshot({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
+    if (!isCurrentNotificationScope(scope)) return false
+    notify('เปิดการแจ้งเตือนแล้ว', 'success')
+    App.renderMore?.()
+    return true
+  }
+
+  async function activateNotificationDevice(scope) {
     if (location.protocol === 'file:') {
       notify('การแจ้งเตือนต้องเปิดผ่าน http/https หรือ PWA ที่ติดตั้งแล้ว', 'warn')
       return false
@@ -651,75 +740,60 @@
       notify('ยังไม่ได้อนุญาตการแจ้งเตือน', 'warn')
       return false
     }
+    if (!isCurrentNotificationScope(scope)) return false
 
     const registration = await navigator.serviceWorker.ready
     const applicationServerKey = urlBase64ToUint8Array(getConfig().vapidKey)
     const existing = await registration.pushManager.getSubscription()
-    if (existing) await existing.unsubscribe()
-    const pushSubscription = await registration.pushManager.subscribe({
+    if (!isCurrentNotificationScope(scope)) return false
+    const pushSubscription = existing || await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey,
     })
     const subJson = pushSubscription.toJSON()
-    try { localStorage.setItem(PUSH_SUB_KEY, JSON.stringify(subJson)) } catch (_) {}
-
+    await requireRegisteredDevice(scope, { activation: true })
+    if (!isCurrentNotificationScope(scope)) return false
     const prefs = ensureSettings()
+    try { localStorage.setItem(PUSH_SUB_KEY, JSON.stringify(subJson)) } catch (_) {}
     prefs.permission = 'granted'
     prefs.enabled = true
     prefs.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Bangkok'
     persist()
-
-    await callFunction('register-notification-device', {
-      installId: getInstallId(),
-      pushSubscription: subJson,
-      platform: platform(),
-      browser: browserName(),
-      timezone: prefs.timezone,
-      permission,
-      enabled: true,
-      hideAmounts: Boolean(prefs.hide_amounts_in_notification),
-      appVersion: window.MT_APP_VERSION || '',
-      userAgent: navigator.userAgent || '',
-    }, { timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
-    await savePreferences()
-    await syncCustomRules({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS }).catch(() => {})
-    await syncSnapshot({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
-    notify('เปิดการแจ้งเตือนแล้ว', 'success')
-    App.renderMore?.()
     return true
   }
 
   async function disableNotifications() {
+    let scope = captureNotificationScope()
+    if (!scope) {
+      notify('ต้องเข้าสู่ระบบก่อนปิดการแจ้งเตือนบนเซิร์ฟเวอร์', 'warn')
+      return false
+    }
     const prefs = ensureSettings()
     const previousEnabled = prefs.enabled === true
     prefs.enabled = false
+    notificationScopeGeneration++
+    scope = captureNotificationScope()
+    const pendingRegistration = deviceLifecycle.reset()
     persist()
     try {
+      // A previously dispatched enable must settle before this device is disabled.
+      await pendingRegistration?.catch(() => {})
       if (isConfigured()) {
-        const sub = storedPushSub()
-        await callFunction('register-notification-device', {
-          installId: getInstallId(),
-          pushSubscription: sub,
-          platform: platform(),
-          browser: browserName(),
-          timezone: prefs.timezone,
-          permission: Notification.permission || 'default',
-          enabled: false,
-          hideAmounts: Boolean(prefs.hide_amounts_in_notification),
-          appVersion: window.MT_APP_VERSION || '',
-          userAgent: navigator.userAgent || '',
-        }, { timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
-        await savePreferences()
+        const sub = await readBrowserSubscription()
+        await callFunction('register-notification-device', devicePayload(scope, sub, false), { scope, timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
+        await callFunction('update-notification-preferences', preferencesPayload(scope), { scope, timeoutMs: MANUAL_FETCH_TIMEOUT_MS })
       }
     } catch (err) {
+      if (!isCurrentNotificationScope(scope)) return false
       // Keep the local switch aligned with the server. Claiming success here
       // would leave a live device row that can still receive push messages.
-      prefs.enabled = previousEnabled
+      ensureSettings().enabled = previousEnabled
       persist()
       notify('ปิดการแจ้งเตือนไม่สำเร็จ: ยังเชื่อมต่อเซิร์ฟเวอร์ไม่ได้', 'error')
       App.renderMore?.()
       return false
     }
+    if (!isCurrentNotificationScope(scope)) return false
     notify('ปิดการแจ้งเตือนแล้ว', 'success')
     App.renderMore?.()
     return true
@@ -730,6 +804,10 @@
     if (!('Notification' in window)) return 'ไม่รองรับ'
     if (!isConfigured()) return 'รอตั้งค่า'
     if (!prefs.enabled) return 'ปิดอยู่'
+    const device = App.notificationDeviceStatus
+    if (device?.status === 'error') return 'ยังซิงค์ไม่สำเร็จ'
+    if (device?.reason === 'subscription-required') return 'ต้องเปิดแจ้งเตือนอีกครั้ง'
+    if (device?.status === 'registering') return 'กำลังลงทะเบียน'
     if (Notification.permission === 'granted') return 'เปิดแล้ว'
     if (Notification.permission === 'denied') return 'ถูกบล็อก'
     return 'ยังไม่เปิด'
@@ -1052,13 +1130,28 @@
     })
   }
 
-  App.syncAllNotificationData = function() {
-    Promise.all([
+  App.syncAllNotificationData = async function() {
+    const scope = captureNotificationScope()
+    if (!notificationsMaySync()) {
+      notify('ยังไม่พร้อมซิงค์ กรุณาเข้าสู่ระบบและเปิดการแจ้งเตือนขณะออนไลน์', 'warn')
+      return false
+    }
+    try {
+      const results = await Promise.all([
       syncSnapshot({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS }),
       syncCustomRules({ force: true, timeoutMs: MANUAL_FETCH_TIMEOUT_MS }),
-    ])
-      .then(() => notify('ซิงค์การแจ้งเตือนแล้ว', 'success'))
-      .catch(err => notify(err.message || 'ซิงค์ไม่สำเร็จ', 'error'))
+      ])
+      if (!isCurrentNotificationScope(scope)) return false
+      if (results.some(result => !result)) {
+        notify('ยังมีข้อมูลการแจ้งเตือนรอซิงค์', 'warn')
+        return false
+      }
+      notify('ซิงค์การแจ้งเตือนแล้ว', 'success')
+      return true
+    } catch (err) {
+      if (isCurrentNotificationScope(scope)) notify(err.message || 'ซิงค์ไม่สำเร็จ', 'error')
+      return false
+    }
   }
 
   App.testCustomNotificationRule = async function(ruleId) {
@@ -1174,6 +1267,18 @@
     if (S.page === 'more') App.renderMore?.()
   }, 500)
   window.addEventListener('online', () => scheduleBackgroundNotificationSync('online'), { passive: true })
+  let lastAuthScopeKey = captureNotificationScope()?.key || ''
+  window.addEventListener('mt:auth-state-changed', () => {
+    const scopeKey = captureNotificationScope()?.key || ''
+    if (scopeKey !== lastAuthScopeKey) {
+      notificationScopeGeneration++
+      lastAuthScopeKey = scopeKey
+      deviceLifecycle.reset()
+      App.notificationSnapshotStatus = null
+      App.notificationDeviceStatus = null
+    }
+    if (scopeKey) scheduleBackgroundNotificationSync('auth')
+  })
   window.addEventListener('pageshow', event => {
     if (event.persisted) scheduleBackgroundNotificationSync('pageshow')
   }, { passive: true })

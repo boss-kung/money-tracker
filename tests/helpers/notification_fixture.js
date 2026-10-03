@@ -6,10 +6,10 @@ const root = path.join(__dirname, '../..')
 function notificationFixture({ enabled = true, permission = 'granted', authenticated = true, subscription = undefined, fetch: fetchOverride } = {}) {
   const store = new Map(), calls = [], messages = [], listeners = new Map(), timeouts = new Map()
   let timerId = 0, afterCommit = () => {}, serverRegistered = false
-  const sub = subscription === undefined ? { endpoint: 'https://push.example/device', keys: { p256dh: 'test-key', auth: 'test-auth' } } : subscription
+  let sub = subscription === undefined ? { endpoint: 'https://push.example/device', keys: { p256dh: 'test-key', auth: 'test-auth' } } : subscription
   const pushManager = {
     getSubscription: async () => sub && ({ toJSON: () => sub, unsubscribe: async () => { throw new Error('Existing subscription must be reused') } }),
-    subscribe: async () => ({ toJSON: () => ({ endpoint: 'https://push.example/new', keys: { p256dh: 'new-key', auth: 'new-auth' } }) }),
+    subscribe: async () => { sub = { endpoint: 'https://push.example/new', keys: { p256dh: 'new-key', auth: 'new-auth' } }; return { toJSON: () => sub } },
   }
   const localStorage = {
     getItem: key => store.get(key) || null, setItem: (key, value) => store.set(key, String(value)),
@@ -21,7 +21,7 @@ function notificationFixture({ enabled = true, permission = 'granted', authentic
     setTimeout: (fn, delay) => { timeouts.set(++timerId, { fn, delay }); return timerId },
     clearTimeout: id => timeouts.delete(id), setInterval: () => ++timerId,
     S: { settings: { notifications: { enabled, seededDefaultRuleV1: true, routedByTriggerV1: true, customRules: [] } }, wallets: [], transactions: [] },
-    App: {}, localStorage, Notification: { permission, requestPermission: async () => 'granted' }, PushManager: function () {},
+    App: {}, localStorage, Notification: { permission, requestPermission: async () => { context.Notification.permission = 'granted'; return 'granted' } }, PushManager: function () {},
     navigator: { onLine: true, userAgent: 'test-browser', platform: 'Mac', serviceWorker: { ready: Promise.resolve({ pushManager }) } },
     document: { visibilityState: 'visible' }, location: { protocol: 'https:', hash: '', search: '' },
     persist: () => afterCommit(), getStateCommit: () => ({ addAfterCommit: fn => { afterCommit = fn } }),
@@ -47,7 +47,7 @@ function notificationFixture({ enabled = true, permission = 'granted', authentic
   }
   const source = fs.readFileSync(path.join(root, 'notifications_v2.js'), 'utf8')
   // Expose the actual IIFE functions at the test seam without shipping test-only exports.
-  const seam = 'globalThis.testNotifications = {callFunction,syncCustomRules,syncSnapshot,enableNotifications,disableNotifications,runBackgroundNotificationSync,captureScope:typeof captureNotificationScope === "function"?captureNotificationScope:null};'
+  const seam = 'globalThis.testNotifications = {callFunction,syncCustomRules,syncSnapshot,enableNotifications,disableNotifications,statusLabel,runBackgroundNotificationSync,captureScope:typeof captureNotificationScope === "function"?captureNotificationScope:null};'
   vm.runInContext(source.replace(/\}\)\(\)\s*$/, `${seam}})()`), context, { filename: 'notifications_v2.js' })
   return { context, calls, messages, store, pushManager, timeouts, commit: () => afterCommit(),
     emit: name => { for (const fn of listeners.get(name) || []) fn({}) } }

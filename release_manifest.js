@@ -29,6 +29,7 @@
     './notifications_v2.js',
     './notification_snapshot.js',
     './notification_sync.js',
+    './notification_device_lifecycle.js',
     './onboarding.js',
     './loans_v2.js',
     './auth_sync.js',
