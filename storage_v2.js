@@ -255,10 +255,13 @@ const Storage = {
     }
   },
 
-  verifyState(state, keys = []) {
-    const keyList = Array.isArray(keys) && keys.length
-      ? keys
-      : ['transactions', 'wallets', 'categories', 'settings', 'recurring', 'upcomingBills']
+  verifyState(state, keys = undefined) {
+    // An explicit empty list is meaningful for dirty saves: the write loop has
+    // already read back those keys, so do not silently fall back to unrelated
+    // collections that may not exist on older or quota-constrained devices.
+    const keyList = keys === undefined
+      ? ['transactions', 'wallets', 'categories', 'settings', 'recurring', 'upcomingBills']
+      : (Array.isArray(keys) ? keys : [keys])
     const failures = []
     keyList.forEach(name => {
       const storageKey = KEYS[name]

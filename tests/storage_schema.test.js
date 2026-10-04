@@ -90,6 +90,34 @@ test('dirty-key save serializes and verifies only the selected collections', () 
   assert.deepEqual(Storage.loadCollection('wallets'), [{ id:'bank', balance:100 }])
 })
 
+test('dirty market saves do not fail when unrelated optional keys are still missing', () => {
+  const data = new Map([
+    ['mt_transactions', '[]'],
+    ['mt_wallets', '[]'],
+    ['mt_settings', '{}'],
+  ])
+  global.localStorage = {
+    get length() { return data.size },
+    key(index) { return [...data.keys()][index] ?? null },
+    getItem(key) { return data.has(String(key)) ? data.get(String(key)) : null },
+    setItem(key, value) { data.set(String(key), String(value)) },
+    removeItem(key) { data.delete(String(key)) },
+    clear() { data.clear() },
+  }
+
+  const state = {
+    transactions: [],
+    wallets: [],
+    settings: {},
+    marketPrices: { updatedAt:'2026-10-04T12:00:00.000Z' },
+    cryptoSyncMeta: { attemptAt:'2026-10-04T12:00:00.000Z' },
+  }
+  assert.equal(Storage.saveAll(state, { dirtyKeys:['marketPrices', 'cryptoSyncMeta'] }), true)
+  assert.deepEqual(Storage.loadCollection('marketPrices'), state.marketPrices)
+  assert.deepEqual(Storage.loadCollection('cryptoSyncMeta'), state.cryptoSyncMeta)
+  assert.equal(Storage.lastSaveError, null)
+})
+
 test('dirty-key rollback restores every payload written before a later failure', () => {
   const state = { transactions:[{ id:'old' }], wallets:[{ id:'bank', balance:100 }], settings:{} }
   assert.equal(Storage.saveAll(state), true)
