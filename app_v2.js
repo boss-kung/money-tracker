@@ -938,6 +938,7 @@ let S = {
 
 let MT_STORAGE_HYDRATED = false
 let MT_STATE_COMMIT = null
+let MT_BOOT_FAST_LEDGER = true
 const MT_DERIVED_MEMO = window.MTDerivedRuntime?.createMemoStore?.({ readEpoch:() => getTODAY() }) || {
   memoize(_namespace, _key, compute) { return compute() },
   invalidate() { return 0 },
@@ -970,6 +971,12 @@ function persist(reason = 'app', options = {}) {
     return false
   }
   if (typeof MT_DERIVED_MEMO !== 'undefined') MT_DERIVED_MEMO.invalidate(reason)
+  // Keep the first paint on the persisted ledger snapshot. Any user-initiated
+  // save after first paint opts into the full reward-aware calculation, while
+  // startup migrations/hydration cannot accidentally move work onto the boot
+  // critical path.
+  const firstRenderComplete = typeof MT_FIRST_RENDER_DONE !== 'undefined' && MT_FIRST_RENDER_DONE === true
+  if (firstRenderComplete && reason !== 'billing-hydration' && reason !== 'feature-hydration') MT_BOOT_FAST_LEDGER = false
   const previousBillingWallets = S.wallets
   if (typeof CreditCardCycles !== 'undefined') S.wallets = CreditCardCycles.prepareBillingMigration({ wallets:S.wallets, transactions:S.transactions, refDate:getTODAY() }).wallets
   const stateCommit = getStateCommit()
@@ -1585,6 +1592,18 @@ const MT_RENDER_COORDINATOR = window.MTDerivedRuntime?.createRenderCoordinator?.
       duration: Math.round((performance.now() - renderStart) * 10) / 10,
     })
     requestAnimationFrame(() => requestAnimationFrame(() => requestHideBootScreen('first-render')))
+    const scheduleBootReconciliation = typeof setTimeout === 'function' ? setTimeout : null
+    scheduleBootReconciliation?.(() => {
+      const reconcileBootLedger = () => {
+        MT_BOOT_FAST_LEDGER = false
+        try {
+          App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
+          App.requestRender?.('ledger-reconciled')
+        } catch (_) {}
+      }
+      if (typeof requestIdleCallback === 'function') requestIdleCallback(reconcileBootLedger, { timeout: 2000 })
+      else reconcileBootLedger()
+    }, 3500)
   },
 }) || { request() { if (MT_STORAGE_HYDRATED) App.showPage(S.page) } }
 App.requestRender = reason => {
@@ -4982,7 +5001,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App.getLedgerAmountForTx = function(tx) {
     return window.MTLedger.getLedgerAmountForTx(tx, {
       wallets:S.wallets || [],
-      rewardForTx:row => typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(row) : row.rewardEstimate,
+      rewardForTx:row => (typeof MT_BOOT_FAST_LEDGER !== 'undefined' && MT_BOOT_FAST_LEDGER) ? row.rewardEstimate : (typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(row) : row.rewardEstimate),
       preferStored:true,
     })
   }
@@ -4994,7 +5013,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App._expectedLedgerAmountForTx = function(tx) {
     return window.MTLedger.getLedgerAmountForTx(tx, {
       wallets:S.wallets || [],
-      rewardForTx:row => typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(row) : row.rewardEstimate,
+      rewardForTx:row => (typeof MT_BOOT_FAST_LEDGER !== 'undefined' && MT_BOOT_FAST_LEDGER) ? row.rewardEstimate : (typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(row) : row.rewardEstimate),
       preferStored:false,
     })
   }
@@ -5019,7 +5038,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       wallets:S.wallets || [],
       loans:S.loans || [],
       today:today(),
-      rewardForTx:tx => typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(tx) : tx.rewardEstimate,
+      rewardForTx:tx => (typeof MT_BOOT_FAST_LEDGER !== 'undefined' && MT_BOOT_FAST_LEDGER) ? tx.rewardEstimate : (typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(tx) : tx.rewardEstimate),
     })
   }
 
@@ -5423,6 +5442,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App.saveTx = function() {
+    if (typeof MT_BOOT_FAST_LEDGER !== 'undefined') MT_BOOT_FAST_LEDGER = false
     let saved = false
     const transactionDirtyKeys = ['transactions', 'wallets', 'merchants', 'recurring', 'bnplPlans', 'splitBills', 'splitPeople', 'netWorthSnapshots']
     const commitTransaction = (dirtyKeys = transactionDirtyKeys) => {
@@ -5645,6 +5665,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App.saveCCPay = function() {
+    if (typeof MT_BOOT_FAST_LEDGER !== 'undefined') MT_BOOT_FAST_LEDGER = false
     const parsePayNumber = value => Number(String(value || '0').replace(/,/g, '')) || 0
     const editId = S.editingCCPaymentId
     const existingTx = editId
@@ -15986,9 +16007,11 @@ App._pickMerchant = function(name, opts = {}) {
       card,
       transactions: S.transactions || [],
       refDate,
-      rewardForTx: tx => App.getTransactionRewardEstimate?.(tx) || { points:0, cashback:0, discount:0 },
+      rewardForTx: tx => (typeof MT_BOOT_FAST_LEDGER !== 'undefined' && MT_BOOT_FAST_LEDGER)
+        ? (tx.rewardEstimate || { points:0, cashback:0, discount:0 })
+        : (App.getTransactionRewardEstimate?.(tx) || { points:0, cashback:0, discount:0 }),
       amountForTx: tx => typeof App._expectedLedgerAmountForTx === 'function'
-        ? App._expectedLedgerAmountForTx(tx)
+        ? ((typeof MT_BOOT_FAST_LEDGER !== 'undefined' && MT_BOOT_FAST_LEDGER) ? window.MTLedger.getLedgerAmountForTx(tx, { wallets: S.wallets || [], preferStored: true }) : App._expectedLedgerAmountForTx(tx))
         : (App.getLedgerAmountForTx?.(tx) || tx.amount || 0),
       isPostedTx: tx => !tx.date || String(tx.date) <= String(refDate),
     }
@@ -16918,7 +16941,7 @@ App._pickMerchant = function(name, opts = {}) {
   window.visualViewport?.addEventListener('scroll', syncViewportSoon, { passive:true })
   document.addEventListener('focusin', syncViewportSoon, true)
   document.addEventListener('focusout', () => setTimeout(syncViewportSoon, 120), true)
-  persist()
+  persist('feature-hydration')
 })()
 
 /* ============================================================
@@ -23704,7 +23727,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return changed
   }
 
-  try { App.repairSharedExpenseData?.({ save:true }) } catch (err) { console.warn('shared expense repair failed', err) }
+  const scheduleSharedExpenseRepair = () => {
+    try { App.repairSharedExpenseData?.({ save:true }) } catch (err) { console.warn('shared expense repair failed', err) }
+  }
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(scheduleSharedExpenseRepair, { timeout: 5000 })
+  else setTimeout(scheduleSharedExpenseRepair, 3500)
 })()
 
 /* ============================================================
@@ -23886,6 +23913,6 @@ window.MTScreenHooks?.install?.(App, {
 
 // The initial frame renders after all features and screen adapters are installed.
 App.requestRender('features-ready')
-requestAnimationFrame(() => requestAnimationFrame(() => {
+setTimeout(() => {
   try { window.MTFeatureLoader?.schedule?.(['notifications', 'advanced', 'capture', 'onboarding']) } catch (_) {}
-}))
+}, 2500)
