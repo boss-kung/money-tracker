@@ -49,3 +49,7 @@ test('render requests can force a page redraw after a durable revision change', 
   assert.match(app, /_pageRenderKey\s*\(/)
   assert.match(app, /_renderRevision/)
 })
+
+test('successful persistence advances the render revision while failed commits do not', () => {
+  assert.match(app, /if \(ok\) \{[\s\S]{0,120}App\._renderRevision\+\+[\s\S]{0,120}App\._forceRenderOnNext\s*=\s*true/)
+})

@@ -5123,12 +5123,46 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return tx
   }
 
+  // Reward caps and threshold triggers are scoped by card and statement cycle.
+  // Replaying only those cycles preserves durable ordering while avoiding a
+  // full transaction scan for every ordinary save.
+  App.getAffectedRewardTransactionIds = function({ changedTxs = [], previousTxs = [] } = {}) {
+    const seeds = [...(Array.isArray(changedTxs) ? changedTxs : [changedTxs]), ...(Array.isArray(previousTxs) ? previousTxs : [previousTxs])].filter(Boolean)
+    const cardIds = new Set(seeds.map(tx => String(tx.walletId || '')).filter(Boolean))
+    if (!cardIds.size) return []
+    const rules = typeof App.ensureCCBenefitRulesState === 'function' ? (App.ensureCCBenefitRulesState(), S.ccBenefitRules || []) : []
+    const cycles = []
+    cardIds.forEach(cardId => {
+      const cardRules = rules.filter(rule => String(rule.cardId || '') === cardId && rule.active !== false)
+      const cardSeeds = seeds.filter(tx => String(tx.walletId || '') === cardId)
+      const dates = cardSeeds.map(tx => App._resolveBenefitTxDate?.(tx) || String(tx.date || '').slice(0, 10)).filter(Boolean)
+      const cycleRules = cardRules.length ? cardRules : [null]
+      cycleRules.forEach(rule => dates.forEach(effectiveDate => {
+        const cycle = App.getCyclePeriodForDate(cardId, effectiveDate, rule) || {}
+        if (cycle.start && cycle.end) cycles.push({ cardId, start: cycle.start, end: cycle.end })
+      }))
+    })
+    const transactionIds = new Set()
+    ;(S.transactions || []).forEach(tx => {
+      const cardId = String(tx.walletId || '')
+      if (!cardIds.has(cardId)) return
+      const effectiveDate = App._resolveBenefitTxDate?.(tx) || String(tx.date || '').slice(0, 10)
+      if (cycles.some(cycle => cycle.cardId === cardId && effectiveDate >= cycle.start && effectiveDate <= cycle.end)) {
+        if (tx.id) transactionIds.add(tx.id)
+      }
+    })
+    seeds.forEach(tx => { if (tx.id) transactionIds.add(tx.id) })
+    return [...transactionIds]
+  }
+
   App.refreshTransactionRewardEstimates = function(options = {}) {
     App.invalidateDerivedState?.('reward-refresh')
     const save = options?.save === true
     const txs = Array.isArray(S.transactions) ? S.transactions : []
+    const transactionIds = Array.isArray(options?.transactionIds) ? new Set(options.transactionIds.map(String)) : null
+    const targetTxs = transactionIds ? txs.filter(tx => transactionIds.has(String(tx.id || ''))) : txs
     let changed = 0
-    txs.forEach(tx => {
+    targetTxs.forEach(tx => {
       const before = tx?.rewardEstimate ? JSON.stringify(tx.rewardEstimate) : ''
       const next = App._rewardEstimateForTx?.(tx) || null
       if (next) tx.rewardEstimate = next
@@ -5379,8 +5413,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
 
   App.saveTx = function() {
     let saved = false
-    const commitTransaction = () => {
-      if (persist('transaction')) { saved = true; return true }
+    const transactionDirtyKeys = ['transactions', 'wallets', 'merchants', 'recurring', 'bnplPlans', 'splitBills', 'splitPeople', 'netWorthSnapshots']
+    const commitTransaction = (dirtyKeys = transactionDirtyKeys) => {
+      if (persist('transaction', { dirtyKeys: dirtyKeys })) { saved = true; return true }
       // Storage rolled back the durable snapshot; restore financial state while
       // keeping the draft and open form available for another attempt.
       Object.assign(S, Storage.init())
@@ -5460,7 +5495,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
         }
         S.transactions.unshift(...txs)
         App._registerMerchantFromTx?.(txs[0])
-        App.refreshTransactionRewardEstimates?.()
+        const transactionIds = App.getAffectedRewardTransactionIds?.({ changedTxs: txs }) || txs.map(row => row.id)
+        App.refreshTransactionRewardEstimates?.({ transactionIds })
         if (!commitTransaction()) return false
         resetAfterSaveChrome()
         App.closeOverlay('overlay-add-tx')
@@ -5492,7 +5528,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
         App.linkSplitBillToTransaction?.(tx.splitBillId, tx.id, { save:false })
       }
       App._registerMerchantFromTx?.(tx)
-      App.refreshTransactionRewardEstimates?.()
+      const transactionIds = App.getAffectedRewardTransactionIds?.({ changedTxs: [tx], previousTxs: [previousTx] }) || [tx.id]
+      App.refreshTransactionRewardEstimates?.({ transactionIds })
 
       // Create BNPL plan when saving a new expense on a BNPL wallet with installments
       if (!isEdit && tx.type === 'expense' && typeof BNPL !== 'undefined') {
@@ -5539,8 +5576,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
         createdTx.recurringInstanceKey = App._recurringInstanceKey?.(createdRec.id, 1, scheduledDate) || `${createdRec.id}__1__${scheduledDate}`
         createdTx.isRecurring = true
         App._updateRecurringNext?.(createdRec)
-        App.refreshTransactionRewardEstimates?.()
-        if (!persist('transaction.recurring')) Object.assign(S, Storage.init())
+        const recurringTransactionIds = App.getAffectedRewardTransactionIds?.({ changedTxs: [createdTx] }) || [createdTx.id]
+        App.refreshTransactionRewardEstimates?.({ transactionIds: recurringTransactionIds })
+        if (!persist('transaction.recurring', { dirtyKeys: transactionDirtyKeys })) Object.assign(S, Storage.init())
       }
     } catch (err) {
       console.error('saveTx failed', err)
@@ -12272,7 +12310,16 @@ App._pickMerchant = function(name, opts = {}) {
   let cryptoSearchToken = 0
   let cryptoSyncInFlight = null
   let cryptoAutoSyncThrottleUntil = 0
+  let marketSyncIdleHandle = 0
+  let marketSyncIdlePromise = null
   let coinCapCache = { fetchedAt: 0, rows: [] }
+
+  function comparableMarketData(value) {
+    return JSON.stringify(value || {}, (key, item) => {
+      if (key === 'updatedAt' || key === 'fetchedAt' || key === 'lastUpdatedAt') return undefined
+      return item
+    })
+  }
 
   function normalizeCryptoName(value = '') {
     return String(value || '')
@@ -12763,6 +12810,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (cryptoSyncInFlight) return cryptoSyncInFlight
     cryptoSyncInFlight = (async () => {
       const attemptAt = nowISO()
+      const marketBefore = comparableMarketData(S.marketPrices)
       const activeAssets = collectActiveCryptoAssets()
       const activeIds = [...new Set(activeAssets.map(asset => normalizeCoinGeckoId(asset?.coinGeckoId)).filter(Boolean))]
       if (!activeIds.length) {
@@ -12774,9 +12822,8 @@ App._pickMerchant = function(name, opts = {}) {
           errorAt: '',
           errorMessage: '',
         })
-        persist()
         if (!silent) notify('ยังไม่มีเหรียญที่ sync ราคาอัตโนมัติได้ ใช้ราคาสำรองแทน', 'warn')
-        return { syncedIds: [], failedIds: [], usedFallback: false }
+        return { syncedIds: [], failedIds: [], usedFallback: false, changed: false }
       }
       if (navigator.onLine === false) {
         updateCryptoSyncMeta({
@@ -12787,9 +12834,8 @@ App._pickMerchant = function(name, opts = {}) {
           errorAt: nowISO(),
           errorMessage: 'offline',
         })
-        persist()
         if (!silent) notify('ออฟไลน์อยู่ ใช้ราคาเดิมหรือราคาสำรองแทน', 'warn')
-        return { syncedIds: [], failedIds: activeIds, usedFallback: false, offline: true }
+        return { syncedIds: [], failedIds: activeIds, usedFallback: false, offline: true, changed: false }
       }
 
       const geckoSources = {}
@@ -12838,11 +12884,10 @@ App._pickMerchant = function(name, opts = {}) {
         syncedIds: finalSyncedIds,
         failedIds: finalFailedIds,
       })
-      persist()
-      App.render?.()
       const cryptoSubScreenOpen = document.getElementById('sub-screen')?.classList.contains('open')
         && (document.querySelector('#sub-screen .sub-header h2')?.textContent || '').includes('Crypto Portfolio')
-      if (cryptoSubScreenOpen) App.openCryptoPortfolioDetail()
+      const marketDataChanged = finalSyncedIds.length > 0 && comparableMarketData(S.marketPrices) !== marketBefore
+      if (cryptoSubScreenOpen && marketDataChanged) App.openCryptoPortfolioDetail()
 
       if (!silent) {
         if (finalSyncedIds.length && !finalFailedIds.length) {
@@ -12853,7 +12898,7 @@ App._pickMerchant = function(name, opts = {}) {
           notify('Sync ราคา Crypto ไม่สำเร็จ ใช้ราคาสำรองแทน', 'error')
         }
       }
-      return { syncedIds: finalSyncedIds, failedIds: finalFailedIds, usedFallback: fallbackSyncedIds.length > 0 }
+      return { syncedIds: finalSyncedIds, failedIds: finalFailedIds, usedFallback: fallbackSyncedIds.length > 0, changed: marketDataChanged }
     })()
     try {
       return await cryptoSyncInFlight
@@ -12869,7 +12914,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (now < cryptoAutoSyncThrottleUntil) return Promise.resolve(null)
     cryptoAutoSyncThrottleUntil = now + 60 * 1000
     if (!cryptoPricesAreStale()) return Promise.resolve(null)
-    return syncCryptoPrices({ silent: true, reason })
+    return syncMarketSuite({ cryptoOnly: true, silent: true, reason })
   }
 
   async function syncMarketSuite({ cryptoOnly = false, silent = false } = {}) {
@@ -12878,6 +12923,7 @@ App._pickMerchant = function(name, opts = {}) {
       if (!silent) notify('ออฟไลน์อยู่ ใช้ราคาเดิมหรือราคาสำรองแทน', 'warn')
       return { syncedIds: [], failedIds: [], offline: true }
     }
+    const marketBefore = comparableMarketData(S.marketPrices)
     const next = { ...(S.marketPrices || {}), crypto: { ...(S.marketPrices?.crypto || {}) } }
     let fxOk = false
     let goldOk = false
@@ -12895,11 +12941,13 @@ App._pickMerchant = function(name, opts = {}) {
       } catch (_) {}
     }
 
-    next.updatedAt = nowISO()
     next.crypto = { ...(S.marketPrices?.crypto || {}), ...(next.crypto || {}) }
+    const marketDataChanged = comparableMarketData(next) !== marketBefore
+    if (!marketDataChanged) return { syncedIds: cryptoResult?.syncedIds || [], failedIds: cryptoResult?.failedIds || [], changed: false }
+    next.updatedAt = nowISO()
     S.marketPrices = next
-    persist()
-    App.render?.()
+    persist('market-sync', { dirtyKeys: ['marketPrices', 'cryptoSyncMeta'] })
+    App.requestRender?.('market-sync')
 
     if (cryptoOnly) {
       if (!silent) {
@@ -12907,13 +12955,14 @@ App._pickMerchant = function(name, opts = {}) {
         else if (cryptoOk) notify('Sync ราคา Crypto ได้บางส่วน บางเหรียญใช้ราคาสำรองเดิม', 'warn')
         else notify('Sync ราคา Crypto ไม่สำเร็จ ใช้ราคาสำรองแทน', 'warn')
       }
-      return
+      return { syncedIds: cryptoResult?.syncedIds || [], failedIds: cryptoResult?.failedIds || [], changed: true }
     }
 
     if (!silent) {
       if (cryptoOk || fxOk || goldOk) notify(goldOk ? 'Sync ราคาทอง, Crypto และ FX สำเร็จ' : 'อัปเดตราคาแล้ว', 'success')
       else notify('Sync ราคาไม่ได้ ใช้ราคาสำรองแทน', 'error')
     }
+    return { syncedIds: cryptoResult?.syncedIds || [], failedIds: cryptoResult?.failedIds || [], changed: true }
   }
 
   App.refreshCryptoPrices = function() {
@@ -12931,12 +12980,31 @@ App._pickMerchant = function(name, opts = {}) {
 
   const MARKET_AUTO_SYNC_STALE_MS = 15 * 60 * 1000
 
+  App.scheduleIdleMarketSync = function(reason = 'auto') {
+    if (marketSyncIdlePromise) return marketSyncIdlePromise
+    marketSyncIdlePromise = new Promise(resolve => {
+      const run = () => {
+        marketSyncIdleHandle = 0
+        syncMarketSuite({ cryptoOnly: false, silent: true, reason })
+          .catch(() => null)
+          .then(resolve)
+          .finally(() => { marketSyncIdlePromise = null })
+      }
+      if (typeof window.requestIdleCallback === 'function') {
+        marketSyncIdleHandle = window.requestIdleCallback(run, { timeout: 1800 })
+      } else {
+        marketSyncIdleHandle = window.setTimeout(run, 0)
+      }
+    })
+    return marketSyncIdlePromise
+  }
+
   App._autoSyncMarketIfStale = function() {
     if (navigator.onLine === false) return
     const updatedAt = S.marketPrices?.updatedAt
     const age = updatedAt ? Date.now() - new Date(updatedAt).getTime() : Infinity
     if (age < MARKET_AUTO_SYNC_STALE_MS) return
-    syncMarketSuite({ cryptoOnly: false, silent: true }).catch(() => {})
+    return App.scheduleIdleMarketSync('stale-market')
   }
 
   App.openCryptoHoldingForm = function(holdingId = '') {
@@ -13337,7 +13405,7 @@ App._pickMerchant = function(name, opts = {}) {
     App.openCryptoPortfolioDetail()
     notify(holdingId ? 'อัปเดตเหรียญแล้ว' : 'เพิ่มเหรียญแล้ว', 'success')
     if (coinGeckoId) {
-      await syncCryptoPrices({ silent: true })
+      await syncMarketSuite({ cryptoOnly: true, silent: true })
       App.openCryptoPortfolioDetail()
     }
   }
@@ -16839,9 +16907,6 @@ App._pickMerchant = function(name, opts = {}) {
   window.visualViewport?.addEventListener('scroll', syncViewportSoon, { passive:true })
   document.addEventListener('focusin', syncViewportSoon, true)
   document.addEventListener('focusout', () => setTimeout(syncViewportSoon, 120), true)
-  setTimeout(() => {
-    try { App.maybeAutoSyncCryptoPrices?.('startup') } catch (_) {}
-  }, 1200)
   persist()
 })()
 
