@@ -61,6 +61,7 @@ function runtime() {
   })
   context.App._isPostedTx = tx => tx.date <= date
   vm.runInContext(section('  App.getRuleCycleUsage = function', '  // Returns per-merchant'), context)
+  vm.runInContext(section('  App.getBenefitCapBreakdown = function', '  App.applyBenefitRule = function'), context)
   vm.runInContext(section('  App.applyBenefitRule = function', '  App.getOptimalBenefitSelection = function'), context)
   return { context, state, card, counts:() => ({ builds, estimates }), setDate:value => { date = value } }
 }
@@ -162,6 +163,33 @@ test('cached cycle usage preserves same-day threshold ordering and resets on del
   assert.equal(r.context.App.applyBenefitRule(second, rule, usage(second)).cashback, 200)
 })
 
+test('threshold cycle usage counts only rewards from transactions that crossed a new block', () => {
+  const r = runtime()
+  const rule = {id:'r', type:'cashback', cashback:{mode:'fixed', fixedAmount:200}, rewardTrigger:{mode:'cycle_spend_threshold', thresholdAmount:10000, grantMode:'every_threshold', trackChannels:['online']}}
+  r.state.transactions.push(
+    {id:'a', type:'expense', walletId:'c', amount:7090, date:'2026-10-01', createdSequence:1, rewardRuleIds:['r'], channel:'online'},
+    {id:'b', type:'expense', walletId:'c', amount:7090, date:'2026-10-02', createdSequence:2, rewardRuleIds:['r'], channel:'online'},
+  )
+
+  const usage = r.context.App.getRuleCycleUsage('r', 'c', '2026-10-01', '2026-10-31', '', ['online'], '', '', rule, '2026-10-03')
+
+  assert.equal(usage.triggerCountUsedBefore, 1)
+  assert.equal(usage.cashbackUsedBefore, 200)
+})
+
+test('threshold cycle usage stays locked while tracked spend is below the threshold', () => {
+  const r = runtime()
+  const rule = {id:'r', type:'cashback', cashback:{mode:'fixed', fixedAmount:200}, rewardTrigger:{mode:'cycle_spend_threshold', thresholdAmount:10000, grantMode:'once_per_cycle', trackChannels:['online']}}
+  r.state.transactions.push(
+    {id:'a', type:'expense', walletId:'c', amount:7090, date:'2026-10-01', createdSequence:1, rewardRuleIds:['r'], channel:'online'},
+  )
+
+  const usage = r.context.App.getRuleCycleUsage('r', 'c', '2026-10-01', '2026-10-31', '', ['online'], '', '', rule, '2026-10-02')
+
+  assert.equal(usage.thresholdUnlocked, false)
+  assert.equal(usage.cashbackUsedBefore, 0)
+})
+
 test('a changed cycle cap recomputes usage without reusing the previous rule configuration', () => {
   const r = runtime()
   const rule = {id:'r', type:'cashback', cashback:{mode:'percent', rate:10}, limits:{maxRewardAmountPerCycle:100}}
@@ -172,4 +200,113 @@ test('a changed cycle cap recomputes usage without reusing the previous rule con
   assert.equal(r.context.App.applyBenefitRule(second, rule, usage()).cashback, 0)
   rule.limits.maxRewardAmountPerCycle = 150
   assert.equal(r.context.App.applyBenefitRule(second, rule, usage()).cashback, 50)
+})
+
+test('discount rewards honor the per-merchant reward cap', () => {
+  const r = runtime()
+  const rule = {
+    id:'r', type:'discount', discount:{mode:'percent', rate:10},
+    limits:{maxRewardAmountPerMerchantPerCycle:50},
+  }
+  const tx = {id:'t', type:'expense', walletId:'c', amount:1000, date:'2026-10-01', merchant:'Shop'}
+
+  const reward = r.context.App.applyBenefitRule(tx, rule, {
+    discountUsedByMerchantBefore:40,
+  })
+
+  assert.equal(reward.discount, 10)
+})
+
+test('point rewards honor the per-channel reward cap in point units', () => {
+  const r = runtime()
+  const rule = {
+    id:'r', type:'points', points:{bahtPerPoint:10, multiplier:1},
+    limits:{maxRewardAmountPerChannelPerCycle:100},
+  }
+  const tx = {id:'t', type:'expense', walletId:'c', amount:1000, date:'2026-10-01', channel:'online'}
+
+  const reward = r.context.App.applyBenefitRule(tx, rule, {
+    pointsUsedByChannelBefore:60,
+  })
+
+  assert.equal(reward.points, 40)
+})
+
+test('cycle usage reports prior discount rewards for the same merchant', () => {
+  const r = runtime()
+  const rule = {
+    id:'r', type:'discount', discount:{mode:'percent', rate:10},
+    limits:{maxRewardAmountPerMerchantPerCycle:50},
+  }
+  const first = {id:'a', type:'expense', walletId:'c', amount:300, date:'2026-10-01', createdSequence:1, rewardRuleIds:['r'], merchant:'Shop'}
+  const second = {...first, id:'b', date:'2026-10-02', createdSequence:2}
+  r.state.transactions.push(first, second)
+
+  const usage = r.context.App.getRuleCycleUsage('r', 'c', '2026-10-01', '2026-10-31', second.id, [], 'Shop', '', rule, second.date)
+
+  assert.equal(usage.discountUsedByMerchantBefore, 30)
+  assert.equal(r.context.App.applyBenefitRule(second, rule, usage).discount, 20)
+})
+
+test('cycle usage reports prior point rewards for the same channel', () => {
+  const r = runtime()
+  const rule = {
+    id:'r', type:'points', points:{bahtPerPoint:10, multiplier:1},
+    limits:{maxRewardAmountPerChannelPerCycle:100},
+  }
+  const first = {id:'a', type:'expense', walletId:'c', amount:600, date:'2026-10-01', createdSequence:1, rewardRuleIds:['r'], channel:'online'}
+  const second = {...first, id:'b', date:'2026-10-02', createdSequence:2}
+  r.state.transactions.push(first, second)
+
+  const usage = r.context.App.getRuleCycleUsage('r', 'c', '2026-10-01', '2026-10-31', second.id, [], '', 'online', rule, second.date)
+
+  assert.equal(usage.pointsUsedByChannelBefore, 60)
+  assert.equal(r.context.App.applyBenefitRule(second, rule, usage).points, 40)
+})
+
+test('threshold replay orders transactions by the effective benefit date override', () => {
+  const r = runtime()
+  const rule = {id:'r', type:'cashback', cashback:{mode:'fixed', fixedAmount:200}, rewardTrigger:{mode:'cycle_spend_threshold', thresholdAmount:10000, grantMode:'every_threshold', trackChannels:['online']}}
+  r.state.transactions.push(
+    {id:'effective-first', type:'expense', walletId:'c', amount:6000, date:'2026-10-03', benefitDateOverride:'2026-10-01', createdSequence:1, rewardRuleIds:['r'], channel:'online', merchant:'First Shop'},
+    {id:'effective-second', type:'expense', walletId:'c', amount:6000, date:'2026-10-01', benefitDateOverride:'2026-10-02', createdSequence:2, rewardRuleIds:['r'], channel:'online', merchant:'Second Shop'},
+  )
+
+  const firstShopUsage = r.context.App.getRuleCycleUsage('r', 'c', '2026-10-01', '2026-10-31', '', ['online'], 'First Shop', '', rule, '2026-10-04')
+  const secondShopUsage = r.context.App.getRuleCycleUsage('r', 'c', '2026-10-01', '2026-10-31', '', ['online'], 'Second Shop', '', rule, '2026-10-04')
+
+  assert.equal(firstShopUsage.cashbackUsedByMerchantBefore, 0)
+  assert.equal(secondShopUsage.cashbackUsedByMerchantBefore, 200)
+})
+
+test('mixed rewards do not compare point totals against baht-denominated reward caps', () => {
+  const r = runtime()
+  const rule = {
+    id:'r', type:'both',
+    cashback:{mode:'percent', rate:10}, points:{bahtPerPoint:10, multiplier:1},
+    limits:{maxRewardAmountPerTx:50},
+  }
+  const tx = {id:'t', type:'expense', walletId:'c', amount:1000, date:'2026-10-01'}
+
+  const reward = r.context.App.applyBenefitRule(tx, rule, {})
+
+  assert.equal(reward.cashback, 50)
+  assert.equal(reward.points, 100)
+})
+
+test('benefit cap breakdown reports point usage in point units', () => {
+  const r = runtime()
+  const rule = {
+    id:'r', cardId:'c', type:'points', points:{bahtPerPoint:10, multiplier:1},
+    limits:{maxRewardAmountPerChannelPerCycle:100}, suggestedConditions:{channels:['online']},
+  }
+  r.state.ccBenefitRules.push(rule)
+  r.state.transactions.push({
+    id:'a', type:'expense', walletId:'c', amount:600, date:'2026-10-01',
+    rewardRuleIds:['r'], channel:'online',
+  })
+
+  const breakdown = r.context.App.getBenefitCapBreakdown('r', 'c', '2026-10-01', '2026-10-31', [], ['online'])
+
+  assert.equal(breakdown.channelCashback.online, 60)
 })

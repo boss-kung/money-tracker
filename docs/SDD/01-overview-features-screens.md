@@ -49,7 +49,7 @@ Financial Tracker (ชื่อภายในโค้ดคือ Money Tracke
 13. สำรอง/กู้คืนข้อมูล และซิงก์ข้ามอุปกรณ์แบบเข้ารหัสฝั่งผู้ใช้ (`auth_sync.js` + `crypto_vault.js`)
 14. ล็อกแอปด้วย PIN / Face ID / Touch ID (`app_lock.js`)
 15. บันทึกรายการแบบเร็วด้วยเสียงหรือข้อความภาษาไทย (`quick_capture.js`)
-16. ค้นหาโปรโมชันบัตรเครดิตด้วย AI ผ่าน backend ภายนอก (`promo-search-appscript.js`, `promo-search-worker/`)
+16. นำเข้าสิทธิประโยชน์บัตรเครดิตจากลิงก์ธนาคารด้วย parser เฉพาะผู้ออกบัตร
 
 ## 1.3 ใช้ทำอะไร / กลุ่มผู้ใช้
 
@@ -92,8 +92,7 @@ Financial Tracker (ชื่อภายในโค้ดคือ Money Tracke
 
 ชั้นที่ 4 — Backend เสริม (ไม่บังคับ)
 - Supabase — Auth (Google OAuth PKCE), ตาราง `mt_user_vaults` เก็บ ciphertext, Edge Functions 7 ตัว, pg_cron 2 ตาราง job
-- Google Apps Script — proxy ราคาทอง (`gold-proxy-appscript.js`) และ AI promo search (`promo-search-appscript.js`)
-- Cloudflare Worker — ทางเลือกของ promo search (`promo-search-worker/src/index.js`)
+- Google Apps Script — proxy ราคาทอง (`gold-proxy-appscript.js`)
 - API สาธารณะภายนอก — `api.chnwt.dev` (ราคาทอง), `api.frankfurter.dev` (อัตราแลกเปลี่ยน), `api.coingecko.com` / `api.coincap.io` (ราคาคริปโต)
   ทั้งหมดถูกอนุญาตไว้ใน CSP `connect-src` ที่ `index.html` บรรทัด 26–39
 
@@ -118,8 +117,7 @@ Backend
 - Deno + `@supabase/supabase-js@2.45.4` (esm.sh) + `web-push@3.6.7` (npm:)
 - Resend สำหรับส่งอีเมล OTP ยืนยันการลบบัญชี (`send-delete-otp/index.ts`)
 - Firebase Cloud Messaging (มีโค้ด `_shared/fcm.ts` พร้อม service-account JWT signing แต่ฟังก์ชันที่ใช้งานจริงทั้งหมดเรียก `sendWebPush` ไม่ใช่ `sendFcm` — ดู SECTION 15)
-- Google Apps Script + Gemini API (grounded search + JSON schema extraction)
-- Cloudflare Workers + Wrangler (โปรเจกต์ย่อย `promo-search-worker/`, มี `node_modules` commit ลงรีโพ)
+- Google Apps Script สำหรับ proxy ราคาทอง
 
 Testing
 - Node.js built-in `node:test` + `node:assert/strict` เท่านั้น — ไม่มี Jest ไม่มี Vitest
@@ -178,8 +176,6 @@ Money Tracker/
 ├── scripts/gen-splash.js          สร้างภาพ splash iOS ทุกขนาด
 │
 ├── gold-proxy-appscript.js        Apps Script proxy ราคาทอง (doGet + JSONP)
-├── promo-search-appscript.js      Apps Script AI promo search + benefit analysis
-├── promo-search-worker/           Cloudflare Worker ทางเลือกของ promo search (มี node_modules)
 │
 ├── demo/                          แอปเวอร์ชัน demo แยก namespace
 │   ├── index.html                 โหลดสคริปต์เดียวกันแต่ prefix ../
@@ -399,10 +395,10 @@ Money Tracker/
   - ผลลัพธ์ที่บันทึกลง tx ถูกย่อด้วย `App._slimRewardEstimate` เหลือ 12 ฟิลด์ต่อกฎ เพื่อประหยัด localStorage
 - นำเข้ากฎจากลิงก์ธนาคาร — `App.openCCBenefitImportDialog` → `App.analyzeCCBenefitLink` → `App._fetchBenefitSourceDocument` → parser เฉพาะผู้ออกบัตร
   (`_parseCardXPromotionDrafts`, `_parseUobPromotionDrafts`, `_parseAeonPromotionDrafts`, `_parseFirstChoicePromotionDrafts`, `_parseUnionPayPromotionDrafts`)
-  หรือส่งให้ AI วิเคราะห์ (`App._analyzeBenefitTextWithAI` → `MT_PROMO_SEARCH_ENDPOINT`)
-- API ที่ใช้ — Google Apps Script endpoint ที่ hard-code ไว้ใน `index.html` บรรทัด 363 และ CardX endpoint `cdx-prod-ssc-frontend.cardx.co.th` (อยู่ใน CSP)
+  โดยไม่มีการส่งข้อมูลไปยัง AI endpoint ภายนอก
+- API ที่ใช้ — CardX endpoint `cdx-prod-ssc-frontend.cardx.co.th` (อยู่ใน CSP) เฉพาะตอนดึงข้อมูลหน้า CardX
 - Loading state — มี (การวิเคราะห์ลิงก์เป็น async) แต่ implement เป็นการ re-render preview ไม่ใช่ spinner กลาง
-- Error handling — `App.verifyBenefitEndpoint` ตรวจ endpoint ก่อน, ถ้า fetch ไม่ได้จะ fallback ไปพร็อกซีอื่น
+- Error handling — แสดง diagnostics จากการดึงหน้าเว็บและ parser เฉพาะผู้ออกบัตร
 - Limitation — parser ผูกกับโครงสร้าง HTML ของแต่ละธนาคาร ถ้าเว็บธนาคารเปลี่ยน parser จะพัง
 
 ## F-09 บัญชีคะแนนและสมุดบัญชีรางวัล (Reward Accounts / Ledger)
@@ -673,20 +669,12 @@ Money Tracker/
   รหัสหลายชุดต่อสิทธิ์ (`addPrivilegeDraftCode`, `removePrivilegeDraftCode`, `updatePrivilegeDraftCode`)
 - ความสัมพันธ์ — INS-06 เตือนเมื่อใกล้หมดอายุ (<= 7 วัน); trigger แจ้งเตือน `privilege_expiry`
 
-## F-27 ค้นหาโปรโมชันบัตรด้วย AI
+## F-27 นำเข้าสิทธิประโยชน์จากลิงก์ธนาคาร
 
-- Entry point — จากหน้าสิทธิประโยชน์บัตร (`App.openCCBenefitImportDialog` และเส้นทาง promo search)
-- Database — `mt_credit_card_promo_searches`, `mt_credit_card_promotions`
-- Backend ทางเลือกที่ 1 — Google Apps Script (`promo-search-appscript.js`)
-  - `doPost(e)` รับ action; `doGet()` สำหรับ health check; `respond()` ตอบ JSON/JSONP
-  - cache ใน CacheService (`cacheKey(issuers, month, mode)`, `cacheGet`, `cacheSet`)
-  - `buildSearchPrompt` → `callGeminiWithSearch` (grounded search) → `buildExtractionPrompt` → `callGeminiJsonSchema` → `normalizeResults`
-  - `handlePromoSearch(payload)` และ `handleBenefitAnalysis(payload)`
-  - `getMockResults` สำหรับทดสอบโดยไม่เรียก AI
-- Backend ทางเลือกที่ 2 — Cloudflare Worker (`promo-search-worker/src/index.js`)
-  - รับเฉพาะ `POST /promo-search` (บรรทัด 628) มิฉะนั้นตอบ error
-  - `searchOfficialPromoPages` → `fetchOfficialSource` → `callAiExtractor`
-- Endpoint ที่ใช้จริง — hard-code ใน `index.html` บรรทัด 363 (`window.MT_PROMO_SEARCH_ENDPOINT`)
+- Entry point — จากหน้าสิทธิประโยชน์บัตร (`App.openCCBenefitImportDialog`)
+- แหล่งข้อมูล — หน้าเว็บธนาคารที่ผู้ใช้ระบุ และ CardX API สำหรับหน้า CardX
+- การประมวลผล — parser เฉพาะผู้ออกบัตรในเครื่อง; ไม่ใช้ Promo endpoint หรือ Gemini
+- Database — กฎที่ผู้ใช้เลือกบันทึกลง `mt_cc_benefit_rules`
 
 ## F-28 นำเข้า / ส่งออกข้อมูล
 

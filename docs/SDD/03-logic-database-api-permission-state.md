@@ -1003,7 +1003,7 @@ API ที่มีจริงแบ่งเป็น 4 กลุ่ม
 1. Supabase Auth (GoTrue) — เรียกตรงจากเบราว์เซอร์
 2. Supabase REST (PostgREST) — เรียกตรงจากเบราว์เซอร์ ผ่าน RLS
 3. Supabase Edge Functions — 7 endpoint
-4. API ภายนอก — ราคาทอง อัตราแลกเปลี่ยน คริปโต และ AI promo search
+4. API ภายนอก — ราคาทอง อัตราแลกเปลี่ยน และคริปโต
 
 Base URL — `window.MT_SUPABASE_URL` (ตั้งใน `notification_config.js` ที่ CI สร้างจาก secrets)
 
@@ -1240,16 +1240,9 @@ sendFcm(message) — POST https://fcm.googleapis.com/v1/projects/{FIREBASE_PROJE
 ### ราคาคริปโต — `https://api.coingecko.com` และ `https://api.coincap.io`
 - ใช้ทั้งค้นหาเหรียญและดึงราคา
 
-### AI Promo Search — Google Apps Script Web App
-- Endpoint hard-code ที่ `index.html` บรรทัด 363
-- `doPost(e)` รับ action แล้วแยกไป `handlePromoSearch(payload)` หรือ `handleBenefitAnalysis(payload)`
-- ภายในเรียก Gemini 2 ครั้ง: grounded search (`callGeminiWithSearch`) แล้ว structured extraction (`callGeminiJsonSchema`)
-- มี cache ผ่าน CacheService และโหมด mock (`getMockResults`)
-
-### AI Promo Search — Cloudflare Worker (ทางเลือก)
-- `POST /promo-search` เท่านั้น (path หรือ method อื่น → error)
-- `searchOfficialPromoPages(issuer, month, mode)` → `fetchOfficialSource(url, issuer, month)` → `callAiExtractor(prompt, apiKey)`
-- ตั้งค่าใน `wrangler.toml`
+### Promo import
+- ไม่มี Promo endpoint หรือ AI backend แล้ว
+- การนำเข้าจากลิงก์ใช้ parser เฉพาะผู้ออกบัตรใน `app_v2.js`
 
 ### CardX — `https://cdx-prod-ssc-frontend.cardx.co.th`
 - อยู่ใน CSP ใช้ดึงหน้าโปรโมชันเพื่อ parse

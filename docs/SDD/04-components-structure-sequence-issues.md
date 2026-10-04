@@ -159,7 +159,7 @@
 ├──────────────────────────────────────────────────────────┤
 │ External                                                 │
 │   Supabase (Auth / REST / Edge Functions / pg_cron)      │
-│   Google Apps Script, Cloudflare Worker, Public APIs     │
+│   Google Apps Script (gold proxy), Public APIs           │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -682,12 +682,7 @@ App.confirmImportPayload()
 
 ## 15.1 TODO / FIXME ที่มีอยู่
 
-พบ TODO เพียง 3 จุด ทั้งหมดอยู่ใน `promo-search-worker/src/index.js`
-- บรรทัด 120 — `// TODO: verify current URL for First Choice promotions`
-- บรรทัด 147 — `// TODO: verify current URL for TTB promotions`
-- บรรทัด 156 — `// TODO: verify current URL for AEON promotions`
-
-ไม่พบ FIXME, HACK, หรือ XXX ในความหมายของหมายเหตุค้างงาน
+ไม่มี TODO, FIXME, HACK หรือ XXX ที่เกี่ยวกับ Promo endpoint; backend ดังกล่าวถูกถอดออกแล้ว
 (`XXXX-XXXX-...` ใน `auth_sync.js` เป็น placeholder ของ recovery key ไม่ใช่ TODO)
 
 ## 15.2 ความไม่สอดคล้องระหว่างโค้ดกับ Schema ฐานข้อมูล (ความรุนแรงสูง)
@@ -804,7 +799,7 @@ fcm_token text not null unique
 7. `App.render()` ปิดท้ายด้วย `formatNumberInputsIn(document)` ซึ่ง query ทั้ง document
 8. `getStatementHistory` เรียก `getCardStatement` 6 ครั้ง แต่ละครั้ง filter ทุกธุรกรรม = O(6n) ต่อบัตรหนึ่งใบ
    และแดชบอร์ดเรียกซ้ำสำหรับทุกบัตร
-9. `promo-search-worker/node_modules` มีอยู่ในไฟล์ระบบ (แม้จะ gitignored) ทำให้การค้นหาไฟล์ในโปรเจกต์ช้า
+9. ไม่มี backend Promo search แยกในรีโพแล้ว; การนำเข้าลิงก์ใช้ parser ในแอป
 
 ## 15.9 ปัญหา Memory / Resource Leak ที่เป็นไปได้
 
@@ -829,14 +824,13 @@ fcm_token text not null unique
    — anon key เป็นค่าสาธารณะโดยออกแบบ แต่การฝังในไฟล์ทำให้หมุนเวียนคีย์ยาก (ต้องแก้ migration แล้วรันใหม่)
 5. `notification_config.js` ที่ commit ไว้มี Supabase URL และ anon key ของ production จริง
    (ไฟล์เขียนกำกับว่าเป็น placeholder และ CI จะเขียนทับ แต่ค่าที่อยู่จริงคือค่า production)
-6. `MT_PROMO_SEARCH_ENDPOINT` hard-code ใน `index.html` — ใครก็เรียก endpoint นี้ได้ อาจทำให้โควตา Gemini ถูกใช้หมด
+6. Promo endpoint ถูกถอดออกแล้ว จึงไม่มี endpoint หรือ Gemini quota ที่เปิดจาก frontend
 7. App Lock ไม่ใช่ security boundary — `MTAppLock.start()` เรียก `init()` ทันทีแม้ยังล็อกอยู่ (บรรทัด 390–393)
    ข้อมูลถูกโหลดเข้าหน่วยความจำและ DOM ถูก render เบื้องหลัง ใครที่เปิด devtools ได้ก็อ่านข้อมูลได้
 8. `rescue.html` เข้าถึงและเขียน localStorage ได้โดยไม่ผ่าน App Lock
 9. `Storage.reset()` ลบเฉพาะคีย์ใน `KEYS` — คีย์อื่นอีกกว่า 20 คีย์ (App Lock config, auth state, recovery key,
    notification install id) ยังคงอยู่หลัง "รีเซ็ตข้อมูลทั้งหมด"
-10. `promo-search-appscript.js` และ Cloudflare Worker ดึง HTML จากเว็บธนาคารมา parse — ถ้าเว็บถูกแทรกเนื้อหา
-    ข้อมูลนั้นจะไหลเข้าสู่ AI extractor และกลายเป็นกฎสิทธิประโยชน์ในแอป (ผู้ใช้ต้องตรวจก่อนบันทึกเสมอ)
+10. parser นำเข้าลิงก์ยังอาศัยโครงสร้าง HTML ของเว็บธนาคาร — หากเว็บเปลี่ยน รูปแบบการนำเข้าอาจใช้ไม่ได้
 11. CORS whitelist ไม่มีพอร์ต 8765 ซึ่งเป็นพอร์ต dev ที่ `CLAUDE.md` และ `.claude/launch.json` กำหนด
     ทำให้การทดสอบ edge function ในเครื่องล้มเหลวโดยไม่มีสาเหตุที่ชัดเจน
 
@@ -854,7 +848,7 @@ fcm_token text not null unique
 1. CI ไม่รันเทสต์ — `.github/workflows/deploy.yml` มีเพียง generate config → configure-pages → upload → deploy
    ทั้งที่มีเทสต์ 26 ไฟล์ที่รันได้ด้วย `node --test tests/`
 2. ไม่มี lint / formatter — ไม่พบ `.eslintrc`, `.prettierrc`, หรือ config ใด ๆ
-3. ไม่มี `package.json` ที่ระดับ root (มีเฉพาะใน `promo-search-worker/`)
+3. ไม่มี `package.json` ที่ระดับ root (โปรเจกต์เป็น static frontend)
 4. ไม่มี type checking (ไม่มี TypeScript หรือ JSDoc type annotation ที่เป็นระบบ) ยกเว้นฝั่ง Supabase Edge Functions
 5. `supabase/.temp/` ถูกเก็บอยู่ในโปรเจกต์ (มีไฟล์ว่าง 9 ไฟล์) — เป็น artifact ของ Supabase CLI
 6. `.superpowers/` และ `.codex-ui-audit/` เป็น artifact ของเครื่องมือพัฒนาที่ปนอยู่ในรีโพ

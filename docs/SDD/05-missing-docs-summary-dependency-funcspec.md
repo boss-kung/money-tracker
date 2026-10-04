@@ -125,7 +125,7 @@
 - `find_dead_css.py` และ `remove_dead_css.py` ไม่มีคำอธิบายวิธีใช้และข้อควรระวัง
 - `scripts/gen-splash.js` ไม่มีคำอธิบายว่ารันเมื่อไรและต้องติดตั้งอะไร (มีคอมเมนต์สั้นใน `index.html` บรรทัด 54)
 - `demo/` ไม่มี README อธิบายว่าโหมด demo ต่างจากของจริงอย่างไร
-- `promo-search-worker/README.md` มีอยู่ (188 บรรทัด) แต่ไม่มีเอกสารว่าเลือกใช้ Worker หรือ Apps Script อย่างไร
+- ไม่มี backend Promo search ที่ต้อง deploy แยก; การนำเข้าลิงก์ใช้ parser ในแอป
 - ค่าคงที่เชิงธุรกิจไม่มีคำอธิบายที่มา เช่น `CREDIT_ALERT_DAYS = 3`, TTL 4 ชั่วโมงของ insight,
   30 วันของ dismiss, เกณฑ์ออม 20%, เงินสำรอง 3 เดือน, สิทธิ์ใกล้หมดอายุ 7 วัน
 
@@ -145,7 +145,7 @@
 | F-05 | รอบบิลบัตรเครดิต | คำนวณรอบ/วันครบกำหนด/ยอดค้าง | sub-screen `openCCDetail` | — | mt_wallets, mt_transactions | ผู้ใช้ | ใช้งานได้ |
 | F-06 | ชำระบัตรเครดิต | ชำระพร้อมรองรับส่วนลดตอนชำระ | overlay `#overlay-cc-pay` | — | mt_transactions | ผู้ใช้ | ใช้งานได้ |
 | F-07 | วงเงินร่วม | กลุ่มบัตรที่ใช้วงเงินร่วมกัน | sub-screen | — | mt_credit_limit_groups | ผู้ใช้ | ใช้งานได้ |
-| F-08 | สิทธิประโยชน์บัตร | กฎคะแนน/เงินคืน/ส่วนลด + เลือกชุดที่คุ้มที่สุดอัตโนมัติ | sub-screen (wizard 3 ขั้น) | Apps Script promo search, CardX | mt_cc_benefit_rules, mt_cc_benefits | ผู้ใช้ | ใช้งานได้ (parser ผูกกับ HTML ธนาคาร) |
+| F-08 | สิทธิประโยชน์บัตร | กฎคะแนน/เงินคืน/ส่วนลด + เลือกชุดที่คุ้มที่สุดอัตโนมัติ | sub-screen (wizard 3 ขั้น) | CardX เฉพาะตอนนำเข้าลิงก์ | mt_cc_benefit_rules, mt_cc_benefits | ผู้ใช้ | ใช้งานได้ (parser ผูกกับ HTML ธนาคาร) |
 | F-09 | บัญชีคะแนน | ติดตามคะแนนสะสมและมูลค่าเป็นบาท | sub-screen | — | mt_reward_accounts, mt_reward_ledger | ผู้ใช้ | ใช้งานได้ |
 | F-10 | BNPL | แผนผ่อนของกระเป๋า BNPL + จ่ายงวด/ปิดยอด | sub-screen + overlay 2 ตัว | — | mt_bnpl_plans, mt_transactions | ผู้ใช้ | ใช้งานได้ (ไม่มีหน้า detail เฉพาะ) |
 | F-11 | รายการประจำ | ตั้งรายการซ้ำรายวัน/รายเดือน | sub-screen, `#more?open=recurring` | — | mt_recurring | ผู้ใช้ | ใช้งานได้ |
@@ -164,7 +164,7 @@
 | F-24 | ราคาทอง / FX | ดึงราคาทองไทยและอัตราแลกเปลี่ยน มี fallback 5 ชั้น | อัตโนมัติตอนเปิดแอป | api.chnwt.dev, r.jina.ai, allorigins, corsproxy, Apps Script, frankfurter | mt_market_prices, MT_GOLD_LAST | ผู้ใช้ | ใช้งานได้ (พึ่งพร็อกซีสาธารณะ) |
 | F-25 | พอร์ตคริปโต | ถือครอง/ซื้อ/ขาย/ปรับจำนวน พร้อมกำไรขาดทุน | sub-screen | CoinGecko, CoinCap | mt_crypto_* (4 คีย์) | ผู้ใช้ | ใช้งานได้ |
 | F-26 | สิทธิพิเศษ | คูปอง/โค้ด/ของแถม พร้อมวันหมดอายุ | sub-screen, `#more?open=privileges` | — | mt_privileges | ผู้ใช้ | ใช้งานได้ |
-| F-27 | ค้นหาโปรบัตรด้วย AI | ค้นโปรโมชันบัตรจากเว็บธนาคารผ่าน Gemini | จากหน้าสิทธิประโยชน์บัตร | Apps Script + Gemini หรือ Cloudflare Worker | mt_credit_card_promo_searches, mt_credit_card_promotions | ผู้ใช้ | ใช้งานได้ (มี TODO ค้าง 3 URL) |
+| F-27 | นำเข้าสิทธิประโยชน์จากลิงก์ | parse โปรโมชันจากลิงก์ธนาคารด้วย parser ในเครื่อง | จากหน้าสิทธิประโยชน์บัตร | CardX เฉพาะตอนนำเข้าลิงก์ | mt_cc_benefit_rules | ผู้ใช้ | ใช้งานได้ตาม parser ที่รองรับ |
 | F-28 | นำเข้า / ส่งออก | JSON (schema v3) และ CSV พร้อม preview และ validation | More → ตั้งค่า → ข้อมูล | — | ทุกคีย์ | ผู้ใช้ | ใช้งานได้ |
 | F-29 | ตรวจ/ซ่อมยอด | เทียบยอดที่เก็บกับยอดที่คำนวณ แล้วซ่อม | sub-screen | — | mt_wallets | ผู้ใช้ | ใช้งานได้ |
 | F-30 | พื้นที่จัดเก็บ | ดูการใช้พื้นที่และคืนพื้นที่ | sub-screen | — | ทุกคีย์ | ผู้ใช้ | ใช้งานได้ |
@@ -279,7 +279,7 @@
 | `MTBoot`, `MTBootScreen`, `MT_DEBUG_FLAGS` | index.html inline + app_v2.js | ทุกไฟล์ (ผ่าน optional chaining) |
 | `ThaiBankHolidays` | thai_bank_holidays.js | credit_card_cycles.js |
 | `MT_SUPABASE_URL`, `MT_SUPABASE_ANON_KEY`, `MT_FCM_VAPID_KEY`, `MT_FIREBASE_CONFIG` | notification_config.js | auth_sync.js, notifications_v2.js |
-| `MT_PROMO_SEARCH_ENDPOINT`, `MT_GOLD_PROXY_URL`, `MT_GOLD_AURORA_PROXY_URL`, `MT_AUTH_REDIRECT_URL` | index.html inline | app_v2.js, gold_market.js, auth_sync.js |
+| `MT_GOLD_PROXY_URL`, `MT_GOLD_AURORA_PROXY_URL`, `MT_AUTH_REDIRECT_URL` | index.html inline | gold_market.js, auth_sync.js |
 | `MT_DEMO_MODE`, `MT_DEMO_STORAGE_DISABLED`, `MTDemoStorage` | demo/demo_bootstrap.js | app_v2.js (`openDemoApp`, `_showRescueBannerIfNeeded`) |
 | `_fieldTooLong`, `FIELD_MAX` | app_v2.js (expose ให้ split_bill) | split_bill.js |
 | `_loanDraft`, `_repDraft` | loans_v2.js | inline oninput ใน HTML string |
@@ -315,9 +315,7 @@
 | r.jina.ai / allorigins / corsproxy | proxy อ่านหน้าเว็บ | fallback ชั้นถัดไป |
 | api.frankfurter.dev | อัตราแลกเปลี่ยน | มูลค่ากระเป๋า FCD ไม่อัปเดต |
 | api.coingecko.com / api.coincap.io | ราคาคริปโต | มูลค่าคริปโตไม่อัปเดต |
-| Google Apps Script | promo search + gold proxy | ค้นโปรไม่ได้ / ใช้ fallback ราคาทอง |
-| Cloudflare Worker | promo search ทางเลือก | ใช้ Apps Script แทน |
-| Gemini API | สกัดข้อมูลโปรโมชัน | promo search ล้มเหลว |
+| Google Apps Script | gold proxy เท่านั้น | ใช้ fallback ราคาทอง |
 | Resend | ส่งอีเมล OTP | `send-delete-otp` ล้มเหลว (แต่ไม่ถูกใช้จริง) |
 | CardX website | ดึงหน้าโปรโมชัน | นำเข้ากฎจากลิงก์ CardX ไม่ได้ |
 | GitHub Pages | โฮสต์ | เข้าแอปไม่ได้ (แต่ PWA ที่ติดตั้งแล้วยังทำงานออฟไลน์ได้จาก SW cache) |
