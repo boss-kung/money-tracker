@@ -20,6 +20,8 @@
   const notify  = (msg, type='info') => { try { toast(msg, type) } catch(_) {} }
   const r2      = n => Math.round((Number(n)||0) * 100) / 100
   const numVal  = el => parseFloat(String(el?.value||'').replace(/,/g,'')) || 0
+  const finite  = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback
+  const clone   = value => JSON.parse(JSON.stringify(value))
   const todayStr = () => {
     try { if (typeof getTODAY === 'function') return getTODAY() } catch(_) {}
     const d = new Date()
@@ -32,23 +34,73 @@
   }
 
   // ── Store ────────────────────────────────────────────────────
+  function durableCollectionSave(storageKey, stateKey, value) {
+    const hasState = typeof S !== 'undefined'
+    const previousState = hasState ? clone(S[stateKey] ?? null) : null
+    const previousRaw = (() => { try { return localStorage.getItem(storageKey) } catch (_) { return null } })()
+    if (hasState) S[stateKey] = value
+
+    // Production writes go through State Commit so readback, rollback and Vault
+    // dirty revisions stay coupled. The direct path remains for isolated tests and
+    // early boot environments where the main app has not installed App.saveAll yet.
+    if (hasState && typeof App?.saveAll === 'function' && typeof Storage !== 'undefined') {
+      if (App.saveAll('split-bill') === true) return true
+      S[stateKey] = previousState
+      try {
+        if (previousRaw === null || previousRaw === undefined) localStorage.removeItem(storageKey)
+        else localStorage.setItem(storageKey, previousRaw)
+      } catch (_) {}
+      return false
+    }
+
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(value))
+      if (localStorage.getItem(storageKey) !== JSON.stringify(value)) throw new Error('readback mismatch')
+      return true
+    } catch (_) {
+      if (hasState) S[stateKey] = previousState
+      try {
+        if (previousRaw === null || previousRaw === undefined) localStorage.removeItem(storageKey)
+        else localStorage.setItem(storageKey, previousRaw)
+      } catch (_) {}
+      return false
+    }
+  }
+
+  function loadArray(storageKey) {
+    try {
+      const value = JSON.parse(localStorage.getItem(storageKey) || '[]')
+      return Array.isArray(value)
+        ? value.filter(row => row && typeof row === 'object' && !Array.isArray(row))
+        : []
+    } catch (_) { return [] }
+  }
+
   const SbStore = {
-    loadBills:    () => { try { return JSON.parse(localStorage.getItem(BILLS_KEY)||'[]')||[] } catch(_) { return [] } },
-    saveBills:    b  => { try { localStorage.setItem(BILLS_KEY,  JSON.stringify(b)); if (typeof S !== 'undefined') S.splitBills = b; return true } catch(_) { return false } },
-    loadPeople:   () => { try { return JSON.parse(localStorage.getItem(PEOPLE_KEY)||'[]')||[] } catch(_) { return [] } },
-    savePeople:   p  => { try { localStorage.setItem(PEOPLE_KEY, JSON.stringify(p)); if (typeof S !== 'undefined') S.splitPeople = p; return true } catch(_) { return false } },
+    loadBills:    () => loadArray(BILLS_KEY),
+    saveBills:    b  => durableCollectionSave(BILLS_KEY, 'splitBills', b),
+    loadPeople:   () => loadArray(PEOPLE_KEY),
+    savePeople:   p  => durableCollectionSave(PEOPLE_KEY, 'splitPeople', p),
     getBill:      id => SbStore.loadBills().find(b => b.id === id) || null,
     getPerson:    id => SbStore.loadPeople().find(p => p.id === id) || null,
     upsertBill:   bill => {
       const list = SbStore.loadBills(); const i = list.findIndex(b => b.id === bill.id)
       if (i >= 0) list[i] = bill; else list.unshift(bill); return SbStore.saveBills(list)
     },
-    deleteBill:   id => SbStore.saveBills(SbStore.loadBills().filter(b => b.id !== id)),
+    archiveBill:  id => {
+      const bill = SbStore.getBill(id)
+      return bill ? SbStore.upsertBill({ ...bill, archived: true, updatedAt: nowISO() }) : false
+    },
+    deleteBill:   id => SbStore.archiveBill(id),
     upsertPerson: person => {
       const list = SbStore.loadPeople(); const i = list.findIndex(p => p.id === person.id)
       if (i >= 0) list[i] = person; else list.unshift(person); return SbStore.savePeople(list)
     },
-    deletePerson: id => SbStore.savePeople(SbStore.loadPeople().filter(p => p.id !== id)),
+    archivePerson: id => {
+      const person = SbStore.getPerson(id)
+      return person ? SbStore.upsertPerson({ ...person, archived: true, updatedAt: nowISO() }) : false
+    },
+    deletePerson: id => SbStore.archivePerson(id),
   }
 
   // ── Data helpers ─────────────────────────────────────────────
@@ -68,10 +120,18 @@
       manualTotal: Number(base.manualTotal) || 0,
       ownerPersonId: base.ownerPersonId || '',
       linkedTransactionId: base.linkedTransactionId || '',
-      peopleIds:   Array.isArray(base.peopleIds) ? [...base.peopleIds] : [],
-      items:       Array.isArray(base.items) ? JSON.parse(JSON.stringify(base.items)) : [],
-      pipeline:    Array.isArray(base.pipeline) ? JSON.parse(JSON.stringify(base.pipeline)) : defaultPipeline(),
-      payments:    base.payments ? { ...base.payments } : {},
+      peopleIds:   Array.isArray(base.peopleIds) ? base.peopleIds.filter(id => typeof id === 'string' || typeof id === 'number').map(String) : [],
+      items:       Array.isArray(base.items) ? JSON.parse(JSON.stringify(base.items
+        .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+        .map(item => ({
+          ...item,
+          participants: Array.isArray(item.participants) ? item.participants.filter(p => p && typeof p === 'object' && !Array.isArray(p)) : [],
+          discount: item.discount && typeof item.discount === 'object' && !Array.isArray(item.discount)
+            ? { ...item.discount }
+            : { enabled: false, mode: 'percent', value: 0 },
+        })))) : [],
+      pipeline:    Array.isArray(base.pipeline) ? JSON.parse(JSON.stringify(base.pipeline.filter(step => step && typeof step === 'object' && !Array.isArray(step)))) : defaultPipeline(),
+      payments:    base.payments && typeof base.payments === 'object' && !Array.isArray(base.payments) ? { ...base.payments } : {},
       rounding:    (() => {
         const r = base.rounding
         if (!r || r === false || r === 0) return { mode: 'off', amount: 0 }
@@ -85,20 +145,23 @@
   }
 
   // ── Calculator ───────────────────────────────────────────────
-  function itemEffectivePrice(item) {
+  function itemEffectivePrice(item = {}) {
     // Support legacy format (qty × pricePerUnit) and new format (price)
-    const base = item.price != null
-      ? Number(item.price) || 0
-      : (Number(item.qty)||1) * (Number(item.pricePerUnit)||0)
+    const rawBase = item.price != null
+      ? finite(item.price)
+      : Math.max(0, finite(item.qty, 1)) * Math.max(0, finite(item.pricePerUnit))
+    const base = r2(Math.max(0, rawBase))
     if (!item.discount?.enabled) return r2(base)
+    const value = Math.max(0, finite(item.discount.value))
     const disc = item.discount.mode === 'percent'
-      ? base * (Number(item.discount.value)||0) / 100
-      : Number(item.discount.value)||0
-    return r2(base - Math.max(0, disc))
+      ? base * Math.min(100, value) / 100
+      : Math.min(base, value)
+    return r2(Math.max(0, base - disc))
   }
 
   function itemSubtotal(draft) {
-    return r2((draft.items||[]).reduce((s, item) => s + itemEffectivePrice(item), 0))
+    const items = Array.isArray(draft?.items) ? draft.items : []
+    return r2(items.reduce((s, item) => s + (item && typeof item === 'object' ? itemEffectivePrice(item) : 0), 0))
   }
 
   function roundToUnit(satang, unit) {
@@ -110,13 +173,10 @@
     const totalCents = Math.round(r2(totalAmount) * 100)
     const shares = {}
     ids.forEach(id => { shares[id] = 0 })
-    if (!ids.length || totalCents === 0) return shares
-
     const totalWeight = weights.reduce((sum, w) => sum + Math.max(0, Number(w) || 0), 0)
+    if (!ids.length || totalCents <= 0 || totalWeight <= 0) return shares
     const rawRows = ids.map((id, i) => {
-      const raw = totalWeight > 0
-        ? Math.max(0, Number(weights[i]) || 0) / totalWeight * totalCents
-        : totalCents / ids.length
+      const raw = Math.max(0, Number(weights[i]) || 0) / totalWeight * totalCents
       const cents = Math.floor(raw)
       return { id, cents, frac: raw - cents, order: i }
     })
@@ -141,15 +201,16 @@
   }
 
   function runPipeline(subtotal, pipeline, rounding = false) {
-    const foodBase = r2(subtotal)
+    const foodBase = r2(Math.max(0, finite(subtotal)))
     let amount = foodBase
     const steps = [{ label: 'ยอดอาหาร', amount, delta: 0, type: 'base' }]
-    for (const p of (pipeline||[])) {
-      if (!p.enabled) continue
+    for (const p of (Array.isArray(pipeline) ? pipeline : [])) {
+      if (!p || typeof p !== 'object' || !p.enabled) continue
       const base = p.base === 'food' ? foodBase : amount
-      let raw = p.mode === 'percent' ? base * (Number(p.value)||0) / 100 : (Number(p.value)||0)
-      const delta = p.type === 'discount' ? -Math.abs(r2(raw)) : Math.abs(r2(raw))
-      amount = r2(amount + delta)
+      const value = Math.max(0, finite(p.value))
+      const raw = p.mode === 'percent' ? base * value / 100 : value
+      const delta = p.type === 'discount' ? -Math.min(amount, Math.abs(r2(raw))) : Math.abs(r2(raw))
+      amount = r2(Math.max(0, amount + delta))
       steps.push({ label: p.label, amount, delta, type: p.type, mode: p.mode, value: p.value, base: p.base })
     }
     let roundingDelta = 0
@@ -161,42 +222,99 @@
       amount = rounded
     } else if (rm.mode === 'custom') {
       roundingDelta = r2(Number(rm.amount) || 0)
-      amount = r2(amount + roundingDelta)
+      amount = r2(Math.max(0, amount + roundingDelta))
     }
-    return { finalTotal: amount, steps, roundingDelta }
+    return { finalTotal: Math.max(0, amount), steps, roundingDelta }
   }
 
-  function calcShares(draft) {
-    const byPerson = {}
-    draft.peopleIds.forEach(id => { byPerson[id] = 0 })
+  function validateDraft(draft = {}) {
+    const errors = []
+    const peopleIds = Array.isArray(draft.peopleIds) ? draft.peopleIds : []
+    const knownPeople = new Set(peopleIds)
+    if (!peopleIds.length) errors.push({ code: 'people_required', message: 'เลือกอย่างน้อย 1 คน' })
 
-    ;(draft.items||[]).forEach(item => {
-      const total = itemEffectivePrice(item)
-      const parts = (item.participants||[]).filter(p => draft.peopleIds.includes(p.personId))
-      if (!parts.length) return
+    ;(Array.isArray(draft.items) ? draft.items : []).forEach((item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        errors.push({ code: 'invalid_item', index, message: `รายการที่ ${index + 1} มีข้อมูลไม่ถูกต้อง` })
+        return
+      }
+      const rawPrice = item.price != null
+        ? Number(item.price)
+        : Number(item.qty ?? 1) * Number(item.pricePerUnit ?? 0)
+      const basePrice = itemEffectivePrice({ ...item, discount: { ...(item.discount || {}), enabled: false } })
+      const effectivePrice = itemEffectivePrice(item)
+      if (!Number.isFinite(rawPrice) || rawPrice < 0 || !Number.isFinite(basePrice)) errors.push({ code: 'invalid_price', index, message: `รายการที่ ${index + 1} มีราคาไม่ถูกต้อง` })
+      const parts = (Array.isArray(item.participants) ? item.participants : []).filter(p => p && typeof p === 'object' && knownPeople.has(p.personId))
+      if (!parts.length && effectivePrice > 0) errors.push({ code: 'missing_participants', index, message: `รายการที่ ${index + 1} ยังไม่ได้เลือกผู้ร่วมรายการ` })
       if (item.splitMode === 'ratio') {
-        const sum = parts.reduce((s,p) => s + (Number(p.ratio)||1), 0)
-        parts.forEach(p => { byPerson[p.personId] += (Number(p.ratio)||1)/sum * total })
+        const invalid = parts.some(p => !Number.isFinite(Number(p.ratio)) || Number(p.ratio) <= 0)
+        if (invalid) errors.push({ code: 'invalid_ratio', index, message: `รายการที่ ${index + 1} ต้องใช้สัดส่วนมากกว่า 0` })
+      }
+      if (item.discount?.enabled) {
+        const value = Number(item.discount.value)
+        if (!Number.isFinite(value) || value < 0 || (item.discount.mode === 'percent' && value > 100) || (item.discount.mode !== 'percent' && value > basePrice)) {
+          errors.push({ code: 'invalid_discount', index, message: `ส่วนลดของรายการที่ ${index + 1} ไม่ถูกต้อง` })
+        }
+      }
+    })
+
+    ;(Array.isArray(draft.pipeline) ? draft.pipeline : []).forEach((step, index) => {
+      if (!step || typeof step !== 'object' || Array.isArray(step)) {
+        errors.push({ code: 'invalid_pipeline', index, message: `ขั้นตอนที่ ${index + 1} มีข้อมูลไม่ถูกต้อง` })
+        return
+      }
+      const value = Number(step.value)
+      if (step.enabled && (!Number.isFinite(value) || value < 0 || (step.mode === 'percent' && value > 100))) {
+        errors.push({ code: 'invalid_pipeline', index, message: `ค่าขั้นตอนที่ ${index + 1} ไม่ถูกต้อง` })
+      }
+    })
+    return errors
+  }
+
+  function calcShares(draft = {}) {
+    const peopleIds = Array.isArray(draft.peopleIds) ? draft.peopleIds : []
+    const byPerson = {}
+    peopleIds.forEach(id => { byPerson[id] = 0 })
+    let unassignedSubtotal = 0
+    let unassignedItemCount = 0
+
+    ;(Array.isArray(draft.items) ? draft.items : []).forEach(item => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return
+      const total = itemEffectivePrice(item)
+      const parts = (Array.isArray(item.participants) ? item.participants : []).filter(p => p && typeof p === 'object' && peopleIds.includes(p.personId))
+      if (!parts.length) { if (total > 0) { unassignedSubtotal = r2(unassignedSubtotal + total); unassignedItemCount++ }; return }
+      if (item.splitMode === 'ratio') {
+        const invalidPart = parts.some(p => !Number.isFinite(Number(p.ratio)) || Number(p.ratio) <= 0)
+        if (invalidPart) { unassignedSubtotal = r2(unassignedSubtotal + total); unassignedItemCount++; return }
+        const validParts = parts.map(p => ({ ...p, ratio: Number(p.ratio) }))
+        const sum = validParts.reduce((s,p) => s + p.ratio, 0)
+        if (!sum) { unassignedSubtotal = r2(unassignedSubtotal + total); unassignedItemCount++; return }
+        validParts.forEach(p => { byPerson[p.personId] += p.ratio / sum * total })
       } else {
         parts.forEach(p => { byPerson[p.personId] += total / parts.length })
       }
     })
 
     const sub = r2(Object.values(byPerson).reduce((s,v)=>s+v,0))
-    const { finalTotal } = runPipeline(itemSubtotal(draft), draft.pipeline, draft.rounding)
-    const ids = draft.peopleIds || []
-    const shares = allocateCents(ids, ids.map(id => byPerson[id] || 0), finalTotal)
+    const itemTotal = itemSubtotal(draft)
+    const { finalTotal } = runPipeline(itemTotal, draft.pipeline, draft.rounding)
+    const ids = peopleIds
+    const allocationTotal = unassignedItemCount && itemTotal > 0
+      ? r2(finalTotal * Math.min(1, sub / itemTotal))
+      : finalTotal
+    const shares = allocateCents(ids, ids.map(id => byPerson[id] || 0), allocationTotal)
 
-    return { shares, sub, finalTotal }
+    return { shares, sub, finalTotal, unassignedSubtotal, unassignedItemCount }
   }
 
-  function calcResult(draft) {
+  function calcResult(draft = {}) {
     const people  = SbStore.loadPeople()
     const pNameFn = id => { const p = people.find(x=>x.id===id); return p ? p.name : '?' }
-    const { shares, finalTotal } = calcShares(draft)
+    const { shares, finalTotal, unassignedSubtotal, unassignedItemCount } = calcShares(draft)
     const payments = draft.payments || {}
 
-    const personResults = draft.peopleIds.map(id => {
+    const peopleIds = Array.isArray(draft.peopleIds) ? draft.peopleIds : []
+    const personResults = peopleIds.map(id => {
       const finalShare = r2(shares[id] || 0)
       const paid       = r2(payments[id] || 0)
       const net        = r2(paid - finalShare)
@@ -217,6 +335,7 @@
     }
 
     const warnings = []
+    if (unassignedItemCount) warnings.push(`${unassignedItemCount} รายการยังไม่ได้ระบุผู้ร่วมรายการ รวม ${fmt(unassignedSubtotal)}`)
     const sub = itemSubtotal(draft)
     const { finalTotal: calcTotal } = runPipeline(sub, draft.pipeline, draft.rounding)
 
@@ -226,15 +345,15 @@
       else          warnings.push(`ยอดคำนวณ ${fmt(calcTotal)} มากกว่ายอดบิล ${fmt(draft.manualTotal)} อยู่ ${fmt(Math.abs(diff))} — กรุณาตรวจสอบราคารายการ`)
     }
 
-    const totalPaid = draft.peopleIds.reduce((s,id) => s + r2(payments[id]||0), 0)
-    if (draft.peopleIds.length && Math.abs(r2(totalPaid - finalTotal)) > 0.5) {
+    const totalPaid = peopleIds.reduce((s,id) => s + r2(payments[id]||0), 0)
+    if (peopleIds.length && Math.abs(r2(totalPaid - finalTotal)) > 0.5) {
       warnings.push(`ยอดที่จ่ายรวม ${fmt(totalPaid)} ${totalPaid < finalTotal ? 'น้อยกว่า' : 'มากกว่า'} ยอดสุดท้าย ${fmt(finalTotal)}`)
     }
 
     return { personResults, transfers, finalTotal, calcTotal, warnings }
   }
 
-  window.SplitBillCalc = { calcResult, runPipeline, itemSubtotal, calcShares }
+  window.SplitBillCalc = { calcResult, runPipeline, itemSubtotal, calcShares, validateDraft }
   window.SbStore = SbStore
 
   function findTx(id) {
@@ -451,10 +570,86 @@
   let _draft = null
   let _step  = 1
   let _editingItemIdx = -1
+  let _editingItemOriginal = null
+  let _editingNewItem = false
 
-  function _saveDraft()  { if (_draft) try { const draft = { ..._draft, _step }; localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); if (typeof S !== 'undefined') S.splitBillDraft = draft } catch (_) {} }
-  function _clearDraft() { try { localStorage.removeItem(DRAFT_KEY); if (typeof S !== 'undefined') S.splitBillDraft = null } catch (_) {} }
-  function _loadDraft()  { try { const r = localStorage.getItem(DRAFT_KEY); return r ? JSON.parse(r) : null } catch (_) { return null } }
+  function _saveDraft() {
+    if (!_draft) return false
+    const draft = { ..._draft, _step }
+    const hasState = typeof S !== 'undefined'
+    const previousState = hasState ? clone(S.splitBillDraft ?? null) : null
+    const previousRaw = (() => { try { return localStorage.getItem(DRAFT_KEY) } catch (_) { return null } })()
+    if (hasState) S.splitBillDraft = draft
+
+    if (hasState && typeof App?.saveAll === 'function' && typeof Storage !== 'undefined') {
+      if (App.saveAll('split-bill-draft') === true) return true
+      S.splitBillDraft = previousState
+      try {
+        if (previousRaw === null || previousRaw === undefined) localStorage.removeItem(DRAFT_KEY)
+        else localStorage.setItem(DRAFT_KEY, previousRaw)
+      } catch (_) {}
+      return false
+    }
+
+    try {
+      const serialized = JSON.stringify(draft)
+      localStorage.setItem(DRAFT_KEY, serialized)
+      if (localStorage.getItem(DRAFT_KEY) !== serialized) throw new Error('readback mismatch')
+      return true
+    } catch (_) {
+      if (hasState) S.splitBillDraft = previousState
+      try {
+        if (previousRaw === null || previousRaw === undefined) localStorage.removeItem(DRAFT_KEY)
+        else localStorage.setItem(DRAFT_KEY, previousRaw)
+      } catch (_) {}
+      return false
+    }
+  }
+
+  function _clearDraft(persist = true) {
+    const hasState = typeof S !== 'undefined'
+    const previousState = hasState ? clone(S.splitBillDraft ?? null) : null
+    const previousRaw = (() => { try { return localStorage.getItem(DRAFT_KEY) } catch (_) { return null } })()
+    if (hasState) S.splitBillDraft = null
+
+    if (!persist) {
+      try { localStorage.removeItem(DRAFT_KEY) } catch (_) {}
+      return true
+    }
+    if (hasState && typeof App?.saveAll === 'function' && typeof Storage !== 'undefined') {
+      if (App.saveAll('split-bill-draft-clear') === true) return true
+      S.splitBillDraft = previousState
+      try {
+        if (previousRaw === null || previousRaw === undefined) localStorage.removeItem(DRAFT_KEY)
+        else localStorage.setItem(DRAFT_KEY, previousRaw)
+      } catch (_) {}
+      return false
+    }
+    try {
+      localStorage.removeItem(DRAFT_KEY)
+      if (localStorage.getItem(DRAFT_KEY) !== null) throw new Error('readback mismatch')
+      return true
+    } catch (_) {
+      if (hasState) S.splitBillDraft = previousState
+      try {
+        if (previousRaw === null || previousRaw === undefined) localStorage.removeItem(DRAFT_KEY)
+        else localStorage.setItem(DRAFT_KEY, previousRaw)
+      } catch (_) {}
+      return false
+    }
+  }
+
+  function _loadDraft() {
+    try {
+      const stateDraft = typeof S !== 'undefined' && S.splitBillDraft && typeof S.splitBillDraft === 'object'
+        ? S.splitBillDraft
+        : null
+      const raw = localStorage.getItem(DRAFT_KEY)
+      const storedDraft = raw ? JSON.parse(raw) : null
+      const draft = stateDraft || storedDraft
+      return draft && typeof draft === 'object' && !Array.isArray(draft) ? draft : null
+    } catch (_) { return null }
+  }
 
   const STEP_TITLES = ['','ข้อมูลบิล & คน','รายการอาหาร','ส่วนลด / ค่าบริการอื่น','ระบุคนจ่าย','สรุป']
   const noAnim = { animate: false }
@@ -528,11 +723,13 @@
   //  HOME / HISTORY
   // ══════════════════════════════════════════════════════════════
   App.openSplitBillScreen = function () {
-    const bills = SbStore.loadBills()
+    const allBills = SbStore.loadBills()
+    const bills = allBills.filter(b => !b.archived)
+    const archivedBills = allBills.filter(b => b.archived)
 
     const cards = bills.map(b => {
       const sub   = itemSubtotal(b)
-      const total = b.manualTotal > 0 ? b.manualTotal : runPipeline(sub, b.pipeline, b.rounding).finalTotal
+      const total = runPipeline(sub, b.pipeline, b.rounding).finalTotal
       const n     = (b.peopleIds||[]).length
       return `<div class="card card-pad sb-bill-row" onclick="App.openSplitBillDetail(${jsArg(b.id)})">
         <div style="display:flex;align-items:center;gap:10px">
@@ -546,6 +743,15 @@
         </div>
       </div>`
     }).join('')
+    const archivedCards = archivedBills.map(b => `<div class="card card-pad" style="opacity:.62">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.title||'ไม่มีชื่อ')}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${thaiDate(b.date)} · เก็บแล้ว</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();App._sbRestoreBill(${jsArg(b.id)})" style="width:auto">เรียกคืน</button>
+      </div>
+    </div>`).join('')
 
     App.openSubScreen(`
       <div class="sub-header">
@@ -562,6 +768,7 @@
               <div style="font-weight:700;margin-top:8px">ยังไม่มีบิล</div>
               <div style="font-size:13px;margin-top:4px">แตะ + บิล เพื่อเริ่ม</div>
             </div>`}
+        ${archivedBills.length ? `<details style="margin-top:18px"><summary style="font-size:13px;color:var(--muted);cursor:pointer">บิลที่เก็บไว้ (${archivedBills.length})</summary><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${archivedCards}</div></details>` : ''}
       </div>`)
   }
 
@@ -698,16 +905,26 @@
   App._sbCopy = function (billId) {
     const bill = SbStore.getBill(billId); if (!bill) return
     const copy = { ...JSON.parse(JSON.stringify(bill)), id: genId(), linkedTransactionId: '', title: (bill.title||'บิล') + ' (สำเนา)', date: todayStr(), payments: {}, createdAt: nowISO(), updatedAt: nowISO() }
-    SbStore.upsertBill(copy)
+    if (!SbStore.upsertBill(copy)) return notify('ทำสำเนาบิลไม่สำเร็จ กรุณาลองใหม่', 'error')
     notify('ทำสำเนาบิลแล้ว', 'success')
     App.openSplitBillDetail(copy.id)
   }
 
   App._sbDelete = function (billId) {
     const bill = SbStore.getBill(billId); if (!bill) return
-    const go = () => { SbStore.deleteBill(billId); notify('ลบบิลแล้ว', 'success'); App.openSplitBillScreen() }
-    if (App.showConfirm) App.showConfirm({ title:'ลบบิล', danger:true, confirmLabel:'ลบ', body:`ลบ "${bill.title||'บิล'}"?`, onConfirm: go })
-    else if (confirm(`ลบ "${bill.title||'บิล'}"?`)) go()
+    const go = () => {
+      if (!SbStore.archiveBill(billId)) return notify('เก็บบิลไม่สำเร็จ กรุณาลองใหม่', 'error')
+      notify('เก็บบิลแล้ว', 'success'); App.openSplitBillScreen()
+    }
+    if (App.showConfirm) App.showConfirm({ title:'เก็บบิล', danger:true, confirmLabel:'เก็บ', body:`เก็บ "${bill.title||'บิล'}" ออกจากรายการ?`, onConfirm: go })
+    else if (confirm(`เก็บ "${bill.title||'บิล'}" ออกจากรายการ?`)) go()
+  }
+
+  App._sbRestoreBill = function (billId) {
+    const bill = SbStore.getBill(billId); if (!bill) return
+    if (!SbStore.upsertBill({ ...bill, archived: false, updatedAt: nowISO() })) return notify('เรียกคืนบิลไม่สำเร็จ กรุณาลองใหม่', 'error')
+    notify('เรียกคืนบิลแล้ว', 'success')
+    App.openSplitBillScreen()
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -733,6 +950,8 @@
       }
     }
     _editingItemIdx = -1
+    _editingItemOriginal = null
+    _editingNewItem = false
     _sbRender()
   }
 
@@ -766,8 +985,8 @@
   //  STEP 1 — ข้อมูลบิล + คน (merged)
   // ══════════════════════════════════════════════════════════════
   function _sbStep1(opts) {
-    const people   = SbStore.loadPeople().filter(p => !p.archived)
     const selected = _draft.peopleIds
+    const people   = SbStore.loadPeople().filter(p => !p.archived || selected.includes(p.id))
     const ownerOptions = selected.map(id => {
       const person = SbStore.getPerson(id)
       if (!person) return ''
@@ -839,7 +1058,10 @@
         item.participants = _draft.peopleIds.map(id => ({ personId: id, ratio: 1 }))
       }
     })
-    _step = 2; _saveDraft(); _sbRender()
+    const previousStep = _step
+    _step = 2
+    if (!_saveDraft()) { _step = previousStep; return notify('บันทึกแบบร่างไม่สำเร็จ กรุณาลองใหม่', 'error') }
+    _sbRender()
   }
 
   App._sbTogglePerson = function (id) {
@@ -873,7 +1095,7 @@
     const name  = input?.value.trim()
     if (!name) return
     const person = { id: genId(), name, emoji: '👤', color: '#2563EB', note: '', archived: false, createdAt: nowISO(), updatedAt: nowISO() }
-    SbStore.upsertPerson(person)
+    if (!SbStore.upsertPerson(person)) return notify('เพิ่มสมาชิกไม่สำเร็จ กรุณาลองใหม่', 'error')
     _draft.peopleIds.push(person.id)
     _sbStep1(noAnim)
   }
@@ -1015,12 +1237,16 @@
       participants: _draft.peopleIds.map(id => ({ personId: id, ratio: 1 })),
     })
     _editingItemIdx = _draft.items.length - 1
+    _editingItemOriginal = null
+    _editingNewItem = true
     _sbStep3(noAnim)
   }
 
   App._sbEditItem = function (i) {
     if (_editingItemIdx !== -1) _sbItemSaveFields()
     _editingItemIdx = i
+    _editingItemOriginal = clone(_draft.items[i])
+    _editingNewItem = false
     _sbStep3(noAnim)
   }
 
@@ -1028,10 +1254,19 @@
     if (_editingItemIdx === i)       _editingItemIdx = -1
     else if (_editingItemIdx > i)    _editingItemIdx--
     _draft.items.splice(i, 1)
+    _editingItemOriginal = null
+    _editingNewItem = false
     _sbStep3(noAnim)
   }
 
-  App._sbNext3 = function () { _step = 3; _saveDraft(); _sbRender() }
+  App._sbNext3 = function () {
+    const error = validateDraft(_draft)[0]
+    if (error) return notify(error.message, 'error')
+    const previousStep = _step
+    _step = 3
+    if (!_saveDraft()) { _step = previousStep; return notify('บันทึกแบบร่างไม่สำเร็จ กรุณาลองใหม่', 'error') }
+    _sbRender()
+  }
 
   function _sbItemSaveFields() {
     const item = _draft.items[_editingItemIdx]
@@ -1046,9 +1281,9 @@
     if (discModeEl) item.discount.mode  = discModeEl.value
     if (discValEl)  item.discount.value = numVal(discValEl)
     if (item.splitMode === 'ratio') {
-      ;(item.participants||[]).forEach(p => {
+      ;(Array.isArray(item.participants) ? item.participants : []).forEach(p => {
         const el = document.getElementById(`sbi-ratio-${p.personId}`)
-        if (el) p.ratio = Number(el.value) || 1
+        if (el) p.ratio = Number.isFinite(Number(el.value)) ? Number(el.value) : 0
       })
     }
   }
@@ -1080,16 +1315,22 @@
   App._sbItemSave = function () {
     _sbItemSaveFields()
     const item = _draft.items[_editingItemIdx]
+    const error = validateDraft({ ..._draft, items: item ? [item] : [] }).find(e => e.index === 0)
+    if (error) return notify(error.message, 'error')
     if (item && !item.name && !item.price) _draft.items.splice(_editingItemIdx, 1)
     _editingItemIdx = -1
+    _editingItemOriginal = null
+    _editingNewItem = false
     _sbStep3(noAnim)
   }
 
   App._sbItemCancel = function () {
-    // Check draft (not DOM) — new items have name='' and price=0
     const item = _draft.items[_editingItemIdx]
-    if (item && !item.name && !item.price) _draft.items.splice(_editingItemIdx, 1)
+    if (_editingItemOriginal && _editingItemIdx >= 0) _draft.items[_editingItemIdx] = _editingItemOriginal
+    else if (_editingNewItem && item) _draft.items.splice(_editingItemIdx, 1)
     _editingItemIdx = -1
+    _editingItemOriginal = null
+    _editingNewItem = false
     _sbStep3(noAnim)
   }
 
@@ -1257,7 +1498,15 @@
     })
   }
 
-  App._sbNext4 = function () { _sbPipeSaveAll(); _step = 4; _saveDraft(); _sbRender() }
+  App._sbNext4 = function () {
+    _sbPipeSaveAll()
+    const error = validateDraft(_draft)[0]
+    if (error) return notify(error.message, 'error')
+    const previousStep = _step
+    _step = 4
+    if (!_saveDraft()) { _step = previousStep; return notify('บันทึกแบบร่างไม่สำเร็จ กรุณาลองใหม่', 'error') }
+    _sbRender()
+  }
 
   // ══════════════════════════════════════════════════════════════
   //  STEP 5 — ใครจ่ายไปแล้ว
@@ -1273,7 +1522,8 @@
       const paidRaw = _draft.payments[id] || 0
       const paid    = paidRaw ? String(paidRaw).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''
       const hasPaid = paidRaw > 0
-      const safeId  = esc(id)
+      const domId   = esc(id)
+      const jsId    = jsArg(id)
       return `<div class="detail-row" style="align-items:center">
         <div style="flex:4">
           <div style="font-weight:600">${esc(name)}</div>
@@ -1282,14 +1532,14 @@
         <div style="display:flex;flex:5;align-items:center;gap:6px">
           <span style="color:var(--muted)">฿</span>
           <div style="position:relative;display:flex;align-items:center;flex:1">
-            <input class="form-input" type="text" inputmode="decimal" id="pay-${safeId}"
+            <input class="form-input" type="text" inputmode="decimal" id="pay-${domId}"
               value="${paid||''}" placeholder="0"
               style="width:100%;text-align:right;padding-right:${hasPaid?'28':'10'}px !important"
-              oninput="App._fmtNum(this);(function(v,id){var n=parseFloat(v.replace(/,/g,''))||0;var x=document.getElementById('pay-x-'+id);if(x){x.style.display=n>0?'flex':'none'};document.getElementById('pay-'+id).style.setProperty('padding-right',n>0?'28px':'10px','important')})(this.value,'${safeId}');App._sbUpdatePayRemaining()">
-            <button id="pay-x-${esc(safeId)}" onclick="App._sbPayClear(${jsArg(safeId)})"
+              oninput="App._fmtNum(this);(function(v,id){var n=parseFloat(v.replace(/,/g,''))||0;var x=document.getElementById('pay-x-'+id);if(x){x.style.display=n>0?'flex':'none'};document.getElementById('pay-'+id).style.setProperty('padding-right',n>0?'28px':'10px','important')})(this.value,${jsId});App._sbUpdatePayRemaining()">
+            <button id="pay-x-${domId}" onclick="App._sbPayClear(${jsId})"
               style="display:${hasPaid?'flex':'none'};position:absolute;right:6px;background:none;border:none;cursor:pointer;color:var(--muted);padding:2px;align-items:center;font-size:13px;line-height:1">✕</button>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="App._sbPayAll(${jsArg(safeId)})" style="width:auto;padding:0 10px;font-size:12px">ทั้งหมด</button>
+          <button class="btn btn-secondary btn-sm" onclick="App._sbPayAll(${jsId})" style="width:auto;padding:0 10px;font-size:12px">ทั้งหมด</button>
         </div>
       </div>`
     }).join('')
@@ -1328,7 +1578,13 @@
     })
   }
 
-  App._sbNext5 = function () { _sbSavePayments(); _step = 5; _saveDraft(); _sbRender() }
+  App._sbNext5 = function () {
+    _sbSavePayments()
+    const previousStep = _step
+    _step = 5
+    if (!_saveDraft()) { _step = previousStep; return notify('บันทึกแบบร่างไม่สำเร็จ กรุณาลองใหม่', 'error') }
+    _sbRender()
+  }
 
   App._sbUpdatePayRemaining = function () {
     const el = document.getElementById('sb-pay-remaining')
@@ -1411,11 +1667,24 @@
 
   App._sbSaveBill = function () {
     if (!_draft) return
+    const error = validateDraft(_draft)[0]
+    if (error) return notify(error.message, 'error')
     _draft.updatedAt = nowISO()
-    SbStore.upsertBill(_draft)
-    _clearDraft()
-    notify('บันทึกบิลแล้ว 🎉', 'success')
+    const draftBeforeClear = typeof S !== 'undefined' ? clone(S.splitBillDraft ?? null) : null
+    const rawDraftBeforeClear = (() => { try { return localStorage.getItem(DRAFT_KEY) } catch (_) { return null } })()
+    if (typeof S !== 'undefined') S.splitBillDraft = null
+    const saved = SbStore.upsertBill(_draft)
+    if (!saved) {
+      if (typeof S !== 'undefined') S.splitBillDraft = draftBeforeClear
+      try {
+        if (rawDraftBeforeClear === null || rawDraftBeforeClear === undefined) localStorage.removeItem(DRAFT_KEY)
+        else localStorage.setItem(DRAFT_KEY, rawDraftBeforeClear)
+      } catch (_) {}
+      return notify('บันทึกบิลไม่สำเร็จ กรุณาลองใหม่', 'error')
+    }
+    _clearDraft(false)
     const id = _draft.id; _draft = null
+    notify('บันทึกบิลแล้ว 🎉', 'success')
     App.openSplitBillDetail(id)
   }
 
@@ -1425,7 +1694,10 @@
       App._sbItemCancel()
       return
     }
-    if (_step <= 1) { _clearDraft(); return App.openSplitBillScreen() }
+    if (_step <= 1) {
+      if (!_clearDraft()) return notify('ยกเลิกไม่สำเร็จ กรุณาลองใหม่', 'error')
+      return App.openSplitBillScreen()
+    }
     _step--; _sbRender()
   }
 
@@ -1440,16 +1712,18 @@
           <div class="settings-row" style="padding: 0px 8px 0px 0px;gap:8px;align-items:center">
             <input class="form-input" id="sbp-edit-${esc(p.id)}" value="${esc(p.name)}"
               style="flex:1;padding:8px 10px;font-size:14px"
-              onkeydown="if(event.key==='Enter')App._sbSaveEditPerson('${esc(p.id)}');if(event.key==='Escape')App.openSplitPeopleScreen()">
+              onkeydown="if(event.key==='Enter')App._sbSaveEditPerson(${jsArg(p.id)});if(event.key==='Escape')App.openSplitPeopleScreen()">
             <button class="btn btn-primary btn-sm" onclick="App._sbSaveEditPerson(${jsArg(p.id)})" style="width:auto;padding:8px 14px">บันทึก</button>
             <button class="btn-icon" onclick="App.openSplitPeopleScreen()" style="color:var(--muted)">✕</button>
           </div>`
       }
       return `
-        <div class="settings-row" style="padding:0px 8px">
-          <div class="s-label" style="flex:1">${esc(p.name)}</div>
-          <button class="btn-icon" onclick="App.openSplitPeopleScreen(${jsArg(p.id)})" style="color:var(--muted);font-size:13px" title="แก้ไข">✏️</button>
-          <button class="btn-icon" onclick="App._sbDeletePerson(${jsArg(p.id)})" style="color:var(--expense);font-size:13px" title="ลบ">🗑</button>
+        <div class="settings-row" style="padding:0px 8px;opacity:${p.archived ? '.58' : '1'}">
+          <div class="s-label" style="flex:1">${esc(p.name)}${p.archived ? ' <span style="font-size:11px;color:var(--muted)">(เก็บแล้ว)</span>' : ''}</div>
+          ${p.archived
+            ? `<button class="btn-icon" onclick="App._sbRestorePerson(${jsArg(p.id)})" style="color:var(--primary);font-size:13px" title="เรียกคืน">↩</button>`
+            : `<button class="btn-icon" onclick="App.openSplitPeopleScreen(${jsArg(p.id)})" style="color:var(--muted);font-size:13px" title="แก้ไข">✏️</button>
+               <button class="btn-icon" onclick="App._sbDeletePerson(${jsArg(p.id)})" style="color:var(--expense);font-size:13px" title="เก็บ">🗑</button>`}
         </div>`
     }).join('')
 
@@ -1482,7 +1756,8 @@
     if (!name) return notify('กรุณากรอกชื่อ', 'error')
     const _sbpErr = (window._fieldTooLong || function(){})(name, (window.FIELD_MAX || {}).name || 50, 'ชื่อสมาชิก')
     if (_sbpErr) return notify(_sbpErr, 'error')
-    SbStore.upsertPerson({ id: genId(), name, emoji:'👤', color:'#2563EB', note:'', archived:false, createdAt: nowISO(), updatedAt: nowISO() })
+    const person = { id: genId(), name, emoji:'👤', color:'#2563EB', note:'', archived:false, createdAt: nowISO(), updatedAt: nowISO() }
+    if (!SbStore.upsertPerson(person)) return notify('เพิ่มสมาชิกไม่สำเร็จ กรุณาลองใหม่', 'error')
     notify('เพิ่มสมาชิกแล้ว', 'success')
     App.openSplitPeopleScreen()
   }
@@ -1493,16 +1768,26 @@
     const _sbpeErr = (window._fieldTooLong || function(){})(name, (window.FIELD_MAX || {}).name || 50, 'ชื่อสมาชิก')
     if (_sbpeErr) return notify(_sbpeErr, 'error')
     const existing = SbStore.getPerson(personId); if (!existing) return
-    SbStore.upsertPerson({ ...existing, name, updatedAt: nowISO() })
+    if (!SbStore.upsertPerson({ ...existing, name, updatedAt: nowISO() })) return notify('บันทึกสมาชิกไม่สำเร็จ กรุณาลองใหม่', 'error')
     notify('แก้ไขแล้ว', 'success')
     App.openSplitPeopleScreen()
   }
 
   App._sbDeletePerson = function (personId) {
     const p = SbStore.getPerson(personId); if (!p) return
-    const go = () => { SbStore.deletePerson(personId); notify('ลบแล้ว', 'success'); App.openSplitPeopleScreen() }
-    if (App.showConfirm) App.showConfirm({ title:'ลบสมาชิก', danger:true, confirmLabel:'ลบ', body:`ลบ "${p.name}"?`, onConfirm: go })
-    else if (confirm(`ลบ "${p.name}"?`)) go()
+    const go = () => {
+      if (!SbStore.archivePerson(personId)) return notify('เก็บสมาชิกไม่สำเร็จ กรุณาลองใหม่', 'error')
+      notify('เก็บสมาชิกแล้ว', 'success'); App.openSplitPeopleScreen()
+    }
+    if (App.showConfirm) App.showConfirm({ title:'เก็บสมาชิก', danger:true, confirmLabel:'เก็บ', body:`เก็บ "${p.name}" ไว้เพื่อรักษาประวัติ?`, onConfirm: go })
+    else if (confirm(`เก็บ "${p.name}" ไว้เพื่อรักษาประวัติ?`)) go()
+  }
+
+  App._sbRestorePerson = function (personId) {
+    const person = SbStore.getPerson(personId); if (!person) return
+    if (!SbStore.upsertPerson({ ...person, archived: false, updatedAt: nowISO() })) return notify('เรียกคืนสมาชิกไม่สำเร็จ กรุณาลองใหม่', 'error')
+    notify('เรียกคืนสมาชิกแล้ว', 'success')
+    App.openSplitPeopleScreen()
   }
 
   // ══════════════════════════════════════════════════════════════

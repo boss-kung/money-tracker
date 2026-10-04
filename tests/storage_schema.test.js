@@ -115,3 +115,17 @@ test('skipped Loan payload still has per-collection readback verification', () =
   }
   assert.equal(Storage.saveAll(state), false)
 })
+
+test('backup normalization keeps Split Bill collections object-shaped', () => {
+  const normalized = Storage.normalizeBackupPayload({
+    transactions: [],
+    wallets: [],
+    splitBills: [null, 'bad-row', { id: 'bill-1', title: 'Dinner' }],
+    splitPeople: [null, { id: 'person-1', name: 'A' }],
+    splitBillDraft: { id: 'draft-1', items: [null, { id: 'item-1', price: 10 }] },
+  })
+
+  assert.deepEqual(normalized.splitBills, [{ id: 'bill-1', title: 'Dinner' }])
+  assert.deepEqual(normalized.splitPeople, [{ id: 'person-1', name: 'A' }])
+  assert.deepEqual(normalized.splitBillDraft.items, [{ id: 'item-1', price: 10 }])
+})

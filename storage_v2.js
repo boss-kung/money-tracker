@@ -404,9 +404,23 @@ const Storage = {
       }
 
       if (key === 'splitBillDraft') {
-        normalized[key] = incoming && typeof incoming === 'object' && !Array.isArray(incoming)
-          ? incoming
-          : null
+        if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+          normalized[key] = null
+          return
+        }
+        const draft = { ...incoming }
+        if (Array.isArray(draft.items)) draft.items = draft.items.filter(item => item && typeof item === 'object' && !Array.isArray(item))
+        if (Array.isArray(draft.peopleIds)) draft.peopleIds = draft.peopleIds.filter(id => typeof id === 'string' || typeof id === 'number').map(String)
+        if (Array.isArray(draft.pipeline)) draft.pipeline = draft.pipeline.filter(step => step && typeof step === 'object' && !Array.isArray(step))
+        if (!draft.payments || typeof draft.payments !== 'object' || Array.isArray(draft.payments)) draft.payments = {}
+        normalized[key] = draft
+        return
+      }
+
+      if (key === 'splitBills' || key === 'splitPeople') {
+        normalized[key] = Array.isArray(incoming)
+          ? incoming.filter(row => row && typeof row === 'object' && !Array.isArray(row))
+          : []
         return
       }
 
