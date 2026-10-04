@@ -108,15 +108,19 @@ test('saveWallet: payDay always set in Object.assign (not conditional spread)', 
   )
 })
 
-test('saveWallet: retroactive plan rebuild code exists', () => {
+test('saveWallet: retroactive plan rebuild preserves paid installments', () => {
   const appSrc = fs.readFileSync(require('path').join(__dirname, '../app_v2.js'), 'utf8')
   assert.ok(
-    appSrc.includes('Retroactively rebuild active BNPL plan schedules'),
-    'Retroactive plan rebuild block not found in saveWallet'
+    appSrc.includes('const bnplScheduleUpdates = []'),
+    'Retroactive BNPL schedule update block not found in saveWallet'
   )
   assert.ok(
-    appSrc.includes('BNPL.calc.buildSchedule(plan.totalAmount, plan.installments, plan.purchaseDate, _effectivePayDay)'),
-    'buildSchedule call not found in retroactive rebuild block'
+    appSrc.includes('BNPL.calc.rebuildSchedulePreservingPayments('),
+    'payment-preserving rebuild call not found in saveWallet'
+  )
+  assert.ok(
+    !appSrc.includes('BNPL.calc.buildSchedule(plan.totalAmount, plan.installments, plan.purchaseDate, _effectivePayDay)'),
+    'saveWallet must not rebuild from the full principal and then copy paid rows'
   )
 })
 

@@ -35,10 +35,19 @@
 
   // ── BNPLCalc ────────────────────────────────────────────────────────────────
   const BNPLCalc = {
+    MAX_INSTALLMENTS: 600,
+
+    normalizeInstallments(value, min = 1) {
+      const raw = typeof value === 'string' ? value.trim() : value
+      if (raw === '' || raw === null || raw === undefined) return null
+      const n = Number(raw)
+      return Number.isSafeInteger(n) && n >= min && n <= BNPLCalc.MAX_INSTALLMENTS ? n : null
+    },
+
     distributeAmounts(totalAmount, installments) {
       const total = Math.round(Number(totalAmount) * 100) / 100
-      const n = Number(installments)
-      if (!Number.isFinite(total) || total < 0 || !Number.isInteger(n) || n < 1) return []
+      const n = BNPLCalc.normalizeInstallments(installments, 1)
+      if (!Number.isFinite(total) || total < 0 || n === null) return []
       const unitAmt = Math.floor((total / n) * 100) / 100
       return Array.from({ length:n }, (_, index) => index === n - 1
         ? Math.round((total - unitAmt * (n - 1)) * 100) / 100
@@ -47,7 +56,8 @@
 
     buildSchedule(totalAmount, installments, purchaseDate, payDay) {
       const total = Number(totalAmount)
-      const n = Number(installments)
+      const n = BNPLCalc.normalizeInstallments(installments, 1)
+      if (!Number.isFinite(total) || total < 0 || n === null) return []
       const amounts = BNPLCalc.distributeAmounts(total, n)
       return Array.from({ length: n }, (_, i) => {
         // If payDay is set, use that fixed day-of-month instead of purchase day
@@ -61,8 +71,8 @@
 
     rebuildSchedulePreservingPayments(plan, totalAmount, installments, payDay) {
       const newTotal = Math.round(Number(totalAmount) * 100) / 100
-      const newN = Number(installments)
-      if (!(newTotal > 0) || !Number.isInteger(newN) || newN < 1) return { error:'invalid_values' }
+      const newN = BNPLCalc.normalizeInstallments(installments, 1)
+      if (!(newTotal > 0) || newN === null) return { error:'invalid_values' }
       const oldSchedule = Array.isArray(plan?.schedule) ? plan.schedule : []
       const paidByNo = new Map(oldSchedule.filter(row => row?.paidTxId).map(row => [Number(row.no), row]))
       const maxPaidNo = Math.max(0, ...paidByNo.keys())
@@ -112,16 +122,20 @@
     createPlan({ walletId, txId, merchant, purchaseDate, totalAmount, installments }, { save = true } = {}) {
       const wallet = (typeof S !== 'undefined' ? S.wallets : [])?.find(w => w.id === walletId)
       const payDay = wallet?.payDay || null
+      const total = Math.round(Number(totalAmount) * 100) / 100
+      const n = BNPLCalc.normalizeInstallments(installments, 2)
+      if (!(total > 0) || !Number.isFinite(total)) return { error:'invalid_values' }
+      if (n === null) return { error:'invalid_installments' }
       const plan = {
         id: genId(),
         walletId,
         txId,
         merchant: merchant || '',
         purchaseDate: purchaseDate || todayStr(),
-        totalAmount: Number(totalAmount),
-        installments: Number(installments),
+        totalAmount: total,
+        installments: n,
         interestRate: 0,
-        schedule: BNPLCalc.buildSchedule(Number(totalAmount), Number(installments), purchaseDate || todayStr(), payDay),
+        schedule: BNPLCalc.buildSchedule(total, n, purchaseDate || todayStr(), payDay),
         status: 'active',
         createdAt: new Date().toISOString(),
       }
@@ -261,8 +275,11 @@
         plan.merchant = merchant
         if (srcTx) srcTx.merchant = merchant
       }
-      const newTotal = totalAmount != null && totalAmount !== '' ? Number(totalAmount) : plan.totalAmount
-      const newN = installments != null && installments !== '' ? Number(installments) : plan.installments
+      const newTotal = totalAmount != null && totalAmount !== '' ? Number(totalAmount) : Number(plan.totalAmount)
+      const rawN = installments != null && installments !== '' ? installments : plan.installments
+      const newN = BNPLCalc.normalizeInstallments(rawN, 2)
+      if (!(newTotal > 0) || !Number.isFinite(newTotal)) return { error:'invalid_values' }
+      if (newN === null) return { error:'invalid_installments' }
       const structureChanged = newTotal !== plan.totalAmount || newN !== plan.installments
       if (structureChanged) {
         const wallet = (typeof S !== 'undefined' ? S.wallets : [])?.find(w => w.id === plan.walletId)
@@ -562,7 +579,7 @@
 
     _editPlanHtml(plan) {
       const paidCount = plan.schedule.filter(s => s.paidTxId).length
-      const minInstallments = Math.max(1, paidCount)
+      const minInstallments = Math.max(2, paidCount)
       const note = paidCount > 0
         ? `<div style="font-size:12px;opacity:.6;margin-top:6px">จ่ายไปแล้ว ${paidCount} งวด — ลดจำนวนงวดต่ำกว่านี้ไม่ได้ และงวดที่จ่ายแล้วจะคงไว้</div>`
         : ''
@@ -578,7 +595,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">จำนวนงวด</label>
-          <input class="form-input" type="number" min="${minInstallments}" inputmode="numeric" id="bnpl-edit-installments" value="${Number(plan.installments)}">
+          <input class="form-input" type="number" min="${minInstallments}" max="600" step="1" inputmode="numeric" id="bnpl-edit-installments" value="${Number(plan.installments)}">
           ${note}
         </div>
         <div style="display:flex;gap:8px;margin-top:16px">

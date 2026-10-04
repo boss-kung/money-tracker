@@ -2430,6 +2430,11 @@ App.pickEmoji=(p,e)=>{
   App.openEditTx = function(id) {
     const tx = S.transactions.find(t => t.id === id)
     if (!tx) return
+    if (tx.installmentGroupId) {
+      App.closeOverlay('overlay-tx-detail')
+      App.openEditInstallmentGroup?.(tx.installmentGroupId)
+      return
+    }
     // Card payments have a second amount (the cash actually debited when a
     // discount/promotion is used). Route them through the dedicated form so
     // editing cannot silently discard that relationship.
@@ -2592,7 +2597,7 @@ App.pickEmoji=(p,e)=>{
     box.innerHTML = `<div class="tx-detail-scroll">${App._txDetailRowsHtml(tx)}${S.deleteConfirm ? `<div class="tx-detail-danger"><button class="btn btn-danger" onclick="App.confirmDeleteTx()">ยืนยันการลบ</button><button class="btn btn-secondary mt-8" onclick="App._cancelDelete()">ยกเลิก</button></div>` : ''}</div>
       <div class="tx-detail-actions">
         <button class="btn btn-secondary" onclick="App.openDuplicateTx('${esc(tx.id)}')">⧉ ทำซ้ำ</button>
-        <button class="btn btn-primary" onclick="App.openEditTx('${esc(tx.id)}')">✏️ แก้ไขรายการ</button>
+        <button class="btn btn-primary" onclick="App.openEditTx('${esc(tx.id)}')">${tx.installmentGroupId ? '✏️ แก้ไขชุดผ่อน' : '✏️ แก้ไขรายการ'}</button>
         ${S.deleteConfirm ? '' : `<button class="btn btn-outline tx-detail-delete" onclick="App.deleteTx()">ลบรายการ</button>`}
       </div>`
   }
@@ -3290,6 +3295,19 @@ App.pickEmoji=(p,e)=>{
     App._renderAddTxDetail?.()
   }
 
+  App._updateBNPLInstallmentPreview = function() {
+    const preview = document.getElementById('tx-bnpl-schedule-preview')
+    if (!preview) return
+    const installments = Number(S.tx?.bnplInstallments || 0)
+    const amount = Number(S.tx?.amount || 0)
+    if (!(installments > 1) || !(amount > 0)) {
+      preview.textContent = ''
+      return
+    }
+    const perInstallment = Math.round(amount / installments * 100) / 100
+    preview.textContent = `งวดละ ≈ ${typeof Calc !== 'undefined' && Calc.fmt ? Calc.fmt(perInstallment) : '฿' + perInstallment.toFixed(2)} · ${installments} งวด`
+  }
+
   App._renderAddTxDetail = function() {
     const type = S.tx.type
     const typeKey = type === 'income' ? 'income' : 'expense'
@@ -3363,17 +3381,17 @@ App.pickEmoji=(p,e)=>{
               const _bi = Number(S.tx.bnplInstallments || 0)
               const _amt = Number(S.tx.amount || 0)
               const _schedulePreview = (_bi > 1 && _amt > 0)
-                ? `<div style="font-size:12px;opacity:.65;margin-top:6px">งวดละ ≈ ${typeof Calc !== 'undefined' && Calc.fmt ? Calc.fmt(Math.round(_amt/_bi*100)/100) : '฿'+(_amt/_bi).toFixed(2)} · ${_bi} งวด</div>`
+                ? `งวดละ ≈ ${typeof Calc !== 'undefined' && Calc.fmt ? Calc.fmt(Math.round(_amt/_bi*100)/100) : '฿'+(_amt/_bi).toFixed(2)} · ${_bi} งวด`
                 : ''
               return `<div class="form-group"><label class="form-label">แบ่งชำระ (BNPL)</label>
                 <div class="installment-month-grid">
                   ${[0,3,6,12].map(m => `<button type="button" class="${_bi===m?'active':''}" onclick="App._txField('bnplInstallments',${m});App._renderAddTxDetail()">${m===0?'ไม่แบ่ง':m+' งวด'}</button>`).join('')}
                 </div>
-                <input class="form-input" type="number" min="2" inputmode="numeric" value="${_bi > 0 && ![3,6,12].includes(_bi) ? _bi : ''}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('bnplInstallments',this.value?Number(this.value):0);App._renderAddTxDetail()" style="margin-top:8px">
-                ${_schedulePreview}
+                <input class="form-input" type="number" min="2" max="600" step="1" inputmode="numeric" value="${_bi > 0 && ![3,6,12].includes(_bi) ? _bi : ''}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('bnplInstallments',this.value);App._updateBNPLInstallmentPreview()" style="margin-top:8px">
+                <div id="tx-bnpl-schedule-preview" style="font-size:12px;opacity:.65;margin-top:6px">${esc(_schedulePreview)}</div>
               </div>`
             }
-            return `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? (App._recurringInlineHtml?.() || '') : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}`
+            return `<div class="form-group"><label class="form-label">ตัวเลือก</label><div class="tx-flag-grid"><button type="button" class="flag-pill${S.tx.isRecurring ? ' active' : ''}" onclick="App._toggleTxFlag('isRecurring')">🔁 ประจำ</button><button type="button" class="flag-pill installment${S.tx.isInstallment ? ' active' : ''}" onclick="App._toggleTxFlag('isInstallment')">📦 ผ่อนชำระ</button></div></div>${S.tx.isRecurring ? (App._recurringInlineHtml?.() || '') : ''}${S.tx.isInstallment ? `<div class="form-group"><label class="form-label">จำนวนงวด</label><div class="installment-month-grid">${[3,6,10,12].map(m => `<button type="button" class="${String(S.tx.installmentMonths || '') === String(m) ? 'active' : ''}" onclick="App._txField('installmentMonths','${m}');App._renderAddTxDetail()">${m}</button>`).join('')}</div><input class="form-input" type="number" min="2" max="600" step="1" inputmode="numeric" value="${esc(S.tx.installmentMonths || '')}" placeholder="หรือกรอกจำนวนงวดเอง" oninput="App._txField('installmentMonths',this.value)" style="margin-top:8px"></div>` : ''}`
           })()}
           ${(() => {
             try {
@@ -5376,7 +5394,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
         }
       }
 
-      const months = parseInt(S.tx.installmentMonths || 0)
+      const months = S.tx.isInstallment
+        ? App._normalizeInstallmentCount(S.tx.installmentMonths, 2)
+        : 0
       if (!isEdit && S.tx.type === 'expense' && S.tx.isInstallment && months >= 2) {
         const total = Number(S.tx.amount || 0)
         const base = Math.floor((total / months) * 100) / 100
@@ -5451,9 +5471,14 @@ Calc.getUsableMoney = function(wallets, state = null) {
       // Create BNPL plan when saving a new expense on a BNPL wallet with installments
       if (!isEdit && tx.type === 'expense' && typeof BNPL !== 'undefined') {
         const _bnplWallet = (S.wallets || []).find(w => w.id === tx.walletId)
-        const _bnplN = Number(draft.bnplInstallments || 0)
-        if (_bnplWallet?.type === 'bnpl' && _bnplN >= 2) {
-          BNPL.store.createPlan({ walletId: tx.walletId, txId: tx.id, merchant: tx.merchant || '', purchaseDate: tx.date, totalAmount: Number(tx.amount), installments: _bnplN }, { save:false })
+        const _bnplN = BNPL.calc?.normalizeInstallments?.(draft.bnplInstallments, 2) || null
+        if (_bnplWallet?.type === 'bnpl' && _bnplN !== null) {
+          const _bnplResult = BNPL.store.createPlan({ walletId: tx.walletId, txId: tx.id, merchant: tx.merchant || '', purchaseDate: tx.date, totalAmount: Number(tx.amount), installments: _bnplN }, { save:false })
+          if (_bnplResult?.error) {
+            S.transactions = (S.transactions || []).filter(row => row.id !== tx.id)
+            toast('สร้างแผน BNPL ไม่สำเร็จ กรุณาตรวจสอบจำนวนงวด', 'error')
+            return false
+          }
         }
       }
 
@@ -5521,6 +5546,18 @@ Calc.getUsableMoney = function(wallets, state = null) {
       if (!isValidImportDate(t.date)) { warnings.push('ข้ามรายการวันที่ไม่ถูกต้อง'); return false }
       if (t.walletId && !walletIds.has(t.walletId)) { warnings.push('ข้ามรายการที่อ้างอิง wallet ไม่พบ'); return false }
       if (t.toWalletId && !walletIds.has(t.toWalletId)) { warnings.push('ข้ามรายการที่อ้างอิงปลายทางไม่พบ'); return false }
+      if (t.isInstallment) {
+        const installmentNo = Number(t.installmentNo)
+        const installmentMonths = App._normalizeInstallmentCount(t.installmentMonths, 2)
+        if (!t.installmentGroupId || installmentMonths === null || !Number.isSafeInteger(installmentNo) || installmentNo < 1 || installmentNo > installmentMonths) {
+          warnings.push('ข้ามรายการผ่อนที่มี metadata ไม่ครบถ้วน')
+          return false
+        }
+      }
+      if (t.installmentGroupId && !t.isInstallment) {
+        warnings.push('ข้ามรายการผ่อนที่ไม่มี isInstallment flag')
+        return false
+      }
       if (t.type === 'transfer' && (!t.walletId || !t.toWalletId || t.walletId === t.toWalletId)) {
         warnings.push('ข้ามรายการโอนที่ไม่มีกระเป๋าต้นทาง/ปลายทางครบถ้วน'); return false
       }
@@ -6983,7 +7020,7 @@ App._pickMerchant = function(name, opts = {}) {
             <div class="installment-edit-note"><b>${esc(g.merchant || 'ผ่อนชำระ')}</b><span>บันทึกแล้ว ${past.length} งวด · ยอดที่ถือว่าเกิดขึ้นแล้ว ${money(paidKept)}</span></div>
             <div class="form-group"><label class="form-label">ขอบเขตการแก้ไข</label><select class="form-input" id="ieg-scope"><option value="future">แก้งวดอนาคตเท่านั้น (แนะนำ)</option><option value="all">แก้ทั้งชุด รวมงวดที่ผ่านมา</option></select><div class="form-hint">ถ้าแก้ทั้งชุด ยอดย้อนหลังในรายงานและกระเป๋าจะถูกคำนวณใหม่ด้วย</div></div>
             <div class="form-group"><label class="form-label">ชื่อร้านค้า / รายการ</label><input class="form-input" id="ieg-merchant" value="${esc(first.merchant || g.merchant || '')}"></div>
-            <div class="form-split-row"><div><label class="form-label">ยอดรวมทั้งชุด</label><input class="form-input" type="number" min="0" step="0.01" id="ieg-total" value="${esc(total)}"></div><div><label class="form-label">จำนวนงวดทั้งหมด</label><input class="form-input" type="number" min="1" step="1" id="ieg-months" value="${esc(rows.length || first.installmentMonths || 1)}"></div></div>
+            <div class="form-split-row"><div><label class="form-label">ยอดรวมทั้งชุด</label><input class="form-input" type="number" min="0" step="0.01" id="ieg-total" value="${esc(total)}"></div><div><label class="form-label">จำนวนงวดทั้งหมด</label><input class="form-input" type="number" min="2" max="600" step="1" id="ieg-months" value="${esc(rows.length || first.installmentMonths || 2)}"></div></div>
             <div class="form-split-row"><div><label class="form-label">วันที่งวดแรก</label><input class="form-input" type="date" id="ieg-start" value="${esc(rows[0]?.date || today())}"></div><div><label class="form-label">กระเป๋า / บัตร</label><select class="form-input" id="ieg-wallet">${walletOpts}</select></div></div>
             <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="ieg-category">${catOpts}</select></div>
             <div class="form-group"><label class="form-label">หมายเหตุ</label><input class="form-input" id="ieg-note" value="${esc(first.note || '')}"></div>
@@ -6999,7 +7036,7 @@ App._pickMerchant = function(name, opts = {}) {
   App.saveInstallmentGroupEdit = function(groupId, cardId = '') {
     const scope = document.getElementById('ieg-scope')?.value || 'future'
     const total = Number(document.getElementById('ieg-total')?.value || 0)
-    const months = parseInt(document.getElementById('ieg-months')?.value || 0)
+    const months = App._normalizeInstallmentCount(document.getElementById('ieg-months')?.value, 2)
     const startDate = document.getElementById('ieg-start')?.value || today()
     const walletId = document.getElementById('ieg-wallet')?.value || ''
     const categoryId = document.getElementById('ieg-category')?.value || ''
@@ -7007,8 +7044,9 @@ App._pickMerchant = function(name, opts = {}) {
     const note = document.getElementById('ieg-note')?.value || ''
     const g = groupById(groupId)
     if (!g) { toast('ไม่พบชุดผ่อนนี้', 'error'); return }
+    const firstRow = g.rows?.[0] || {}
     if (!(total > 0)) { App._showFieldError('ieg-total', 'ระบุยอดรวมมากกว่า 0'); return }
-    if (!(months >= 1)) { App._showFieldError('ieg-months', 'ระบุจำนวนงวดอย่างน้อย 1'); return }
+    if (months === null) { App._showFieldError('ieg-months', 'ระบุจำนวนงวดเป็นจำนวนเต็มตั้งแต่ 2 ถึง 600'); return }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) { App._showFieldError('ieg-start', 'ระบุวันที่งวดแรก'); return }
     if (!walletId) { App._showFieldError('ieg-wallet', 'เลือกกระเป๋า / บัตร'); return }
     if (!categoryId) { App._showFieldError('ieg-category', 'เลือกหมวดหมู่'); return }
@@ -7042,10 +7080,20 @@ App._pickMerchant = function(name, opts = {}) {
       const generated = amounts.map((amount, idx) => {
         const date = scope === 'future' ? addMonths(futureBaseDate, idx) : addMonths(startDate, startOffset + idx)
         const no = startOffset + idx + 1
-        return { id:Calc.genId(), type:'expense', amount, walletId, categoryId, merchant, note, date, isInstallment:true, installmentGroupId:groupId, installmentNo:no, installmentMonths:months, installmentTotalAmount:total, scheduled:date > today(), createdAt:nowISO(), createdSequence:sequenceBase + idx }
+        return {
+          id:Calc.genId(), type:'expense', amount, walletId, categoryId, merchant, note, date,
+          isInstallment:true, installmentGroupId:groupId, installmentNo:no,
+          installmentMonths:months, installmentTotalAmount:total, scheduled:date > today(),
+          createdAt:nowISO(), createdSequence:sequenceBase + idx,
+          rewardRuleIds:Array.isArray(firstRow.rewardRuleIds) ? [...firstRow.rewardRuleIds] : [],
+          rewardRulesTouched:firstRow.rewardRulesTouched === true,
+          rewardIncludePoints:firstRow.rewardIncludePoints !== false,
+          rewardIncludeCashback:firstRow.rewardIncludeCashback !== false,
+        }
       })
       S.transactions = (S.transactions || []).filter(t => t.installmentGroupId !== groupId).concat(keep, generated)
       S.transactions.sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
+      App.refreshTransactionRewardEstimates?.()
       App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
       persist(); document.getElementById('installment-edit-overlay')?.remove(); App.openInstallmentCenter(cardId); toast('แก้ไขชุดผ่อนแล้ว', 'success')
     }
@@ -10006,6 +10054,13 @@ App._pickMerchant = function(name, opts = {}) {
   // Credit-limit-aware transaction validation
   // ══════════════════════════════════════════════════════════
 
+  App._normalizeInstallmentCount = function(value, min = 1) {
+    const raw = typeof value === 'string' ? value.trim() : value
+    if (raw === '' || raw === null || raw === undefined) return null
+    const count = Number(raw)
+    return Number.isSafeInteger(count) && count >= min && count <= 600 ? count : null
+  }
+
   App.validateTransactionDraft = function(tx, opts = {}) {
     const { isEdit = false, editingTxId } = opts
     const amt = Number(tx.amount || 0)
@@ -10018,6 +10073,9 @@ App._pickMerchant = function(name, opts = {}) {
     if (_mErr) return _mErr
     const _nErr = _fieldTooLong(tx.note, FIELD_MAX.note, 'หมายเหตุ')
     if (_nErr) return _nErr
+    if (tx.type === 'expense' && tx.isInstallment && App._normalizeInstallmentCount(tx.installmentMonths, 2) === null) {
+      return 'กรุณาระบุจำนวนงวดเป็นจำนวนเต็มอย่างน้อย 2 งวด'
+    }
 
     // For edits, simulate effective balance by reverting the original transaction
     const origTx = isEdit && editingTxId ? (S.transactions || []).find(t => t.id === editingTxId) : null
@@ -10059,6 +10117,14 @@ App._pickMerchant = function(name, opts = {}) {
         }
       }
       if (w.type === 'bnpl') {
+        const rawBNPLInstallments = tx.bnplInstallments
+        const hasBNPLInstallments = rawBNPLInstallments !== null
+          && rawBNPLInstallments !== undefined
+          && String(rawBNPLInstallments).trim() !== ''
+          && Number(rawBNPLInstallments) !== 0
+        if (hasBNPLInstallments && App._normalizeInstallmentCount(rawBNPLInstallments, 2) === null) {
+          return 'กรุณาระบุจำนวนงวด BNPL เป็นจำนวนเต็มอย่างน้อย 2 งวด หรือเลือกไม่แบ่ง'
+        }
         const limit = Number(w.creditLimit || 0)
         if (limit > 0) {
           const origAmt = (origTx && origTx.walletId === tx.walletId && origTx.type === 'expense') ? Number(origTx.amount || 0) : 0
@@ -10083,8 +10149,9 @@ App._pickMerchant = function(name, opts = {}) {
       notify('กระเป๋านี้ถูกซ่อนจากหน้ากระเป๋าแล้ว', 'info')
       return
     }
+    const keepLegacyBNPL = w?.type === 'bnpl'
     const TYPES  = [['bank','🏦','ธนาคาร'],['cash','💵','เงินสด'],['ewallet','📱','E-Wallet'],['credit','💳','บัตรเครดิต'],['bnpl','🛍️','BNPL'],['gold','🥇','ทอง'],['fcd','💱','FCD']]
-      .filter(([value]) => BNPL_FEATURE_ENABLED || value !== 'bnpl')
+      .filter(([value]) => BNPL_FEATURE_ENABLED || value !== 'bnpl' || keepLegacyBNPL)
     const walletFormTypes = new Set(TYPES.map(([value]) => value))
     const type   = walletFormTypes.has(w?.type) ? w.type : 'bank'
     const isCC   = type === 'credit'
@@ -10497,6 +10564,9 @@ App._pickMerchant = function(name, opts = {}) {
     const isBNPL = type === 'bnpl'
     const isDebt = isCC || isBNPL
     const isInv = ['gold','fcd'].includes(type)
+    const wId = S.editingWalletId || null
+    const previousWallet = wId ? (S.wallets || []).find(w => w.id === wId) : null
+    const previousPayDay = previousWallet?.type === 'bnpl' ? (previousWallet.payDay || null) : null
     const rawBalance = parseFloat(document.getElementById(isDebt ? 'wf-cc-balance' : 'wf-balance')?.value) || 0
     const ICONS = { bank:'🏦', cash:'💵', ewallet:'📱', credit:'💳', bnpl:'🛍️', saving:'🏦', gold:'🥇', fcd:'💱' }
 
@@ -10599,7 +10669,6 @@ App._pickMerchant = function(name, opts = {}) {
     }
 
     // Ledger-based opening balance
-    const wId   = S.editingWalletId || null
     const flows = typeof App._ledgerFlows === 'function' ? App._ledgerFlows() : { cash:{}, units:{} }
     const r2 = n => Math.round((Number(n)||0)*100)/100
     const r8 = n => Math.round((Number(n)||0)*1e8)/1e8
@@ -10613,6 +10682,22 @@ App._pickMerchant = function(name, opts = {}) {
       data.openingBalance = r2(balance - flowC)
     }
 
+    const bnplScheduleUpdates = []
+    const nextPayDay = isBNPL ? (data.payDay || null) : null
+    if (isBNPL && previousWallet?.type === 'bnpl' && previousPayDay !== nextPayDay && typeof BNPL !== 'undefined') {
+      for (const plan of (S.bnplPlans || [])) {
+        if (plan.walletId !== wId || plan.status !== 'active') continue
+        const rebuilt = BNPL.calc.rebuildSchedulePreservingPayments(
+          plan, plan.totalAmount, plan.installments, nextPayDay
+        )
+        if (rebuilt.error) {
+          notify('ไม่สามารถปรับตาราง BNPL ได้ เนื่องจากข้อมูลยอดที่ชำระแล้วไม่สอดคล้องกัน', 'error')
+          return
+        }
+        bnplScheduleUpdates.push({ plan, rebuilt })
+      }
+    }
+
     if (S.editingWalletId) {
       const idx = (S.wallets||[]).findIndex(w => w.id === S.editingWalletId)
       if (idx >= 0) S.wallets[idx] = { ...S.wallets[idx], ...data }
@@ -10620,20 +10705,12 @@ App._pickMerchant = function(name, opts = {}) {
       S.wallets.push({ id:genId(), ...data })
     }
 
-    // Retroactively rebuild active BNPL plan schedules when payDay changes
-    if (isBNPL && S.editingWalletId && typeof BNPL !== 'undefined' && (S.bnplPlans || []).length > 0) {
-      const _editedId = S.editingWalletId
-      const _savedWallet = (S.wallets || []).find(w => w.id === _editedId)
-      const _effectivePayDay = _savedWallet?.payDay || null
-      ;(S.bnplPlans || []).forEach(plan => {
-        if (plan.walletId !== _editedId || plan.status !== 'active') return
-        const rebuilt = BNPL.calc.buildSchedule(plan.totalAmount, plan.installments, plan.purchaseDate, _effectivePayDay)
-        plan.schedule = rebuilt.map(item => {
-          const old = plan.schedule.find(s => s.no === item.no)
-          return old?.paidTxId ? old : item   // keep paid installments unchanged
-        })
-      })
-    }
+    bnplScheduleUpdates.forEach(({ plan, rebuilt }) => {
+      plan.schedule = rebuilt.schedule
+      plan.totalAmount = rebuilt.totalAmount
+      plan.installments = rebuilt.installments
+      plan.status = plan.schedule.every(row => row.paidTxId) ? 'paid_off' : 'active'
+    })
 
     App.recalculateWalletBalances?.({ save:false, recordSnapshot:false })
     persist()
@@ -10922,6 +10999,7 @@ App._pickMerchant = function(name, opts = {}) {
     const walletIds   = new Set(wallets.map(w => w.id).filter(Boolean))
     const catIds      = new Set(cats.map(c => c.id).filter(Boolean))
     const txIdsSeen   = new Set()
+    const installmentGroups = new Map()
 
     txns.forEach((t, i) => {
       const ref = `tx[${i}] id=${t.id || '(none)'}`
@@ -10958,9 +11036,37 @@ App._pickMerchant = function(name, opts = {}) {
       if (t.isInstallment && !t.installmentGroupId)
         warnings.push(`${ref}: isInstallment=true but no installmentGroupId`)
 
+      if (t.installmentGroupId) {
+        const group = installmentGroups.get(t.installmentGroupId) || []
+        group.push(t)
+        installmentGroups.set(t.installmentGroupId, group)
+      }
+
       // Recurring transaction without template reference
       if (t.isRecurring && !t.sourceRecurringId)
         warnings.push(`${ref}: isRecurring=true but no sourceRecurringId`)
+    })
+
+    installmentGroups.forEach((rows, groupId) => {
+      const refs = rows.map(row => Number(row.installmentNo))
+      const months = rows.map(row => Number(row.installmentMonths))
+      const monthValues = [...new Set(months)]
+      const expectedMonths = monthValues.length === 1 && Number.isSafeInteger(monthValues[0]) ? monthValues[0] : null
+      const uniqueNos = new Set(refs)
+      if (rows.some(row => row.isInstallment !== true))
+        warnings.push(`installment group "${groupId}": row missing isInstallment flag`)
+      if (refs.some(no => !Number.isSafeInteger(no) || no < 1) || uniqueNos.size !== refs.length)
+        warnings.push(`installment group "${groupId}": duplicate installmentNo`)
+      if (expectedMonths === null || expectedMonths < 2 || rows.length !== expectedMonths || refs.some(no => no > expectedMonths))
+        warnings.push(`installment group "${groupId}": incomplete installment count`)
+      const invalidDeclaredTotal = rows.some(row => row.installmentTotalAmount !== undefined && !Number.isFinite(Number(row.installmentTotalAmount)))
+      if (invalidDeclaredTotal)
+        warnings.push(`installment group "${groupId}": invalid total metadata`)
+      const declaredTotals = rows.map(row => Number(row.installmentTotalAmount)).filter(Number.isFinite)
+      const declaredTotal = declaredTotals.length ? Math.max(...declaredTotals) : 0
+      const actualTotal = Math.round(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0) * 100) / 100
+      if (declaredTotal > 0 && Math.abs(actualTotal - declaredTotal) > 0.01)
+        warnings.push(`installment group "${groupId}": total mismatch`)
     })
 
     // Duplicate reward ledger entries per statement
@@ -16578,7 +16684,7 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   App.exportCSV = function() {
-    const headers = ['date','benefitDateOverride','type','amount','wallet','toWallet','category','merchant','note','status','budgetAmount','sharedBill','sharedPeople','myShare','reimbursed','reimbursableRemaining','reimbursesSharedExpenseTxId','incomeTreatment','reimbursementSource','reimbursementSplitBillId','fromSplitPersonId','toSplitPersonId','splitBillId','recurringId','installmentGroupId','installmentNo','rewardRuleIds','createdAt']
+    const headers = ['date','benefitDateOverride','type','amount','wallet','toWallet','category','merchant','note','status','budgetAmount','sharedBill','sharedPeople','myShare','reimbursed','reimbursableRemaining','reimbursesSharedExpenseTxId','incomeTreatment','reimbursementSource','reimbursementSplitBillId','fromSplitPersonId','toSplitPersonId','splitBillId','recurringId','installmentGroupId','installmentNo','installmentMonths','installmentTotalAmount','isInstallment','rewardRuleIds','createdAt']
     const csvCell = value => `"${String(value ?? '').replace(/"/g, '""')}"`
     const rows = [...(S.transactions || [])]
       .sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')))
@@ -16624,6 +16730,9 @@ App._pickMerchant = function(name, opts = {}) {
           t.sourceRecurringId || t.recurringId || '',
           t.installmentGroupId || '',
           t.installmentNo || '',
+          t.installmentMonths || '',
+          t.installmentTotalAmount || '',
+          t.isInstallment ? 'yes' : '',
           Array.isArray(t.rewardRuleIds) ? t.rewardRuleIds.join('|') : '',
           t.createdAt || '',
         ].map(csvCell).join(',')
