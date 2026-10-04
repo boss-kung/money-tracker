@@ -964,7 +964,7 @@ function getStateCommit() {
 }
 
 // ── Persist ──────────────────────────────────────────────────
-function persist(reason = 'app') {
+function persist(reason = 'app', options = {}) {
   if (!MT_STORAGE_HYDRATED) {
     console.warn('[Money Tracker] persist skipped before storage hydration')
     return false
@@ -974,8 +974,8 @@ function persist(reason = 'app') {
   if (typeof CreditCardCycles !== 'undefined') S.wallets = CreditCardCycles.prepareBillingMigration({ wallets:S.wallets, transactions:S.transactions, refDate:getTODAY() }).wallets
   const stateCommit = getStateCommit()
   const result = stateCommit
-    ? stateCommit.commit({ reason })
-    : { ok: Storage.saveAll(S) === true }
+    ? stateCommit.commit({ reason, ...options })
+    : { ok: Storage.saveAll(S, options) === true }
   const ok = result.ok === true
   if (!ok) {
     S.wallets = previousBillingWallets
@@ -1111,7 +1111,7 @@ function toast(msg, type = 'info') {
 const overlayCloseTimers = {}
 
 const App = {
-  saveAll(reason = 'app') { return persist(reason) },
+  saveAll(reason = 'app', options = {}) { return persist(reason, options) },
   openOverlay(id) {
     clearTimeout(overlayCloseTimers[id])
     delete overlayCloseTimers[id]

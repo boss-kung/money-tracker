@@ -27,6 +27,12 @@ test('persist invalidates derived calculations and reward and billing paths use 
   assert.match(app, /App\.getCreditCardBillingState\s*=\s*function[\s\S]{0,500}MT_DERIVED_MEMO\.memoize/)
 })
 
+test('persist exposes optional dirty-key metadata through the State Commit seam', () => {
+  assert.match(app, /function persist\(reason = 'app', options = \{\}\)/)
+  assert.match(app, /stateCommit\.commit\(\{ reason, \.\.\.options \}\)/)
+  assert.match(app, /saveAll\(reason = 'app', options = \{\}\) \{ return persist\(reason, options\) \}/)
+})
+
 test('initial page render is scheduled through the coalescing coordinator', () => {
   assert.match(app, /createRenderCoordinator/)
   assert.match(app, /App\.requestRender\('initial'\)/)

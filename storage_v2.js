@@ -296,14 +296,23 @@ const Storage = {
     return data
   },
 
-  saveAll(state) {
+  saveAll(state, { dirtyKeys = undefined } = {}) {
     if (!state || typeof state !== 'object') return false
     if (!Storage.isLocalStorageReadable()) {
       Storage.lastSaveError = { key: '*', message: 'localStorage unavailable', at: new Date().toISOString() }
       return false
     }
 
-    const entries = Object.entries(COLLECTIONS).filter(([, descriptor]) => descriptor.state !== false)
+    const requestedNames = Array.isArray(dirtyKeys) && dirtyKeys.length
+      ? new Set(dirtyKeys.map(name => {
+          const entry = Object.entries(COLLECTIONS).find(([collectionName, descriptor]) => collectionName === name || descriptor.key === name)
+          return entry?.[0] || String(name)
+        }))
+      : null
+    const entries = Object.entries(COLLECTIONS).filter(([name, descriptor]) => {
+      if (descriptor.state === false) return false
+      return !requestedNames || requestedNames.has(name)
+    })
     const previous = new Map()
     const serialized = new Map()
     try {
@@ -327,7 +336,10 @@ const Storage = {
         if (previous.get(key) !== payload) localStorage.setItem(key, payload)
         if (localStorage.getItem(key) !== payload) throw new Error(`readback mismatch after save: ${key}`)
       }
-      const verification = Storage.verifyState(state, ['transactions', 'wallets', 'settings', 'upcomingBills'])
+      const requiredVerificationKeys = requestedNames
+        ? ['transactions', 'wallets', 'settings', 'upcomingBills'].filter(name => requestedNames.has(name))
+        : ['transactions', 'wallets', 'settings', 'upcomingBills']
+      const verification = Storage.verifyState(state, requiredVerificationKeys)
       committed = verification.ok
       if (!committed) throw new Error(`state verification failed: ${verification.failures.join(', ')}`)
       Storage.lastSaveError = null

@@ -73,6 +73,48 @@ test('saving unchanged collections avoids rewriting them while changed data pers
   assert.deepEqual(Storage.loadCollection('transactions'), state.transactions)
 })
 
+test('dirty-key save serializes and verifies only the selected collections', () => {
+  const state = { transactions:[], wallets:[{ id:'bank', balance:100 }], settings:{} }
+  assert.equal(Storage.saveAll(state), true)
+  const reads = []
+  const originalGet = localStorage.getItem
+  localStorage.getItem = key => {
+    reads.push(key)
+    return originalGet(key)
+  }
+  state.transactions.push({ id:'new', amount:10 })
+  assert.equal(Storage.saveAll(state, { dirtyKeys:['transactions'] }), true)
+  assert.deepEqual(reads.filter(key => key === 'mt_transactions'), ['mt_transactions','mt_transactions','mt_transactions'])
+  assert.equal(reads.includes('mt_wallets'), false)
+  assert.deepEqual(Storage.loadCollection('transactions'), state.transactions)
+  assert.deepEqual(Storage.loadCollection('wallets'), [{ id:'bank', balance:100 }])
+})
+
+test('dirty-key rollback restores every payload written before a later failure', () => {
+  const state = { transactions:[{ id:'old' }], wallets:[{ id:'bank', balance:100 }], settings:{} }
+  assert.equal(Storage.saveAll(state), true)
+  const previousTransactions = localStorage.getItem('mt_transactions')
+  const previousWallets = localStorage.getItem('mt_wallets')
+  state.settings = { ...state.settings, theme: 'dark' }
+  const write = localStorage.setItem
+  const writes = []
+  let failed = false
+  localStorage.setItem = (key, value) => {
+    writes.push(key)
+    if (key === 'mt_wallets' && !failed) {
+      failed = true
+      throw new Error('quota exceeded')
+    }
+    write(key, value)
+  }
+  state.transactions.push({ id:'new' })
+  state.wallets[0].balance = 200
+  assert.equal(Storage.saveAll(state, { dirtyKeys:['transactions','wallets'] }), false)
+  assert.equal(localStorage.getItem('mt_transactions'), previousTransactions)
+  assert.equal(localStorage.getItem('mt_wallets'), previousWallets)
+  assert.equal(writes.includes('mt_settings'), false)
+})
+
 test('a failed changed collection restores the last coherent snapshot including earlier writes', () => {
   const state = { transactions:[{ id:'old' }], wallets:[{ id:'bank', balance:100 }], settings:{ theme:'light' } }
   assert.equal(Storage.saveAll(state), true)
