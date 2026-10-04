@@ -12,10 +12,18 @@ const worker = fs.readFileSync(path.join(root, 'service-worker_v2.js'), 'utf8')
 
 test('feature loader exposes ordered, coalesced group loading with readiness state', () => {
   assert.match(loader, /MTFeatureLoader/)
-  assert.match(loader, /load\(group\)/)
+  assert.match(loader, /function load\(group(?:, options = \{\})?\)/)
   assert.match(loader, /pending\.get\(group\)/)
   assert.match(loader, /ready\(group\)/)
   assert.match(loader, /script\.onerror/)
+})
+
+test('deferred feature groups batch their startup redraw into one request', () => {
+  assert.match(loader, /load\(group, options = \{\}\)/)
+  assert.match(loader, /options\.render !== false/)
+  assert.match(loader, /load\(group, \{ render:false \}\)/)
+  assert.match(loader, /optional-features-ready/)
+  assert.match(loader, /if \(shouldRender\)[\s\S]{0,120}root\.App\?\.requestRender/)
 })
 
 test('release manifest keeps deferred modules offline-cacheable', () => {

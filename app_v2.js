@@ -1583,7 +1583,9 @@ const MT_RENDER_COORDINATOR = window.MTDerivedRuntime?.createRenderCoordinator?.
   render: reasons => {
     if (!MT_STORAGE_HYDRATED) return
     const renderStart = performance.now()
-    App.showPage(S.page)
+    const isFirstRender = !MT_FIRST_RENDER_DONE
+    App._suppressScreenAnimations = !isFirstRender
+    try { App.showPage(S.page) } finally { App._suppressScreenAnimations = false }
     if (MT_FIRST_RENDER_DONE) return
     MT_FIRST_RENDER_DONE = true
     window.MTBoot?.mark?.('app.firstRender.done', {
@@ -21060,6 +21062,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }, { phase: 'before', priority: 10 })
 
   MTScreenHooks.register('dashboard', 'animations.dashboard', function (context) {
+    if (App._suppressScreenAnimations) return
     const _prevVals = context.metadata.previousValues || {}
     try {
       _runDashCountUp()

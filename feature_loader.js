@@ -39,7 +39,8 @@
     })
   }
 
-  function load(group) {
+  function load(group, options = {}) {
+    const shouldRender = options.render !== false
     if (states.get(group) === 'ready') return Promise.resolve(true)
     if (pending.get(group)) return pending.get(group)
     states.set(group, 'loading')
@@ -47,7 +48,9 @@
       .reduce((chain, asset) => chain.then(() => loadScript(asset)), Promise.resolve())
       .then(() => {
         states.set(group, 'ready')
-        try { root.App?.requestRender?.(`feature-ready:${group}`) } catch (_) {}
+        if (shouldRender) {
+          try { root.App?.requestRender?.(`feature-ready:${group}`) } catch (_) {}
+        }
         return true
       })
       .catch(error => { states.set(group, 'error'); throw error })
@@ -61,7 +64,14 @@
   }
 
   function schedule(groupsToLoad = Object.keys(groups)) {
-    const run = () => groupsToLoad.reduce((chain, group) => chain.then(() => load(group).catch(() => false)), Promise.resolve())
+    const run = () => groupsToLoad
+      .reduce((chain, group) => chain.then(() => load(group, { render:false }).catch(() => false)), Promise.resolve())
+      .then(() => {
+        if (groupsToLoad.length) {
+          try { root.App?.requestRender?.('optional-features-ready') } catch (_) {}
+        }
+        return true
+      })
     if (typeof root.requestIdleCallback === 'function') return root.requestIdleCallback(run, { timeout: 2500 })
     return root.setTimeout(run, 0)
   }

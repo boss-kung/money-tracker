@@ -5,7 +5,7 @@
   if (root) root.MT_RELEASE = manifest
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict'
-  const version = '2026.10.04-performance-r138'
+  const version = '2026.10.04-performance-r139'
   const coreAssets = Object.freeze([
     './',
     './index.html',

@@ -53,3 +53,8 @@ test('render requests can force a page redraw after a durable revision change', 
 test('successful persistence advances the render revision while failed commits do not', () => {
   assert.match(app, /if \(ok\) \{[\s\S]{0,120}App\._renderRevision\+\+[\s\S]{0,120}App\._forceRenderOnNext\s*=\s*true/)
 })
+
+test('coordinator redraws after first paint without replaying dashboard animations', () => {
+  assert.match(app, /App\._suppressScreenAnimations/)
+  assert.match(app, /if \(App\._suppressScreenAnimations\) return/)
+})
