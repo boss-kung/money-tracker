@@ -68,7 +68,6 @@
 
 /* ── FAB (fixed bottom-right, dashboard only) ────────────── */
 #fab {
-  right: 20px;
   cursor: pointer;
 }
 
@@ -189,7 +188,7 @@ select.form-input  { appearance: none; cursor: pointer; }
   animation: fadeIn .2s;
 }
 .sheet {
-  position: relative; max-height: 94dvh;
+  position: relative;
   background: var(--surface);
   display: flex; flex-direction: column;
   animation: slideUp .28s cubic-bezier(.32,.72,0,1);
@@ -221,7 +220,7 @@ select.form-input  { appearance: none; cursor: pointer; }
 .sub-scroll { flex: 1; overflow-y: auto; }
 
 /* ── Numpad ──────────────────────────────────────────────── */
-.numpad-key:active { transform: scale(.93); background: var(--border); }
+.numpad-key:active { transform: scale(.93); }
 
 
 /* ── Type Tabs ───────────────────────────────────────────── */
@@ -279,7 +278,6 @@ select.form-input  { appearance: none; cursor: pointer; }
 }
 .tx-icon {
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
 }
 .tx-info  { flex: 1; min-width: 0; }
 .tx-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -364,7 +362,6 @@ select.form-input  { appearance: none; cursor: pointer; }
 
 /* ── Net Worth Card ──────────────────────────────────────── */
 .nw-label  { color: var(--muted); margin-bottom: 4px; }
-.nw-value  { font-size: 30px; }
 .nw-detail { display: flex; gap: 16px; margin-top: 8px; }
 .nw-item   { font-size: 13px; color: var(--muted); }
 .nw-summary-delta { font-size: 12px; margin-top: 6px; }
@@ -571,7 +568,8 @@ html.dark .nw-chart-zero-line { stroke: #334155; }
 @media (max-width: 430px) {
   #fab { right: 20px; }
 }
-.tx-flag-grid{grid-template-columns:repeat(2,1fr)}.emoji-current{font-weight:800}.emoji-grid button{height:42px}
+.tx-flag-grid { grid-template-columns: repeat(2, 1fr); }
+.emoji-grid button { height: 42px; }
 
 /* ── Foundation tokens and refreshed surfaces ───────────────
    Mobile-first finance app polish. Pure CSS enhancement; no logic changes.
@@ -579,9 +577,7 @@ html.dark .nw-chart-zero-line { stroke: #334155; }
 
 
 .page-header {
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: blur(16px);
-  border-bottom-color: var(--border);
 }
 
 
@@ -601,7 +597,6 @@ html.dark .nw-chart-zero-line { stroke: #334155; }
   letter-spacing: .01em;
 }
 .form-input {
-  border-color: var(--border);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
 }
 
@@ -624,12 +619,14 @@ html.dark .nw-chart-zero-line { stroke: #334155; }
 .reward-tile,
 .wallet-summary-card {
   padding: 12px;
-  border: 1px solid rgba(255,255,255,.18);
+  border-width: 1px;
+  border-style: solid;
 }
 .reward-tile span,
 .wallet-summary-card span { display: block; opacity: .78; }
 .reward-tile strong,
-.wallet-summary-card strong { display: block; font-weight: 800; margin-top: 2px; }
+.wallet-summary-card strong { display: block; margin-top: 2px; }
+.wallet-summary-card strong { font-weight: 800; }
 
 .section-header button { border: none; background: none; font-size: 12px; }
 
@@ -651,7 +648,6 @@ html.dark .nw-chart-zero-line { stroke: #334155; }
 
 .wc-name { font-weight: 800; }
 .wc-type { opacity: .72; }
-.wc-balance { font-size: 30px; }
 .wc-action-row { display: flex; }
 .wallet-chip-btn {
   border: 1px solid rgba(255,255,255,.46);
@@ -706,28 +702,22 @@ html.dark .nw-chart-zero-line { stroke: #334155; }
 
 
 /* Core components */
-.card {
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-}
 .btn-icon,
 .icon-btn {
   width: 38px;
   height: 38px;
+  color: var(--muted);
+}
+.btn-icon {
   border-radius: 50%;
   background: var(--elevated);
   border: 0;
-  color: var(--muted);
 }
-.btn-icon:active,
-.icon-btn:active,
-.btn:active { transform: scale(.96); }
+.btn-icon:active { transform: scale(.96); }
 
 
 .form-input {
   font-size: 15px;
-}
-.form-input:focus {
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 15%, transparent);
 }
 .chip {
   border: 0;
@@ -813,14 +803,15 @@ html.dark .nw-chart-zero-line { stroke: #334155; }
 .mt-net-main { min-width: 0; padding-top: 2px; }
 .mt-net-label,
 .mt-net-status-label {
-  font-size: 13px;
-  line-height: 1.35;
   font-weight: 600;
   color: rgba(232, 244, 255, .82);
 }
+.mt-net-status-label {
+  font-size: 13px;
+  line-height: 1.35;
+}
 .mt-net-value {
   margin-top: 6px;
-  font-size: clamp(34px, 7.6vw, 56px);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 6px 18px rgba(15,23,42,.24);
 }
@@ -1170,7 +1161,6 @@ html.dark .mt-alert-row-name { color: var(--text); }
   display:flex;
   justify-content:center;
   align-items:center;
-  font-size: clamp(38px, 13vw, 52px);
   letter-spacing: -1px;
   font-variant-numeric: tabular-nums;
 }
@@ -1356,7 +1346,6 @@ html.dark .mt-alert-row-name { color: var(--text); }
 :root {
   /* Fonts */
   --font-line: "LINE Seed Sans TH", "LINESeedSansTH", "LINE Seed Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, system-ui, sans-serif;
-  --font-ios: var(--font-line);
 
   /* Safe areas */
   --safe-t: env(safe-area-inset-top, 0px);
@@ -1909,7 +1898,8 @@ textarea.form-input:focus {
 
 
 .tx-icon {
-  flex: 0 0 42px !important;
+  flex-grow: 0 !important;
+  flex-shrink: 0 !important;
 }
 
 .tx-title {
@@ -1941,12 +1931,7 @@ textarea.form-input:focus {
 
 body { font-feature-settings: "tnum" 1; }
 
-.tx-amount,
-.wc-balance,
-.wallet-summary-card strong,
-.reward-tile strong {
-  font-variant-numeric: tabular-nums;
-}
+.wc-balance { font-variant-numeric: tabular-nums; }
 
 
 /* Put sheets above sub-screens when launched from a detail page. */
@@ -2039,10 +2024,17 @@ button,
 input,
 select,
 textarea {
-  font-family: var(--font-ios) !important;
   font-size: var(--body-fs) !important;
-  line-height: 1.34 !important;
   letter-spacing: normal !important;
+}
+
+body,
+#app,
+.page,
+.card,
+.sheet,
+.sub-scroll {
+  line-height: 1.34 !important;
 }
 
 /* Page density */
@@ -2100,6 +2092,16 @@ body.is-dashboard #dashboard-content {
 .budget-row-used,
 .empty-sub {
   font-size: var(--label-fs) !important;
+}
+.form-label,
+.detail-label,
+.nw-label,
+.mt-net-label,
+.tx-date,
+.reward-tile span,
+.wallet-summary-card span,
+.budget-row-used,
+.empty-sub {
   line-height: 1.28 !important;
 }
 
@@ -2113,6 +2115,12 @@ body.is-dashboard #dashboard-content {
 .detail-value,
 .budget-row-title {
   font-size: 15px !important;
+}
+.section-header h3,
+.sec-title,
+.settings-row,
+.detail-value,
+.budget-row-title {
   line-height: 1.3 !important;
 }
 
@@ -2155,9 +2163,12 @@ body.is-dashboard #dashboard-content {
   font-weight: 800;
 }
 .tx-amount,
+.wallet-summary-card strong {
+  font-size: 15.5px !important;
+}
+.tx-amount,
 .wallet-summary-card strong,
 .reward-tile strong {
-  font-size: 15.5px !important;
   line-height: 1.18 !important;
   letter-spacing: -.015em !important;
   font-variant-numeric: tabular-nums;
@@ -2172,20 +2183,24 @@ body.is-dashboard #dashboard-content {
 .amount-summary-card,
 .reward-tile,
 .wallet-summary-card {
-  border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-sm) !important;
+}
+.card,
+.mt-alert-card,
+.amount-summary-card,
+.reward-tile,
+.wallet-summary-card {
+  border-radius: var(--radius-lg) !important;
 }
 .card-pad { padding: 10px; }
 .form-group { margin-bottom: 6px !important; }
 .chips,
-.wallet-summary-grid,
 .mt-wallet-mini-grid,
 .mt-stat-row,
 .reward-grid,
 .cat-grid,
 .tx-flag-grid,
 .installment-month-grid,
-.color-picker-row,
 .segmented-tabs,
 .budget-tabs {
   gap: var(--compact-gap) !important;
@@ -2210,7 +2225,6 @@ body.is-dashboard #dashboard-content {
 }
 .list-item,
 .mt-merchant-item,
-.tx-row-modern,
 .installment-mini-row,
 .installment-compact-row,
 .settings-row {
@@ -2246,9 +2260,13 @@ body.is-dashboard #dashboard-content {
 /* Button/form density: smaller than previous round but still finger-safe */
 .btn,
 .form-input,
+select.form-input {
+  min-height: var(--touch-h) !important;
+}
+.btn,
+.form-input,
 select.form-input,
 textarea.form-input {
-  min-height: var(--touch-h) !important;
   border-radius: 14px !important;
   padding: 10px 12px !important;
 }
@@ -2263,10 +2281,16 @@ textarea.form-input { min-height: 72px !important; }
 .installment-month-grid button,
 .segmented-tab,
 .budget-tab {
-  min-height: var(--touch-h-sm) !important;
   font-size: 12px !important;
   padding: 3px 11px !important;
   border-radius: 999px !important;
+}
+.btn-sm,
+.wallet-chip-btn,
+.installment-month-grid button,
+.segmented-tab,
+.budget-tab {
+  min-height: var(--touch-h-sm) !important;
 }
 .type-tab,
 .flag-pill {
@@ -2699,7 +2723,6 @@ textarea.form-input:focus { box-shadow: 0 0 0 3px rgba(37,99,235,.12) !important
 .form-split-row > div {
   min-width: 0;
 }
-.form-input[type="date"],
 .form-split-row input[type="date"] {
   box-sizing: border-box;
   display: block;
@@ -2777,13 +2800,14 @@ html.dark #reports-content .ai-insight { background:rgba(37,99,235,.16) !importa
    Color picker and market helper polish
    ============================================================ */
 .color-row,
-.color-picker-row,
-.color-picker-row.compact-colors,
-.color-row.compact-colors {
+.color-picker-row {
   display:flex !important;
-  flex-wrap:wrap !important;
   align-items:center !important;
   gap:9px !important;
+}
+.color-row:not(.compact-colors),
+.color-picker-row:not(.compact-colors) {
+  flex-wrap:wrap !important;
 }
 .color-dot,
 .color-swatch,
@@ -2848,9 +2872,11 @@ label.color-swatch {
   background:rgba(255,255,255,.16) !important;
   border:1px solid rgba(255,255,255,.22) !important;
   border-radius:999px !important;
-  min-height:32px !important;
   min-width:48px !important;
   font-weight: 800 !important;
+}
+.wallet-card.wallet-card-colored .wallet-chip-btn {
+  min-height:32px !important;
 }
 /* Touch-target minimum for the pay button specifically (regular chip
    buttons on colored cards stay 32px — this is the only one that's a
@@ -3215,7 +3241,6 @@ select,
 textarea,
 .btn,
 .btn-sm,
-.chip,
 .wallet-chip-btn,
 .wc-card-pay-btn,
 .type-tab,
@@ -4877,11 +4902,6 @@ html.dark .v64-rec-tab.active {
 /* ============================================================
    Transaction detail UX refresh
    ============================================================ */
-#tx-detail-content {
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-}
-
 #overlay-tx-detail .sheet {
   padding-bottom: 0 !important;
 }
@@ -5146,6 +5166,10 @@ html.dark .crypto-summary-item {
 .wallet-detail-availability span {
   display: block;
   font-size: 12px;
+}
+
+.upcoming-summary-grid span,
+.wallet-detail-availability span {
   color: var(--muted);
   margin-bottom: 4px;
 }
@@ -5155,9 +5179,7 @@ html.dark .crypto-summary-item {
   margin-bottom: 0px !important;
 }
 
-.upcoming-summary-grid strong,
-.wallet-available-block strong,
-.wallet-detail-availability strong {
+.upcoming-summary-grid strong {
   font-size: 14px;
 }
 
@@ -5296,18 +5318,24 @@ html.dark .crypto-summary-item {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 8px;
   padding-top: 8px;
+}
+
+.wallet-available-block {
   border-top: 1px solid rgba(255,255,255,.18);
+}
+
+.wallet-detail-availability {
+  border-top: 1px solid rgba(148, 163, 184, .25);
+}
+
+.wallet-available-block strong {
+  color: #fff;
 }
 
 .wallet-available-block strong,
 .wallet-detail-availability strong {
-  color: #fff;
   font-weight: 500 !important;
   font-size: 12px !important;
-}
-
-.wallet-detail-availability {
-  border-top-color: rgba(148, 163, 184, .25);
 }
 
 .wallet-detail-availability strong {
@@ -7658,17 +7686,20 @@ html.dark .spcal-l5    { background: #DC2626; border-color: #B91C1C; }
 
 .finance-page-cue,
 .finance-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
   background: color-mix(in srgb, var(--primary) 14%, transparent);
   color: var(--primary);
-  font-size: 18px;
   line-height: 1;
+}
+
+.finance-page-cue {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  font-size: 18px;
 }
 
 .finance-avatar {
@@ -8228,13 +8259,16 @@ html.dark .spcal-l5    { background: #DC2626; border-color: #B91C1C; }
 .finance-goal-lanes > div,
 .finance-goal-mini-list span {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 8px 10px;
   background: color-mix(in srgb, var(--card) 88%, var(--finance-accent) 12%);
+}
+
+.finance-goal-lanes > div {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
 }
 
 .finance-goal-lanes span {

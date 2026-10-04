@@ -265,7 +265,8 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 .ui-v2 .v2-dash-greet .g-hi { font-size: 15px; font-weight: 500; color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-v2 .v2-dash-greet .g-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .ui-v2 .v2-dash-greet .g-icon,
-.ui-v2 .v2-dash-greet .g-avatar { width: 36px; height: 36px; min-height: 36px; border-radius: 999px; border: 0; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #ffffff24; color: #fff; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ui-v2 .v2-dash-greet .g-avatar { width: 36px; height: 36px; min-height: 36px; border-radius: 999px; border: 0; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #fff; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ui-v2 .v2-dash-greet .g-icon { background: #ffffff24; }
 .ui-v2 .v2-dash-greet .g-avatar { background: #ffffff38; }
 .ui-v2 .v2-dash-greet .g-icon:active,
 .ui-v2 .v2-dash-greet .g-avatar:active { transform: scale(.94); }
@@ -288,10 +289,10 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 .ui-v2 .mt-net-metric-icon { color: rgba(255,255,255,.85); }
 
 /* AI bar + quick actions block (JS-injected) */
-.ui-v2 .mt-v2-actions { display: flex; flex-direction: column; gap: 12px; margin: 14px 0 6px; }
+.ui-v2 .mt-v2-actions { display: flex; flex-direction: column; gap: 12px; margin: 16px 0 8px; }
 
 /* Month nav → seg-pill */
-.ui-v2 .dash-month-nav { margin: 6px 0 10px; }
+.ui-v2 .dash-month-nav { margin: 2px 0 10px; }
 .ui-v2 .dash-month-nav .chip { background: var(--elevated); color: var(--muted); border: none; border-radius: 999px; font-size: 11px; padding: 5px 12px; font-weight: 400; }
 .ui-v2 .dash-month-nav .chip.active { background: var(--primary); color: #fff; font-weight: 500; }
 
@@ -860,9 +861,6 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 }
 .ui-v2 .mt-wallet-mini .name { font-size: 10px; color: var(--muted); }
 
-/* P2-10  Month nav tightening */
-.ui-v2 .dash-month-nav { margin-top: 2px; margin-bottom: 10px; }
-
 /* P3-11  Section header label tokens */
 .ui-v2 #dashboard-content .section-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -891,7 +889,6 @@ html.ui-v2 body.is-dashboard #dashboard-content,
 .ui-v2 #dashboard-content .card { box-shadow: none !important; border: 1px solid var(--border) !important; }
 
 /* P4-18  Spacing rhythm tweaks */
-.ui-v2 .mt-v2-actions      { margin-top: 16px; margin-bottom: 8px; }
 .ui-v2 .mt-dash-stat-bento { margin: 0 0 12px; }
 
 /* P4-19  Micro-interactions — tap feedback */
