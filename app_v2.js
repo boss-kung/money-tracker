@@ -1591,6 +1591,17 @@ App.requestRender = reason => {
   App._forceRenderOnNext = true
   return MT_RENDER_COORDINATOR.request(reason)
 }
+App.ensureFeatureAndCall = function(group, method, args = []) {
+  const invoke = () => {
+    const fn = App[method]
+    return typeof fn === 'function' ? fn(...args) : undefined
+  }
+  if (!window.MTFeatureLoader?.load) return invoke()
+  return window.MTFeatureLoader.load(group).then(invoke).catch(error => {
+    console.warn(`[Money Tracker] optional feature ${group} failed`, error)
+    return undefined
+  })
+}
 App.invalidateDerivedState = reason => MT_DERIVED_MEMO.invalidate(reason)
 
 /* ============================================================
@@ -2544,7 +2555,7 @@ App.pickEmoji=(p,e)=>{
       receivable && Number(receivable.expectedReimbursement || 0) > 0 ? `<div class="detail-row"><span class="detail-label">คงเหลือรอรับคืน</span><span class="detail-value" style="color:${receivable.remaining > 0 ? 'var(--income)' : receivable.status === 'over_reimbursed' ? 'var(--warning,#f59e0b)' : 'var(--muted)'}">${fmt(receivable.remaining)}${receivable.status === 'over_reimbursed' ? ' · รับเกิน' : ''}</span></div>` : '',
       splitBillLink.status === 'mismatch' ? `<div class="detail-row" style="background:rgba(245,158,11,.10);border-radius:8px;padding:8px 12px;margin:6px 0"><span class="detail-label" style="color:var(--warning,#f59e0b)">สถานะ</span><span class="detail-value" style="color:var(--warning,#f59e0b)">${esc(splitBillLink.message || 'ข้อมูลหารบิลกับรายการจ่ายยังไม่ตรงกัน')}</span></div>` : '',
       splitBillLink.status === 'missing_bill' ? `<div class="detail-row" style="background:rgba(239,68,68,.08);border-radius:8px;padding:8px 12px;margin:6px 0"><span class="detail-label" style="color:var(--expense)">สถานะ</span><span class="detail-value" style="color:var(--expense)">${esc(splitBillLink.message || 'ไม่พบบิลหารที่เคยเชื่อมไว้')}</span></div>` : '',
-      splitBillLink.billId && splitBillLink.status !== 'missing_bill' ? `<div class="detail-row"><span class="detail-label">เปิดหารบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openSplitBillDetail('${esc(splitBillLink.billId)}')">${splitBillLink.status === 'mismatch' ? 'อัปเดตจากบิล' : 'ดูรายละเอียด'}</button></span></div>` : '',
+      splitBillLink.billId && splitBillLink.status !== 'missing_bill' ? `<div class="detail-row"><span class="detail-label">เปิดหารบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.ensureFeatureAndCall('advanced','openSplitBillDetail',['${esc(splitBillLink.billId)}'])">${splitBillLink.status === 'mismatch' ? 'อัปเดตจากบิล' : 'ดูรายละเอียด'}</button></span></div>` : '',
     ].filter(Boolean).join('') : ''
     const quickSharedRows = !splitBillLink && shared
       ? `<div class="detail-row"><span class="detail-label">จ่ายแทนทั้งหมด</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">นับเข้างบของเรา</span><span class="detail-value">${fmt(shared.myShare || 0)}</span></div><div class="detail-row"><span class="detail-label">รับคืนแล้ว</span><span class="detail-value" style="color:var(--income)">${fmt(sharedSettlement?.received || shared.reimbursedAmount || 0)}</span></div><div class="detail-row"><span class="detail-label">คงเหลือรอรับคืน</span><span class="detail-value" style="color:${(sharedSettlement?.remaining || shared.remainingReimbursableAmount || shared.reimbursableAmount || 0) > 0 ? 'var(--income)' : 'var(--muted)'}">${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0)}</span></div>`
@@ -20332,7 +20343,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <div class="card card-pad"><div style="font-size:12px;color:var(--muted)">สุทธิ</div><div style="font-size:22px;font-weight:700">${fmt(s.netSettlement)}</div></div>
         </div>
         ${App._financeJourneyLinks([
-          ['ไปหารบิล','App.openSplitBillScreen()'],
+          ['ไปหารบิล',"App.ensureFeatureAndCall('advanced','openSplitBillScreen')"],
         ])}
         ${s.balances.length ? `<div class="card card-pad">
           <div class="finance-section-title">ยอดตามคน</div>
@@ -22982,9 +22993,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>
       <div class="sec-title">เงินร่วมกัน</div>
       <div class="card card-pad">
-        ${row({ icon: '🍽️', label: 'หารบิล', value: splitBillCount ? `${splitBillCount} บิล` : '', onclick: 'App.openSplitBillScreen()' })}
+        ${row({ icon: '🍽️', label: 'หารบิล', value: splitBillCount ? `${splitBillCount} บิล` : '', onclick: "App.ensureFeatureAndCall('advanced','openSplitBillScreen')" })}
         ${row({ icon: '🤝', label: 'เงินที่แชร์กับคนอื่น', onclick: 'App.openSharedFinanceDashboard()' })}
-        ${(() => { const lo = (typeof LoanStore !== 'undefined') ? LoanStore.outstanding() : []; const tot = lo.reduce((s,l) => s+(Number(l.amount||0) - (l.repayments||[]).reduce((ss,r)=>ss+Number(r.amount||0),0)), 0); return row({ icon: '💸', label: 'ให้ยืมเงิน', value: lo.length ? `${lo.length} ราย · ${Calc.fmt(tot)}` : '', onclick: 'App.openLoansScreen()' }) })()}
+        ${(() => { const lo = (typeof LoanStore !== 'undefined') ? LoanStore.outstanding() : []; const tot = lo.reduce((s,l) => s+(Number(l.amount||0) - (l.repayments||[]).reduce((ss,r)=>ss+Number(r.amount||0),0)), 0); return row({ icon: '💸', label: 'ให้ยืมเงิน', value: lo.length ? `${lo.length} ราย · ${Calc.fmt(tot)}` : '', onclick: "App.ensureFeatureAndCall('advanced','openLoansScreen')" }) })()}
       </div>
       <div class="sec-title">ผู้ช่วยส่วนตัว</div>
       <div class="card card-pad">
@@ -23875,3 +23886,6 @@ window.MTScreenHooks?.install?.(App, {
 
 // The initial frame renders after all features and screen adapters are installed.
 App.requestRender('features-ready')
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  try { window.MTFeatureLoader?.schedule?.(['notifications', 'advanced', 'capture', 'onboarding']) } catch (_) {}
+}))

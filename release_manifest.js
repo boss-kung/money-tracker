@@ -10,6 +10,7 @@
     './',
     './index.html',
     './release_manifest.js',
+    './feature_loader.js',
     './style_v2.css',
     './ui_v2.css',
     './app_v2.js',
@@ -49,8 +50,19 @@
     './assets/fonts/LINESeedSansTH_XBd.ttf',
     './assets/fonts/tabler-icons-subset.woff2',
   ])
+  const deferredAssets = Object.freeze([
+    './notification_snapshot.js',
+    './notification_sync.js',
+    './notification_device_lifecycle.js',
+    './notifications_v2.js',
+    './split_bill.js',
+    './loans_v2.js',
+    './quick_capture.js',
+    './onboarding.js',
+  ])
   const networkFirstFiles = Object.freeze(coreAssets
     .map(asset => asset.split('/').pop())
     .filter(name => /\.(?:js|css|ttf|woff2)$/.test(name)))
-  return Object.freeze({ version, coreAssets, networkFirstFiles })
+  const immutableFiles = Object.freeze([...networkFirstFiles])
+  return Object.freeze({ version, coreAssets, deferredAssets, networkFirstFiles, immutableFiles })
 })

@@ -70,6 +70,24 @@ async function networkFirstWithTimeout(request, fallbackUrl = '', timeoutMs = CO
   return (await Promise.race([fresh, timeoutResult(timeoutMs)])) || cached
 }
 
+function isImmutableAsset(request) {
+  const path = new URL(request.url).pathname.split('/').pop()
+  return self.MT_RELEASE.immutableFiles.includes(path)
+}
+
+async function cacheFirstImmutable(request) {
+  const cache = await caches.open(CACHE_NAME)
+  const cached = await matchCached(request)
+  // Serve immutable code/fonts immediately; keep a background revalidation so
+  // the next navigation receives the newest release without blocking this one.
+  const revalidate = fetch(request).then(response => putIfUsable(cache, request, response)).catch(() => null)
+  if (cached) {
+    revalidate.catch(() => null)
+    return cached
+  }
+  return (await revalidate) || Response.error()
+}
+
 async function cacheFirstNavigation(request) {
   const cache = await caches.open(CACHE_NAME)
   const cached = await matchCached(request, './index.html')
@@ -172,6 +190,11 @@ self.addEventListener('fetch', event => {
 
   if (acceptsHtml) {
     event.respondWith(cacheFirstNavigation(request))
+    return
+  }
+
+  if (isImmutableAsset(request)) {
+    event.respondWith(cacheFirstImmutable(request))
     return
   }
 
