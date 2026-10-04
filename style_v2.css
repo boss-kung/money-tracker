@@ -6314,6 +6314,24 @@ h6,
   animation: mt-nav-bounce .52s cubic-bezier(.34, 1.56, .64, 1) both !important;
 }
 
+.tx-load-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 14px 0 24px;
+}
+.tx-load-more {
+  min-height: 44px;
+  width: min(100%, 320px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-btn.mt-nav-bounce svg,
+  .tx-load-more {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* ── P1: Transaction row stagger fade-up on list render ──────── */
 @keyframes mt-tx-in {
   from { opacity: 0; transform: translateY(12px); }

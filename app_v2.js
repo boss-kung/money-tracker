@@ -984,6 +984,10 @@ function persist(reason = 'app', options = {}) {
     if (result.error) console.error('[Money Tracker] state commit failed:', result.error)
     try { toast('บันทึกไม่สำเร็จ — แนะนำสำรองข้อมูลก่อนลองใหม่', 'error') } catch (_) {}
   }
+  if (ok) {
+    App._renderRevision++
+    App._forceRenderOnNext = true
+  }
   return ok
 }
 function moneyFmt(n) { return S.settings?.hideMoney ? '฿*****' : Calc.fmt(n || 0) }
@@ -1279,6 +1283,17 @@ const App = {
   },
 
   // ── Navigation ────────────────────────────────────────────
+  _renderRevision: 0,
+  _lastPageRenderKey: '',
+  _forceRenderOnNext: false,
+  _pageRenderKey(page = S.page) {
+    const filters = page === 'transactions'
+      ? [S.txMonth, S.txType, S.txSearch, S.txWalletFilter, S.txCategoryFilter, S.txAmtMin, S.txAmtMax, S.txListLimit]
+      : page === 'reports'
+        ? [S.rptMonth, S.rptView]
+        : []
+    return `${page}|${App._renderRevision}|${JSON.stringify(filters)}`
+  },
   showPage(page) {
     page = APP_ROUTE_PAGES.has(page) ? page : 'dashboard'
     S.page = page
@@ -1290,7 +1305,12 @@ const App = {
       b.classList.toggle('active', b.dataset.tab === page)
     })
     App._syncPageChrome(page)
+    const renderKey = App._pageRenderKey(page)
+    const shouldRender = App._forceRenderOnNext || App._lastPageRenderKey !== renderKey
+    App._forceRenderOnNext = false
+    if (!shouldRender) return
     App.render()
+    App._lastPageRenderKey = App._pageRenderKey(page)
   },
 
   render() {
@@ -1567,7 +1587,10 @@ const MT_RENDER_COORDINATOR = window.MTDerivedRuntime?.createRenderCoordinator?.
     requestAnimationFrame(() => requestAnimationFrame(() => requestHideBootScreen('first-render')))
   },
 }) || { request() { if (MT_STORAGE_HYDRATED) App.showPage(S.page) } }
-App.requestRender = reason => MT_RENDER_COORDINATOR.request(reason)
+App.requestRender = reason => {
+  App._forceRenderOnNext = true
+  return MT_RENDER_COORDINATOR.request(reason)
+}
 App.invalidateDerivedState = reason => MT_DERIVED_MEMO.invalidate(reason)
 
 /* ============================================================
@@ -2316,73 +2339,76 @@ App.pickEmoji=(p,e)=>{
     if (!root) return
     const walletId = root.querySelector('.wallet-detail-screen')?.dataset.walletId
     const ccId = root.querySelector('.cc-detail-screen')?.dataset.cardId
-    root.querySelectorAll('.tx-row').forEach(el => {
-      el.onclick = () => {
-        if (el.classList.contains('swipe-reveal-delete')) {
-          el.classList.remove('swipe-reveal-delete')
-          return
-        }
-        if (walletId) return App.openTxDetailSub(el.dataset.txid, 'wallet', walletId)
-        if (ccId) return App.openTxDetailSub(el.dataset.txid, 'cc', ccId)
-        App.openTxDetail(el.dataset.txid)
-      }
+    const confirmDelete = row => {
+      const txId = row?.dataset.txid
+      if (!txId) return
+      App.showConfirm({
+        title: 'ลบรายการ',
+        confirmLabel: 'ลบ',
+        danger: true,
+        onConfirm() {
+          const tx = (S.transactions || []).find(t => t.id === txId)
+          if (!tx) return
+          S.transactions = S.transactions.filter(t => t.id !== txId)
+          App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
+          persist()
+          App.render()
+          toast('ลบรายการแล้ว', 'success')
+        },
+        onCancel() { row.classList.remove('swipe-reveal-delete') }
+      })
+    }
 
-      // Swipe-to-delete (skip if already bound)
-      if (el._swipeBound) return
-      el._swipeBound = true
-
-      // Inject delete action button
-      if (!el.querySelector('.tx-row-delete-action')) {
-        const delBtn = document.createElement('div')
-        delBtn.className = 'tx-row-delete-action'
-        delBtn.setAttribute('aria-label', 'ลบรายการ')
-        delBtn.innerHTML = '🗑'
-        delBtn.addEventListener('click', e => {
-          e.stopPropagation()
-          const txId = el.dataset.txid
-          App.showConfirm({
-            title: 'ลบรายการ',
-            confirmLabel: 'ลบ',
-            danger: true,
-            onConfirm() {
-              const tx = (S.transactions || []).find(t => t.id === txId)
-              if (!tx) return
-              S.transactions = S.transactions.filter(t => t.id !== txId)
-              App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
-              persist()
-              App.render()
-              toast('ลบรายการแล้ว', 'success')
-            },
-            onCancel() { el.classList.remove('swipe-reveal-delete') }
-          })
-        })
-        el.appendChild(delBtn)
-      }
-
-      // Touch swipe detection
-      let startX = 0, startY = 0, tracking = false
-      el.addEventListener('touchstart', e => {
-        startX = e.touches[0].clientX
-        startY = e.touches[0].clientY
-        tracking = true
-      }, { passive: true })
-      el.addEventListener('touchend', e => {
-        if (!tracking) return
-        tracking = false
-        const dx = e.changedTouches[0].clientX - startX
-        const dy = e.changedTouches[0].clientY - startY
-        if (Math.abs(dy) > 40) return // ป้องกัน vertical scroll กระตุ้น swipe
-        if (dx < -60) {
-          // Close other open rows first
-          document.querySelectorAll('.tx-row.swipe-reveal-delete').forEach(r => {
-            if (r !== el) r.classList.remove('swipe-reveal-delete')
-          })
-          el.classList.add('swipe-reveal-delete')
-        } else if (dx > 30) {
-          el.classList.remove('swipe-reveal-delete')
-        }
-      }, { passive: true })
+    root.querySelectorAll('.tx-row').forEach(row => {
+      if (row.querySelector('.tx-row-delete-action')) return
+      const delBtn = document.createElement('div')
+      delBtn.className = 'tx-row-delete-action'
+      delBtn.setAttribute('aria-label', 'ลบรายการ')
+      delBtn.setAttribute('role', 'button')
+      delBtn.innerHTML = '🗑'
+      row.appendChild(delBtn)
     })
+    if (root._txDelegatedBound) return
+    root._txDelegatedBound = true
+    root._txSwipe = null
+    root.addEventListener('click', event => {
+      const row = event.target.closest?.('.tx-row')
+      if (!row || !root.contains(row)) return
+      if (event.target.closest?.('.tx-row-delete-action')) {
+        event.preventDefault()
+        event.stopPropagation()
+        confirmDelete(row)
+        return
+      }
+      if (row.classList.contains('swipe-reveal-delete')) {
+        row.classList.remove('swipe-reveal-delete')
+        return
+      }
+      if (walletId) return App.openTxDetailSub(row.dataset.txid, 'wallet', walletId)
+      if (ccId) return App.openTxDetailSub(row.dataset.txid, 'cc', ccId)
+      App.openTxDetail(row.dataset.txid)
+    })
+    root.addEventListener('touchstart', event => {
+      const row = event.target.closest?.('.tx-row')
+      if (!row || !root.contains(row) || !event.touches?.[0]) return
+      root._txSwipe = { row, startX: event.touches[0].clientX, startY: event.touches[0].clientY }
+    }, { passive: true })
+    root.addEventListener('touchend', event => {
+      const gesture = root._txSwipe
+      root._txSwipe = null
+      if (!gesture || !event.changedTouches?.[0]) return
+      const dx = event.changedTouches[0].clientX - gesture.startX
+      const dy = event.changedTouches[0].clientY - gesture.startY
+      if (Math.abs(dy) > 40) return
+      if (dx < -60) {
+        document.querySelectorAll('.tx-row.swipe-reveal-delete').forEach(row => {
+          if (row !== gesture.row) row.classList.remove('swipe-reveal-delete')
+        })
+        gesture.row.classList.add('swipe-reveal-delete')
+      } else if (dx > 30) {
+        gesture.row.classList.remove('swipe-reveal-delete')
+      }
+    }, { passive: true })
   }
 })();
 
@@ -5917,6 +5943,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App.toggleTxFilterPanel = function() { S.txFilterOpen = !S.txFilterOpen; App.renderTransactions() }
   App.clearTxFilters = function() {
     S.txType = 'all'; S.txWalletFilter = ''; S.txCategoryFilter = ''; S.txAmtMin = ''; S.txAmtMax = ''; S.txSearch = ''; S.txFilterOpen = false
+    S.txListLimit = 40
     App.renderTransactions()
   }
 
@@ -6800,6 +6827,12 @@ App._pickMerchant = function(name, opts = {}) {
     return `${d} ${TH_MONTHS[(m || 1) - 1] || ''} ${yy}`
   }
 
+  const TX_LIST_PAGE_SIZE = 40
+
+  function resetTxListWindow() {
+    S.txListLimit = TX_LIST_PAGE_SIZE
+  }
+
   function currentTxFilteredV42() {
     const q = String(S.txSearch || '').toLowerCase()
     const amtMin = S.txAmtMin ? Number(S.txAmtMin) : null
@@ -6832,8 +6865,8 @@ App._pickMerchant = function(name, opts = {}) {
       <div class="chips tx-month-row tx-month-row-compact" id="tx-month-chips">${monthChips}</div>
       <div id="tx-filter-panel" class="tx-filter-panel${S.txFilterOpen ? ' open' : ''}">
         <div class="chips tx-filter-row" id="tx-type-chips">${typeChips}</div>
-        <div class="tx-filter-grid"><select class="form-input" onchange="S.txWalletFilter=this.value;App.renderTransactionsList()">${walletOpts}</select><select class="form-input" onchange="S.txCategoryFilter=this.value;App.renderTransactionsList()">${catOpts}</select></div>
-        <div class="tx-filter-grid"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ ต่ำสุด" value="${esc(S.txAmtMin || '')}" oninput="S.txAmtMin=this.value;App.renderTransactionsList()"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ สูงสุด" value="${esc(S.txAmtMax || '')}" oninput="S.txAmtMax=this.value;App.renderTransactionsList()"></div>
+        <div class="tx-filter-grid"><select class="form-input" onchange="App.setTxWalletFilter(this.value)">${walletOpts}</select><select class="form-input" onchange="App.setTxCategoryFilter(this.value)">${catOpts}</select></div>
+        <div class="tx-filter-grid"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ ต่ำสุด" value="${esc(S.txAmtMin || '')}" oninput="App.setTxAmountFilter('min', this.value)"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ สูงสุด" value="${esc(S.txAmtMax || '')}" oninput="App.setTxAmountFilter('max', this.value)"></div>
         <button class="btn btn-secondary btn-sm" onclick="App.clearTxFilters()">ล้างตัวกรอง</button>
       </div>
     </div>`
@@ -6859,12 +6892,14 @@ App._pickMerchant = function(name, opts = {}) {
     const searchClear = header.querySelector('.mt-search-clear')
     if (search) search.oninput = e => {
       S.txSearch = e.target.value
+      resetTxListWindow()
       if (searchClear) searchClear.hidden = !e.target.value
       App.renderTransactionsList()
     }
     if (search && searchClear) searchClear.onclick = () => {
       search.value = ''
       S.txSearch = ''
+      resetTxListWindow()
       searchClear.hidden = true
       App.renderTransactionsList()
       search.focus()
@@ -6875,6 +6910,7 @@ App._pickMerchant = function(name, opts = {}) {
   App.renderTransactionsList = function() {
     const months = Calc.getMonths(6)
     const filtered = currentTxFilteredV42()
+    if (!Number.isFinite(Number(S.txListLimit)) || Number(S.txListLimit) < TX_LIST_PAGE_SIZE) resetTxListWindow()
     const expenseAmountForList = tx => tx.type === 'expense'
       ? Number(Calc.getExpenseLedgerAmount?.(tx) ?? tx.ledgerAmount ?? tx.amount ?? 0)
       : Number(tx.amount || 0)
@@ -6883,7 +6919,8 @@ App._pickMerchant = function(name, opts = {}) {
       .filter(t => t.type === 'expense')
       .reduce((s,t) => s + expenseAmountForList(t), 0)
     updateTxFilterToggleLabel()
-    const byDate = {}; filtered.forEach(t => { (byDate[t.date] ||= []).push(t) })
+    const visibleFiltered = filtered.slice(0, S.txListLimit)
+    const byDate = {}; visibleFiltered.forEach(t => { (byDate[t.date] ||= []).push(t) })
     const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a))
     let html = txStaticControlsHtml(months)
     html += dates.length ? '' : App._emptyState('📋','ไม่มีรายการ', S.txSearch ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีรายการในช่วงนี้')
@@ -6896,6 +6933,9 @@ App._pickMerchant = function(name, opts = {}) {
       const label = Calc.labelDate ? Calc.labelDate(date) : date
       html += `<div class="tx-date-header"><span>${esc(label)}</span><div>${dayInc ? `<b class="c-income">+${money(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense">-${money(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
     })
+    if (visibleFiltered.length < filtered.length) {
+      html += `<div class="tx-load-more-wrap"><button type="button" class="btn btn-secondary tx-load-more" aria-controls="tx-list-content" aria-label="แสดงรายการเพิ่มเติม" onclick="App.loadMoreTransactions()">แสดงรายการเพิ่มเติม (${visibleFiltered.length}/${filtered.length})</button></div>`
+    }
     const el = document.getElementById('tx-list-content')
     if (el) {
       const saved = el.scrollTop
@@ -6909,8 +6949,21 @@ App._pickMerchant = function(name, opts = {}) {
     if (expEl) expEl.textContent = '-' + money(expense)
     App._bindTxRows?.('tx-list-content')
   }
-  App.setTxMonth = function(m) { S.txMonth = m; App.renderTransactions() }
-  App.setTxType = function(t) { S.txType = t; App.renderTransactions() }
+  App.loadMoreTransactions = function() {
+    const current = Number(S.txListLimit) || TX_LIST_PAGE_SIZE
+    S.txListLimit = current + TX_LIST_PAGE_SIZE
+    App.renderTransactionsList()
+  }
+  App.setTxWalletFilter = function(value) { S.txWalletFilter = value || ''; resetTxListWindow(); App.renderTransactionsList() }
+  App.setTxCategoryFilter = function(value) { S.txCategoryFilter = value || ''; resetTxListWindow(); App.renderTransactionsList() }
+  App.setTxAmountFilter = function(kind, value) {
+    if (kind === 'min') S.txAmtMin = value || ''
+    if (kind === 'max') S.txAmtMax = value || ''
+    resetTxListWindow()
+    App.renderTransactionsList()
+  }
+  App.setTxMonth = function(m) { S.txMonth = m; resetTxListWindow(); App.renderTransactions() }
+  App.setTxType = function(t) { S.txType = t; resetTxListWindow(); App.renderTransactions() }
 
   // iOS keyboard/select guard: hide nav/FAB while form controls are active.
   function isFormControl(el) { return !!el && (el.matches?.('input:not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, [contenteditable="true"]')) }
@@ -20886,8 +20939,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const btn = document.querySelector(`.nav-btn[data-tab="${page}"]`)
     if (!btn) return
     btn.classList.remove('mt-nav-bounce')
-    void btn.offsetWidth
-    btn.classList.add('mt-nav-bounce')
+    requestAnimationFrame(() => {
+      if (!btn.isConnected || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+      btn.classList.add('mt-nav-bounce')
+    })
     setTimeout(() => btn.classList.remove('mt-nav-bounce'), 560)
     // W11: add body class for magnetic FAB CSS targeting
     document.body.className = document.body.className

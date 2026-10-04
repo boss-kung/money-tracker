@@ -42,3 +42,10 @@ test('initial page render is scheduled through the coalescing coordinator', () =
   assert.match(onboarding, /App\.requestRender\('onboarding-ready'\)/)
   assert.doesNotMatch(onboarding, /if\s*\(p === 'dashboard'\)\s*App\.renderDashboard\(\)/)
 })
+
+test('render requests can force a page redraw after a durable revision change', () => {
+  assert.match(app, /App\._forceRenderOnNext\s*=\s*true/)
+  assert.match(app, /App\._renderRevision\+\+/)
+  assert.match(app, /_pageRenderKey\s*\(/)
+  assert.match(app, /_renderRevision/)
+})
