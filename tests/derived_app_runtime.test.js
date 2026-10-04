@@ -52,6 +52,9 @@ function runtime() {
     resolveBenefitTxChannel:tx => tx.channel || '',
     txShouldCountForRule:(tx, _rule, id) => (tx.rewardRuleIds || []).includes(id),
     getRuleEligibility:() => ({matched:true, merchantMatch:true, channelMatch:true, reasons:[]}),
+    getBenefitCapScopes:(_rule, eligibility = {}) => Array.isArray(eligibility.capScopes) && eligibility.capScopes.length
+      ? eligibility.capScopes
+      : eligibility.capScope === 'merchant' || eligibility.capScope === 'channel' ? [eligibility.capScope] : ['merchant', 'channel'],
     merchantTextsMatch:(a, b) => a === b,
     channelMatchesAny:(channels, channel) => channels.includes(channel),
     getTriggerTrackChannels:trigger => trigger.trackChannels || [],
@@ -217,6 +220,50 @@ test('discount rewards honor the per-merchant reward cap', () => {
   assert.equal(reward.discount, 10)
 })
 
+test('any-mode benefits use channel quota first and preserve merchant quota', () => {
+  const r = runtime()
+  const rule = {
+    id:'r', cardId:'c', type:'cashback',
+    cashback:{mode:'percent', rate:15},
+    suggestedConditions:{merchants:['Shop X'], channels:['A'], merchantChannelMatchMode:'any'},
+    limits:{
+      maxEligibleSpendPerMerchantPerCycle:200,
+      maxRewardAmountPerMerchantPerCycle:30,
+      maxEligibleSpendPerChannelPerCycle:200,
+      maxRewardAmountPerChannelPerCycle:30,
+    },
+  }
+  r.context.getRuleEligibility = (tx, currentRule) => {
+    const merchants = currentRule.suggestedConditions?.merchants || []
+    const channels = currentRule.suggestedConditions?.channels || []
+    const merchantConditionMatch = merchants.includes(tx.merchant)
+    const channelConditionMatch = channels.includes(tx.channel)
+    const capScope = channelConditionMatch ? 'channel' : merchantConditionMatch ? 'merchant' : ''
+    return {
+      matched: currentRule.suggestedConditions?.merchantChannelMatchMode === 'any'
+        ? merchantConditionMatch || channelConditionMatch
+        : merchantConditionMatch && channelConditionMatch,
+      merchantMatch: merchantConditionMatch,
+      channelMatch: channelConditionMatch,
+      merchantConditionMatch,
+      channelConditionMatch,
+      capScope,
+      capScopes: capScope ? [capScope] : [],
+      reasons: [],
+    }
+  }
+  const first = {id:'a', type:'expense', walletId:'c', amount:150, date:'2026-10-01', createdSequence:1, rewardRuleIds:['r'], merchant:'Other Shop', channel:'A'}
+  const second = {id:'b', type:'expense', walletId:'c', amount:100, date:'2026-10-02', createdSequence:2, rewardRuleIds:['r'], merchant:'Shop X', channel:'A'}
+  const third = {id:'d', type:'expense', walletId:'c', amount:250, date:'2026-10-03', createdSequence:3, rewardRuleIds:['r'], merchant:'Shop X', channel:'B'}
+  const usage = tx => r.context.App.getRuleCycleUsage('r', 'c', '2026-10-01', '2026-10-31', tx.id, [], tx.merchant, tx.channel, rule, tx.date)
+
+  assert.equal(r.context.App.applyBenefitRule(first, rule, usage(first)).cashback, 22.5)
+  r.state.transactions.push(first)
+  assert.equal(r.context.App.applyBenefitRule(second, rule, usage(second)).cashback, 7.5)
+  r.state.transactions.push(second)
+  assert.equal(r.context.App.applyBenefitRule(third, rule, usage(third)).cashback, 30)
+})
+
 test('point rewards honor the per-channel reward cap in point units', () => {
   const r = runtime()
   const rule = {
@@ -347,4 +394,29 @@ test('benefit cap breakdown discovers merchants and channels when the rule has n
 
   assert.equal(breakdown.merchantCashback.Shop, 10)
   assert.equal(breakdown.channelCashback.online, 10)
+})
+
+test('benefit cap breakdown assigns any-mode overlap to the channel only', () => {
+  const r = runtime()
+  const rule = {
+    id:'r', cardId:'c', type:'cashback', cashback:{mode:'percent', rate:15},
+    suggestedConditions:{merchants:['Shop X'], channels:['A'], merchantChannelMatchMode:'any'},
+    limits:{maxEligibleSpendPerMerchantPerCycle:200, maxEligibleSpendPerChannelPerCycle:200},
+  }
+  r.context.getRuleEligibility = (tx, currentRule) => {
+    const merchantConditionMatch = currentRule.suggestedConditions.merchants.includes(tx.merchant)
+    const channelConditionMatch = currentRule.suggestedConditions.channels.includes(tx.channel)
+    const capScope = channelConditionMatch ? 'channel' : merchantConditionMatch ? 'merchant' : ''
+    return { matched: merchantConditionMatch || channelConditionMatch, merchantMatch:merchantConditionMatch, channelMatch:channelConditionMatch, capScope, capScopes:capScope ? [capScope] : [], reasons:[] }
+  }
+  r.state.ccBenefitRules.push(rule)
+  r.state.transactions.push({
+    id:'a', type:'expense', walletId:'c', amount:150, date:'2026-10-01',
+    rewardRuleIds:['r'], merchant:'Other Shop', channel:'A',
+  })
+
+  const breakdown = r.context.App.getBenefitCapBreakdown('r', 'c', '2026-10-01', '2026-10-31', ['Shop X'], ['A'])
+
+  assert.deepEqual(Array.from(Object.keys(breakdown.merchantCashback)), [])
+  assert.equal(breakdown.channelCashback.a, 22.5)
 })
