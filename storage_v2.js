@@ -296,7 +296,7 @@ const Storage = {
     return data
   },
 
-  saveAll(state, { dirtyKeys = undefined } = {}) {
+  saveAll(state, { dirtyKeys = undefined, _quotaRetried = false, _rollbackSnapshot = null } = {}) {
     if (!state || typeof state !== 'object') return false
     if (!Storage.isLocalStorageReadable()) {
       Storage.lastSaveError = { key: '*', message: 'localStorage unavailable', at: new Date().toISOString() }
@@ -315,6 +315,22 @@ const Storage = {
     })
     const previous = new Map()
     const serialized = new Map()
+    const rollbackSnapshot = _rollbackSnapshot instanceof Map ? _rollbackSnapshot : previous
+    const restoreSnapshot = snapshot => {
+      const entries = [...snapshot].map(([key, raw]) => {
+        let current = null
+        try { current = localStorage.getItem(key) } catch (_) {}
+        const currentSize = current === null || current === undefined ? 0 : String(current).length
+        const targetSize = raw === null || raw === undefined ? 0 : String(raw).length
+        return { key, raw, releasedBytes: currentSize - targetSize }
+      }).sort((a, b) => b.releasedBytes - a.releasedBytes)
+      entries.forEach(({ key, raw }) => {
+        try {
+          if (raw === null || raw === undefined) localStorage.removeItem(key)
+          else localStorage.setItem(key, raw)
+        } catch (_) {}
+      })
+    }
     try {
       entries.forEach(([name, descriptor]) => {
         const value = state[name] !== undefined
@@ -329,6 +345,7 @@ const Storage = {
     }
 
     let committed = false
+    let saveError = null
     try {
       for (const [key, payload] of serialized) {
         // The full snapshot remains available for verification and rollback.
@@ -342,24 +359,44 @@ const Storage = {
       const verification = Storage.verifyState(state, requiredVerificationKeys)
       committed = verification.ok
       if (!committed) throw new Error(`state verification failed: ${verification.failures.join(', ')}`)
-      Storage.lastSaveError = null
-      Storage.lastVerifyError = null
-      return true
     } catch (e) {
-      Storage.lastSaveError = { key: '*', message: e?.message || 'save failed', at: new Date().toISOString() }
-      return false
+      saveError = e
     } finally {
       if (!committed) {
         // Best-effort rollback restores the last coherent snapshot. Existing values
         // are never replaced by a partially-written state when one key fails.
-        for (const [key, raw] of previous) {
-          try {
-            if (raw === null || raw === undefined) localStorage.removeItem(key)
-            else localStorage.setItem(key, raw)
-          } catch (_) {}
-        }
+        restoreSnapshot(rollbackSnapshot)
       }
     }
+
+    if (!saveError) {
+      Storage.lastSaveError = null
+      Storage.lastVerifyError = null
+      return true
+    }
+
+    const isQuotaError = saveError.name === 'QuotaExceededError'
+      || saveError.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    if (isQuotaError && !_quotaRetried) {
+      let freedSpace = false
+      try {
+        if (localStorage.getItem('mt_pre_import_backup') !== null) {
+          localStorage.removeItem('mt_pre_import_backup')
+          freedSpace = true
+        }
+      } catch (_) {}
+      if (Storage.pruneLocalBackups(1)) freedSpace = true
+      if (freedSpace) {
+        return Storage.saveAll(state, {
+          dirtyKeys,
+          _quotaRetried: true,
+          _rollbackSnapshot: rollbackSnapshot,
+        })
+      }
+    }
+
+    Storage.lastSaveError = { key: '*', message: saveError?.message || 'save failed', at: new Date().toISOString() }
+    return false
   },
 
   buildExportPayload(state, { preferState = false } = {}) {
