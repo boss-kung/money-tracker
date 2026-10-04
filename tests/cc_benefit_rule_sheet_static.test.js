@@ -80,6 +80,18 @@ test('cashback benefit rules can round eligible spend down to every-Baht blocks'
   assert.match(applyBody, /cashbackBaseAmount\s*\*\s*\(Number\(cashbackCfg\.rate\s*\|\|\s*0\)\s*\/\s*100\)/)
 })
 
+test('benefit rule form persists explicit merchant/channel OR matching', () => {
+  const normalizeBody = namedFunctionBody('normalizeBenefitRule')
+  const formBody = functionBody('App._ccbrStep2Html')
+  const readBody = functionBody('App._ccbrReadStep')
+  const saveBody = functionBody('App.saveCCBenefitRule')
+
+  assert.match(normalizeBody, /merchantChannelMatchMode/)
+  assert.match(formBody, /ccbr-merchant-channel-any/)
+  assert.match(readBody, /merchantChannelMatchMode/)
+  assert.match(saveBody, /merchantChannelMatchMode/)
+})
+
 test('cycle-spend-threshold cashback only rewards newly crossed blocks, not every tx after the first crossing', () => {
   const applyBody = functionBody('App.applyBenefitRule')
 

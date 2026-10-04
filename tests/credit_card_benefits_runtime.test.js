@@ -95,6 +95,7 @@ test('legacy cashback migration preserves the every-Baht block before reward cal
     normalizeTrackChannels: () => [],
     benefitCalculationAmount: tx => Number(tx.amount || 0),
     getRuleEligibility: () => ({ matched:true, reasons:[] }),
+    getBenefitCapScopes: () => ['merchant', 'channel'],
     getTriggerTrackChannels: () => [],
     channelMatchesAny: () => true,
     normalizeBenefitCompareValue: (_type, value) => value,
@@ -147,6 +148,33 @@ test('a rule with merchant and channel conditions requires both to match', () =>
   assert.equal(result.merchantMatch, true)
   assert.equal(result.channelMatch, false)
   assert.equal(result.matched, false)
+})
+
+test('a rule with any merchant/channel mode matches either condition', () => {
+  const context = {
+    App: { getBenefitChannelOptions: () => [] },
+    categoryConditionMatches: () => true,
+    benefitCalculationAmount: tx => Number(tx.amount || 0),
+    resolveBenefitTxDate: tx => tx.date,
+    resolveBenefitTxChannel: tx => tx.channel,
+    ruleIsInActiveWindow: () => true,
+    today: () => '2026-10-04',
+  }
+  vm.createContext(context)
+  vm.runInContext(section('  function normalizeCompareText', '  function canonicalMerchantText'), context)
+  vm.runInContext(section('  function canonicalMerchantText', '  function expandRuleSubsets'), context)
+  vm.runInContext(section('  const ONLINE_CHANNEL_ALIASES', '  function normalizeTrackChannels'), context)
+  vm.runInContext(section('  function getRuleEligibility', '  function txExplicitRewardRuleIds'), context)
+
+  const result = vm.runInContext(`getRuleEligibility(
+    { amount: 1000, merchant: 'Other Shop', channel: 'online', date: '2026-10-04' },
+    { suggestedConditions: { merchants: ['Airline'], channels: ['online'], merchantChannelMatchMode: 'any' } }
+  )`, context)
+
+  assert.equal(result.merchantMatch, false)
+  assert.equal(result.channelMatch, true)
+  assert.equal(result.matched, true)
+  assert.equal(result.capScope, 'channel')
 })
 
 test('duplicate reward confirmation keeps the entered values available until recording starts', () => {
@@ -352,6 +380,7 @@ test('benefit suggestions choose cycle boundaries from the effective override da
     },
     ensureCCBenefitRulesState() {},
     getRuleEligibility: () => ({ matched:true, merchantMatch:true, channelMatch:true, timeMatch:true }),
+    getBenefitCapScopes: () => ['merchant', 'channel'],
     getCyclePeriodForDate: (_cardId, refDate) => {
       cycleDates.push(refDate)
       return { start:'2026-11-01', end:'2026-11-30' }
@@ -379,6 +408,7 @@ test('benefit suggestions choose cycle boundaries from the effective override da
 test('point-rule suggestions detect exhausted merchant caps in point units', () => {
   const context = {
     benefitValueAtOrAboveCap: (_type, value, cap) => Number(value || 0) >= Number(cap || 0),
+    getBenefitCapScopes: () => ['merchant', 'channel'],
   }
   vm.createContext(context)
   vm.runInContext(section('  function rewardUsedForRuleType', '  App.getSuggestedBenefitRules = function'), context)
@@ -393,10 +423,29 @@ test('point-rule suggestions detect exhausted merchant caps in point units', () 
   assert.equal(reason, 'ร้านนี้ครบแล้ว')
 })
 
+test('any-mode channel matches ignore an exhausted merchant cap', () => {
+  const context = {
+    benefitValueAtOrAboveCap: (_type, value, cap) => Number(value || 0) >= Number(cap || 0),
+    getBenefitCapScopes: (_rule, eligibility) => eligibility.capScopes,
+  }
+  vm.createContext(context)
+  vm.runInContext(section('  function rewardUsedForRuleType', '  App.getSuggestedBenefitRules = function'), context)
+
+  const reason = vm.runInContext(`getFullyUsedReasonForRule(
+    { type:'cashback', validity:{statementCycleHint:'calendar_month'}, limits:{maxRewardAmountPerMerchantPerCycle:30, maxRewardAmountPerChannelPerCycle:30} },
+    { merchant:'Shop X', channel:'A' },
+    { matched:true, merchantMatch:true, channelMatch:true, capScopes:['channel'] },
+    { cashbackUsedByMerchantBefore:30, cashbackUsedByChannelBefore:0 }
+  )`, context)
+
+  assert.equal(reason, '')
+})
+
 test('rule status treats an exhausted eligible-spend cap as fully used even with a reward cap', () => {
   const context = {
     App: {},
     benefitValueAtOrAboveCap: (_type, value, cap) => Number(value || 0) >= Number(cap || 0),
+    getBenefitCapScopes: () => ['merchant', 'channel'],
   }
   vm.createContext(context)
   vm.runInContext(section('  function rewardUsedForRuleType', '  App.getSuggestedBenefitRules = function'), context)
