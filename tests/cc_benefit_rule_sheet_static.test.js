@@ -114,3 +114,30 @@ test('rule cycle usage only counts transactions strictly before the reference tx
     assert.match(call, /resolveBenefitTxDate\(txDraft\)/, `call site missing refDate: ${call}`)
   })
 })
+
+test('overview tracks merchant and channel caps and excludes archived cards', () => {
+  const body = functionBody('App.openCCBenefitOverviewScreen')
+  assert.match(body, /function isTrackable\(rule\)/)
+  assert.match(body, /maxRewardAmountPerMerchantPerCycle/)
+  assert.match(body, /maxEligibleSpendPerMerchantPerCycle/)
+  assert.match(body, /maxRewardAmountPerChannelPerCycle/)
+  assert.match(body, /maxEligibleSpendPerChannelPerCycle/)
+  assert.match(body, /filter\(w\s*=>\s*w\.type\s*===\s*'credit'\s*&&\s*!w\.archived\)/)
+})
+
+test('rule transaction sheet delegates reward and cap calculation to the canonical engine', () => {
+  const body = functionBody('App._openRuleTransactionsSheetImpl')
+  assert.match(body, /App\.getRuleCycleUsage\(/)
+  assert.match(body, /App\.applyBenefitRule\(/)
+  assert.match(body, /createdSequence|durableOrder/)
+  assert.match(body, /Keep this view in lock-step with the engine/)
+})
+
+test('points caps and mixed rewards use point-aware display labels', () => {
+  const formBody = functionBody('App._ccbrStep3Html')
+  const breakdownBody = functionBody('App.openBenefitCapBreakdownSheet')
+  const sheetBody = functionBody('App._openRuleTransactionsSheetImpl')
+  assert.match(appSource, /Reward caps are denominated in points/)
+  assert.match(breakdownBody, /คะแนน/)
+  assert.match(sheetBody, /both/)
+})

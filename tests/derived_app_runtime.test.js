@@ -294,6 +294,25 @@ test('mixed rewards do not compare point totals against baht-denominated reward 
   assert.equal(reward.points, 100)
 })
 
+test('every-Baht cashback usage honors the block size before applying cycle caps', () => {
+  const r = runtime()
+  const rule = {
+    id:'r', type:'cashback', cashback:{mode:'percent', rate:1, everyBaht:500},
+    limits:{maxRewardAmountPerCycle:7},
+  }
+  const first = {id:'a', type:'expense', walletId:'c', amount:950, date:'2026-10-01', createdSequence:1, rewardRuleIds:['r']}
+  const second = {id:'b', type:'expense', walletId:'c', amount:500, date:'2026-10-02', createdSequence:2, rewardRuleIds:['r']}
+  r.state.transactions.push(first, second)
+
+  const firstReward = r.context.App.applyBenefitRule(first, rule, {})
+  const usage = r.context.App.getRuleCycleUsage('r', 'c', '2026-10-01', '2026-10-31', second.id, [], '', '', rule, second.date)
+  const secondReward = r.context.App.applyBenefitRule(second, rule, usage)
+
+  assert.equal(firstReward.cashback, 5)
+  assert.equal(usage.cashbackUsedBefore, 5)
+  assert.equal(secondReward.cashback, 2)
+})
+
 test('benefit cap breakdown reports point usage in point units', () => {
   const r = runtime()
   const rule = {
@@ -309,4 +328,23 @@ test('benefit cap breakdown reports point usage in point units', () => {
   const breakdown = r.context.App.getBenefitCapBreakdown('r', 'c', '2026-10-01', '2026-10-31', [], ['online'])
 
   assert.equal(breakdown.channelCashback.online, 60)
+})
+
+test('benefit cap breakdown discovers merchants and channels when the rule has no explicit lists', () => {
+  const r = runtime()
+  const rule = {
+    id:'r', cardId:'c', type:'cashback', cashback:{mode:'percent', rate:1},
+    limits:{maxRewardAmountPerMerchantPerCycle:50, maxRewardAmountPerChannelPerCycle:100},
+    suggestedConditions:{},
+  }
+  r.state.ccBenefitRules.push(rule)
+  r.state.transactions.push({
+    id:'a', type:'expense', walletId:'c', amount:1000, date:'2026-10-01',
+    rewardRuleIds:['r'], merchant:'Shop', channel:'online',
+  })
+
+  const breakdown = r.context.App.getBenefitCapBreakdown('r', 'c', '2026-10-01', '2026-10-31', [], [])
+
+  assert.equal(breakdown.merchantCashback.Shop, 10)
+  assert.equal(breakdown.channelCashback.online, 10)
 })

@@ -78,6 +78,51 @@ test('promotion import preserves exclusions and does not turn campaign-only limi
   assert.ok(draft.warnings.some(message => message.includes('ตลอดโปรโมชัน')))
 })
 
+test('legacy cashback migration preserves the every-Baht block before reward calculation', () => {
+  const state = {
+    ccBenefits: {
+      'card-1': { cashback: { enabled:true, percent:1, everyBaht:500 } },
+    },
+    ccBenefitRules: [],
+    migrations: {},
+  }
+  const context = {
+    S: state,
+    App: {},
+    genId: () => 'generated-rule',
+    parseRuleNumber: value => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null,
+    normalizeCompareText: value => String(value || '').toLowerCase(),
+    normalizeTrackChannels: () => [],
+    benefitCalculationAmount: tx => Number(tx.amount || 0),
+    getRuleEligibility: () => ({ matched:true, reasons:[] }),
+    getTriggerTrackChannels: () => [],
+    channelMatchesAny: () => true,
+    normalizeBenefitCompareValue: (_type, value) => value,
+    formatTrackChannelLabel: () => '',
+    resolveBenefitTxDate: tx => tx.date,
+    rewardTotalForRuleResult: row => Number(row.cashback || 0) + Number(row.discount || 0) + Number(row.points || 0),
+    today: () => '2026-10-04',
+    money: value => String(value),
+  }
+  vm.createContext(context)
+  vm.runInContext(section('  function normalizeBenefitRule', '  App.normalizeBenefitRule = normalizeBenefitRule'), context)
+  vm.runInContext(section('  function buildLegacyBenefitRules', '  App.getCyclePeriodForDate = function'), context)
+  vm.runInContext(section('  App.applyBenefitRule = function', '  App.getOptimalBenefitSelection = function'), context)
+
+  context.App.ensureCCBenefitRulesState()
+
+  const rule = context.S.ccBenefitRules[0]
+  assert.equal(rule.cashback.everyBaht, 500)
+  assert.equal(context.App.applyBenefitRule({ amount:950, date:'2026-10-04' }, rule).cashback, 5)
+
+  state.ccBenefitRules = [{
+    id:'legacy-cashback-card-1', cardId:'card-1', source:'legacy', type:'cashback',
+    cashback:{ mode:'percent', rate:1, everyBaht:null },
+  }]
+  context.App.ensureCCBenefitRulesState()
+  assert.equal(context.S.ccBenefitRules[0].cashback.everyBaht, 500)
+})
+
 test('a rule with merchant and channel conditions requires both to match', () => {
   const context = {
     App: { getBenefitChannelOptions: () => [] },
@@ -346,4 +391,137 @@ test('point-rule suggestions detect exhausted merchant caps in point units', () 
   )`, context)
 
   assert.equal(reason, 'ร้านนี้ครบแล้ว')
+})
+
+test('rule status treats an exhausted eligible-spend cap as fully used even with a reward cap', () => {
+  const context = {
+    App: {},
+    benefitValueAtOrAboveCap: (_type, value, cap) => Number(value || 0) >= Number(cap || 0),
+  }
+  vm.createContext(context)
+  vm.runInContext(section('  function rewardUsedForRuleType', '  App.getSuggestedBenefitRules = function'), context)
+
+  const reason = vm.runInContext(`getFullyUsedReasonForRule(
+    { type:'cashback', validity:{statementCycleHint:'calendar_month'}, limits:{maxEligibleSpendPerCycle:100, maxRewardAmountPerCycle:1000} },
+    {},
+    { matched:true, merchantMatch:true, channelMatch:true },
+    { eligibleSpendUsedBefore:100, cashbackUsedBefore:1 }
+  )`, context)
+
+  assert.equal(reason, 'ยอดใช้จ่ายครบแล้วเดือนนี้')
+})
+
+test('legacy migration keeps custom rules and adds missing enabled legacy rules', () => {
+  const state = {
+    ccBenefits: {
+      'card-1': { cashback: { enabled:true, percent:1, everyBaht:500 } },
+    },
+    ccBenefitRules: [{ id:'custom', cardId:'card-1', type:'cashback', cashback:{mode:'percent',rate:2} }],
+    migrations: {},
+  }
+  const context = {
+    S: state,
+    App: {},
+    genId: () => 'generated-rule',
+    parseRuleNumber: value => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null,
+    normalizeCompareText: value => String(value || '').toLowerCase(),
+    normalizeTrackChannels: () => [],
+  }
+  vm.createContext(context)
+  vm.runInContext(section('  function normalizeBenefitRule', '  App.normalizeBenefitRule = normalizeBenefitRule'), context)
+  vm.runInContext(section('  function buildLegacyBenefitRules', '  App.getCyclePeriodForDate = function'), context)
+
+  context.App.ensureCCBenefitRulesState()
+
+  assert.deepEqual(Array.from(state.ccBenefitRules, rule => rule.id), ['custom', 'legacy-cashback-card-1'])
+  assert.equal(state.ccBenefitRules[1].cashback.everyBaht, 500)
+})
+
+test('disabled legacy benefit data does not create an active migrated rule', () => {
+  const state = {
+    ccBenefits: {
+      'card-1': { enabled:false, cashback: { enabled:false, percent:1, everyBaht:500 } },
+    },
+    ccBenefitRules: [],
+    migrations: {},
+  }
+  const context = {
+    S: state,
+    App: {},
+    genId: () => 'generated-rule',
+    parseRuleNumber: value => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null,
+    normalizeCompareText: value => String(value || '').toLowerCase(),
+    normalizeTrackChannels: () => [],
+  }
+  vm.createContext(context)
+  vm.runInContext(section('  function normalizeBenefitRule', '  App.normalizeBenefitRule = normalizeBenefitRule'), context)
+  vm.runInContext(section('  function buildLegacyBenefitRules', '  App.getCyclePeriodForDate = function'), context)
+
+  context.App.ensureCCBenefitRulesState()
+
+  assert.equal(state.ccBenefitRules.length, 0)
+})
+
+test('step three form values are copied into the draft before navigating back', () => {
+  const values = {
+    'ccbr-trigger-threshold':'2000',
+    'ccbr-limit-reward-tx':'50',
+    'ccbr-limit-reward-cycle':'100',
+    'ccbr-limit-eligible-tx':'500',
+    'ccbr-limit-eligible-cycle':'3000',
+    'ccbr-limit-eligible-merchant':'200',
+    'ccbr-limit-reward-merchant':'30',
+    'ccbr-limit-eligible-channel':'1000',
+    'ccbr-limit-reward-channel':'50',
+    'ccbr-priority':'7',
+  }
+  const classes = {
+    'ccbr-trigger-toggle':['on'],
+    'ccbr-grant-every':['active'],
+    'ccbr-stacking':['on'],
+    'ccbr-base':['on'],
+  }
+  const context = {
+    App: { _ccbrDraft: {
+      _step:3, type:'cashback', _trackChannels:['online'],
+      rewardTrigger:{mode:'cycle_spend_threshold'}, limits:{},
+    } },
+    document: {
+      getElementById(id) {
+        return {
+          value: values[id] || '',
+          classList: { contains(name) { return (classes[id] || []).includes(name) } },
+        }
+      },
+    },
+  }
+  vm.createContext(context)
+  vm.runInContext(section('  App._ccbrReadStep = function', '  App._ccbrStep1Html = function'), context)
+
+  context.App._ccbrReadStep(3)
+
+  assert.equal(context.App._ccbrDraft.rewardTrigger.thresholdAmount, 2000)
+  assert.equal(context.App._ccbrDraft.rewardTrigger.grantMode, 'every_threshold')
+  assert.equal(context.App._ccbrDraft.limits.maxRewardAmountPerCycle, 100)
+  assert.equal(context.App._ccbrDraft.limits.maxRewardAmountPerChannelPerCycle, 50)
+  assert.equal(context.App._ccbrDraft.priority, 7)
+})
+
+test('point-rule cap form uses point units while eligible-spend caps stay in Baht', () => {
+  const context = {
+    App: { getBenefitChannelOptions: () => [['online', 'ออนไลน์']] },
+    S: { categories: { expense: [] } },
+    getTriggerTrackChannels: () => [],
+    esc: value => String(value || ''),
+  }
+  vm.createContext(context)
+  vm.runInContext(section('  App._ccbrSetType = function', '  App._ccbrRenderStep = function'), context)
+
+  const html = context.App._ccbrStep3Html({
+    type:'points', allowStacking:true, isBaseRule:false,
+    points:{bahtPerPoint:10, multiplier:1}, limits:{}, rewardTrigger:{}, _trackChannels:[],
+  })
+
+  assert.match(html, /id="ccbr-limit-reward-tx"[\s\S]*?>คะแนน<\/span>/)
+  assert.match(html, /id="ccbr-limit-eligible-tx"[\s\S]*?>฿<\/span>/)
 })
