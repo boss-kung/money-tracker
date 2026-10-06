@@ -54,3 +54,9 @@ test('persist migration state uses one canonical before-commit hook', () => {
   assert.match(block, /migrateToV5\(\)/)
   assert.match(block, /ensureUpcomingBillsState\(\)/)
 })
+
+test('demo disables service worker registration for its relative asset root', () => {
+  const demoSource = fs.readFileSync(path.join(__dirname, '..', 'demo', 'demo_bootstrap.js'), 'utf8')
+  assert.match(demoSource, /MT_DEBUG_FLAGS/)
+  assert.match(demoSource, /noServiceWorker:\s*true/)
+})
