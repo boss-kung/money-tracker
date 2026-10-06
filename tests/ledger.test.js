@@ -99,6 +99,35 @@ test('Financial Position reports Loan receivables without adding them back to as
   })
 })
 
+test('Financial Position derives committed installment liabilities from future credit transactions', () => {
+  const position = Ledger.getFinancialPosition({
+    wallets:[
+      { id:'cash', type:'cash', balance:1000 },
+      { id:'card', type:'credit', balance:-100 },
+      { id:'excluded-card', type:'credit', balance:-200, excludeFromNetWorth:true },
+    ],
+    transactions:[
+      {
+        id:'posted-installment', type:'expense', walletId:'card', amount:100,
+        ledgerAmount:95, installmentGroupId:'group-1', date:'2026-08-01',
+      },
+      {
+        id:'future-installment', type:'expense', walletId:'card', amount:200,
+        ledgerAmount:195, installmentGroupId:'group-1', date:'2026-09-01',
+      },
+      {
+        id:'excluded-installment', type:'expense', walletId:'excluded-card', amount:50,
+        installmentGroupId:'group-1', date:'2026-09-01',
+      },
+    ],
+    today:'2026-08-09',
+    rewardForTx:() => ({ discount:10 }),
+  })
+
+  assert.equal(position.committedLiabilities, 190)
+  assert.equal(position.liabilities, 290)
+})
+
 test('Financial Position deducts outstanding Loan cash until it is repaid', () => {
   const loan = {
     id:'loan', walletId:'cash', amount:300, date:'2026-08-01',

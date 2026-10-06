@@ -33,3 +33,14 @@ test('delete flows use one dispatcher with ordered feature middleware', () => {
   assert.match(source, /registerDeleteTxMiddleware\?\.\('confirm', 'shared-reimbursement'/)
   assert.doesNotMatch(source, /prevConfirmDeleteTx|prevDeleteTxFromSub|_origConfirmDelete|prevConfirmDeleteShared|prevDeleteTxFromSubShared/)
 })
+
+test('financial position delegates liability composition to Ledger', () => {
+  const start = source.indexOf('  App.getFinancialPosition = function()')
+  const end = source.indexOf('\n  Calc.getNetWorth = function()', start)
+  assert.ok(start >= 0 && end > start, 'financial-position adapter section missing')
+  const block = source.slice(start, end)
+
+  assert.match(block, /transactions:S\.transactions \|\| \[\]/)
+  assert.match(block, /rewardForTx:/)
+  assert.doesNotMatch(block, /getCommittedInstallmentDebt/)
+})

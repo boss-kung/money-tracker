@@ -2354,24 +2354,16 @@ App.pickEmoji=(p,e)=>{
   App.getFinancialPosition = function() {
     const wallets = S.wallets || []
     const todayStr = getTODAY()
-    const amountForTx = tx => typeof App._expectedLedgerAmountForTx === 'function'
-      ? App._expectedLedgerAmountForTx(tx)
-      : window.MTLedger.getLedgerAmountForTx(tx, { wallets })
-    const committedLiabilities = wallets
-      .filter(wallet => wallet?.type === 'credit' && !wallet.excludeFromNetWorth)
-      .reduce((sum, wallet) => sum + window.MTLedger.getCommittedInstallmentDebt({
-        transactions:S.transactions || [],
-        today:todayStr,
-        walletId:wallet.id,
-        amountForTx,
-      }), 0)
     const cryptoValue = Number(App.getCryptoPortfolioSummary?.().totalValueTHB || 0)
     const position = window.MTLedger.getFinancialPosition({
       wallets,
       loans:S.loans || [],
+      transactions:S.transactions || [],
       today:todayStr,
       cryptoValue,
-      committedLiabilities,
+      rewardForTx:row => typeof App.getTransactionRewardEstimate === 'function'
+        ? App.getTransactionRewardEstimate(row)
+        : row.rewardEstimate,
       walletValue:wallet => App._walletValueTHB(wallet),
       // Crypto holdings have their own portfolio ledger. Excluding legacy
       // Crypto Wallets here prevents the same holding from being counted twice.

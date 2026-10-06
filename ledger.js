@@ -185,9 +185,11 @@
   function getFinancialPosition({
     wallets = [],
     loans = [],
+    transactions = [],
     today = todayLocalISO(),
     cryptoValue = 0,
-    committedLiabilities = 0,
+    rewardForTx = null,
+    committedLiabilities = null,
     walletValue = wallet => Number(wallet?.balance || 0),
     excludeWalletTypes = [],
   } = {}) {
@@ -209,7 +211,20 @@
     })
     const receivables = (loans || []).reduce((sum, loan) => sum + getLoanReceivable(loan, today), 0)
     const crypto = Math.max(0, Number(cryptoValue || 0))
-    const committed = Math.max(0, Number(committedLiabilities || 0))
+    const amountForCommittedTx = tx => getLedgerAmountForTx(tx, {
+      wallets,
+      rewardForTx,
+      preferStored:false,
+    })
+    const derivedCommitted = (wallets || [])
+      .filter(wallet => String(wallet?.type || '').toLowerCase() === 'credit' && !wallet?.excludeFromNetWorth)
+      .reduce((sum, wallet) => sum + getCommittedInstallmentDebt({
+        transactions,
+        today,
+        walletId:wallet.id,
+        amountForTx:amountForCommittedTx,
+      }), 0)
+    const committed = Math.max(0, Number(committedLiabilities == null ? derivedCommitted : committedLiabilities))
     // A Loan reduces the source Wallet immediately. Keep the outstanding
     // receivable visible for collection tracking, but do not add it back to
     // realizable assets until a repayment actually returns to a Wallet.

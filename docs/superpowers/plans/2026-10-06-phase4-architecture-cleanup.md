@@ -63,9 +63,9 @@
 - Modify: domain/runtime modules selected after Task 3 review
 - Create/modify: service contract tests
 
-- [ ] Identify remaining calculation ownership split across `app_v2.js` and feature modules.
-- [ ] Move one bounded calculation at a time behind a stable service interface.
-- [ ] Remove only wrappers proven redundant by focused tests.
+- [x] Identify remaining calculation ownership split across `app_v2.js` and feature modules.
+- [x] Move one bounded calculation at a time behind a stable service interface.
+- [x] Remove only wrappers proven redundant by focused tests.
 
 ### Task 5: Phase 4 verification and handoff
 
@@ -73,4 +73,4 @@
 - [x] Reconfirm the existing Deno checks for backend contracts from Phase 3.
 - [x] Run `git diff --check` and review the final diff for unrelated changes.
 - [x] Re-run Supabase migrations once credentials or a test database are available.
-- [ ] Commit or open a PR when repository write permissions permit Git metadata updates.
+- [x] Commit or open a PR when repository write permissions permit Git metadata updates.
