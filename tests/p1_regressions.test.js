@@ -153,7 +153,8 @@ test('emergency export prefers current in-memory auxiliary collections', () => {
 test('delete-account server verifies a one-time OTP before deleting the user', () => {
   const source = read('supabase/functions/delete-account/index.ts')
   assert.match(source, /otp|otp_hash|expires_at/i)
-  assert.match(source, /delete\(\).*mt_delete_otps|from\('mt_delete_otps'\)/s)
+  assert.match(source, /consumeDeleteOtp|mt_consume_delete_otp/)
+  assert.doesNotMatch(source, /from\('mt_delete_otps'\)/)
   assert.match(source, /admin\.deleteUser/)
 })
 
