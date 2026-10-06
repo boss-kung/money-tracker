@@ -12,6 +12,19 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const INVESTMENT_WALLET_TYPES = new Set(['gold', 'crypto', 'fcd'])
 
+  // One wallet-reference contract is shared by ledger integrity, import
+  // validation and master-delete protection. Investment transactions support
+  // both the current cashWalletId field and the legacy sourceWalletId alias.
+  const TRANSACTION_WALLET_REFERENCE_SCHEMA = Object.freeze({
+    default: Object.freeze([{ fields:['walletId'] }]),
+    transfer: Object.freeze([{ fields:['walletId'] }, { fields:['toWalletId'] }]),
+    cc_payment: Object.freeze([{ fields:['walletId'] }, { fields:['toWalletId'] }]),
+    bnpl_payment: Object.freeze([{ fields:['walletId'] }, { fields:['toWalletId'] }]),
+    investment_buy: Object.freeze([{ fields:['walletId'] }, { fields:['cashWalletId', 'sourceWalletId'] }]),
+    investment_sell: Object.freeze([{ fields:['walletId'] }, { fields:['cashWalletId', 'sourceWalletId'] }]),
+    investment_adjust: Object.freeze([{ fields:['walletId'] }]),
+  })
+
   const round2 = value => Math.round((Number(value) || 0) * 100) / 100
   const round8 = value => Math.round((Number(value) || 0) * 1e8) / 1e8
 
@@ -72,6 +85,36 @@
     if (!tx || tx.type !== 'cc_payment') return round2(tx?.amount)
     const cashAmount = Number(tx.cashAmount)
     return Number.isFinite(cashAmount) && cashAmount > 0 ? round2(cashAmount) : round2(tx.amount)
+  }
+
+  function getTransactionWalletReferenceSpec(tx) {
+    return TRANSACTION_WALLET_REFERENCE_SCHEMA[String(tx?.type || '')] || TRANSACTION_WALLET_REFERENCE_SCHEMA.default
+  }
+
+  function getTransactionWalletReferenceIds(tx) {
+    const ids = []
+    getTransactionWalletReferenceSpec(tx).forEach(requirement => {
+      requirement.fields.map(field => tx?.[field]).filter(Boolean).forEach(value => {
+        if (!ids.includes(value)) ids.push(value)
+      })
+    })
+    return ids
+  }
+
+  function validateTransactionWalletReferences(tx, walletIds) {
+    const known = walletIds instanceof Set ? walletIds : new Set(walletIds || [])
+    return getTransactionWalletReferenceSpec(tx).flatMap(requirement => {
+      const values = requirement.fields.map(field => tx?.[field]).filter(Boolean)
+      if (!values.some(value => known.has(value))) {
+        return [{
+          txId: tx?.id,
+          date: tx?.date,
+          field: requirement.fields.join('|'),
+          value: values[0],
+        }]
+      }
+      return []
+    })
   }
 
   function getLedgerAmountForTx(tx, { wallets = [], rewardForTx = null, preferStored = true } = {}) {
@@ -142,9 +185,11 @@
   function getFinancialPosition({
     wallets = [],
     loans = [],
+    transactions = [],
     today = todayLocalISO(),
     cryptoValue = 0,
-    committedLiabilities = 0,
+    rewardForTx = null,
+    committedLiabilities = null,
     walletValue = wallet => Number(wallet?.balance || 0),
     excludeWalletTypes = [],
   } = {}) {
@@ -166,7 +211,20 @@
     })
     const receivables = (loans || []).reduce((sum, loan) => sum + getLoanReceivable(loan, today), 0)
     const crypto = Math.max(0, Number(cryptoValue || 0))
-    const committed = Math.max(0, Number(committedLiabilities || 0))
+    const amountForCommittedTx = tx => getLedgerAmountForTx(tx, {
+      wallets,
+      rewardForTx,
+      preferStored:false,
+    })
+    const derivedCommitted = (wallets || [])
+      .filter(wallet => String(wallet?.type || '').toLowerCase() === 'credit' && !wallet?.excludeFromNetWorth)
+      .reduce((sum, wallet) => sum + getCommittedInstallmentDebt({
+        transactions,
+        today,
+        walletId:wallet.id,
+        amountForTx:amountForCommittedTx,
+      }), 0)
+    const committed = Math.max(0, Number(committedLiabilities == null ? derivedCommitted : committedLiabilities))
     // A Loan reduces the source Wallet immediately. Keep the outstanding
     // receivable visible for collection tracking, but do not add it back to
     // realizable assets until a repayment actually returns to a Wallet.
@@ -189,10 +247,7 @@
     const issues = []
     ;(transactions || []).forEach(tx => {
       if (!isPostedTx(tx, today)) return
-      if (!tx.walletId || !walletIds.has(tx.walletId)) issues.push({ txId:tx.id, date:tx.date, field:'walletId', value:tx.walletId })
-      if ((tx.type === 'transfer' || tx.type === 'cc_payment') && (!tx.toWalletId || !walletIds.has(tx.toWalletId))) {
-        issues.push({ txId:tx.id, date:tx.date, field:'toWalletId', value:tx.toWalletId })
-      }
+      issues.push(...validateTransactionWalletReferences(tx, walletIds))
     })
     return issues
   }
@@ -212,6 +267,10 @@
     isDatedActivityPosted,
     getLedgerAmountForTx,
     getCCPaymentCashAmount,
+    TRANSACTION_WALLET_REFERENCE_SCHEMA,
+    getTransactionWalletReferenceSpec,
+    getTransactionWalletReferenceIds,
+    validateTransactionWalletReferences,
     getLoanContractRemaining,
     getLoanReceivable,
     validateLoanRepayment,

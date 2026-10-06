@@ -1,11 +1,6 @@
 import { adminClient, getAuthenticatedUserId } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
-
-async function hashOtp(otp: string, userId: string): Promise<string> {
-  const data = new TextEncoder().encode(`${otp}:${userId}`)
-  const buf = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
-}
+import { consumeDeleteOtp, hashDeleteOtp } from '../_shared/delete_otp.ts'
 
 Deno.serve(async req => {
   const options = handleOptions(req)
@@ -21,29 +16,29 @@ Deno.serve(async req => {
     if (!/^\d{6}$/.test(otp)) return jsonResponse({ error: 'A 6-digit deletion OTP is required' }, 400, req)
 
     const admin = adminClient()
-    const { data: otpRow, error: otpError } = await admin
-      .from('mt_delete_otps')
-      .select('otp_hash, expires_at')
-      .eq('user_id', userId)
-      .maybeSingle()
-    if (otpError) throw otpError
-    const expectedHash = await hashOtp(otp, userId)
-    const valid = otpRow
-      && String(otpRow.otp_hash || '') === expectedHash
-      && new Date(String(otpRow.expires_at || '')).getTime() > Date.now()
-    if (!valid) return jsonResponse({ error: 'Invalid or expired deletion OTP' }, 401, req)
-
-    // Consume the OTP before the destructive operation so it is one-time even if
-    // the client retries after a network timeout.
-    const { data: consumedRows, error: consumeError } = await admin
-      .from('mt_delete_otps')
-      .delete()
-      .eq('user_id', userId)
-      .eq('otp_hash', expectedHash)
-      .select('user_id')
-    if (consumeError) throw consumeError
-    if (!Array.isArray(consumedRows) || consumedRows.length !== 1) {
+    const expectedHash = await hashDeleteOtp(otp, userId)
+    const valid = await consumeDeleteOtp(admin, { userId, otpHash: expectedHash })
+    if (!valid) {
       return jsonResponse({ error: 'Invalid or expired deletion OTP' }, 401, req)
+    }
+
+    // Keep account deletion explicit even after the database cascade is live.
+    // This makes cleanup observable and protects deployments where migrations
+    // are applied in stages.
+    for (const table of [
+      'mt_notification_logs',
+      'mt_notification_rules',
+      'mt_notification_snapshots',
+      'mt_notification_preferences',
+      'mt_notification_devices',
+      'mt_user_vaults',
+      'mt_delete_otps',
+    ]) {
+      const { error: cleanupError } = await admin
+        .from(table)
+        .delete()
+        .eq('user_id', userId)
+      if (cleanupError) throw cleanupError
     }
 
     const { error } = await admin.auth.admin.deleteUser(userId)

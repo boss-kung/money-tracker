@@ -59,7 +59,7 @@ function runtime(wallets, transactions = []) {
     context, state,
     counts:() => ({ scans, snapshots, writes }),
     setDate:date => { refDate = date },
-    rejectStorage:() => { rejectStorage = true }, notices,
+    rejectStorage:(value = true) => { rejectStorage = value }, notices,
   }
 }
 
@@ -119,7 +119,7 @@ function transactionRuntime() {
     _rewardEstimateForTx:() => null,
     closeOverlay() {}, showPage() {}, render() {},
   })
-  vm.runInContext(section('  App.saveTx = function()', '  function isValidImportDate('), r.context)
+  vm.runInContext(section('  App.saveTx = function(forceSkipDuplicateCheck)', '  function isValidImportDate('), r.context)
   return r
 }
 
@@ -138,6 +138,34 @@ test('failed Transaction storage restores the financial state without success fe
   assert.equal(r.state.transactions.length, 0)
   assert.equal(r.state.wallets[0].balance, 1000)
   assert.equal(r.notices.some(notice => notice.type === 'success'), false)
+})
+
+test('recurring Transaction save uses one durable commit and can retry idempotently after failure', () => {
+  const r = transactionRuntime()
+  Object.assign(r.state.tx, {
+    type:'expense', amount:'100', categoryId:'food', isRecurring:true,
+    recurrenceType:'monthly', recurringDayOfMonth:2, durationMonths:'3',
+  })
+  Object.assign(r.context.App, {
+    _initRecurringLiteDefaults() {},
+    _createRecurringFromDraft: draft => ({ id:'rec-1', walletId:draft.walletId, amount:draft.amount, recurrenceType:'monthly' }),
+    _recurringOccurrenceDate:() => '2026-11-02',
+    _recurringInstanceKey:() => 'rec-1__1__2026-11-02',
+    _updateRecurringNext() {},
+    openRecurringScreen() {},
+  })
+  r.rejectStorage()
+  assert.equal(r.context.App.saveTx(), false)
+  assert.equal(r.state.transactions.length, 0)
+  assert.equal(r.state.recurring.length, 0)
+  assert.equal(r.state.tx.isRecurring, true, 'draft remains available for retry')
+
+  r.rejectStorage(false)
+  assert.equal(r.context.App.saveTx(), true)
+  assert.equal(r.state.transactions.length, 1)
+  assert.equal(r.state.recurring.length, 1)
+  assert.equal(r.state.transactions[0].sourceRecurringId, 'rec-1')
+  assert.equal(r.counts().writes, 2)
 })
 
 function loadBNPL(context) {

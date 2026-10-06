@@ -1,13 +1,8 @@
 import { adminClient, getAuthenticatedUserId } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
+import { generateDeleteOtp, hashDeleteOtp, issueDeleteOtp } from '../_shared/delete_otp.ts'
 
 const OTP_EXPIRY_MINUTES = 10
-
-async function hashOtp(otp: string, userId: string): Promise<string> {
-  const data = new TextEncoder().encode(`${otp}:${userId}`)
-  const buf = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
-}
 
 Deno.serve(async req => {
   const options = handleOptions(req)
@@ -25,15 +20,12 @@ Deno.serve(async req => {
     if (userErr || !user?.email) return jsonResponse({ error: 'User not found' }, 404, req)
 
     // Generate 6-digit OTP
-    const otp = String(Math.floor(100000 + Math.random() * 900000))
-    const otpHash = await hashOtp(otp, userId)
+    const otp = generateDeleteOtp()
+    const otpHash = await hashDeleteOtp(otp, userId)
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString()
 
-    // Upsert — one active OTP per user at a time
-    const { error: dbErr } = await supabase
-      .from('mt_delete_otps')
-      .upsert({ user_id: userId, otp_hash: otpHash, expires_at: expiresAt }, { onConflict: 'user_id' })
-    if (dbErr) throw dbErr
+    const issued = await issueDeleteOtp(supabase, { userId, otpHash, expiresAt })
+    if (!issued) return jsonResponse({ error: 'Too many deletion OTP requests. Try again later.' }, 429, req)
 
     // Send via Resend
     const resendKey = Deno.env.get('RESEND_API_KEY')

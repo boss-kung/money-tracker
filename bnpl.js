@@ -501,7 +501,7 @@
       const remainingTotal = remaining.reduce((s, i) => s + Number(i.amount || 0), 0)
       const payoffOption = remaining.length > 1
         ? `<label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface-soft,#F8FAFC);border-radius:10px;margin-bottom:12px;cursor:pointer;font-size:13px">
-            <input type="checkbox" id="bnpl-payoff-all" onchange="BNPL.ui._togglePayoff('${esc(plan.id)}',${item.no})" style="width:auto">
+            <input type="checkbox" id="bnpl-payoff-all" onchange="BNPL.ui._togglePayoff(${MTSafeRender.jsArg(plan.id)},${item.no})" style="width:auto">
             <span>ปิดยอดทั้งหมด (${remaining.length} งวดที่เหลือ · ${money(remainingTotal)})</span>
           </label>`
         : ''

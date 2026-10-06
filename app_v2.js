@@ -120,6 +120,7 @@ function nextTransactionCreationSequence() {
    ============================================================ */
 window.__mountUpcomingBillsFeature = function() {
   const esc = MTSafeRender.escapeHtml
+  const jsArg = MTSafeRender.jsArg
   const today = () => getTODAY()
   const nowISO = () => new Date().toISOString()
   const money = n => (typeof moneyFmt === 'function' ? moneyFmt(Number(n) || 0) : Calc.fmt(Number(n) || 0))
@@ -333,10 +334,10 @@ window.__mountUpcomingBillsFeature = function() {
       ${billStatusPill(meta, bill.amountType)}
       ${bill.note ? `<div class="upcoming-bill-note">${esc(bill.note)}</div>` : ''}
       <div class="upcoming-bill-actions">
-        ${canPay ? `<button class="btn btn-primary btn-sm" onclick="App.openUpcomingBillPayment('${esc(bill.id)}')" style="width:auto">จ่ายแล้ว</button>` : ''}
-        ${canReschedule ? `<button class="btn btn-secondary btn-sm" onclick="App.openUpcomingBillReschedule('${esc(bill.id)}')" style="width:auto">เลื่อน</button>` : ''}
-        <button class="btn btn-secondary btn-sm" onclick="App.openUpcomingBillForm('${esc(bill.id)}')" style="width:auto">แก้ไข</button>
-        ${canCancel ? `<button class="btn btn-outline btn-sm" onclick="App.cancelUpcomingBill('${esc(bill.id)}')" style="width:auto">ยกเลิก</button>` : ''}
+        ${canPay ? `<button class="btn btn-primary btn-sm" onclick="App.openUpcomingBillPayment(${MTSafeRender.jsArg(bill.id)})" style="width:auto">จ่ายแล้ว</button>` : ''}
+        ${canReschedule ? `<button class="btn btn-secondary btn-sm" onclick="App.openUpcomingBillReschedule(${MTSafeRender.jsArg(bill.id)})" style="width:auto">เลื่อน</button>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="App.openUpcomingBillForm(${MTSafeRender.jsArg(bill.id)})" style="width:auto">แก้ไข</button>
+        ${canCancel ? `<button class="btn btn-outline btn-sm" onclick="App.cancelUpcomingBill(${MTSafeRender.jsArg(bill.id)})" style="width:auto">ยกเลิก</button>` : ''}
       </div>
     </div>`
   }
@@ -364,12 +365,6 @@ window.__mountUpcomingBillsFeature = function() {
 
   App.closeUpcomingDialog = function() {
     document.getElementById('upcoming-bill-overlay')?.remove()
-  }
-
-  const prevBeforePersistV50 = App._beforePersistV50?.bind(App)
-  App._beforePersistV50 = function() {
-    prevBeforePersistV50?.()
-    ensureUpcomingBillsState()
   }
 
   App._updateUpcomingBillDraft = function(field, value) {
@@ -446,9 +441,9 @@ window.__mountUpcomingBillsFeature = function() {
     const wallets = upcomingWallets()
     const categories = upcomingCategories()
     App.openSubScreen(`<div class="sub-header">
-        <button class="btn-icon" onclick="App.openUpcomingBillsScreen('${esc(S.upcomingBillsFilter || 'pending')}')">←</button>
+        <button class="btn-icon" onclick="App.openUpcomingBillsScreen(${MTSafeRender.jsArg(S.upcomingBillsFilter || 'pending')})">←</button>
         <h2>${existing ? 'แก้ไขรายการรอจ่าย' : 'เพิ่มรายการรอจ่าย'}</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.saveUpcomingBill('${esc(billId)}')" style="width:auto">บันทึก</button>
+        <button class="btn btn-primary btn-sm" onclick="App.saveUpcomingBill(${MTSafeRender.jsArg(billId)})" style="width:auto">บันทึก</button>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="card card-pad">
@@ -511,7 +506,7 @@ window.__mountUpcomingBillsFeature = function() {
     openUpcomingDialog(
       'เลื่อนกำหนดจ่าย',
       `<div class="form-group"><label class="form-label">วันครบกำหนดใหม่</label><input class="form-input" type="date" id="upcoming-reschedule-date" value="${esc(bill.dueDate || today())}"></div>`,
-      `<button class="btn btn-secondary" onclick="App.closeUpcomingDialog()">ยกเลิก</button><button class="btn btn-primary" onclick="App.confirmUpcomingBillReschedule('${esc(billId)}')">บันทึก</button>`
+      `<button class="btn btn-secondary" onclick="App.closeUpcomingDialog()">ยกเลิก</button><button class="btn btn-primary" onclick="App.confirmUpcomingBillReschedule(${MTSafeRender.jsArg(billId)})">บันทึก</button>`
     )
   }
 
@@ -575,7 +570,7 @@ window.__mountUpcomingBillsFeature = function() {
        <div class="form-group"><label class="form-label">หมวดหมู่</label><select class="form-input" id="upcoming-pay-category"><option value="">เลือกหมวดหมู่</option>${categories.map(c => `<option value="${esc(c.id)}"${bill.categoryId === c.id ? ' selected' : ''}>${esc(c.icon || '📦')} ${esc(c.label)}</option>`).join('')}</select></div>
        <div class="form-group"><label class="form-label">ร้านค้า / ผู้รับชำระ</label><input class="form-input" list="upcoming-pay-merchants" id="upcoming-pay-merchant" value="${esc(getBillMerchantLabel(bill))}" placeholder="เช่น MEA"><datalist id="upcoming-pay-merchants">${(S.merchants || []).map(m => `<option value="${esc(m.name)}"></option>`).join('')}</datalist></div>
        <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" id="upcoming-pay-note" rows="3">${esc(bill.note || '')}</textarea></div>`,
-      `<button class="btn btn-secondary" onclick="App.closeUpcomingDialog()">ยกเลิก</button><button class="btn btn-primary" onclick="App.confirmUpcomingBillPayment('${esc(billId)}')">ยืนยันการจ่าย</button>`
+      `<button class="btn btn-secondary" onclick="App.closeUpcomingDialog()">ยกเลิก</button><button class="btn btn-primary" onclick="App.confirmUpcomingBillPayment(${MTSafeRender.jsArg(billId)})">ยืนยันการจ่าย</button>`
     )
   }
 
@@ -650,8 +645,7 @@ window.__mountUpcomingBillsFeature = function() {
     bill.updatedAt = nowISO()
   }
 
-  const prevConfirmDeleteTx = App.confirmDeleteTx?.bind(App)
-  App.confirmDeleteTx = function() {
+  App.registerDeleteTxMiddleware?.('confirm', 'upcoming-bill', ctx => {
     const tx = (S.transactions || []).find(t => t.id === S.selectedTxId)
     if (tx && (tx.upcomingBillId || tx.sourceUpcomingBillId) && !tx.installmentGroupId) {
       App.showConfirm?.({
@@ -660,29 +654,37 @@ window.__mountUpcomingBillsFeature = function() {
         body:`ยืนยันลบรายการ ${money(tx.amount)}? รายการรอจ่ายที่เชื่อมไว้จะกลับมาเป็น “รอจ่าย”`,
         confirmLabel:'ลบ',
         onConfirm() {
-          App._rollbackUpcomingBillPayment(tx)
-          S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
-          S.deleteConfirm = false
-          App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-          try {
-            const directSaved = persistUpcomingPaymentKeys()
-            const fullSaved = persist()
-            if (!directSaved && !fullSaved) throw new Error('persist failed')
-          } catch (_) {
-            toast('ลบรายการแล้ว', 'success')
-          }
-          App.closeOverlay?.('overlay-tx-detail')
-          App.render?.()
-          toast('ลบรายการแล้ว และคืนสถานะรายการรอจ่ายแล้ว', 'success')
+          const previousTransactions = S.transactions
+          const previousWallets = cloneCommitValue(S.wallets || [])
+          const bill = (S.upcomingBills || []).find(row => row.id === (tx.upcomingBillId || tx.sourceUpcomingBillId))
+          const previousBill = bill ? cloneCommitValue(bill) : null
+          commitMutation({
+            mutate: () => {
+              App._rollbackUpcomingBillPayment(tx)
+              S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
+              S.deleteConfirm = false
+              App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+            },
+            rollback: () => {
+              S.transactions = previousTransactions
+              S.wallets = previousWallets
+              if (bill && previousBill) Object.assign(bill, previousBill)
+            },
+            onSuccess: () => {
+              App.closeOverlay?.('overlay-tx-detail')
+              App.render?.()
+              toast('ลบรายการแล้ว และคืนสถานะรายการรอจ่ายแล้ว', 'success')
+            },
+          })
         }
       })
-      return
+      return true
     }
-    prevConfirmDeleteTx?.()
-  }
+    return ctx.next()
+  }, { priority: 100 })
 
-  const prevDeleteTxFromSub = App.deleteTxFromSub?.bind(App)
-  App.deleteTxFromSub = function(id, backType = '', backId = '') {
+  App.registerDeleteTxMiddleware?.('sub', 'upcoming-bill', ctx => {
+    const [id, backType = '', backId = ''] = ctx.args
     const tx = (S.transactions || []).find(t => t.id === id)
     if (tx && (tx.upcomingBillId || tx.sourceUpcomingBillId)) {
       App.showConfirm?.({
@@ -691,30 +693,40 @@ window.__mountUpcomingBillsFeature = function() {
         body:`ยืนยันลบรายการ ${money(tx.amount)}? รายการรอจ่ายที่เชื่อมไว้จะกลับมาเป็น “รอจ่าย”`,
         confirmLabel:'ลบ',
         onConfirm() {
-          App._rollbackUpcomingBillPayment(tx)
-          S.transactions = (S.transactions || []).filter(t => t.id !== id)
-          if (typeof BNPL !== 'undefined') {
-            S.bnplPlans = (S.bnplPlans || []).filter(p => p.txId !== id)
-            BNPL.store.unlinkPaymentByTxId(id)
-          }
-          App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-          try {
-            const directSaved = persistUpcomingPaymentKeys()
-            const fullSaved = persist()
-            if (!directSaved && !fullSaved) throw new Error('persist failed')
-          } catch (_) {
-            toast('ลบรายการแล้ว', 'success')
-          }
-          if (backType === 'cc' && backId) App.openCCDetail?.(backId)
-          else if (backType === 'wallet' && backId) App.openWalletDetail?.(backId)
-          else App.closeSubScreen?.()
-          toast('ลบรายการแล้ว และคืนสถานะรายการรอจ่ายแล้ว', 'success')
+          const previousTransactions = S.transactions
+          const previousWallets = cloneCommitValue(S.wallets || [])
+          const previousBnplPlans = cloneCommitValue(S.bnplPlans || [])
+          const bill = (S.upcomingBills || []).find(row => row.id === (tx.upcomingBillId || tx.sourceUpcomingBillId))
+          const previousBill = bill ? cloneCommitValue(bill) : null
+          commitMutation({
+            mutate: () => {
+              App._rollbackUpcomingBillPayment(tx)
+              S.transactions = (S.transactions || []).filter(t => t.id !== id)
+              if (typeof BNPL !== 'undefined') {
+                S.bnplPlans = (S.bnplPlans || []).filter(p => p.txId !== id)
+                BNPL.store.unlinkPaymentByTxId(id)
+              }
+              App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+            },
+            rollback: () => {
+              S.transactions = previousTransactions
+              S.wallets = previousWallets
+              S.bnplPlans = previousBnplPlans
+              if (bill && previousBill) Object.assign(bill, previousBill)
+            },
+            onSuccess: () => {
+              if (backType === 'cc' && backId) App.openCCDetail?.(backId)
+              else if (backType === 'wallet' && backId) App.openWalletDetail?.(backId)
+              else App.closeSubScreen?.()
+              toast('ลบรายการแล้ว และคืนสถานะรายการรอจ่ายแล้ว', 'success')
+            },
+          })
         }
       })
-      return
+      return true
     }
-    prevDeleteTxFromSub?.(id, backType, backId)
-  }
+    return ctx.next()
+  }, { priority: 100 })
 
   function injectWalletAvailabilityRows() {
     document.querySelectorAll('#wallets-content .wallet-card[onclick*="App.openWalletDetail"]').forEach(card => {
@@ -971,6 +983,11 @@ function persist(reason = 'app', options = {}) {
     return false
   }
   if (typeof MT_DERIVED_MEMO !== 'undefined') MT_DERIVED_MEMO.invalidate(reason)
+  const persistHost = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : {})
+  if (persistHost.__MT_PERSIST_OVERRIDE && persistHost.__MT_PERSIST_OVERRIDE_ACTIVE !== true) {
+    persistHost.__MT_PERSIST_OVERRIDE_ACTIVE = true
+    try { return persistHost.__MT_PERSIST_OVERRIDE() } finally { persistHost.__MT_PERSIST_OVERRIDE_ACTIVE = false }
+  }
   // Keep the first paint on the persisted ledger snapshot. Any user-initiated
   // save after first paint opts into the full reward-aware calculation, while
   // startup migrations/hydration cannot accidentally move work onto the boot
@@ -989,7 +1006,12 @@ function persist(reason = 'app', options = {}) {
     // Commit preparation may populate caches before storage rejects the write.
     if (typeof MT_DERIVED_MEMO !== 'undefined') MT_DERIVED_MEMO.invalidate('commit-rollback')
     if (result.error) console.error('[Money Tracker] state commit failed:', result.error)
-    try { toast('บันทึกไม่สำเร็จ — แนะนำสำรองข้อมูลก่อนลองใหม่', 'error') } catch (_) {}
+    const conflict = Storage.lastConflict
+    try {
+      toast(conflict
+        ? 'ข้อมูลถูกแก้ไขจากแท็บอื่น กรุณารีโหลดก่อนบันทึกซ้ำ'
+        : 'บันทึกไม่สำเร็จ — แนะนำสำรองข้อมูลก่อนลองใหม่', 'error')
+    } catch (_) {}
   }
   if (ok) {
     App._renderRevision++
@@ -997,6 +1019,30 @@ function persist(reason = 'app', options = {}) {
   }
   return ok
 }
+
+// Every user-facing mutation must cross one durable commit boundary. Callers
+// mutate synchronously, provide a rollback for the in-memory snapshot, and
+// only render success UI after persist() confirms the write.
+function commitMutation({ mutate, rollback, onSuccess }) {
+  const config = arguments[0] || {}
+  mutate?.()
+  const persistHost = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : {})
+  const previousPersistOverride = persistHost.__MT_PERSIST_OVERRIDE
+  persistHost.__MT_PERSIST_OVERRIDE = typeof config.persist === 'function' ? config.persist : null
+  const committed = persist()
+  persistHost.__MT_PERSIST_OVERRIDE = previousPersistOverride
+  if (!committed) {
+    rollback?.()
+    return false
+  }
+  onSuccess?.()
+  return true
+}
+
+function cloneCommitValue(value) {
+  try { return JSON.parse(JSON.stringify(value)) } catch (_) { return value }
+}
+
 function moneyFmt(n) { return S.settings?.hideMoney ? '฿*****' : Calc.fmt(n || 0) }
 
 function stripNumberCommas(value) {
@@ -1123,6 +1169,43 @@ const overlayCloseTimers = {}
 
 const App = {
   saveAll(reason = 'app', options = {}) { return persist(reason, options) },
+  showStorageRecoveryNotice() {
+    const existing = document.getElementById('mt-storage-recovery-notice')
+    const status = Storage.hydrationStatus
+    if (!status?.recoveryMode) {
+      existing?.remove()
+      return
+    }
+    if (existing || !document.body) return
+    const notice = document.createElement('section')
+    notice.id = 'mt-storage-recovery-notice'
+    notice.className = 'card card-pad'
+    notice.style.cssText = 'margin:12px 16px;border:1px solid var(--amber);'
+
+    const title = document.createElement('strong')
+    title.textContent = 'ข้อมูลบางส่วนอ่านไม่ได้'
+    title.style.color = 'var(--amber)'
+    const detail = document.createElement('p')
+    detail.textContent = `ระบบเก็บข้อมูลต้นฉบับไว้แล้ว: ${(status.corruptCollections || []).join(', ') || 'ไม่ทราบชุดข้อมูล'}. กรุณาส่งออกหรือกู้คืน backup ก่อนทำรายการต่อ`
+    detail.style.cssText = 'margin:8px 0;color:var(--muted);font-size:var(--label-fs,12px);'
+    const actions = document.createElement('div')
+    actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;'
+    const makeButton = (label, className, handler) => {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = className
+      button.textContent = label
+      button.addEventListener('click', handler)
+      return button
+    }
+    actions.append(
+      makeButton('ส่งออกข้อมูล', 'btn btn-primary btn-sm', () => App.exportData?.()),
+      makeButton('ไปกู้คืน backup', 'btn btn-secondary btn-sm', () => App.showPage?.('more')),
+      makeButton('รีเซ็ตชุดข้อมูล', 'btn btn-outline btn-sm', () => App.resetData?.()),
+    )
+    notice.append(title, detail, actions)
+    document.getElementById('app')?.prepend(notice)
+  },
   openOverlay(id) {
     clearTimeout(overlayCloseTimers[id])
     delete overlayCloseTimers[id]
@@ -1721,7 +1804,30 @@ Object.assign(App, {
     }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>จัดการหมวดหมู่</h2><button class="btn btn-primary btn-sm" onclick="App.openCategoryForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="segmented-tabs segmented-tabs-2"><button class="segmented-tab ${type==='expense'?'active':''}" onclick="App.openCategoryScreen('expense')">รายจ่าย</button><button class="segmented-tab ${type==='income'?'active':''}" onclick="App.openCategoryScreen('income')">รายรับ</button></div><div class="search-field-wrap"><input class="search-input" id="cat-search" placeholder="ค้นหาหมวดหมู่" value="${esc(q)}" oninput="App._syncSearchClear(this); App.openCategoryScreen('${type}', this.value)"><button type="button" class="search-clear-btn" aria-label="ล้างการค้นหา"${q ? '' : ' hidden'} onclick="const input=this.parentElement.querySelector('input'); input.value=''; App._syncSearchClear(input); App.openCategoryScreen('${type}', ''); input.focus()">×</button></div><div class="card mt-12"><div id="cat-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
   },
-  saveCategory(id) { const type = S.catManageType || 'expense'; const label = document.getElementById('cat-name').value.trim(), icon = document.getElementById('cat-icon').value.trim() || '📦', color = document.getElementById('cat-color').value || '#2563EB'; if (!label) { App._showFieldError('cat-name', 'กรุณากรอกชื่อหมวดหมู่'); return } const _cErr = _fieldTooLong(label, FIELD_MAX.label, 'ชื่อหมวดหมู่'); if (_cErr) { App._showFieldError('cat-name', _cErr); return } if (id) { const idx = S.categories[type].findIndex(c => c.id === id); if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color } } else S.categories[type].push({ id:Calc.genId(), label, icon, color }); persist(); document.getElementById('category-form-overlay')?.remove(); App.openCategoryScreen(type); toast('บันทึกหมวดหมู่แล้ว','success') },
+  saveCategory(id) {
+    const type = S.catManageType || 'expense'
+    const label = document.getElementById('cat-name').value.trim()
+    const icon = document.getElementById('cat-icon').value.trim() || '📦'
+    const color = document.getElementById('cat-color').value || '#2563EB'
+    if (!label) { App._showFieldError('cat-name', 'กรุณากรอกชื่อหมวดหมู่'); return }
+    const _cErr = _fieldTooLong(label, FIELD_MAX.label, 'ชื่อหมวดหมู่')
+    if (_cErr) { App._showFieldError('cat-name', _cErr); return }
+    const previousCategories = (S.categories[type] || []).map(category => ({ ...category }))
+    commitMutation({
+      mutate: () => {
+        if (id) {
+          const idx = S.categories[type].findIndex(c => c.id === id)
+          if (idx >= 0) S.categories[type][idx] = { ...S.categories[type][idx], label, icon, color }
+        } else S.categories[type].push({ id:Calc.genId(), label, icon, color })
+      },
+      rollback: () => { S.categories[type] = previousCategories },
+      onSuccess: () => {
+        document.getElementById('category-form-overlay')?.remove()
+        App.openCategoryScreen(type)
+        toast('บันทึกหมวดหมู่แล้ว','success')
+      },
+    })
+  },
 
   openMerchantScreen(q='') {
     const esc = MTSafeRender.escapeHtml
@@ -1739,7 +1845,31 @@ Object.assign(App, {
     if (existingList && document.getElementById('sub-screen')?.classList.contains('open')) { existingList.innerHTML = listHtml; return }
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ร้านค้า / Platform</h2><button class="btn btn-primary btn-sm" onclick="App.openMerchantForm()" style="width:auto;padding:8px 14px">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="search-field-wrap"><input class="search-input" placeholder="ค้นหาร้านค้า" value="${esc(q)}" oninput="App._syncSearchClear(this); App.openMerchantScreen(this.value)"><button type="button" class="search-clear-btn" aria-label="ล้างการค้นหา"${q ? '' : ' hidden'} onclick="const input=this.parentElement.querySelector('input'); input.value=''; App._syncSearchClear(input); App.openMerchantScreen(''); input.focus()">×</button></div><div class="card mt-12"><div id="merchant-list-items" style="padding:0 16px">${listHtml}</div></div></div>`)
   },
-  saveMerchant(id) { const data = { name:document.getElementById('mer-name').value.trim(), emoji:document.getElementById('mer-emoji').value.trim() || '🏪', color:document.getElementById('mer-color').value || '#2563EB' }; if (!data.name) { App._showFieldError('mer-name', 'กรุณากรอกชื่อร้านค้า'); return } const _merErr = _fieldTooLong(data.name, FIELD_MAX.name, 'ชื่อร้านค้า'); if (_merErr) { App._showFieldError('mer-name', _merErr); return } if (id) { const idx = S.merchants.findIndex(m => m.id === id); if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data } } else S.merchants.push({ id:Calc.genId(), ...data }); persist(); document.getElementById('merchant-form-overlay')?.remove(); App.openMerchantScreen(); toast('บันทึกร้านค้าแล้ว','success') },
+  saveMerchant(id) {
+    const data = {
+      name:document.getElementById('mer-name').value.trim(),
+      emoji:document.getElementById('mer-emoji').value.trim() || '🏪',
+      color:document.getElementById('mer-color').value || '#2563EB',
+    }
+    if (!data.name) { App._showFieldError('mer-name', 'กรุณากรอกชื่อร้านค้า'); return }
+    const _merErr = _fieldTooLong(data.name, FIELD_MAX.name, 'ชื่อร้านค้า')
+    if (_merErr) { App._showFieldError('mer-name', _merErr); return }
+    const previousMerchants = (S.merchants || []).map(merchant => ({ ...merchant }))
+    commitMutation({
+      mutate: () => {
+        if (id) {
+          const idx = S.merchants.findIndex(m => m.id === id)
+          if (idx >= 0) S.merchants[idx] = { ...S.merchants[idx], ...data }
+        } else S.merchants.push({ id:Calc.genId(), ...data })
+      },
+      rollback: () => { S.merchants = previousMerchants },
+      onSuccess: () => {
+        document.getElementById('merchant-form-overlay')?.remove()
+        App.openMerchantScreen()
+        toast('บันทึกร้านค้าแล้ว','success')
+      },
+    })
+  },
   _registerMerchantFromTx(tx) {
   App._ensureV2State()
 
@@ -1934,7 +2064,10 @@ function init() {
   S.investmentSnapshots = data.investmentSnapshots || []
   MT_STORAGE_HYDRATED = true
   // The extended App APIs are registered later in this script; persist prepares metadata directly.
-  persist('billing-hydration')
+  App.showStorageRecoveryNotice?.()
+  if (!Storage.hydrationStatus?.recoveryMode) {
+    persist('billing-hydration')
+  }
 
   S.settings ||= {}
   S.settings.storageMeta ||= {}
@@ -2280,24 +2413,16 @@ App.pickEmoji=(p,e)=>{
   App.getFinancialPosition = function() {
     const wallets = S.wallets || []
     const todayStr = getTODAY()
-    const amountForTx = tx => typeof App._expectedLedgerAmountForTx === 'function'
-      ? App._expectedLedgerAmountForTx(tx)
-      : window.MTLedger.getLedgerAmountForTx(tx, { wallets })
-    const committedLiabilities = wallets
-      .filter(wallet => wallet?.type === 'credit' && !wallet.excludeFromNetWorth)
-      .reduce((sum, wallet) => sum + window.MTLedger.getCommittedInstallmentDebt({
-        transactions:S.transactions || [],
-        today:todayStr,
-        walletId:wallet.id,
-        amountForTx,
-      }), 0)
     const cryptoValue = Number(App.getCryptoPortfolioSummary?.().totalValueTHB || 0)
     const position = window.MTLedger.getFinancialPosition({
       wallets,
       loans:S.loans || [],
+      transactions:S.transactions || [],
       today:todayStr,
       cryptoValue,
-      committedLiabilities,
+      rewardForTx:row => typeof App.getTransactionRewardEstimate === 'function'
+        ? App.getTransactionRewardEstimate(row)
+        : row.rewardEstimate,
       walletValue:wallet => App._walletValueTHB(wallet),
       // Crypto holdings have their own portfolio ledger. Excluding legacy
       // Crypto Wallets here prevents the same holding from being counted twice.
@@ -2381,11 +2506,22 @@ App.pickEmoji=(p,e)=>{
         onConfirm() {
           const tx = (S.transactions || []).find(t => t.id === txId)
           if (!tx) return
-          S.transactions = S.transactions.filter(t => t.id !== txId)
-          App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
-          persist()
-          App.render()
-          toast('ลบรายการแล้ว', 'success')
+          const previousTransactions = S.transactions
+          const previousWallets = cloneCommitValue(S.wallets || [])
+          commitMutation({
+            mutate: () => {
+              S.transactions = S.transactions.filter(t => t.id !== txId)
+              App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
+            },
+            rollback: () => {
+              S.transactions = previousTransactions
+              S.wallets = previousWallets
+            },
+            onSuccess: () => {
+              App.render()
+              toast('ลบรายการแล้ว', 'success')
+            },
+          })
         },
         onCancel() { row.classList.remove('swipe-reveal-delete') }
       })
@@ -2420,6 +2556,7 @@ App.pickEmoji=(p,e)=>{
       if (ccId) return App.openTxDetailSub(row.dataset.txid, 'cc', ccId)
       App.openTxDetail(row.dataset.txid)
     })
+    // Touch swipe detection is delegated from the container to avoid rebinding rows.
     root.addEventListener('touchstart', event => {
       const row = event.target.closest?.('.tx-row')
       if (!row || !root.contains(row) || !event.touches?.[0]) return
@@ -2532,9 +2669,9 @@ App.pickEmoji=(p,e)=>{
     const tx = App._filterWalletTx ? App._filterWalletTx(id) : S.transactions.filter(t => t.walletId === id || t.toWalletId === id).sort((a,b) => (b.date || '').localeCompare(a.date || ''))
     const inv = isInvest(w)
     const unitPrice = inv ? App._investmentUnitPriceTHB(w) : 0
-    const chips = [['all','ทั้งหมด'],['month','เดือนนี้'],['3m','3 เดือน'],['year','ปีนี้'],['custom','กำหนดเอง']].map(([k,l]) => `<button class="chip${S.walletTxRange === k ? ' active' : ''}" onclick="App.setWalletTxRange('${k}','${esc(id)}')">${l}</button>`).join('')
-    const custom = S.walletTxRange === 'custom' ? `<div class="wallet-filter-custom"><input class="form-input" type="date" id="wallet-filter-start" value="${esc(S.walletTxStart || '')}"><input class="form-input" type="date" id="wallet-filter-end" value="${esc(S.walletTxEnd || '')}"><button class="btn btn-primary btn-sm" onclick="App.setWalletTxCustom('${esc(id)}')" style="width:auto;min-width:60px">ดู</button></div>` : ''
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(w.icon)} ${esc(w.name)}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(w.id)}')" style="width:auto">แก้ไข</button></div>
+    const chips = [['all','ทั้งหมด'],['month','เดือนนี้'],['3m','3 เดือน'],['year','ปีนี้'],['custom','กำหนดเอง']].map(([k,l]) => `<button class="chip${S.walletTxRange === k ? ' active' : ''}" onclick="App.setWalletTxRange('${k}',${MTSafeRender.jsArg(id)})">${l}</button>`).join('')
+    const custom = S.walletTxRange === 'custom' ? `<div class="wallet-filter-custom"><input class="form-input" type="date" id="wallet-filter-start" value="${esc(S.walletTxStart || '')}"><input class="form-input" type="date" id="wallet-filter-end" value="${esc(S.walletTxEnd || '')}"><button class="btn btn-primary btn-sm" onclick="App.setWalletTxCustom(${MTSafeRender.jsArg(id)})" style="width:auto;min-width:60px">ดู</button></div>` : ''
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(w.icon)} ${esc(w.name)}</h2><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm(${MTSafeRender.jsArg(w.id)})" style="width:auto">แก้ไข</button></div>
       <div class="sub-scroll wallet-detail-screen" data-wallet-id="${esc(id)}">
         <div class="wallet-detail-hero">
           <div class="nw-label">${inv ? 'มูลค่าตามราคาปัจจุบัน/สำรอง' : 'ยอดคงเหลือ'}</div>
@@ -2576,7 +2713,7 @@ App.pickEmoji=(p,e)=>{
       receivable && Number(receivable.expectedReimbursement || 0) > 0 ? `<div class="detail-row"><span class="detail-label">คงเหลือรอรับคืน</span><span class="detail-value" style="color:${receivable.remaining > 0 ? 'var(--income)' : receivable.status === 'over_reimbursed' ? 'var(--warning,#f59e0b)' : 'var(--muted)'}">${fmt(receivable.remaining)}${receivable.status === 'over_reimbursed' ? ' · รับเกิน' : ''}</span></div>` : '',
       splitBillLink.status === 'mismatch' ? `<div class="detail-row" style="background:rgba(245,158,11,.10);border-radius:8px;padding:8px 12px;margin:6px 0"><span class="detail-label" style="color:var(--warning,#f59e0b)">สถานะ</span><span class="detail-value" style="color:var(--warning,#f59e0b)">${esc(splitBillLink.message || 'ข้อมูลหารบิลกับรายการจ่ายยังไม่ตรงกัน')}</span></div>` : '',
       splitBillLink.status === 'missing_bill' ? `<div class="detail-row" style="background:rgba(239,68,68,.08);border-radius:8px;padding:8px 12px;margin:6px 0"><span class="detail-label" style="color:var(--expense)">สถานะ</span><span class="detail-value" style="color:var(--expense)">${esc(splitBillLink.message || 'ไม่พบบิลหารที่เคยเชื่อมไว้')}</span></div>` : '',
-      splitBillLink.billId && splitBillLink.status !== 'missing_bill' ? `<div class="detail-row"><span class="detail-label">เปิดหารบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.ensureFeatureAndCall('advanced','openSplitBillDetail',['${esc(splitBillLink.billId)}'])">${splitBillLink.status === 'mismatch' ? 'อัปเดตจากบิล' : 'ดูรายละเอียด'}</button></span></div>` : '',
+      splitBillLink.billId && splitBillLink.status !== 'missing_bill' ? `<div class="detail-row"><span class="detail-label">เปิดหารบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.ensureFeatureAndCall('advanced','openSplitBillDetail',[${MTSafeRender.jsArg(splitBillLink.billId)}])">${splitBillLink.status === 'mismatch' ? 'อัปเดตจากบิล' : 'ดูรายละเอียด'}</button></span></div>` : '',
     ].filter(Boolean).join('') : ''
     const quickSharedRows = !splitBillLink && shared
       ? `<div class="detail-row"><span class="detail-label">จ่ายแทนทั้งหมด</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">นับเข้างบของเรา</span><span class="detail-value">${fmt(shared.myShare || 0)}</span></div><div class="detail-row"><span class="detail-label">รับคืนแล้ว</span><span class="detail-value" style="color:var(--income)">${fmt(sharedSettlement?.received || shared.reimbursedAmount || 0)}</span></div><div class="detail-row"><span class="detail-label">คงเหลือรอรับคืน</span><span class="detail-value" style="color:${(sharedSettlement?.remaining || shared.remainingReimbursableAmount || shared.reimbursableAmount || 0) > 0 ? 'var(--income)' : 'var(--muted)'}">${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0)}</span></div>`
@@ -2626,8 +2763,8 @@ App.pickEmoji=(p,e)=>{
       rewardValue ? detailRow('สิทธิประโยชน์โดยประมาณ', rewardValue, 'wrap positive') : '',
       splitBillRows,
       quickSharedRows,
-      reimbursementParent ? `<div class="detail-row wrap"><span class="detail-label">รับคืนจากบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openTxDetail('${esc(reimbursementParent.id)}')">${esc(reimbursementParentTitle)}</button></span></div>` : '',
-      receivable && (receivable.remaining ?? 0) > 0 ? `<button class="btn btn-secondary tx-detail-inline-action" onclick="App.openSharedExpenseReimbursement('${esc(tx.id)}')">บันทึกรับคืน ${fmt(receivable.remaining)}</button>` : '',
+      reimbursementParent ? `<div class="detail-row wrap"><span class="detail-label">รับคืนจากบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openTxDetail(${MTSafeRender.jsArg(reimbursementParent.id)})">${esc(reimbursementParentTitle)}</button></span></div>` : '',
+      receivable && (receivable.remaining ?? 0) > 0 ? `<button class="btn btn-secondary tx-detail-inline-action" onclick="App.openSharedExpenseReimbursement(${MTSafeRender.jsArg(tx.id)})">บันทึกรับคืน ${fmt(receivable.remaining)}</button>` : '',
     ]
     const extraRows = [
       tx.type !== 'transfer' && tx.merchant ? detailRow('ร้านค้า / ที่มา', esc(tx.merchant), 'wrap') : '',
@@ -2654,8 +2791,8 @@ App.pickEmoji=(p,e)=>{
     if (!tx || !box) return
     box.innerHTML = `<div class="tx-detail-scroll">${App._txDetailRowsHtml(tx)}${S.deleteConfirm ? `<div class="tx-detail-danger"><button class="btn btn-danger" onclick="App.confirmDeleteTx()">ยืนยันการลบ</button><button class="btn btn-secondary mt-8" onclick="App._cancelDelete()">ยกเลิก</button></div>` : ''}</div>
       <div class="tx-detail-actions">
-        <button class="btn btn-secondary" onclick="App.openDuplicateTx('${esc(tx.id)}')">⧉ ทำซ้ำ</button>
-        <button class="btn btn-primary" onclick="App.openEditTx('${esc(tx.id)}')">${tx.installmentGroupId ? '✏️ แก้ไขชุดผ่อน' : '✏️ แก้ไขรายการ'}</button>
+        <button class="btn btn-secondary" onclick="App.openDuplicateTx(${MTSafeRender.jsArg(tx.id)})">⧉ ทำซ้ำ</button>
+        <button class="btn btn-primary" onclick="App.openEditTx(${MTSafeRender.jsArg(tx.id)})">${tx.installmentGroupId ? '✏️ แก้ไขชุดผ่อน' : '✏️ แก้ไขรายการ'}</button>
         ${S.deleteConfirm ? '' : `<button class="btn btn-outline tx-detail-delete" onclick="App.deleteTx()">ลบรายการ</button>`}
       </div>`
   }
@@ -3186,7 +3323,7 @@ App.pickEmoji=(p,e)=>{
           <div class="sheet-header">
             <h2>${c ? 'แก้ไข' : 'เพิ่ม'}หมวดหมู่</h2>
             <div style="display:flex;align-items:center;gap:6px">
-              <button class="btn btn-primary btn-sm" onclick="App.saveCategory('${esc(id || '')}')" style="width:auto">บันทึก</button>
+              <button class="btn btn-primary btn-sm" onclick="App.saveCategory(${MTSafeRender.jsArg(id || '')})" style="width:auto">บันทึก</button>
               <button class="btn-icon" onclick="document.getElementById('${overlayId}')?.remove()">✕</button>
             </div>
           </div>
@@ -3213,7 +3350,7 @@ App.pickEmoji=(p,e)=>{
           <div class="sheet-header">
             <h2>${m ? 'แก้ไข' : 'เพิ่ม'}ร้านค้า</h2>
             <div style="display:flex;align-items:center;gap:6px">
-              <button class="btn btn-primary btn-sm" onclick="App.saveMerchant('${esc(id || '')}')" style="width:auto">บันทึก</button>
+              <button class="btn btn-primary btn-sm" onclick="App.saveMerchant(${MTSafeRender.jsArg(id || '')})" style="width:auto">บันทึก</button>
               <button class="btn-icon" onclick="document.getElementById('${overlayId}')?.remove()">✕</button>
             </div>
           </div>
@@ -3279,7 +3416,7 @@ App.pickEmoji=(p,e)=>{
       ...(S.settings.customChannels || []).map(c => ({ value: c.value, label: labels[c.value] || c.label, isDefault: false })),
     ]
     const rows = allChannels.map(c =>
-      `<div class="list-item"><div class="list-item-info"><div class="list-item-name">${esc(c.label)}</div><div class="list-item-sub" style="font-family:monospace">${esc(c.value)}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.renameChannel('${esc(c.value)}','${esc(c.label)}')" title="เปลี่ยนชื่อ">✏️</button>${c.isDefault ? '' : `<button class="icon-btn icon-btn-danger" onclick="App.deleteCustomChannel('${esc(c.value)}')" title="ลบ">🗑</button>`}</div></div>`
+      `<div class="list-item"><div class="list-item-info"><div class="list-item-name">${esc(c.label)}</div><div class="list-item-sub" style="font-family:monospace">${esc(c.value)}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.renameChannel(${MTSafeRender.jsArg(c.value)},${MTSafeRender.jsArg(c.label)})" title="เปลี่ยนชื่อ">✏️</button>${c.isDefault ? '' : `<button class="icon-btn icon-btn-danger" onclick="App.deleteCustomChannel(${MTSafeRender.jsArg(c.value)})" title="ลบ">🗑</button>`}</div></div>`
     ).join('')
     App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>ช่องทางการใช้จ่าย</h2></div><div class="sub-scroll" style="padding:12px 16px 40px"><div class="card card-pad" style="margin-bottom:16px"><label class="form-label" style="margin-bottom:6px">เพิ่มช่องทางใหม่</label><div style="display:flex;gap:8px;align-items:center"><input class="form-input" id="new-channel-label" placeholder="เช่น PromptPay, Paotang" style="flex:1" onkeydown="if(event.key==='Enter')App.saveCustomChannel()"><button class="btn btn-primary" onclick="App.saveCustomChannel()" style="width:auto;padding:0 16px;height:44px;flex-shrink:0">+ เพิ่ม</button></div></div><div class="card"><div style="padding:0 16px">${rows}</div></div></div>`)
   }
@@ -3401,7 +3538,7 @@ App.pickEmoji=(p,e)=>{
       <div class="add-detail-shell">
         <div class="add-detail-scroll">
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small><b>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'}</b><span> · แตะเพื่อแก้ไข</span></small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
-          ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div id="cat-grid" style="display:flex;flex-direction:row;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding:0 2px 6px;margin:0 -2px">${orderedCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat('${esc(c.id)}')" style="flex:0 0 110px;width:110px;scroll-snap-align:start;font-size:12px;font-weight:600"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}</div></div>` : ''}
+          ${needsCat ? `<div class="form-group"><label class="form-label">หมวดหมู่ที่ใช้บ่อย</label><div id="cat-grid" style="display:flex;flex-direction:row;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding:0 2px 6px;margin:0 -2px">${orderedCats.map(c => `<button type="button" data-catid="${esc(c.id)}" class="cat-btn${S.tx.categoryId === c.id ? ' active' : ''}" onclick="App._selectCat(${MTSafeRender.jsArg(c.id)})" style="flex:0 0 110px;width:110px;scroll-snap-align:start;font-size:12px;font-weight:600"><span class="cat-icon">${esc(c.icon)}</span><span>${esc(c.label)}</span></button>`).join('')}</div></div>` : ''}
           ${isExpense ? `<div class="form-group"><label class="form-label">ช่องทางการใช้จ่าย</label><select class="form-input" id="tx-channel" onchange="App._txField('channel',this.value);App._renderAddTxDetail()">${(App.getBenefitChannelOptions?.() || [['','ไม่ระบุ'],['online','ออนไลน์'],['offline','หน้าร้าน / ออฟไลน์']]).map(([value,label]) => `<option value="${esc(value)}"${S.tx.channel === value ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></div>` : ''}
           <div class="form-group"><label class="form-label">${type === 'transfer' ? 'จากบัญชี' : 'บัญชีที่ใช้'}</label><select class="form-input" id="tx-wallet" onchange="App._txField('walletId',this.value);App._renderAddTxDetail()">${walletOptions}</select></div>
           ${type === 'transfer'
@@ -3499,7 +3636,7 @@ App.pickEmoji=(p,e)=>{
                   : (rule.channelEligibleRemaining != null && _channelEligibleRem <= 0
                     ? `<span class="list-item-sub" style="color:var(--expense)">ยอดช่องทางนี้เต็มแล้ว</span>`
                     : '')
-                return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}${rule.trackLocked ? ' locked' : ''}${_disabled ? ' disabled' : ''}" ${_disabled ? 'disabled aria-disabled="true"' : `onclick="App._toggleTxRewardRule('${esc(rule.id)}')"`} aria-pressed="${_selected ? 'true' : 'false'}">
+                return `<button type="button" class="reward-rule-result${_selected ? ' selected' : ''}${rule.trackLocked ? ' locked' : ''}${_disabled ? ' disabled' : ''}" ${_disabled ? 'disabled aria-disabled="true"' : `onclick="App._toggleTxRewardRule(${MTSafeRender.jsArg(rule.id)})"`} aria-pressed="${_selected ? 'true' : 'false'}">
                   <span class="csr-main">
                     <span>
                       <span class="list-item-name">${esc(rule.name)}</span>
@@ -3829,9 +3966,18 @@ App.pickEmoji=(p,e)=>{
       confirmLabel: 'รีเซ็ต', danger: true, requireText: 'RESET',
       onConfirm() {
         try { Storage.createLocalBackup?.(S, 'before-reset-data') } catch (_) {}
-        Storage.reset()
+        const resetOk = Storage.reset({ allowRecovery: true })
+        if (!resetOk) {
+          toast('รีเซ็ตข้อมูลไม่สำเร็จ — กรุณาส่งออกข้อมูลก่อนลองใหม่', 'error')
+          return
+        }
         Object.assign(S, cleanResetState())
-        persist(); applyTheme(); App.render()
+        if (!persist()) {
+          App.showStorageRecoveryNotice?.()
+          toast('รีเซ็ตข้อมูลแล้วในหน่วยความจำ แต่บันทึกลงอุปกรณ์ไม่สำเร็จ — กรุณาส่งออกข้อมูลทันที', 'error')
+          return
+        }
+        applyTheme(); App.render()
         toast('รีเซ็ตข้อมูลแล้ว', 'info')
       }
     })
@@ -3983,7 +4129,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       </div>`}
       ${S._ledgerIssues?.length ? `<div class="mt-integrity-warn" onclick="App._showLedgerIssues()">⚠ พบรายการ ${S._ledgerIssues.length} รายการอ้างถึงกระเป๋าที่ไม่มีอยู่แล้ว — แตะเพื่อดูรายละเอียด</div>` : ''}
       ${v2 ? '' : `<div class="dash-month-nav">${months.map(m =>
-        `<button class="chip${m === dm ? ' active' : ''}" onclick="App.setDashMonth('${ESC(m)}')">${ESC(mlabel(m))}</button>`
+        `<button class="chip${m === dm ? ' active' : ''}" onclick="App.setDashMonth(${MTSafeRender.jsArg(m)})">${ESC(mlabel(m))}</button>`
       ).join('')}</div>`}`
 
     // Recurring due alerts (current month only)
@@ -4005,8 +4151,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
               </div>
             </div>
             <div class="mt-recurring-alert-btns" onclick="event.stopPropagation()">
-              <button class="btn btn-primary btn-sm" onclick="App.postRecurringNow('${ESC(r.id)}')">บันทึก</button>
-              <button class="btn btn-secondary btn-sm" onclick="App.skipRecurringNow('${ESC(r.id)}')">ข้าม</button>
+              <button class="btn btn-primary btn-sm" onclick="App.postRecurringNow(${MTSafeRender.jsArg(r.id)})">บันทึก</button>
+              <button class="btn btn-secondary btn-sm" onclick="App.skipRecurringNow(${MTSafeRender.jsArg(r.id)})">ข้าม</button>
             </div>
           </div>`
         })
@@ -4033,7 +4179,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
           ? `<span class="mt-sb-saving mt-sb-saving--bad">ขาดดุล ${FMT(Math.abs(sumNet))}</span>`
           : `<span class="mt-sb-saving mt-sb-saving--good">ออม ${Math.round(savingsPct)}%${sumNet > 0 ? ' ▲' : ''}</span>`
         html += `<div class="mt-summary-banner" id="mt-summary-banner">
-          <div class="mt-summary-banner-close" onclick="App._dismissMonthlySummary('${ESC(lastMonth)}')">×</div>
+          <div class="mt-summary-banner-close" onclick="App._dismissMonthlySummary(${MTSafeRender.jsArg(lastMonth)})">×</div>
           <div class="mt-summary-banner-head">🎉 สรุปเดือน ${ESC(mLabel)}</div>
           <div class="mt-summary-banner-stats">
             <span class="mt-sb-income">รายรับ ${FMT(sumIncome)}</span>
@@ -4044,7 +4190,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
           </div>
           ${catText ? `<div class="mt-summary-banner-cats">${catText}</div>` : ''}
           <div class="mt-summary-banner-actions">
-            <button class="btn btn-sm" onclick="App._showMonthlySummaryDetail('${ESC(lastMonth)}')">ดูรายละเอียด</button>
+            <button class="btn btn-sm" onclick="App._showMonthlySummaryDetail(${MTSafeRender.jsArg(lastMonth)})">ดูรายละเอียด</button>
           </div>
         </div>`
       }
@@ -4185,7 +4331,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
           </div>
         </div>` : ''}
         ${v2 ? `<div class="v2-month-nav">${months.map(m =>
-          `<button class="chip${m === dm ? ' active' : ''}" onclick="App.setDashMonth('${ESC(m)}')">${ESC(mlabel(m))}</button>`
+          `<button class="chip${m === dm ? ' active' : ''}" onclick="App.setDashMonth(${MTSafeRender.jsArg(m)})">${ESC(mlabel(m))}</button>`
         ).join('')}</div>` : ''}
         <div class="mt-net-hero">
           <div class="mt-net-main">
@@ -4242,7 +4388,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       html += `<div class="mt-alert-card">
         <div class="mt-alert-title">บิลบัตรเครดิตที่ต้องชำระ <span class="mt-alert-badges"><em>${ESC(nearDueBadge)}</em><span class="mt-alert-badge-total">${S.settings?.hideMoney ? '฿*****' : `รวม ${FMT(nearDueTotal)}`}</span></span></div>
         ${nearDueCards.map(card => `
-          <div class="mt-alert-row" onclick="App.openCCDetail('${ESC(card.id)}')">
+          <div class="mt-alert-row" onclick="App.openCCDetail(${MTSafeRender.jsArg(card.id)})">
             <div class="mt-alert-row-info">
               <span class="mt-alert-row-name">${ESC(card.icon || '💳')} ${ESC(card.name)} · ${ESC(card.due.dueStr)}</span>
             </div>
@@ -4536,9 +4682,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (w.type === 'bnpl') {
       const _reorderMode = !!S._walletReorderMode
       const _dragHandle = _reorderMode
-        ? `<div class="wallet-drag-handle" ontouchstart="App._walletDragStart(event,'${ESC(w.id)}')" onmousedown="App._walletDragStart(event,'${ESC(w.id)}')">⠿</div>`
+        ? `<div class="wallet-drag-handle" ontouchstart="App._walletDragStart(event,${MTSafeRender.jsArg(w.id)})" onmousedown="App._walletDragStart(event,${MTSafeRender.jsArg(w.id)})">⠿</div>`
         : ''
-      const editBtn = `<button class="wc-edit-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')" aria-label="แก้ไข">✏️</button>`
+      const editBtn = `<button class="wc-edit-btn" onclick="event.stopPropagation();App.openWalletForm(${MTSafeRender.jsArg(w.id)})" aria-label="แก้ไข">✏️</button>`
       const ctx = {
         editBtn,
         dragHandle: _dragHandle,
@@ -4555,11 +4701,11 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const color = w.color || (isCC ? '#DC2626' : invest ? '#D97706' : '#2563EB')
     const name = `${w.icon || ''} ${w.name || ''}`.trim()
     const typeLabel = App._walletTypeLabel ? App._walletTypeLabel(w.type) : w.type
-    const editBtn = `<button class="wc-edit-btn" onclick="event.stopPropagation();App.openWalletForm('${ESC(w.id)}')" aria-label="แก้ไข">✏️</button>`
+    const editBtn = `<button class="wc-edit-btn" onclick="event.stopPropagation();App.openWalletForm(${MTSafeRender.jsArg(w.id)})" aria-label="แก้ไข">✏️</button>`
 
     const _reorderMode = !!S._walletReorderMode
     const _dragHandle = _reorderMode
-      ? `<div class="wallet-drag-handle" ontouchstart="App._walletDragStart(event,'${ESC(w.id)}')" onmousedown="App._walletDragStart(event,'${ESC(w.id)}')">⠿</div>`
+      ? `<div class="wallet-drag-handle" ontouchstart="App._walletDragStart(event,${MTSafeRender.jsArg(w.id)})" onmousedown="App._walletDragStart(event,${MTSafeRender.jsArg(w.id)})">⠿</div>`
       : ''
     const _dataAttrs = `data-wallet-id="${ESC(w.id)}" data-wallet-type="${ESC(w.type)}"`
     const _dragCls = _reorderMode ? ' wallet-drag-item' : ''
@@ -4594,12 +4740,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
       // pct and avail use totalOwed — getCreditUsageForCard already includes committed debt
       const pct = limit ? Math.min(100, Math.max(0, totalOwed / limit * 100)) : 0
       const avail = App.getAvailableCreditForCard ? App.getAvailableCreditForCard(w) : (limit ? Math.max(0, limit - totalOwed) : 0)
-      const payBtn = `<button class="wallet-chip-btn wc-card-pay-btn" onclick="event.stopPropagation();App.openCCPay('${ESC(w.id)}')">ชำระ</button>`
+      const payBtn = `<button class="wallet-chip-btn wc-card-pay-btn" onclick="event.stopPropagation();App.openCCPay(${MTSafeRender.jsArg(w.id)})">ชำระ</button>`
       // Show committed installment breakdown when there are future installment months
       const installmentNote = committedInstallments > 0
         ? `<div class="wc-prog-info" style="margin-top:4px;font-size:11px;opacity:.8"><span>ค้างชำระ ${MONEY(postedOwed)}</span><span>ผ่อนล่วงหน้า ${MONEY(committedInstallments)}</span></div>`
         : ''
-      return `<div ${_dataAttrs} class="wallet-card wallet-card-colored wallet-card-credit${_dragCls}" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB"${_reorderMode ? '' : ` onclick="App.openCCDetail('${ESC(w.id)}')"`}>
+      return `<div ${_dataAttrs} class="wallet-card wallet-card-colored wallet-card-credit${_dragCls}" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB"${_reorderMode ? '' : ` onclick="App.openCCDetail(${MTSafeRender.jsArg(w.id)})"`}>
         ${_dragHandle}
         <div class="wc-header">
           <div><div class="wc-name">${ESC(name)}</div><div class="wc-type">บัตรเครดิต${w.issuer ? ` · ${ESC(w.issuer)}` : ''}${limit ? ` · วงเงิน ${MONEY(limit)}` : ''}</div></div>
@@ -4608,12 +4754,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
         <div class="wc-balance">-${MONEY(totalOwed)}</div>
         ${installmentNote}
         ${!_reorderMode && due ? `<div class="cc-due-strip${due.daysLeft <= 3 ? ' urgent' : ''}"><span>ครบกำหนดชำระ</span><strong>${ESC(due.dueStr)}</strong><em>${due.daysLeft === 0 ? 'วันนี้' : `อีก ${due.daysLeft} วัน`}</em></div>` : ''}
-        ${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : `<div class="wc-no-limit-warn" onclick="event.stopPropagation();App.openEditWallet('${ESC(w.id)}')">⚠ ยังไม่ได้ตั้งวงเงิน — แตะเพื่อตั้งค่า</div>`}
+        ${limit ? `<div class="wc-limit"><div class="wc-prog-bar"><div class="wc-prog-fill" style="width:${pct}%;background:${pct > 80 ? 'rgba(252,165,165,.95)' : 'rgba(255,255,255,.9)'}"></div></div><div class="wc-prog-info"><span>ใช้ ${pct.toFixed(0)}%</span><span>คงเหลือ ${MONEY(avail)}</span></div></div>` : `<div class="wc-no-limit-warn" onclick="event.stopPropagation();App.openEditWallet(${MTSafeRender.jsArg(w.id)})">⚠ ยังไม่ได้ตั้งวงเงิน — แตะเพื่อตั้งค่า</div>`}
       </div>`
     }
 
     // Regular asset wallet
-    return `<div ${_dataAttrs} class="wallet-card wallet-card-colored${_dragCls}" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB"${_reorderMode ? '' : ` onclick="App.openWalletDetail('${ESC(w.id)}')"`}>
+    return `<div ${_dataAttrs} class="wallet-card wallet-card-colored${_dragCls}" style="--wallet-color:${ESC(color)};--wallet-color-2:${ESC(color)}BB"${_reorderMode ? '' : ` onclick="App.openWalletDetail(${MTSafeRender.jsArg(w.id)})"`}>
       ${_dragHandle}
       <div class="wc-header">
         <div><div class="wc-name">${ESC(name)}</div><div class="wc-type">${ESC(typeLabel)}</div></div>
@@ -4837,7 +4983,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
               ${(r.gap > 0.01 || r.unitGap > 1e-8) ? `⚠️ ต่างกัน ${fmt(r.gap)}${r.unitGap > 1e-8 ? ` · หน่วยต่าง ${r.unitGap.toLocaleString('en-US',{maximumFractionDigits:8})}` : ''}` : '✓ ถูกต้อง'}
             </div>
           </div>
-          ${(r.gap > 0.01 || r.unitGap > 1e-8) ? `<button class="btn btn-secondary btn-sm" onclick="App._repairOneWallet('${esc(r.w.id)}')" style="width:auto;margin-left:10px">แก้ไข</button>` : ''}
+          ${(r.gap > 0.01 || r.unitGap > 1e-8) ? `<button class="btn btn-secondary btn-sm" onclick="App._repairOneWallet(${MTSafeRender.jsArg(r.w.id)})" style="width:auto;margin-left:10px">แก้ไข</button>` : ''}
         </div>
       </div>`).join('')
     App.openSubScreen(`
@@ -5443,20 +5589,60 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return tx
   }
 
-  App.saveTx = function() {
+  App.saveTx = function(forceSkipDuplicateCheck) {
     if (typeof MT_BOOT_FAST_LEDGER !== 'undefined') MT_BOOT_FAST_LEDGER = false
-    let saved = false
-    const transactionDirtyKeys = ['transactions', 'wallets', 'merchants', 'recurring', 'bnplPlans', 'splitBills', 'splitPeople', 'netWorthSnapshots']
-    const commitTransaction = (dirtyKeys = transactionDirtyKeys) => {
-      if (persist('transaction', { dirtyKeys: dirtyKeys })) { saved = true; return true }
-      // Storage rolled back the durable snapshot; restore financial state while
-      // keeping the draft and open form available for another attempt.
-      Object.assign(S, Storage.init())
-      return false
+    // Keep the rapid double-submit and duplicate warning at the transaction
+    // boundary itself so later feature packs cannot accidentally bypass it.
+    if (App._txSaveInProgress) return false
+    App._txSaveInProgress = true
+    if (typeof setTimeout === 'function') {
+      setTimeout(() => { App._txSaveInProgress = false }, 600)
     }
+
+    const isEdit = S.txMode === 'edit' && !!S.editingTxId
+    if (!forceSkipDuplicateCheck && !isEdit && typeof App._detectDuplicateTx === 'function') {
+      const duplicateDraft = { ...S.tx, amount: Number(S.tx?.amount || 0) }
+      const duplicate = App._detectDuplicateTx(duplicateDraft, null)
+      if (duplicate) {
+        const wallet = (S.wallets || []).find(row => row.id === duplicate.walletId)
+        const duplicateDescription = [
+          duplicate.merchant,
+          Calc.fmt(duplicate.amount),
+          duplicate.date,
+          wallet?.name,
+        ].filter(Boolean).join(' · ')
+        App.showConfirm?.({
+          title: '⚠️ รายการที่คล้ายกัน',
+          body: `พบรายการที่ตรงกัน:\n${duplicateDescription}\n\nต้องการบันทึกซ้ำหรือไม่?`,
+          confirmLabel: 'บันทึกต่อไป',
+          onConfirm: () => {
+            App._txSaveInProgress = false
+            App.saveTx(true)
+          },
+          onCancel: () => { App._txSaveInProgress = false },
+        })
+        return false
+      }
+    }
+
+    let saved = false
+    const draftForRetry = S.tx ? cloneCommitValue(S.tx) : null
+    const formForRetry = { txMode:S.txMode, editingTxId:S.editingTxId }
     const beforeTxIds = new Set((S.transactions || []).map(t => t.id))
     const beforeRecIds = new Set((S.recurring || []).map(r => r.id))
-    const isEdit = S.txMode === 'edit' && !!S.editingTxId
+    const transactionDirtyKeys = ['transactions', 'wallets', 'merchants', 'recurring', 'bnplPlans', 'splitBills', 'splitPeople', 'netWorthSnapshots']
+    const commitTransaction = (dirtyKeys = transactionDirtyKeys) => commitMutation({
+      mutate: () => {},
+      persist: () => persist('transaction', { dirtyKeys: dirtyKeys }),
+      onSuccess: () => { saved = true },
+      // Storage rolled back the durable snapshot; restore financial state while
+      // keeping the draft and open form available for another attempt.
+      rollback: () => {
+        Object.assign(S, Storage.init())
+        if (draftForRetry) S.tx = cloneCommitValue(draftForRetry)
+        Object.assign(S, formForRetry)
+      },
+    })
     const draft = { ...S.tx, amount:Number(S.tx.amount || 0) }
     const modeBefore = S.txMode
     const resetAfterSaveChrome = () => {
@@ -5530,7 +5716,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
         App._registerMerchantFromTx?.(txs[0])
         const transactionIds = App.getAffectedRewardTransactionIds?.({ changedTxs: txs }) || txs.map(row => row.id)
         App.refreshTransactionRewardEstimates?.({ transactionIds })
-        if (!commitTransaction()) return false
+        if (!commitTransaction()) {
+          App._txSaveInProgress = false
+          return false
+        }
         resetAfterSaveChrome()
         App.closeOverlay('overlay-add-tx')
         if (S.txMode === 'add') {
@@ -5578,7 +5767,35 @@ Calc.getUsableMoney = function(wallets, state = null) {
         }
       }
 
-      if (!commitTransaction()) return false
+      let createdRecurring = null
+      if (modeBefore !== 'edit' && draft.isRecurring && draft.type === 'expense') {
+        const createdTx = (S.transactions || []).find(t => {
+          if (beforeTxIds.has(t.id) || t.type !== draft.type || t.walletId !== draft.walletId) return false
+          const txBaseAmount = App.getBenefitCalculationAmount?.(t) ?? Number(t.amount || 0)
+          return Math.abs(Number(txBaseAmount || 0) - Number(draft.amount || 0)) < 0.01
+        })
+        createdRecurring = App._createRecurringFromDraft?.({ ...draft, amount: Number(draft.amount || 0), _savedTxId: createdTx?.id }) || null
+        if (createdRecurring) S.recurring.push(createdRecurring)
+        if (createdTx && createdRecurring) {
+          const startDate = draft.date || createdTx.date || today()
+          createdRecurring.startDate = startDate
+          if (createdRecurring.durationMonths && !createdRecurring.totalOccurrences) createdRecurring.totalOccurrences = Number(createdRecurring.durationMonths)
+          if (createdRecurring.recurrenceType === 'monthly' && !createdRecurring.recurringDayOfMonth) createdRecurring.recurringDayOfMonth = Number(draft.recurringDayOfMonth || String(startDate).slice(-2)) || 1
+          const scheduledDate = App._recurringOccurrenceDate?.(createdRecurring, 1) || createdRecurring.nextDueDate || startDate
+          createdTx.sourceRecurringId = createdRecurring.id
+          createdTx.recurringDueDate = scheduledDate
+          createdTx.recurringOccurrenceNo = 1
+          createdTx.recurringInstanceKey = App._recurringInstanceKey?.(createdRecurring.id, 1, scheduledDate) || `${createdRecurring.id}__1__${scheduledDate}`
+          createdTx.isRecurring = true
+          App._updateRecurringNext?.(createdRecurring)
+          App.refreshTransactionRewardEstimates?.()
+        }
+      }
+
+      if (!commitTransaction()) {
+        App._txSaveInProgress = false
+        return false
+      }
       resetAfterSaveChrome()
       App.closeOverlay('overlay-add-tx')
       if (isEdit) App.render()
@@ -5586,37 +5803,15 @@ Calc.getUsableMoney = function(wallets, state = null) {
         App.showPage('transactions')
         App._syncPageChrome?.('transactions')
       }
-      toast(isEdit ? 'แก้ไขรายการแล้ว' : 'บันทึกรายการแล้ว', 'success')
+      if (createdRecurring) toast('บันทึกรายการและสร้างรายการประจำแล้ว', 'success')
+      else toast(isEdit ? 'แก้ไขรายการแล้ว' : 'บันทึกรายการแล้ว', 'success')
+      if (createdRecurring) App.openRecurringScreen?.()
       S.txMode = 'add'; S.editingTxId = null
-
-      if (modeBefore === 'edit' || !draft.isRecurring || draft.type !== 'expense') return true
-      const createdTx = (S.transactions || []).find(t => {
-        if (beforeTxIds.has(t.id) || t.type !== draft.type || t.walletId !== draft.walletId) return false
-        const txBaseAmount = App.getBenefitCalculationAmount?.(t) ?? Number(t.amount || 0)
-        return Math.abs(Number(txBaseAmount || 0) - Number(draft.amount || 0)) < 0.01
-      })
-      App._createRecurringFromDraft?.({ ...draft, amount: Number(draft.amount || 0), _savedTxId: createdTx?.id })
-      const createdRec = (S.recurring || []).find(r => !beforeRecIds.has(r.id) || (createdTx?.id && r.createdFromTxId === createdTx.id))
-      if (createdTx && createdRec) {
-        const startDate = draft.date || createdTx.date || today()
-        createdRec.startDate = startDate
-        if (createdRec.durationMonths && !createdRec.totalOccurrences) createdRec.totalOccurrences = Number(createdRec.durationMonths)
-        if (createdRec.recurrenceType === 'monthly' && !createdRec.recurringDayOfMonth) createdRec.recurringDayOfMonth = Number(draft.recurringDayOfMonth || String(startDate).slice(-2)) || 1
-        const scheduledDate = App._recurringOccurrenceDate?.(createdRec, 1) || createdRec.nextDueDate || startDate
-        createdTx.sourceRecurringId = createdRec.id
-        createdTx.recurringDueDate = scheduledDate
-        createdTx.recurringOccurrenceNo = 1
-        createdTx.recurringInstanceKey = App._recurringInstanceKey?.(createdRec.id, 1, scheduledDate) || `${createdRec.id}__1__${scheduledDate}`
-        createdTx.isRecurring = true
-        App._updateRecurringNext?.(createdRec)
-        const recurringTransactionIds = App.getAffectedRewardTransactionIds?.({ changedTxs: [createdTx] }) || [createdTx.id]
-        App.refreshTransactionRewardEstimates?.({ transactionIds: recurringTransactionIds })
-        if (!persist('transaction.recurring', { dirtyKeys: transactionDirtyKeys })) Object.assign(S, Storage.init())
-      }
     } catch (err) {
       console.error('saveTx failed', err)
       toast(`บันทึกรายการไม่สำเร็จ: ${err?.message || err}`, 'error')
       console.warn('V6.5 recurring metadata sync failed', err)
+      App._txSaveInProgress = false
     }
     return saved
   }
@@ -5639,10 +5834,10 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const transactions = data.transactions.filter(t => {
       if (!validTypes.has(t.type)) { warnings.push(`ข้ามรายการ type ผิด: ${t.type}`); return false }
       const amount = Number(t.amount)
-      if (!Number.isFinite(amount) || (!(amount > 0) && !['investment_adjust'].includes(t.type))) { warnings.push('ข้ามรายการจำนวนเงินไม่ถูกต้อง'); return false }
+      if (!Number.isFinite(amount) || !App._isSafeMoneyAmount(amount) || (!(amount > 0) && !['investment_adjust'].includes(t.type))) { warnings.push('ข้ามรายการจำนวนเงินไม่ถูกต้อง'); return false }
       if (!isValidImportDate(t.date)) { warnings.push('ข้ามรายการวันที่ไม่ถูกต้อง'); return false }
-      if (t.walletId && !walletIds.has(t.walletId)) { warnings.push('ข้ามรายการที่อ้างอิง wallet ไม่พบ'); return false }
-      if (t.toWalletId && !walletIds.has(t.toWalletId)) { warnings.push('ข้ามรายการที่อ้างอิงปลายทางไม่พบ'); return false }
+      const referenceIssues = window.MTLedger?.validateTransactionWalletReferences?.(t, walletIds) || []
+      if (referenceIssues.length) { warnings.push('ข้ามรายการที่อ้างอิงกระเป๋าไม่ครบถ้วนหรือไม่พบ'); return false }
       if (t.isInstallment) {
         const installmentNo = Number(t.installmentNo)
         const installmentMonths = App._normalizeInstallmentCount(t.installmentMonths, 2)
@@ -5669,6 +5864,11 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App.saveCCPay = function() {
     if (typeof MT_BOOT_FAST_LEDGER !== 'undefined') MT_BOOT_FAST_LEDGER = false
     const parsePayNumber = value => Number(String(value || '0').replace(/,/g, '')) || 0
+    const isSafeAmount = value => typeof App._isSafeMoneyAmount === 'function'
+      ? App._isSafeMoneyAmount(value)
+      : (typeof Calc !== 'undefined' && typeof Calc.isSafeMoneyAmount === 'function'
+        ? Calc.isSafeMoneyAmount(value)
+        : Number.isFinite(Number(value)) && Number.isSafeInteger(Math.round(Number(value) * 100)))
     const editId = S.editingCCPaymentId
     const existingTx = editId
       ? (S.transactions || []).find(t => t.id === editId && t.type === 'cc_payment')
@@ -5684,8 +5884,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const source = walletById(sourceId)
     if (!card || card.type !== 'credit') { toast('ไม่พบบัตรเครดิต', 'error'); return }
     if (!sourceId || !source) { App._showFieldError('cc-pay-wallet', 'กรุณาเลือกกระเป๋าต้นทาง'); return }
-    if (!Number.isFinite(amount) || !(amount > 0)) { App._showFieldError('cc-pay-amount', 'กรุณาระบุยอดชำระ'); return }
-    if (!Number.isFinite(cashAmount) || !(cashAmount > 0)) { App._showFieldError('cc-pay-cash-amount', 'กรุณาระบุเงินที่จ่ายจริง'); return }
+    if (!Number.isFinite(amount) || !isSafeAmount(amount) || !(amount > 0)) { App._showFieldError('cc-pay-amount', 'กรุณาระบุยอดชำระที่ถูกต้อง'); return }
+    if (!Number.isFinite(cashAmount) || !isSafeAmount(cashAmount) || !(cashAmount > 0)) { App._showFieldError('cc-pay-cash-amount', 'กรุณาระบุเงินที่จ่ายจริงที่ถูกต้อง'); return }
     if (cashAmount > amount + 0.01) { App._showFieldError('cc-pay-cash-amount', 'เงินที่จ่ายจริงต้องไม่เกินยอดที่ตัดจากบัตร'); return }
     if (hasDiscount && Math.abs((amount - cashAmount) - discountAmount) > 0.01) { App._showFieldError('cc-pay-discount', 'ส่วนลดต้องตรงกับยอดตัดบัตรลบเงินที่จ่ายจริง'); return }
     const due = App.getCreditCardDueInfo?.(card)
@@ -5786,7 +5986,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       <div class="sub-header">
         <button class="btn-icon" onclick="App.openRecurringScreen()">←</button>
         <h2>${r?'แก้ไข':'เพิ่ม'}รายการประจำ</h2>
-        <button class="btn btn-primary btn-sm" onclick="App.saveRecurring('${esc(id||'')}')" style="width:auto">บันทึก</button>
+        <button class="btn btn-primary btn-sm" onclick="App.saveRecurring(${MTSafeRender.jsArg(id||'')})" style="width:auto">บันทึก</button>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         ${section('rec-basic-acc', 'ข้อมูลหลัก', `
@@ -5851,32 +6051,47 @@ Calc.getUsableMoney = function(wallets, state = null) {
       recurringDayOfMonth: recType === 'monthly' ? dayOfMonth : undefined,
       durationMonths: recType === 'monthly' && durationMonths ? durationMonths : undefined,
     }
-    if (!S.recurring) S.recurring = []
-    if (id) {
-      const idx = S.recurring.findIndex(r => r.id === id)
-      if (idx >= 0) S.recurring[idx] = { ...S.recurring[idx], ...data }
-    } else {
-      S.recurring.push({ id: Calc.genId(), ...data })
-    }
-    persist(); App.openRecurringScreen(); toast('บันทึกรายการประจำแล้ว', 'success')
+    const previousRecurring = (S.recurring || []).map(row => ({ ...row }))
+    commitMutation({
+      mutate: () => {
+        if (!S.recurring) S.recurring = []
+        if (id) {
+          const idx = S.recurring.findIndex(r => r.id === id)
+          if (idx >= 0) S.recurring[idx] = { ...S.recurring[idx], ...data }
+        } else {
+          S.recurring.push({ id: Calc.genId(), ...data })
+        }
+      },
+      rollback: () => { S.recurring = previousRecurring },
+      onSuccess: () => { App.openRecurringScreen(); toast('บันทึกรายการประจำแล้ว', 'success') },
+    })
   }
 
   App.snoozeRecurring = function(id, days = 7) {
     const r = S.recurring.find(x => x.id === id)
     if (!r) return
-    const occurrenceNo = Number(r.nextOccurrenceNo || 1) || 1
-    r.nextOccurrenceNoOverride = occurrenceNo
-    r.nextDueDateOverride = addDays(r.nextDueDate || today(), days)
-    r.nextDueDate = r.nextDueDateOverride
-    persist(); App.openRecurringScreen(); toast(`เลื่อน ${days} วันแล้ว`, 'info')
+    const previousRecurring = (S.recurring || []).map(row => ({ ...row }))
+    commitMutation({
+      mutate: () => {
+        const occurrenceNo = Number(r.nextOccurrenceNo || 1) || 1
+        r.nextOccurrenceNoOverride = occurrenceNo
+        r.nextDueDateOverride = addDays(r.nextDueDate || today(), days)
+        r.nextDueDate = r.nextDueDateOverride
+      },
+      rollback: () => { S.recurring = previousRecurring },
+      onSuccess: () => { App.openRecurringScreen(); toast(`เลื่อน ${days} วันแล้ว`, 'info') },
+    })
   }
 
   // Make transaction rows readable for new types.
 
   // Delete/archive protection for referenced masters.
   App.deleteWallet = function(id) {
-    const transactionRefs = (S.transactions || []).filter(t => t.walletId === id || t.toWalletId === id || t.cashWalletId === id).length
-    const recurringRefs = (S.recurring || []).filter(r => r.walletId === id || r.cashWalletId === id || r.toWalletId === id).length
+    const transactionRefs = (S.transactions || []).filter(t => {
+      const ids = window.MTLedger?.getTransactionWalletReferenceIds?.(t) || [t.walletId, t.toWalletId, t.cashWalletId, t.sourceWalletId]
+      return ids.includes(id)
+    }).length
+    const recurringRefs = (S.recurring || []).filter(r => [r.walletId, r.cashWalletId, r.sourceWalletId, r.toWalletId].includes(id)).length
     const loanRefs = (S.loans || []).filter(loan => loan.walletId === id || (loan.repayments || []).some(rep => rep.walletId === id)).length
     const bnplRefs = (S.bnplPlans || []).filter(plan => plan.walletId === id || (plan.schedule || []).some(row => row.walletId === id)).length
     const rewardRefs = (S.rewardLedger || []).filter(row => row.cardId === id || row.walletId === id).length
@@ -5919,25 +6134,46 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const type = S.catManageType || 'expense'
     const refs = (S.transactions || []).filter(t => t.categoryId === id).length + (S.recurring || []).filter(r => r.categoryId === id).length
     const cat = (S.categories[type] || []).find(c => c.id === id)
-    if (refs > 0 && cat) { cat.archived = true; persist(); App.openCategoryScreen(type); toast('มีรายการอ้างอิง จึง Archive หมวดหมู่แทนการลบ', 'warn'); return }
+    if (refs > 0 && cat) {
+      const previousArchived = cat.archived
+      commitMutation({
+        mutate: () => { cat.archived = true },
+        rollback: () => { cat.archived = previousArchived },
+        onSuccess: () => {
+          App.openCategoryScreen(type)
+          toast('มีรายการอ้างอิง จึง Archive หมวดหมู่แทนการลบ', 'warn')
+        },
+      })
+      return
+    }
     const idx = (S.categories[type] || []).findIndex(c => c.id === id)
     if (idx < 0) return
     const removed = S.categories[type].splice(idx, 1)[0]
     App.openCategoryScreen(type)
-    App._withUndo(`ลบ "${removed.label}" แล้ว`, () => {
+    const restoreCategory = () => {
       S.categories[type].splice(idx, 0, removed)
       App.openCategoryScreen(type)
-    }, () => persist())
+    }
+    App._withUndo(`ลบ "${removed.label}" แล้ว`, restoreCategory, () => commitMutation({
+      mutate: () => {},
+      rollback: restoreCategory,
+      onSuccess: () => {},
+    }))
   }
 
   App.unarchiveCategory = function(id) {
     const type = S.catManageType || 'expense'
     const cat = (S.categories[type] || []).find(c => c.id === id)
     if (!cat) return
-    delete cat.archived
-    persist()
-    App.openCategoryScreen(type)
-    toast(`คืนค่า "${cat.label}" แล้ว`, 'success')
+    const previousArchived = cat.archived
+    commitMutation({
+      mutate: () => { delete cat.archived },
+      rollback: () => { cat.archived = previousArchived },
+      onSuccess: () => {
+        App.openCategoryScreen(type)
+        toast(`คืนค่า "${cat.label}" แล้ว`, 'success')
+      },
+    })
   }
 
   // Backup reminder for local-only users.
@@ -6025,8 +6261,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App.openTxDetailSub = function(id, backType, backId) {
     const tx = (S.transactions || []).find(t => t.id === id)
     if (!tx) return
-    const back = backType === 'cc' ? `App.openCCDetail('${esc(backId)}')` : backType === 'wallet' ? `App.openWalletDetail('${esc(backId)}')` : 'App.closeSubScreen()'
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>รายละเอียดรายการ</h2></div><div class="sub-scroll tx-detail-sub-screen">${App._txDetailRowsHtml(tx)}<div class="tx-action-grid"><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openEditTx('${esc(tx.id)}')">✏️ แก้ไข</button><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openDuplicateTx('${esc(tx.id)}')">⧉ ทำซ้ำ</button></div><button class="btn btn-outline mt-8" onclick="App.deleteTxFromSub('${esc(tx.id)}','${esc(backType || '')}','${esc(backId || '')}')">🗑 ลบรายการ</button>${tx.isRewardReceived ? '<div class="form-hint" style="margin-top:8px">ถ้าลบรายการนี้ จะรับ Cashback รอบนี้ได้ใหม่</div>' : ''}</div>`)
+    const back = backType === 'cc' ? `App.openCCDetail(${MTSafeRender.jsArg(backId)})` : backType === 'wallet' ? `App.openWalletDetail(${MTSafeRender.jsArg(backId)})` : 'App.closeSubScreen()'
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${back}">←</button><h2>รายละเอียดรายการ</h2></div><div class="sub-scroll tx-detail-sub-screen">${App._txDetailRowsHtml(tx)}<div class="tx-action-grid"><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openEditTx(${MTSafeRender.jsArg(tx.id)})">✏️ แก้ไข</button><button class="btn btn-secondary" onclick="App.closeSubScreen();App.openDuplicateTx(${MTSafeRender.jsArg(tx.id)})">⧉ ทำซ้ำ</button></div><button class="btn btn-outline mt-8" onclick="App.deleteTxFromSub(${MTSafeRender.jsArg(tx.id)},${MTSafeRender.jsArg(backType || '')},${MTSafeRender.jsArg(backId || '')})">🗑 ลบรายการ</button>${tx.isRewardReceived ? '<div class="form-hint" style="margin-top:8px">ถ้าลบรายการนี้ จะรับ Cashback รอบนี้ได้ใหม่</div>' : ''}</div>`)
   }
 
   // ── 4. Reports rollback: restore previous report structure ─────────────────
@@ -6165,8 +6401,27 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return html
   }
 
+  App._reportViewExtensions ||= {}
   App.renderReports = function() {
-    if (!['expense','income','cashflow','assets','credit','budget','networth'].includes(S.rptView)) S.rptView = 'assets'
+    const defaultReportViews = [
+      ['assets','สินทรัพย์'],
+      ['expense','ใช้จ่าย'],
+      ['income','รายรับ'],
+      ['cashflow','กระแสเงินสด'],
+      ['credit','บัตร/หนี้'],
+      ['budget','งบประมาณ'],
+      ['networth','📈 ความมั่งคั่ง'],
+    ]
+    const extensionReportViews = Object.entries(App._reportViewExtensions || {})
+      .filter(([, extension]) => extension && typeof extension.render === 'function')
+      .map(([value, extension]) => [value, extension.label || value])
+    const reportViews = [...defaultReportViews, ...extensionReportViews]
+    if (!reportViews.some(([value]) => value === S.rptView)) S.rptView = 'assets'
+    const selectedExtension = App._reportViewExtensions?.[S.rptView]
+    if (selectedExtension && typeof selectedExtension.render === 'function') {
+      selectedExtension.render()
+      return
+    }
     const currentYear = new Date().getFullYear()
     const selectedYear = S.rptYear || currentYear
     const years = [currentYear, currentYear - 1, currentYear - 2]
@@ -6177,15 +6432,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
     if (monthEl) monthEl.innerHTML =
       `<div class="chips" style="padding:0;margin-bottom:4px">${years.map(y => `<button class="chip${y === selectedYear ? ' active' : ''}" onclick="App._setRptYear(${y})">${y + 543}</button>`).join('')}</div>` +
       `<div class="chips" style="padding:0">${months.map(m => `<button class="chip${m === S.rptMonth ? ' active' : ''}" onclick="App.setRptMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`).join('')}</div>`
-    if (viewEl) viewEl.innerHTML = [
-      ['assets','สินทรัพย์'],
-      ['expense','ใช้จ่าย'],
-      ['income','รายรับ'],
-      ['cashflow','กระแสเงินสด'],
-      ['credit','บัตร/หนี้'],
-      ['budget','งบประมาณ'],
-      ['networth','📈 ความมั่งคั่ง'],
-    ].map(([v,l]) => `<button class="chip${S.rptView === v ? ' active' : ''}" onclick="App.setRptView('${v}')">${l}</button>`).join('')
+    if (viewEl) viewEl.innerHTML = reportViews
+      .map(([v,l]) => `<button class="chip${S.rptView === v ? ' active' : ''}" data-view="${v}" onclick="App.setRptView('${v}')">${l}</button>`)
+      .join('')
 
     // Net Worth view ไม่ใช้ข้อมูลรายเดือน — render แยกและ return ทันที
     if (S.rptView === 'networth') {
@@ -7075,7 +7324,7 @@ App._pickMerchant = function(name, opts = {}) {
 
   App.openRecurringScreen = function() {
     const rows = (S.recurring || []).slice().sort((a,b) => String(a.nextDueDate || '').localeCompare(String(b.nextDueDate || '')))
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.openRecurringForm()" style="width:auto">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px">${rows.length ? rows.map(r => { const due = r.nextDueDate || today(); const dueNow = due <= today(); return `<div class="recurring-item ${r.paused?'paused':''}" data-recurring-id="${esc(r.id)}"><div class="list-item-icon" style="background:${esc(r.color || '#2563EB')}33">${esc(r.icon || '🔁')}</div><div class="list-item-info"><div class="list-item-name">${esc(r.name)}</div><div class="list-item-sub">${money(r.amount)} · ${r.type === 'income' ? 'รายรับ' : 'รายจ่าย'} · ครบกำหนด ${thaiDateShort(due)}${dueNow ? ' · ถึงกำหนดแล้ว' : ''}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.postRecurringNow('${esc(r.id)}')" aria-label="บันทึกตอนนี้">✓</button><button class="icon-btn" onclick="App.openRecurringForm('${esc(r.id)}')" aria-label="แก้ไข">✏️</button><button class="icon-btn" onclick="App.openRecurringActions('${esc(r.id)}')" aria-label="ตัวเลือกเพิ่มเติม">⋯</button></div></div>` }).join('') : App._emptyState('🔁','ยังไม่มีรายการประจำ','')}</div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>รายการประจำ</h2><button class="btn btn-primary btn-sm" onclick="App.openRecurringForm()" style="width:auto">+ เพิ่ม</button></div><div class="sub-scroll" style="padding:12px 16px 40px">${rows.length ? rows.map(r => { const due = r.nextDueDate || today(); const dueNow = due <= today(); return `<div class="recurring-item ${r.paused?'paused':''}" data-recurring-id="${esc(r.id)}"><div class="list-item-icon" style="background:${esc(r.color || '#2563EB')}33">${esc(r.icon || '🔁')}</div><div class="list-item-info"><div class="list-item-name">${esc(r.name)}</div><div class="list-item-sub">${money(r.amount)} · ${r.type === 'income' ? 'รายรับ' : 'รายจ่าย'} · ครบกำหนด ${thaiDateShort(due)}${dueNow ? ' · ถึงกำหนดแล้ว' : ''}</div></div><div class="recurring-actions"><button class="icon-btn" onclick="App.postRecurringNow(${MTSafeRender.jsArg(r.id)})" aria-label="บันทึกตอนนี้">✓</button><button class="icon-btn" onclick="App.openRecurringForm(${MTSafeRender.jsArg(r.id)})" aria-label="แก้ไข">✏️</button><button class="icon-btn" onclick="App.openRecurringActions(${MTSafeRender.jsArg(r.id)})" aria-label="ตัวเลือกเพิ่มเติม">⋯</button></div></div>` }).join('') : App._emptyState('🔁','ยังไม่มีรายการประจำ','')}</div>`)
   }
 
   App.openRecurringActions = function(id) {
@@ -7088,10 +7337,10 @@ App._pickMerchant = function(name, opts = {}) {
     el.innerHTML = `<div class="v23-confirm-sheet recurring-actions-sheet" role="dialog" aria-modal="true">
       <div class="v23-confirm-title">${esc(r.name || 'รายการประจำ')}</div>
       <div class="recurring-more-actions">
-        <button class="btn btn-secondary" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.toggleRecurring('${esc(r.id)}')">${r.paused ? 'เริ่มใช้งาน' : 'หยุดชั่วคราว'}</button>
-        <button class="btn btn-secondary" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.snoozeRecurring('${esc(r.id)}',7)">เลื่อน +7 วัน</button>
-        <button class="btn btn-secondary" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.skipRecurring('${esc(r.id)}')">ข้ามรอบนี้</button>
-        <button class="btn btn-outline" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.deleteRecurring('${esc(r.id)}')">ลบ</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.toggleRecurring(${MTSafeRender.jsArg(r.id)})">${r.paused ? 'เริ่มใช้งาน' : 'หยุดชั่วคราว'}</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.snoozeRecurring(${MTSafeRender.jsArg(r.id)},7)">เลื่อน +7 วัน</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.skipRecurring(${MTSafeRender.jsArg(r.id)})">ข้ามรอบนี้</button>
+        <button class="btn btn-outline" onclick="document.getElementById('recurring-actions-overlay')?.remove();App.deleteRecurring(${MTSafeRender.jsArg(r.id)})">ลบ</button>
       </div>
     </div>`
     el.addEventListener('click', e => { if (e.target === el) el.remove() })
@@ -7151,7 +7400,7 @@ App._pickMerchant = function(name, opts = {}) {
             <div class="form-group"><label class="form-label">หมายเหตุ</label><input class="form-input" id="ieg-note" value="${esc(first.note || '')}"></div>
             <div class="flex-row" style="margin-top:4px">
               <button class="btn btn-secondary" onclick="document.getElementById('${overlayId}')?.remove()">ยกเลิก</button>
-              <button class="btn btn-primary" onclick="App.saveInstallmentGroupEdit('${esc(groupId)}','${esc(cardId)}')">บันทึก</button>
+              <button class="btn btn-primary" onclick="App.saveInstallmentGroupEdit(${MTSafeRender.jsArg(groupId)},${MTSafeRender.jsArg(cardId)})">บันทึก</button>
             </div>
           </div>
         </div>
@@ -7241,6 +7490,7 @@ App._pickMerchant = function(name, opts = {}) {
    ============================================================ */
 ;(function() {
   const esc = MTSafeRender.escapeHtml
+  const jsArg = MTSafeRender.jsArg
   const fmt = n => Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits:2, maximumFractionDigits:2 })
   const money = n => `฿${fmt(n)}`
   const walletById = id => (S.wallets || []).find(w => w.id === id)
@@ -7365,7 +7615,7 @@ App._pickMerchant = function(name, opts = {}) {
           </div>
         </div>
         <div id="ccb-due-preview" class="form-hint cc-due-preview" style="margin-top:8px"></div>
-        <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit('${esc(cardId)}')">บันทึกรอบบัญชี</button></div>
+        <div class="flex-row" style="margin-top:10px"><button class="btn btn-primary" onclick="App.saveCCBenefit(${MTSafeRender.jsArg(cardId)})">บันทึกรอบบัญชี</button></div>
       </div>
     </details>`
     const rulesHtml = rules.length
@@ -7377,7 +7627,7 @@ App._pickMerchant = function(name, opts = {}) {
               ${rule.description ? `<div class="list-item-sub">${esc(rule.description)}</div>` : ''}
               ${rule.source ? `<div class="list-item-sub">ที่มา: ${esc(rule.source)}</div>` : ''}
             </div>
-            <button class="toggle${rule.active ? ' on' : ''}" onclick="event.stopPropagation();App.toggleCCBenefitRule('${esc(rule.id)}')"></button>
+            <button class="toggle${rule.active ? ' on' : ''}" onclick="event.stopPropagation();App.toggleCCBenefitRule(${MTSafeRender.jsArg(rule.id)})"></button>
           </div>
           <div class="list-item-sub" style="margin-top:8px">
             ${rule.suggestedConditions?.categories?.length ? `หมวด: ${esc(rule.suggestedConditions.categories.join(', '))} · ` : ''}${rule.suggestedConditions?.merchants?.length ? `ร้าน: ${esc(rule.suggestedConditions.merchants.join(', '))} · ` : ''}${rule.suggestedConditions?.excludedMerchants?.length ? `ยกเว้น: ${esc(rule.suggestedConditions.excludedMerchants.join(', '))} · ` : ''}${rule.suggestedConditions?.channels?.length ? `ช่องทาง: ${esc(rule.suggestedConditions.channels.join(', '))} · ` : ''}${rule.suggestedConditions?.minSpend ? `ขั้นต่ำ ${money(rule.suggestedConditions.minSpend)}` : ''}${rule.suggestedConditions?.merchantChannelMatchMode === 'any' && rule.suggestedConditions?.merchants?.length && rule.suggestedConditions?.channels?.length ? ' · ร้านหรือช่องทาง' : ''}${rule.validity?.mode === 'range' && (rule.validity?.startDate || rule.validity?.endDate) ? `${rule.suggestedConditions?.minSpend ? ' · ' : ''}ช่วงใช้: ${esc(rule.validity.startDate || 'ไม่ระบุ')} ถึง ${esc(rule.validity.endDate || 'ไม่ระบุ')}` : ''}
@@ -7391,16 +7641,16 @@ App._pickMerchant = function(name, opts = {}) {
             return `<div class="list-item-sub" style="margin-top:4px">🔒 ${chLabel ? `สะสมผ่าน${esc(chLabel)} ` : 'สะสม'}${esc(grantLabel)} → ได้รับสิทธิ์</div>`
           })() : ''}
           <div class="flex-row" style="margin-top:10px">
-            <button class="btn btn-secondary" onclick="App.openCCBenefitRuleForm('${esc(cardId)}','${esc(rule.id)}')">แก้ไข</button>
-            <button class="btn btn-secondary" onclick="App.openCCBenefitRuleCopyDialog('${esc(cardId)}','${esc(rule.id)}')">คัดลอก</button>
-            <button class="btn btn-outline" onclick="App.deleteCCBenefitRule('${esc(rule.id)}')">ลบ</button>
+            <button class="btn btn-secondary" onclick="App.openCCBenefitRuleForm(${MTSafeRender.jsArg(cardId)},${MTSafeRender.jsArg(rule.id)})">แก้ไข</button>
+            <button class="btn btn-secondary" onclick="App.openCCBenefitRuleCopyDialog(${MTSafeRender.jsArg(cardId)},${MTSafeRender.jsArg(rule.id)})">คัดลอก</button>
+            <button class="btn btn-outline" onclick="App.deleteCCBenefitRule(${MTSafeRender.jsArg(rule.id)})">ลบ</button>
           </div>
         </div>`).join('')
       : App._emptyState?.('🎁', 'ยังไม่มีกฎสิทธิประโยชน์', 'เพิ่มสิทธิ์พื้นฐานหรือแคมเปญของบัตรใบนี้') || ''
     const _ccBenefitBack = App._ccBenefitScreenReturn === 'overview'
       ? `App._ccBenefitScreenReturn=null;App.openCCBenefitOverviewScreen()`
-      : `App.openCCDetail('${esc(cardId)}')`
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${_ccBenefitBack}">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog('${esc(cardId)}')" style="width:auto">วางลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')" style="width:auto">+ เพิ่มกฎ</button></div></div>
+      : `App.openCCDetail(${jsArg(cardId)})`
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="${_ccBenefitBack}">←</button><h2>สิทธิประโยชน์บัตร</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitImportDialog(${MTSafeRender.jsArg(cardId)})" style="width:auto">วางลิงก์</button><button class="btn btn-primary btn-sm" onclick="App.openCCBenefitRuleForm(${MTSafeRender.jsArg(cardId)})" style="width:auto">+ เพิ่มกฎ</button></div></div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         ${statementCard}
         <div class="sec-title">กฎของบัตรใบนี้</div>
@@ -7539,6 +7789,9 @@ App._pickMerchant = function(name, opts = {}) {
     }
   }
   App._ccbrStep1Html = function(d) {
+    const jsArg = typeof MTSafeRender !== 'undefined' && MTSafeRender.jsArg
+      ? MTSafeRender.jsArg
+      : value => JSON.stringify(String(value ?? ''))
     const v = n => n ?? ''
     const dt = d.type === 'cashback' && d._cashbackMode === 'fixed' ? 'cashback_fixed' : d.type === 'cashback' ? 'cashback' : d.type
     const types = [
@@ -7548,7 +7801,7 @@ App._pickMerchant = function(name, opts = {}) {
       { id: 'both',           icon: '🎁', label: 'เงินคืน + คะแนน' },
       { id: 'discount',       icon: '🏷️', label: 'ส่วนลดทันที' },
     ]
-    const typeGrid = types.map(t => `<button type="button" class="ccbr-type-card${dt===t.id?' active':''}" onclick="App._ccbrSetType('${t.id}')"><span class="ccbr-type-icon">${t.icon}</span><span>${esc(t.label)}</span></button>`).join('')
+    const typeGrid = types.map(t => `<button type="button" class="ccbr-type-card${dt===t.id?' active':''}" onclick="App._ccbrSetType(${jsArg(t.id)})"><span class="ccbr-type-icon">${t.icon}</span><span>${esc(t.label)}</span></button>`).join('')
     let rewardInput = ''
     if (dt === 'cashback') {
       rewardInput = `<div class="form-group"><label class="form-label">อัตราเงินคืน</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="0.01" id="ccbr-val-rate" value="${esc(v(d.cashback?.rate))}" placeholder="เช่น 5"><span class="ccbr-input-unit">%</span></div></div><div class="form-group"><label class="form-label">คืนทุกๆ <span style="color:var(--muted);font-size:12px;font-weight:400">ว่าง = คำนวณจากยอดเต็ม</span></label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-val-every" value="${esc(v(d.cashback?.everyBaht))}" placeholder="เช่น 500"><span class="ccbr-input-unit">บาท</span></div></div>`
@@ -7563,23 +7816,29 @@ App._pickMerchant = function(name, opts = {}) {
       rewardInput = `<div class="form-group"><label class="form-label">ส่วนลด</label><div style="display:flex;gap:8px;margin-bottom:10px"><button type="button" class="chip mini${!isFixed?' active':''}" id="ccbr-disc-pct" onclick="this.classList.add('active');document.getElementById('ccbr-disc-fix').classList.remove('active');document.getElementById('ccbr-disc-pct-row').style.display='';document.getElementById('ccbr-disc-fix-row').style.display='none'">เปอร์เซ็นต์</button><button type="button" class="chip mini${isFixed?' active':''}" id="ccbr-disc-fix" onclick="this.classList.add('active');document.getElementById('ccbr-disc-pct').classList.remove('active');document.getElementById('ccbr-disc-fix-row').style.display='';document.getElementById('ccbr-disc-pct-row').style.display='none'">คงที่</button></div><div id="ccbr-disc-pct-row"${isFixed?' style="display:none"':''}><div class="ccbr-inline-input"><input class="form-input" type="number" step="0.01" id="ccbr-val-disc-rate" value="${esc(v(d.discount?.rate))}" placeholder="เช่น 5"><span class="ccbr-input-unit">%</span></div></div><div id="ccbr-disc-fix-row"${!isFixed?' style="display:none"':''}><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-val-disc-fixed" value="${esc(v(d.discount?.fixedAmount))}" placeholder="เช่น 50"><span class="ccbr-input-unit">บาท</span></div></div></div>`
     }
     const tpls = [['base_cashback','เงินคืนพื้นฐาน'],['base_points','คะแนนพื้นฐาน'],['cashback_targeted','เงินคืนตามเงื่อนไข'],['cashback_per_merchant','เงินคืนต่อร้าน/เดือน'],['cycle_cashback','เงินคืนยอดสะสม'],['instant_discount','ส่วนลดทันที']]
-    const tplRow = `<div style="margin-bottom:16px"><div class="form-label" style="margin-bottom:6px;font-size:12px;color:var(--muted)">เริ่มจาก template</div><div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px">${tpls.map(([id,lbl])=>`<button type="button" class="chip mini" style="white-space:nowrap;flex-shrink:0" onclick="App._ccbrLoadTemplate('${id}')">${esc(lbl)}</button>`).join('')}</div></div>`
+    const tplRow = `<div style="margin-bottom:16px"><div class="form-label" style="margin-bottom:6px;font-size:12px;color:var(--muted)">เริ่มจาก template</div><div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px">${tpls.map(([id,lbl])=>`<button type="button" class="chip mini" style="white-space:nowrap;flex-shrink:0" onclick="App._ccbrLoadTemplate(${jsArg(id)})">${esc(lbl)}</button>`).join('')}</div></div>`
     return `${tplRow}<div class="card card-pad" style="margin-bottom:12px"><div class="form-group"><label class="form-label">ชื่อกฎ</label><input class="form-input" id="ccbr-name" value="${esc(d.name)}" placeholder="เช่น TrueMoney 3%, คะแนนพื้นฐาน"></div><div class="form-group"><label class="form-label">ประเภทรางวัล</label><div class="ccbr-type-grid">${typeGrid}</div></div>${rewardInput}<div class="tx-reward-toggle-row" style="margin-top:4px"><span class="form-label" style="margin:0">ใช้งานกฎนี้</span><button type="button" id="ccbr-active" class="toggle${d.active!==false?' on':''}" onclick="this.classList.toggle('on')"></button></div></div>`
   }
   App._ccbrStep2Html = function(d) {
+    const jsArg = typeof MTSafeRender !== 'undefined' && MTSafeRender.jsArg
+      ? MTSafeRender.jsArg
+      : value => JSON.stringify(String(value ?? ''))
     const v = n => n ?? ''
     const validity = d.validity || {}
     const isCal = (validity.statementCycleHint || '') === 'calendar_month'
     const merchantChannelMatchMode = d.suggestedConditions?.merchantChannelMatchMode === 'any' ? 'any' : 'all'
     const channelOpts = (App.getBenefitChannelOptions?.() || []).filter(([val]) => val !== '')
     const selectedChs = d._channels || []
-    const chChips = channelOpts.map(([val,lbl]) => `<button type="button" class="chip mini${selectedChs.includes(val)?' active':''}" onclick="App._ccbrToggleChip('_channels','${esc(val)}',this)">${esc(lbl)}</button>`).join('')
+    const chChips = channelOpts.map(([val,lbl]) => `<button type="button" class="chip mini${selectedChs.includes(val)?' active':''}" onclick="App._ccbrToggleChip('_channels',${jsArg(val)},this)">${esc(lbl)}</button>`).join('')
     const cats = S.categories?.expense || []
     const selectedCats = d._categories || []
-    const catChips = cats.length ? cats.map(c => `<button type="button" class="chip mini${selectedCats.includes(c.id)?' active':''}" onclick="App._ccbrToggleChip('_categories','${esc(c.id)}',this)">${esc(c.label)}</button>`).join('') : '<span style="color:var(--muted);font-size:13px">ยังไม่มีหมวดหมู่</span>'
+    const catChips = cats.length ? cats.map(c => `<button type="button" class="chip mini${selectedCats.includes(c.id)?' active':''}" onclick="App._ccbrToggleChip('_categories',${MTSafeRender.jsArg(c.id)},this)">${esc(c.label)}</button>`).join('') : '<span style="color:var(--muted);font-size:13px">ยังไม่มีหมวดหมู่</span>'
     return `<div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ช่วงเวลา <span class="ccbr-section-hint">ว่าง = ไม่จำกัด</span></div><div class="ccbr-date-row"><div><label class="form-label" style="font-size:12px;margin-bottom:4px">วันเริ่ม</label><input class="form-input" type="date" id="ccbr-validity-start" value="${esc(validity.startDate||'')}"></div><div><label class="form-label" style="font-size:12px;margin-bottom:4px">วันสิ้นสุด</label><input class="form-input" type="date" id="ccbr-validity-end" value="${esc(validity.endDate||'')}"></div></div><div style="margin-top:10px"><label class="form-label" style="font-size:12px;margin-bottom:6px">นับรอบแบบ</label><div style="display:flex;gap:8px"><button type="button" class="chip mini${!isCal?' active':''}" id="ccbr-cycle-stmt" onclick="this.classList.add('active');document.getElementById('ccbr-cycle-cal').classList.remove('active')">รอบบิลบัตร</button><button type="button" class="chip mini${isCal?' active':''}" id="ccbr-cycle-cal" onclick="this.classList.add('active');document.getElementById('ccbr-cycle-stmt').classList.remove('active')">เดือนปฏิทิน</button></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ช่องทาง <span class="ccbr-section-hint">ไม่เลือก = ทุกช่องทาง</span></div><div class="ccbr-chip-scroll">${chChips}</div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ความสัมพันธ์ร้าน/ช่องทาง <span class="ccbr-section-hint">ใช้เมื่อเลือกทั้งร้านและช่องทาง</span></div><div style="display:flex;gap:8px"><button type="button" class="chip mini${merchantChannelMatchMode==='all'?' active':''}" id="ccbr-merchant-channel-all" onclick="this.classList.add('active');document.getElementById('ccbr-merchant-channel-any').classList.remove('active')">ต้องตรงทั้งคู่</button><button type="button" class="chip mini${merchantChannelMatchMode==='any'?' active':''}" id="ccbr-merchant-channel-any" onclick="this.classList.add('active');document.getElementById('ccbr-merchant-channel-all').classList.remove('active')">ตรงร้านหรือช่องทาง</button></div><div class="form-hint">ถ้าตรงทั้งร้านและช่องทางพร้อมกัน จะใช้โควตาช่องทาง</div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">หมวดหมู่ <span class="ccbr-section-hint">ไม่เลือก = ทุกหมวด</span></div><div class="ccbr-chip-wrap">${catChips}</div></div><div class="card card-pad" style="margin-bottom:12px"><div class="form-group" style="margin-bottom:10px"><div class="ccbr-section-label">ร้านค้า <span class="ccbr-section-hint">คั่นด้วย comma, ว่าง = ทุกร้าน</span></div><input class="form-input" id="ccbr-merchants" value="${esc((d.suggestedConditions?.merchants||[]).join(', '))}" placeholder="เช่น Shopee, Grab, Netflix"></div><div class="form-group" style="margin-bottom:10px"><div class="ccbr-section-label">ร้านค้าที่ไม่ร่วม <span class="ccbr-section-hint">ยกเว้น · คั่นด้วย comma</span></div><input class="form-input" id="ccbr-excluded-merchants" value="${esc((d.suggestedConditions?.excludedMerchants||[]).join(', '))}" placeholder="เช่น Tops, Big C"></div><div class="form-group" style="margin-bottom:0"><div class="ccbr-section-label">ยอดขั้นต่ำต่อรายการ <span class="ccbr-section-hint">ว่าง = ไม่กำหนด</span></div><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-minSpend" value="${esc(v(d.suggestedConditions?.minSpend))}" placeholder="บาท"><span class="ccbr-input-unit">บาท</span></div></div></div>`
   }
   App._ccbrStep3Html = function(d) {
+    const jsArg = typeof MTSafeRender !== 'undefined' && MTSafeRender.jsArg
+      ? MTSafeRender.jsArg
+      : value => JSON.stringify(String(value ?? ''))
     const v = n => n ?? ''
     const limits = d.limits || {}
     const trigger = d.rewardTrigger || {}
@@ -7587,7 +7846,7 @@ App._pickMerchant = function(name, opts = {}) {
     const isEvery = trigger.grantMode === 'every_threshold'
     const selectedTrackChannels = d._trackChannels || getTriggerTrackChannels(trigger)
     const channelOpts = (App.getBenefitChannelOptions?.() || []).filter(([val]) => val !== '')
-    const trackChannelChips = channelOpts.map(([val,lbl]) => `<button type="button" class="chip mini${selectedTrackChannels.includes(val)?' active':''}" onclick="App._ccbrToggleChip('_trackChannels','${esc(val)}',this)">${esc(lbl)}</button>`).join('')
+    const trackChannelChips = channelOpts.map(([val,lbl]) => `<button type="button" class="chip mini${selectedTrackChannels.includes(val)?' active':''}" onclick="App._ccbrToggleChip('_trackChannels',${jsArg(val)},this)">${esc(lbl)}</button>`).join('')
     return `<div class="card card-pad" style="margin-bottom:12px"><div style="display:flex;align-items:center;justify-content:space-between${hasTrigger?';margin-bottom:14px':''}"><div class="ccbr-section-label" style="margin:0">ยอดสะสมเพื่อปลดล็อก</div><button type="button" id="ccbr-trigger-toggle" class="toggle${hasTrigger?' on':''}" onclick="App._ccbrToggleTrigger()"></button></div><div id="ccbr-trigger-body"${hasTrigger?'':' style="display:none"'}><div class="form-group"><label class="form-label">ช่องทางที่นับสะสม</label><div class="ccbr-chip-scroll ccbr-track-channel-scroll">${trackChannelChips}</div><div class="form-hint">เลือกได้หลายช่องทาง · ไม่เลือก = นับทุก tx บนบัตร ไม่จำกัดเฉพาะรายการที่เลือกกฎนี้</div></div><div class="form-group"><label class="form-label">สะสมครบกี่บาทต่อรอบ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-trigger-threshold" value="${esc(v(trigger.thresholdAmount))}" placeholder="เช่น 2000"><span class="ccbr-input-unit">บาท</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label">วิธีให้รางวัล</label><div style="display:flex;gap:8px;margin-top:6px"><button type="button" class="chip mini${!isEvery?' active':''}" id="ccbr-grant-once" onclick="this.classList.add('active');document.getElementById('ccbr-grant-every').classList.remove('active')">ครั้งเดียวต่อรอบ</button><button type="button" class="chip mini${isEvery?' active':''}" id="ccbr-grant-every" onclick="this.classList.add('active');document.getElementById('ccbr-grant-once').classList.remove('active')" style="white-space:nowrap">ทุกครั้งที่ครบยอด</button></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">เพดานรางวัล <span class="ccbr-section-hint">ว่าง = ไม่จำกัด</span></div><div class="ccbr-2col"><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรายการ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-tx" value="${esc(v(limits.maxRewardAmountPerTx))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรอบบิล</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-cycle" value="${esc(v(limits.maxRewardAmountPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ยอดที่นำมาคำนวณ <span class="ccbr-section-hint">ว่าง = ไม่จำกัด</span></div><div class="ccbr-2col"><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรายการ</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-tx" value="${esc(v(limits.maxEligibleSpendPerTx))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ต่อรอบบิล</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-cycle" value="${esc(v(limits.maxEligibleSpendPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿</span></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">เพดานต่อร้านค้า/เดือน <span class="ccbr-section-hint">จำกัดแยกอิสระตามแต่ละร้านค้า · ว่าง = ไม่จำกัด</span></div><div class="ccbr-2col"><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ยอดคำนวณสูงสุด/ร้าน</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-merchant" value="${esc(v(limits.maxEligibleSpendPerMerchantPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿/ร้าน</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">เงินคืนสูงสุด/ร้าน</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-merchant" value="${esc(v(limits.maxRewardAmountPerMerchantPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿/ร้าน</span></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">เพดานต่อช่องทาง/เดือน <span class="ccbr-section-hint">จำกัดแยกอิสระตามแต่ละช่องทางชำระเงิน · ว่าง = ไม่จำกัด</span></div><div class="ccbr-2col"><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">ยอดคำนวณสูงสุด/ช่องทาง</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-eligible-channel" value="${esc(v(limits.maxEligibleSpendPerChannelPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿/ช่องทาง</span></div></div><div class="form-group" style="margin-bottom:0"><label class="form-label" style="font-size:12px">เงินคืนสูงสุด/ช่องทาง</label><div class="ccbr-inline-input"><input class="form-input" type="number" step="1" id="ccbr-limit-reward-channel" value="${esc(v(limits.maxRewardAmountPerChannelPerCycle))}" placeholder="—"><span class="ccbr-input-unit">฿/ช่องทาง</span></div></div></div></div><div class="card card-pad" style="margin-bottom:12px"><div class="ccbr-section-label">ตั้งค่าเพิ่มเติม</div><div class="tx-reward-toggle-row"><span>ใช้ร่วมกับสิทธิ์อื่นได้</span><button type="button" id="ccbr-stacking" class="toggle${d.allowStacking!==false?' on':''}" onclick="this.classList.toggle('on')"></button></div><div class="tx-reward-toggle-row"><span>เป็นสิทธิ์พื้นฐานของบัตร</span><button type="button" id="ccbr-base" class="toggle${d.isBaseRule?' on':''}" onclick="this.classList.toggle('on')"></button></div><div class="form-group" style="margin-top:10px;margin-bottom:0"><label class="form-label">ลำดับความสำคัญ</label><input class="form-input" type="number" step="1" id="ccbr-priority" value="${esc(v(d.priority||0))}"></div></div>`
   }
   // Reward caps are denominated in points for point-only rules. Keep the existing
@@ -7607,12 +7866,15 @@ App._pickMerchant = function(name, opts = {}) {
   App._ccbrRenderStep = function(step, animate = true) {
     const d = App._ccbrDraft; if (!d) return
     const cardId = d._cardId, ruleId = d._ruleId, isEdit = !!ruleId
+    const jsArg = typeof MTSafeRender !== 'undefined' && MTSafeRender.jsArg
+      ? MTSafeRender.jsArg
+      : value => JSON.stringify(String(value ?? ''))
     const stepTitles = ['รางวัลคืออะไร?', 'ใช้ได้เมื่อไหร่?', 'เพดาน & เงื่อนไขพิเศษ']
     const dots = [1,2,3].map(n => `<div class="ccbr-step-dot${n===step?' active':n<step?' done':''}"></div>`).join('')
-    const backFn = step > 1 ? 'App._ccbrBack()' : `App._onCCBenefitRuleFormBack('${esc(cardId)}')`
+    const backFn = step > 1 ? 'App._ccbrBack()' : `App._onCCBenefitRuleFormBack(${jsArg(cardId)})`
     const nextHtml = step < 3
       ? `<button class="btn btn-primary btn-sm ccbr-nav-btn" onclick="App._ccbrNext()">ถัดไป →</button>`
-      : `<button class="btn btn-primary btn-sm ccbr-nav-btn" onclick="App.saveCCBenefitRule('${esc(cardId)}','${esc(ruleId)}')">บันทึก</button>`
+      : `<button class="btn btn-primary btn-sm ccbr-nav-btn" onclick="App.saveCCBenefitRule(${jsArg(cardId)},${jsArg(ruleId)})">บันทึก</button>`
     const backHtml = `<button class="btn btn-secondary btn-sm ccbr-nav-btn" onclick="${backFn}">${step > 1 ? '← ย้อนกลับ' : 'ยกเลิก'}</button>`
     let body = ''
     if (step === 1) body = App._ccbrStep1Html(d)
@@ -7763,7 +8025,7 @@ App._pickMerchant = function(name, opts = {}) {
             </div>
             <div class="flex-row" style="margin-top:12px">
               <button class="btn btn-secondary" onclick="document.getElementById('${dialogId}')?.remove()">ยกเลิก</button>
-              <button class="btn btn-primary" ${targetCards.length ? '' : 'disabled'} onclick="App.copyCCBenefitRulesToCards('${esc(cardId)}','${esc(sourceRules.map(rule => rule.id).join(','))}')">คัดลอก</button>
+              <button class="btn btn-primary" ${targetCards.length ? '' : 'disabled'} onclick="App.copyCCBenefitRulesToCards(${MTSafeRender.jsArg(cardId)},${MTSafeRender.jsArg(sourceRules.map(rule => rule.id).join(','))})">คัดลอก</button>
             </div>
           </div>
         </div>
@@ -7821,11 +8083,11 @@ App._pickMerchant = function(name, opts = {}) {
           </div>
           <div class="sheet-body" style="overflow-y:auto">
             <div class="form-group">
-              <input class="form-input" id="cc-benefit-import-url" placeholder="วางลิงก์เว็บไซต์..." onkeydown="if(event.key==='Enter'){event.preventDefault();App.analyzeCCBenefitLink('${esc(cardId)}')}">
+              <input class="form-input" id="cc-benefit-import-url" placeholder="วางลิงก์เว็บไซต์..." onkeydown="if(event.key==='Enter'){event.preventDefault();App.analyzeCCBenefitLink(${MTSafeRender.jsArg(cardId)})}">
             </div>
             <div style="display:grid; grid-template-columns: 1fr 1fr;gap:10px;margin-bottom:12px">
               <button class="btn btn-secondary" onclick="document.getElementById('${dialogId}')?.remove()">ยกเลิก</button>
-              <button class="btn btn-primary" onclick="App.analyzeCCBenefitLink('${esc(cardId)}')">วิเคราะห์ลิงก์</button>
+              <button class="btn btn-primary" onclick="App.analyzeCCBenefitLink(${MTSafeRender.jsArg(cardId)})">วิเคราะห์ลิงก์</button>
             </div>
             <div id="cc-benefit-import-result"></div>
           </div>
@@ -8770,7 +9032,7 @@ App._pickMerchant = function(name, opts = {}) {
             ${diagnosticsText ? `<div class="form-hint">${esc(diagnosticsText)}</div>` : ''}
             ${reviewText ? `<div class="form-hint" style="color:#D97706">⚠ ควรตรวจ: ${esc(reviewText)}</div>` : ''}
           </div>
-          <button class="btn btn-secondary btn-sm" style="flex-shrink:0;width:auto" onclick="App._editCCBenefitDraftAtIndex('${esc(cardId)}',${idx})">แก้ไข</button>
+          <button class="btn btn-secondary btn-sm" style="flex-shrink:0;width:auto" onclick="App._editCCBenefitDraftAtIndex(${MTSafeRender.jsArg(cardId)},${idx})">แก้ไข</button>
         </div>
       </div>`
     }).join('')
@@ -8782,7 +9044,7 @@ App._pickMerchant = function(name, opts = {}) {
         </button>
       </div>` : ''
     const saveBtn = drafts.length
-      ? `<button class="btn btn-primary" onclick="App.saveImportedCCBenefitRules('${esc(cardId)}')" ${selectedCount === 0 ? 'disabled style="opacity:0.5"' : ''}>
+      ? `<button class="btn btn-primary" onclick="App.saveImportedCCBenefitRules(${MTSafeRender.jsArg(cardId)})" ${selectedCount === 0 ? 'disabled style="opacity:0.5"' : ''}>
            บันทึก ${selectedCount} กฎที่เลือก
          </button>`
       : ''
@@ -8793,7 +9055,7 @@ App._pickMerchant = function(name, opts = {}) {
       ${ruleRows || `<div class="card card-pad" style="margin-top:10px"><div class="list-item-name">ยังไม่พร้อมสร้างกฎอัตโนมัติ</div><div class="list-item-sub">ระบบดึงหน้าเว็บได้ แต่ยังไม่สามารถแปลงเป็น draft rule ที่มั่นใจพอ</div></div>`}
       ${selectionBar}
       <div style="display:flex;gap:10px;margin-top:10px">
-        <button class="btn btn-secondary" onclick="App.openCCBenefitRuleForm('${esc(cardId)}')">เพิ่มเอง</button>
+        <button class="btn btn-secondary" onclick="App.openCCBenefitRuleForm(${MTSafeRender.jsArg(cardId)})">เพิ่มเอง</button>
         ${saveBtn}
       </div>`
   }
@@ -9066,7 +9328,9 @@ App._pickMerchant = function(name, opts = {}) {
       return `รอบบัตร: ${fmtDateShort(cycle.start)} – ${fmtDateShort(cycle.end)}`
     }
 
-    const jsArg = MTSafeRender.jsArg
+    const jsArg = typeof MTSafeRender !== 'undefined' && MTSafeRender.jsArg
+      ? MTSafeRender.jsArg
+      : value => JSON.stringify(String(value ?? ''))
 
     function getRuleStatus(cardId, rule) {
       const cycle      = getCyclePeriod(cardId, rule)
@@ -9230,7 +9494,7 @@ App._pickMerchant = function(name, opts = {}) {
       const active    = filter === key
       const newFilter = active ? 'all' : key
       const border    = active ? `border:2px solid ${numColor};` : 'border:2px solid transparent;'
-      return `<div onclick="App.openCCBenefitOverviewScreen('${esc(refMonth)}','${newFilter}','',${sa})"
+      return `<div onclick="App.openCCBenefitOverviewScreen(${MTSafeRender.jsArg(refMonth)},'${newFilter}','',${sa})"
         style="background:var(--elevated,#1e2a3a);border-radius:12px;padding:10px;text-align:center;cursor:pointer;${border}">
         <div style="font-size:22px;font-weight:700;color:${numColor}">${count}</div>
         <div style="font-size:11px;color:var(--text-secondary,#6b7280);margin-top:2px">${label}</div>
@@ -9239,11 +9503,11 @@ App._pickMerchant = function(name, opts = {}) {
 
     const toggleHtml = `
       <div style="display:flex;background:var(--elevated,#1e2a3a);border-radius:10px;padding:3px;margin-bottom:12px">
-        <button onclick="App.openCCBenefitOverviewScreen('${esc(refMonth)}','${esc(filter)}','',false)"
+        <button onclick="App.openCCBenefitOverviewScreen(${MTSafeRender.jsArg(refMonth)},${MTSafeRender.jsArg(filter)},'',false)"
           style="flex:1;border:none;cursor:pointer;border-radius:8px;padding:7px 0;font-size:13px;font-weight:600;transition:background .15s,color .15s;
                  background:${!showAll ? 'var(--primary,#2563EB)' : 'transparent'};
                  color:${!showAll ? '#fff' : 'var(--text-secondary,#6b7280)'}">ติดตามได้</button>
-        <button onclick="App.openCCBenefitOverviewScreen('${esc(refMonth)}','${esc(filter)}','',true)"
+        <button onclick="App.openCCBenefitOverviewScreen(${MTSafeRender.jsArg(refMonth)},${MTSafeRender.jsArg(filter)},'',true)"
           style="flex:1;border:none;cursor:pointer;border-radius:8px;padding:7px 0;font-size:13px;font-weight:600;transition:background .15s,color .15s;
                  background:${showAll ? 'var(--primary,#2563EB)' : 'transparent'};
                  color:${showAll ? '#fff' : 'var(--text-secondary,#6b7280)'}">ทั้งหมด</button>
@@ -9281,7 +9545,7 @@ App._pickMerchant = function(name, opts = {}) {
                 <div style="font-size:11px;color:var(--text-secondary,#6b7280)">${allRulesForCard.length} สิทธิ์</div>
               </div>
               <button class="btn-icon" style="font-size:16px;width:32px;height:32px;flex-shrink:0"
-                onclick="App._ccBenefitScreenReturn='overview';App.openCCBenefitScreen('${esc(card.id)}')">⚙️</button>
+                onclick="App._ccBenefitScreenReturn='overview';App.openCCBenefitScreen(${MTSafeRender.jsArg(card.id)})">⚙️</button>
             </div>
             ${filteredRules.map(r => ruleCardHtml(card.id, r)).join('')}
           </div>`
@@ -9289,9 +9553,9 @@ App._pickMerchant = function(name, opts = {}) {
 
     const contentHtml = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(prevStr)}','${esc(filter)}','prev',${sa})">‹</button>
+        <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen(${MTSafeRender.jsArg(prevStr)},${MTSafeRender.jsArg(filter)},'prev',${sa})">‹</button>
         <span style="font-weight:700;font-size:15px">${esc(monthLabel)}</span>
-        <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen('${esc(nextStr)}','${esc(filter)}','next',${sa})"${refMonth >= todayMonth ? ' disabled style="opacity:.3"' : ''}>›</button>
+        <button class="btn-icon" style="font-size:20px" onclick="App.openCCBenefitOverviewScreen(${MTSafeRender.jsArg(nextStr)},${MTSafeRender.jsArg(filter)},'next',${sa})"${refMonth >= todayMonth ? ' disabled style="opacity:.3"' : ''}>›</button>
       </div>
       ${toggleHtml}
       ${summaryHtml}
@@ -9667,7 +9931,9 @@ App._pickMerchant = function(name, opts = {}) {
       if (Number(points || 0) > 0) parts.push(fmtPoints(points))
       return parts.length ? parts.join(' + ') : (rule.type === 'both' ? `${fmtMoney(0)} + ${fmtPoints(0)}` : fmtMoney(0))
     }
-    const jsArg = MTSafeRender.jsArg
+    const jsArg = typeof MTSafeRender !== 'undefined' && MTSafeRender.jsArg
+      ? MTSafeRender.jsArg
+      : value => JSON.stringify(String(value ?? ''))
     const rewardLabel = { cashback:'เงินคืน', discount:'ส่วนลด', points:'คะแนน', both:'เงินคืน + คะแนน' }[rule.type] || 'รางวัล'
     const spendConditionLabel = (() => {
       const cond = rule.suggestedConditions || {}
@@ -10065,6 +10331,7 @@ App._pickMerchant = function(name, opts = {}) {
   // ── Persist extension ──────────────────────────────────────
   App._beforePersistV50 = function() {
     migrateToV5()
+    ensureUpcomingBillsState()
   }
 
   // ── ═══════════════════════════════════════════════════════
@@ -10189,11 +10456,18 @@ App._pickMerchant = function(name, opts = {}) {
     return Number.isSafeInteger(count) && count >= min && count <= 600 ? count : null
   }
 
+  App._isSafeMoneyAmount = function(value) {
+    if (typeof Calc !== 'undefined' && typeof Calc.isSafeMoneyAmount === 'function') return Calc.isSafeMoneyAmount(value)
+    const number = Number(value)
+    const cents = Math.round(number * 100)
+    return Number.isFinite(number) && Number.isSafeInteger(cents)
+  }
+
   App.validateTransactionDraft = function(tx, opts = {}) {
     const { isEdit = false, editingTxId } = opts
     const amt = Number(tx.amount || 0)
     if (!tx.type) return 'ไม่พบประเภทรายการ'
-    if (!amt || amt <= 0) return 'กรุณาระบุจำนวนเงินมากกว่า 0'
+    if (!App._isSafeMoneyAmount(amt) || !amt || amt <= 0) return 'กรุณาระบุจำนวนเงินที่ถูกต้องและไม่เกินขอบเขตที่รองรับ'
     if (!tx.walletId) return 'กรุณาเลือกกระเป๋าเงิน'
     const w = walletById(tx.walletId)
     if (!w) return 'ไม่พบกระเป๋าเงินที่เลือก'
@@ -10255,8 +10529,9 @@ App._pickMerchant = function(name, opts = {}) {
         }
         const limit = Number(w.creditLimit || 0)
         if (limit > 0) {
-          const origAmt = (origTx && origTx.walletId === tx.walletId && origTx.type === 'expense') ? Number(origTx.amount || 0) : 0
-          const available = limit + effectiveBalance(tx.walletId) + origAmt
+          // effectiveBalance already reverts the original expense once when
+          // this is an edit. Adding origAmt again double-counts the credit.
+          const available = limit + effectiveBalance(tx.walletId)
           if (amt > available) return `วงเงิน BNPL คงเหลือ ${money(Math.max(0, available))} ไม่พอสำหรับ ${money(amt)}`
         }
       }
@@ -10506,7 +10781,7 @@ App._pickMerchant = function(name, opts = {}) {
         </div>
       `)}</div>
       ${investHtml}
-      ${w ? `<button class="btn btn-outline" onclick="App.deleteWallet('${esc(w.id)}')" style="margin-top:12px">ลบ</button>` : ''}`
+      ${w ? `<button class="btn btn-outline" onclick="App.deleteWallet(${MTSafeRender.jsArg(w.id)})" style="margin-top:12px">ลบ</button>` : ''}`
     App.openOverlay('overlay-wallet-form')
     App._syncWalletFormSections?.()
     if (isCC) try { App._refreshDueDatePreview?.() } catch (_) {}
@@ -10683,6 +10958,12 @@ App._pickMerchant = function(name, opts = {}) {
 
   // ── Updated saveWallet ──────────────────────────────────────
   App.saveWallet = function() {
+    const previousWalletState = {
+      wallets: cloneCommitValue(S.wallets || []),
+      creditLimitGroups: cloneCommitValue(S.creditLimitGroups || []),
+      rewardAccounts: cloneCommitValue(S.rewardAccounts || []),
+      bnplPlans: cloneCommitValue(S.bnplPlans || []),
+    }
     const name  = document.getElementById('wf-name')?.value.trim()
     const walletFormTypes = new Set(['bank','cash','ewallet','credit','bnpl','gold','fcd'])
     const requestedType = document.getElementById('wf-type')?.value || 'bank'
@@ -10840,16 +11121,26 @@ App._pickMerchant = function(name, opts = {}) {
       plan.status = plan.schedule.every(row => row.paidTxId) ? 'paid_off' : 'active'
     })
 
-    App.recalculateWalletBalances?.({ save:false, recordSnapshot:false })
-    persist()
     const _savedEditId = S.editingWalletId
     const _ccDetailCardId = document.querySelector('.cc-detail-screen')?.dataset.cardId || ''
-    App.closeOverlay('overlay-wallet-form')
-    if (isCC && _savedEditId && _ccDetailCardId === _savedEditId) {
-      App.openCCDetail(_savedEditId)
-    }
-    App.render()
-    notify(_savedEditId ? 'แก้ไขกระเป๋าแล้ว' : 'เพิ่มกระเป๋าแล้ว', 'success')
+    App.recalculateWalletBalances?.({ save:false, recordSnapshot:false })
+    commitMutation({
+      mutate: () => {},
+      rollback: () => {
+        S.wallets = previousWalletState.wallets
+        S.creditLimitGroups = previousWalletState.creditLimitGroups
+        S.rewardAccounts = previousWalletState.rewardAccounts
+        S.bnplPlans = previousWalletState.bnplPlans
+      },
+      onSuccess: () => {
+        App.closeOverlay('overlay-wallet-form')
+        if (isCC && _savedEditId && _ccDetailCardId === _savedEditId) {
+          App.openCCDetail(_savedEditId)
+        }
+        App.render()
+        notify(_savedEditId ? 'แก้ไขกระเป๋าแล้ว' : 'เพิ่มกระเป๋าแล้ว', 'success')
+      },
+    })
   }
 
   // ── Updated saveCCBenefit — saves cycleDay/dueDay too ────────
@@ -10988,7 +11279,7 @@ App._pickMerchant = function(name, opts = {}) {
             </div>` : ''}
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;padding-bottom:8px">
               <button class="btn btn-secondary" onclick="document.getElementById('${dlgId}').remove()">ยกเลิก</button>
-              <button class="btn btn-primary" onclick="App._confirmRecordRewards('${esc(cardId)}','${esc(st.id)}')">✓ บันทึก</button>
+              <button class="btn btn-primary" onclick="App._confirmRecordRewards(${MTSafeRender.jsArg(cardId)},${MTSafeRender.jsArg(st.id)})">✓ บันทึก</button>
             </div>
           </div>
         </div>
@@ -11030,7 +11321,7 @@ App._pickMerchant = function(name, opts = {}) {
             <div style="font-size:13px;font-weight:700;color:var(--expense,#DC2626);margin-bottom:10px">⚠️ รอบนี้บันทึกแล้ว การบันทึกซ้ำจะนับสิทธิประโยชน์สองครั้ง</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
               <button class="btn btn-secondary" onclick="document.getElementById('${dlgId}')?.remove()">ยกเลิก</button>
-              <button class="btn btn-danger" onclick="App._forceRecordRewards('${cardId}','${statementId}')">บันทึกซ้ำ (ยืนยัน)</button>
+              <button class="btn btn-danger" onclick="App._forceRecordRewards(${MTSafeRender.jsArg(cardId)},${MTSafeRender.jsArg(statementId)})">บันทึกซ้ำ (ยืนยัน)</button>
             </div>
           </div>`)
         return
@@ -11144,13 +11435,13 @@ App._pickMerchant = function(name, opts = {}) {
       const amt = Number(t.amount)
       if (!Number.isFinite(amt) || amt < 0) errors.push(`${ref}: invalid amount (${t.amount})`)
 
-      // Missing wallet reference
-      if (!t.walletId) errors.push(`${ref}: missing walletId`)
-      else if (!walletIds.has(t.walletId)) warnings.push(`${ref}: walletId "${t.walletId}" not found`)
-
-      // Transfer/payment toWallet
-      if ((t.type === 'transfer' || t.type === 'cc_payment') && t.toWalletId && !walletIds.has(t.toWalletId))
-        warnings.push(`${ref}: toWalletId "${t.toWalletId}" not found`)
+      // All transaction types share the ledger wallet-reference contract.
+      const referenceIssues = window.MTLedger?.validateTransactionWalletReferences?.(t, walletIds) || []
+      referenceIssues.forEach(issue => {
+        const label = `${issue.field} "${issue.value || ''}"`
+        if (issue.field === 'walletId') errors.push(`${ref}: ${label} not found`)
+        else warnings.push(`${ref}: ${label} not found`)
+      })
 
       // Orphaned category
       if (t.categoryId && !catIds.has(t.categoryId))
@@ -11270,7 +11561,7 @@ App._pickMerchant = function(name, opts = {}) {
           <div class="v5-acct-pts">${balance.toLocaleString('en-US')}</div>
           <div style="font-size:11px;color:var(--muted)">คะแนน</div>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm('${esc(acct.id)}')" style="width:auto;flex-shrink:0">จัดการ</button>
+        <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm(${MTSafeRender.jsArg(acct.id)})" style="width:auto;flex-shrink:0">จัดการ</button>
       </div>`
     }).join('') : `<div style="font-size:13px;color:var(--muted);padding:12px 0">ยังไม่มีบัญชีคะแนน <button class="btn btn-secondary btn-sm" onclick="App.openRewardAccountForm()" style="width:auto;margin-left:8px">+ เพิ่มบัญชี</button></div>`
 
@@ -11290,7 +11581,7 @@ App._pickMerchant = function(name, opts = {}) {
           ${st.reward.points ? `<div style="font-size:12px">⭐ ${st.reward.points.toLocaleString('en-US')} pt</div>` : ''}
           ${st.reward.cashback ? `<div style="font-size:12px">💰 ${money(st.reward.cashback)}</div>` : ''}
         </div>
-        <button class="btn ${recorded?'btn-secondary':'btn-primary'} btn-sm" onclick="App.recordActualRewards('${esc(c.id)}')" style="width:auto;flex-shrink:0;font-size:12px">${recorded?'✓ บันทึกแล้ว':'บันทึกยอด'}</button>
+        <button class="btn ${recorded?'btn-secondary':'btn-primary'} btn-sm" onclick="App.recordActualRewards(${MTSafeRender.jsArg(c.id)})" style="width:auto;flex-shrink:0;font-size:12px">${recorded?'✓ บันทึกแล้ว':'บันทึกยอด'}</button>
       </div>`
     }).filter(Boolean).join('')
 
@@ -11349,9 +11640,9 @@ App._pickMerchant = function(name, opts = {}) {
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="segmented-tabs segmented-tabs-3">
-          <button class="segmented-tab ${S.rewardLedgerTab === 'accounts' ? 'active' : ''}" onclick="App.openRewardLedgerScreen('${esc(selected)}', 'accounts', false)">บัญชีคะแนนสะสม</button>
-          <button class="segmented-tab ${S.rewardLedgerTab === 'pending' ? 'active' : ''}" onclick="App.openRewardLedgerScreen('${esc(selected)}', 'pending', false)">สิทธิ์รอรับ</button>
-          <button class="segmented-tab ${S.rewardLedgerTab === 'history' ? 'active' : ''}" onclick="App.openRewardLedgerScreen('${esc(selected)}', 'history', false)">ประวัติรับสิทธิ์</button>
+          <button class="segmented-tab ${S.rewardLedgerTab === 'accounts' ? 'active' : ''}" onclick="App.openRewardLedgerScreen(${MTSafeRender.jsArg(selected)}, 'accounts', false)">บัญชีคะแนนสะสม</button>
+          <button class="segmented-tab ${S.rewardLedgerTab === 'pending' ? 'active' : ''}" onclick="App.openRewardLedgerScreen(${MTSafeRender.jsArg(selected)}, 'pending', false)">สิทธิ์รอรับ</button>
+          <button class="segmented-tab ${S.rewardLedgerTab === 'history' ? 'active' : ''}" onclick="App.openRewardLedgerScreen(${MTSafeRender.jsArg(selected)}, 'history', false)">ประวัติรับสิทธิ์</button>
         </div>
         ${tabContent}
       </div>`, { animate })
@@ -11371,14 +11662,14 @@ App._pickMerchant = function(name, opts = {}) {
       document.body.appendChild(overlay)
     }
     overlay.innerHTML = `
-      <div class="overlay-backdrop" onclick="App.closeDynamicSheet('${esc(id)}')"></div>
+      <div class="overlay-backdrop" onclick="App.closeDynamicSheet(${MTSafeRender.jsArg(id)})"></div>
       <div class="sheet">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
           <h2>${esc(title)}</h2>
           <div style="display:flex;align-items:center;gap:6px">
             ${actionsHtml}
-            <button class="btn-icon" onclick="App.closeDynamicSheet('${esc(id)}')" aria-label="ปิด">✕</button>
+            <button class="btn-icon" onclick="App.closeDynamicSheet(${MTSafeRender.jsArg(id)})" aria-label="ปิด">✕</button>
           </div>
         </div>
         <div class="sheet-body">${bodyHtml}</div>
@@ -11429,9 +11720,9 @@ App._pickMerchant = function(name, opts = {}) {
           <div class="form-hint">เว้นว่างไว้ถ้าต้องการแก้เฉพาะข้อมูลบัญชีหรือมูลค่าแต้ม</div>
         </div>
         <div class="form-group"><label class="form-label">หมายเหตุการปรับคะแนน</label><input class="form-input" id="ra-adjust-note" placeholder="เช่น คะแนนจากโปรโมชั่น, แก้ไขยอดผิด"></div>` : ''}
-        ${a ? `<button class="btn btn-outline" style="margin-top:8px" onclick="App.deleteRewardAccount('${esc(a.id)}')">ลบบัญชีคะแนนนี้</button>` : ''}
+        ${a ? `<button class="btn btn-outline" style="margin-top:8px" onclick="App.deleteRewardAccount(${MTSafeRender.jsArg(a.id)})">ลบบัญชีคะแนนนี้</button>` : ''}
       </div>`,
-      `<button class="btn btn-primary btn-sm" onclick="App.saveRewardAccount('${esc(accountId||'')}')" style="width:auto">บันทึก</button>`)
+      `<button class="btn btn-primary btn-sm" onclick="App.saveRewardAccount(${MTSafeRender.jsArg(accountId||'')})" style="width:auto">บันทึก</button>`)
   }
 
   App.saveRewardAccount = function(id) {
@@ -11507,7 +11798,7 @@ App._pickMerchant = function(name, opts = {}) {
             ${g.issuer ? `<div style="font-size:12px;color:var(--muted)">${esc(g.issuer)}</div>` : ''}
             <div style="font-size:12px;color:var(--muted);margin-top:4px">บัตรในกลุ่ม: ${cards.map(c => esc(c.name)).join(', ') || 'ยังไม่มีบัตร'}</div>
           </div>
-          <button class="icon-btn" onclick="App.openCreditLimitGroupForm('${esc(g.id)}')">✏️</button>
+          <button class="icon-btn" onclick="App.openCreditLimitGroupForm(${MTSafeRender.jsArg(g.id)})">✏️</button>
         </div>
         <div class="v5-limit-metrics" style="margin-top:10px">
           <div class="v5-lm"><span>วงเงินรวม</span><strong>${money(g.limit)}</strong></div>
@@ -11542,9 +11833,9 @@ App._pickMerchant = function(name, opts = {}) {
           <datalist id="clg-issuer-list">${KNOWN_ISSUERS.map(i=>`<option value="${i}">`).join('')}</datalist>
         </div>
         <div class="form-group"><label class="form-label">วงเงินรวมของกลุ่ม (฿)</label><input class="form-input" type="number" min="0" id="clg-limit" value="${g?.limit||''}"></div>
-        ${g ? `<button class="btn btn-outline" style="margin-top:8px" onclick="App.deleteCreditLimitGroup('${esc(g.id)}')">ลบกลุ่มนี้</button>` : ''}
+        ${g ? `<button class="btn btn-outline" style="margin-top:8px" onclick="App.deleteCreditLimitGroup(${MTSafeRender.jsArg(g.id)})">ลบกลุ่มนี้</button>` : ''}
       </div>`,
-      `<button class="btn btn-primary btn-sm" onclick="App.saveCreditLimitGroup('${esc(groupId||'')}')" style="width:auto">บันทึก</button>`)
+      `<button class="btn btn-primary btn-sm" onclick="App.saveCreditLimitGroup(${MTSafeRender.jsArg(groupId||'')})" style="width:auto">บันทึก</button>`)
   }
 
   App.saveCreditLimitGroup = function(id) {
@@ -11704,9 +11995,7 @@ App._pickMerchant = function(name, opts = {}) {
         status: 'pending',
       } : undefined,
     }
-    S.recurring.push(data)
-    try { persist() } catch (_) {}
-    try { App.showToast?.('สร้างรายการประจำรอบถัดไปแล้ว', 'success') } catch (_) {}
+    return data
   }
 
   App._initRecurringLiteDefaults = initRecurringDefaults
@@ -12164,15 +12453,43 @@ App._pickMerchant = function(name, opts = {}) {
   }
   App.skipRecurring = function(id) { App.skipRecurringNow(id) }
 
-  const prevDeleteTx = App.deleteTx?.bind(App)
+  // Delete flows have several feature-specific concerns (recurring rows,
+  // upcoming bills, shared reimbursements, and presentation animation). Keep
+  // one public entry point and let those features register ordered seams
+  // instead of wrapping one another at module-evaluation time.
+  App._deleteTxMiddleware ||= { confirm: [], sub: [] }
+  App.registerDeleteTxMiddleware ||= function(kind, id, handler, { priority = 0 } = {}) {
+    if (!['confirm', 'sub'].includes(kind) || !id || typeof handler !== 'function') return () => {}
+    const list = App._deleteTxMiddleware[kind] ||= []
+    const entry = { id, handler, priority: Number(priority) || 0 }
+    const existing = list.findIndex(item => item.id === id)
+    if (existing >= 0) list[existing] = entry
+    else list.push(entry)
+    list.sort((a, b) => b.priority - a.priority)
+    return () => {
+      const index = list.indexOf(entry)
+      if (index >= 0) list.splice(index, 1)
+    }
+  }
+  App._runDeleteTxMiddleware ||= function(kind, args, terminal) {
+    const list = [...(App._deleteTxMiddleware?.[kind] || [])]
+    let index = -1
+    const next = () => {
+      index += 1
+      const entry = list[index]
+      return entry ? entry.handler({ args, next }) : terminal(...args)
+    }
+    return next()
+  }
 
   App.deleteTx = function() {
     const tx = (S.transactions || []).find(t => t.id === S.selectedTxId)
     if (isRecurringTx(tx)) { showRecurringDeleteChoice(tx); return }
-    prevDeleteTx ? prevDeleteTx() : (S.deleteConfirm = true, App._renderTxDetail?.())
+    S.deleteConfirm = true
+    App._renderTxDetail?.()
   }
 
-  App.confirmDeleteTx = function() {
+  App._confirmDeleteTxCore = function() {
     const tx = (S.transactions || []).find(t => t.id === S.selectedTxId)
     if (isRecurringTx(tx)) { showRecurringDeleteChoice(tx); return }
     if (!tx) return
@@ -12182,14 +12499,25 @@ App._pickMerchant = function(name, opts = {}) {
         body:'ต้องการลบเฉพาะงวดนี้ หรือทั้งชุดผ่อน? หากต้องการลบทั้งชุดให้ใช้ปุ่ม “ลบทั้งชุด” ในหน้า Installments',
         confirmLabel:'ลบงวดนี้',
         onConfirm() {
-          S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
-          S.deleteConfirm = false
-          App.refreshTransactionRewardEstimates?.()
-          App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-          try { persist() } catch (_) {}
-          App.closeOverlay?.('overlay-tx-detail')
-          App.render?.()
-          notify('ลบงวดนี้แล้ว', 'success')
+          const previousTransactions = S.transactions
+          const previousWallets = cloneCommitValue(S.wallets || [])
+          commitMutation({
+            mutate: () => {
+              S.transactions = (S.transactions || []).filter(t => t.id !== tx.id)
+              S.deleteConfirm = false
+              App.refreshTransactionRewardEstimates?.()
+              App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
+            },
+            rollback: () => {
+              S.transactions = previousTransactions
+              S.wallets = previousWallets
+            },
+            onSuccess: () => {
+              App.closeOverlay?.('overlay-tx-detail')
+              App.render?.()
+              notify('ลบงวดนี้แล้ว', 'success')
+            },
+          })
         }
       })
       return
@@ -12198,6 +12526,9 @@ App._pickMerchant = function(name, opts = {}) {
     if (idx < 0) return
     const removed = S.transactions[idx]
     const label = removed.merchant || removed.note || `฿${removed.amount}`
+    const previousTransactions = S.transactions
+    const previousWallets = cloneCommitValue(S.wallets || [])
+    const previousBnplPlans = cloneCommitValue(S.bnplPlans || [])
     const _removedBNPLPlan = typeof BNPL !== 'undefined' ? (S.bnplPlans || []).find(p => p.txId === removed.id) : null
     const _bnplUnlink = typeof BNPL !== 'undefined' ? BNPL.store.unlinkPaymentByTxId(removed.id) : null
     S.transactions.splice(idx, 1)
@@ -12218,13 +12549,23 @@ App._pickMerchant = function(name, opts = {}) {
         App.render?.()
       },
       () => {
-        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-        try { persist() } catch (_) {}
+        commitMutation({
+          mutate: () => { App.recalculateWalletBalances?.({ save:false, recordSnapshot:true }) },
+          rollback: () => {
+            S.transactions = previousTransactions
+            S.wallets = previousWallets
+            S.bnplPlans = previousBnplPlans
+            if (_bnplUnlink) BNPL.store.relinkPayment(_bnplUnlink, removed.id)
+            App.refreshTransactionRewardEstimates?.()
+            App.render?.()
+          },
+          onSuccess: () => {},
+        })
       }
     )
   }
 
-  App.deleteTxFromSub = function(id, backType = '', backId = '') {
+  App._deleteTxFromSubCore = function(id, backType = '', backId = '') {
     const tx = (S.transactions || []).find(t => t.id === id)
     if (!tx) return
     if (isRecurringTx(tx)) { showRecurringDeleteChoice(tx, { backType, backId }); return }
@@ -12232,6 +12573,9 @@ App._pickMerchant = function(name, opts = {}) {
     if (idx < 0) return
     const removed = S.transactions[idx]
     const label = removed.merchant || removed.note || `฿${removed.amount}`
+    const previousTransactions = S.transactions
+    const previousWallets = cloneCommitValue(S.wallets || [])
+    const previousBnplPlans = cloneCommitValue(S.bnplPlans || [])
     cleanupRewardReceived(removed)
     const _removedBNPLPlan = typeof BNPL !== 'undefined' ? (S.bnplPlans || []).find(p => p.txId === removed.id) : null
     const _bnplUnlink = typeof BNPL !== 'undefined' ? BNPL.store.unlinkPaymentByTxId(removed.id) : null
@@ -12254,10 +12598,27 @@ App._pickMerchant = function(name, opts = {}) {
         else if (backType === 'wallet' && backId) App.openWalletDetail?.(backId)
       },
       () => {
-        App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-        try { persist() } catch (_) {}
+        commitMutation({
+          mutate: () => { App.recalculateWalletBalances?.({ save:false, recordSnapshot:true }) },
+          rollback: () => {
+            S.transactions = previousTransactions
+            S.wallets = previousWallets
+            S.bnplPlans = previousBnplPlans
+            if (_bnplUnlink) BNPL.store.relinkPayment(_bnplUnlink, removed.id)
+            App.refreshTransactionRewardEstimates?.()
+          },
+          onSuccess: () => {},
+        })
       }
     )
+  }
+
+  App.confirmDeleteTx = function(...args) {
+    return App._runDeleteTxMiddleware('confirm', args, (...innerArgs) => App._confirmDeleteTxCore(...innerArgs))
+  }
+
+  App.deleteTxFromSub = function(...args) {
+    return App._runDeleteTxMiddleware('sub', args, (...innerArgs) => App._deleteTxFromSubCore(...innerArgs))
   }
 
   try { migrateRecurringLite() } catch (err) { console.warn('V6.5 recurring migration failed', err) }
@@ -12274,7 +12635,9 @@ App._pickMerchant = function(name, opts = {}) {
    ============================================================ */
 ;(function() {
   const esc = MTSafeRender.escapeHtml
-  const jsArg = MTSafeRender.jsArg
+  const jsArg = typeof MTSafeRender !== 'undefined' && MTSafeRender.jsArg
+    ? MTSafeRender.jsArg
+    : value => JSON.stringify(String(value ?? ''))
   const today = () => getTODAY()
   const nowISO = () => new Date().toISOString()
   const notify = (msg, type = 'info') => { try { App.showToast?.(msg, type) || toast(msg, type) } catch (_) {} }
@@ -12640,7 +13003,7 @@ App._pickMerchant = function(name, opts = {}) {
     const unrealized = App.getCryptoHoldingUnrealizedPLTHB(holding)
     const hidden = !!S.settings?.hideMoney
     if (!showEditButton) {
-      return `<div class="card card-pad crypto-holding-row" onclick="App.openCryptoPortfolioDetail('${esc(holding.id)}')">
+      return `<div class="card card-pad crypto-holding-row" onclick="App.openCryptoPortfolioDetail(${MTSafeRender.jsArg(holding.id)})">
         <div style="display:flex;align-items:flex-start;gap:12px">
           <div class="wallet-pill" style="background:${esc((asset?.color || '#F59E0B'))}33;color:${esc(asset?.color || '#F59E0B')};width:44px;height:44px;border-radius:14px;font-size:15px;flex:0 0 auto">${esc(asset?.icon || asset?.symbol || '?')}</div>
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px">
@@ -12652,7 +13015,7 @@ App._pickMerchant = function(name, opts = {}) {
         </div>
       </div>`
     }
-    return `<div class="card card-pad crypto-holding-row${nested ? ' crypto-holding-row-nested' : ''}" onclick="App.openCryptoPortfolioDetail('${esc(holding.id)}')">
+    return `<div class="card card-pad crypto-holding-row${nested ? ' crypto-holding-row-nested' : ''}" onclick="App.openCryptoPortfolioDetail(${MTSafeRender.jsArg(holding.id)})">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
         <div class="crypto-coin-main" style="min-width:0;flex:1">
           <div class="wallet-pill" style="background:${esc((asset?.color || '#F59E0B'))}33;color:${esc(asset?.color || '#F59E0B')}">${esc(asset?.icon || asset?.symbol || '?')}</div>
@@ -12661,7 +13024,7 @@ App._pickMerchant = function(name, opts = {}) {
             <div class="list-item-sub">${esc(holding.location || 'ไม่ระบุ Wallet')}</div>
           </div>
         </div>
-        ${showEditButton ? `<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();App.openCryptoHoldingForm('${esc(holding.id)}')" style="width:auto;flex:0 0 auto;border-color:var(--line);color:var(--muted)">แก้ไข</button>` : ''}
+        ${showEditButton ? `<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();App.openCryptoHoldingForm(${MTSafeRender.jsArg(holding.id)})" style="width:auto;flex:0 0 auto;border-color:var(--line);color:var(--muted)">แก้ไข</button>` : ''}
       </div>
       <div class="crypto-row-metrics">
         <div class="crypto-row-metric"><span>ถืออยู่</span><strong>${hidden ? '*****' : `${unitFmt(holding.units, asset?.decimals || 8)} ${esc(asset?.symbol || '')}`}</strong></div>
@@ -13065,7 +13428,7 @@ App._pickMerchant = function(name, opts = {}) {
       searchLoading: false,
       searchError: '',
     }
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCryptoPortfolioDetail()">←</button><h2>${holding ? 'แก้ไขเหรียญ' : 'เพิ่มเหรียญ'}</h2><div style="display:flex;gap:6px">${holding ? `<button class="btn btn-outline btn-sm" onclick="App.deleteCryptoHolding('${esc(holding.id)}')" style="min-width:50px">ลบ</button>` : ''}<button class="btn btn-primary btn-sm" onclick="App.saveCryptoHolding('${esc(holdingId)}')" style="min-width:50px">บันทึก</button></div></div>
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCryptoPortfolioDetail()">←</button><h2>${holding ? 'แก้ไขเหรียญ' : 'เพิ่มเหรียญ'}</h2><div style="display:flex;gap:6px">${holding ? `<button class="btn btn-outline btn-sm" onclick="App.deleteCryptoHolding(${MTSafeRender.jsArg(holding.id)})" style="min-width:50px">ลบ</button>` : ''}<button class="btn btn-primary btn-sm" onclick="App.saveCryptoHolding(${MTSafeRender.jsArg(holdingId)})" style="min-width:50px">บันทึก</button></div></div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         <input type="hidden" id="crypto-form-mode" value="${customMode ? 'custom' : 'preset'}">
         <input type="hidden" id="crypto-selected-preset-id" value="${esc(selectedCoinGeckoId)}">
@@ -13306,7 +13669,7 @@ App._pickMerchant = function(name, opts = {}) {
       const priceRow = p.coinGeckoId ? S.marketPrices?.crypto?.[p.coinGeckoId] : null
       const badgeClass = selectedId === p.coinGeckoId ? 'fresh' : (p.sourceLabel === 'CoinGecko' ? 'stale' : 'manual')
       const badgeLabel = selectedId === p.coinGeckoId ? 'เลือกแล้ว' : (p.sourceLabel || 'เลือก')
-      return `<button type="button" class="crypto-search-result${selectedId === p.coinGeckoId ? ' selected' : ''}" onclick="App._selectCryptoPreset('${esc(p.coinGeckoId)}')">
+      return `<button type="button" class="crypto-search-result${selectedId === p.coinGeckoId ? ' selected' : ''}" onclick="App._selectCryptoPreset(${MTSafeRender.jsArg(p.coinGeckoId)})">
       <span class="csr-main">
         <span class="wallet-pill" style="background:${esc(p.color)}33;color:${esc(p.color)}">${p.image ? `<img src="${esc(p.image)}" alt="${esc(p.symbol)}" style="width:18px;height:18px;border-radius:50%;object-fit:cover">` : esc(p.icon || p.symbol)}</span>
         <span>
@@ -13454,7 +13817,7 @@ App._pickMerchant = function(name, opts = {}) {
     const location = holding?.location || 'Wallet'
     const sourceWallets = visibleWallets().filter(w => !['credit','gold','crypto','fcd'].includes(w.type))
     const targetUnits = type === 'adjust' ? (holding ? holding.units : 0) : ''
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCryptoPortfolioDetail('${esc(holdingId)}')">←</button><h2>${type === 'buy' ? 'ซื้อ' : type === 'sell' ? 'ขาย' : 'ปรับจำนวน'} ${esc(asset?.symbol || '')}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCryptoTx('${esc(type)}','${esc(holdingId)}')" style="width:auto">บันทึก</button></div>
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.openCryptoPortfolioDetail(${MTSafeRender.jsArg(holdingId)})">←</button><h2>${type === 'buy' ? 'ซื้อ' : type === 'sell' ? 'ขาย' : 'ปรับจำนวน'} ${esc(asset?.symbol || '')}</h2><button class="btn btn-primary btn-sm" onclick="App.saveCryptoTx(${MTSafeRender.jsArg(type)},${MTSafeRender.jsArg(holdingId)})" style="width:auto">บันทึก</button></div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
         <div class="card card-pad finance-mb-md">
           <div class="list-item-name">${esc(asset?.symbol || '')} · ${esc(asset?.name || '')}</div>
@@ -13546,7 +13909,7 @@ App._pickMerchant = function(name, opts = {}) {
     const txRows = (S.cryptoTransactions || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 30)
     const lastUpdated = summary.lastUpdatedAt ? new Date(summary.lastUpdatedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : 'ยังไม่อัปเดต'
     const selected = holdings.find(h => h.id === selectedHoldingId) || holdings[0] || null
-    const actionButtons = selected ? `<div class="crypto-action-row"><button class="btn btn-secondary" onclick="App.openCryptoTxForm('adjust','${esc(selected.id)}')">Adjust</button><button class="btn btn-outline" onclick="App.openCryptoHoldingForm('${esc(selected.id)}')">Edit</button></div>` : ''
+    const actionButtons = selected ? `<div class="crypto-action-row"><button class="btn btn-secondary" onclick="App.openCryptoTxForm('adjust',${MTSafeRender.jsArg(selected.id)})">Adjust</button><button class="btn btn-outline" onclick="App.openCryptoHoldingForm(${MTSafeRender.jsArg(selected.id)})">Edit</button></div>` : ''
     const sortOptions = [
       ['value_desc', 'มูลค่ามากไปน้อย'],
       ['pl_desc', 'กำไร/ขาดทุนมากไปน้อย'],
@@ -16121,12 +16484,12 @@ App._pickMerchant = function(name, opts = {}) {
     const newerDisabled = offset <= 0
     const newerOffset = Math.max(0, Number(offset || 0) - 1)
     return `<div class="cc-cycle-pager" role="group" aria-label="เลือกรอบบัตรเครดิต">
-      <button class="icon-btn cc-cycle-nav" onclick="App._setCCDetailCycleOffset('${esc(cardId)}', ${olderOffset}, 'older')" aria-label="รอบเก่ากว่า">‹</button>
+      <button class="icon-btn cc-cycle-nav" onclick="App._setCCDetailCycleOffset(${MTSafeRender.jsArg(cardId)}, ${olderOffset}, 'older')" aria-label="รอบเก่ากว่า">‹</button>
       <div class="cc-cycle-current">
         <strong>${st ? `${thaiDate(st.start)} – ${thaiDate(st.end)}` : 'ยังไม่มีรอบบิล'}</strong>
         <span>${offset === 0 ? 'รอบล่าสุด' : `ย้อนหลัง ${offset} รอบ`}</span>
       </div>
-      <button class="icon-btn cc-cycle-nav" ${newerDisabled ? 'disabled' : ''} onclick="App._setCCDetailCycleOffset('${esc(cardId)}', ${newerOffset}, 'newer')" aria-label="รอบใหม่กว่า">›</button>
+      <button class="icon-btn cc-cycle-nav" ${newerDisabled ? 'disabled' : ''} onclick="App._setCCDetailCycleOffset(${MTSafeRender.jsArg(cardId)}, ${newerOffset}, 'newer')" aria-label="รอบใหม่กว่า">›</button>
     </div>`
   }
 
@@ -16139,16 +16502,16 @@ App._pickMerchant = function(name, opts = {}) {
         <div><b>สรุปรอบบัตรเครดิต</b><span>รอบ ${thaiDate(st.start)} – ${thaiDate(st.end)}</span><span>วันกำหนดชำระ ${thaiDate(st.dueDate)}</span></div>
         <em class="status-pill ${st.paid || Number(st.balanceDue || 0) <= 0 ? 'ok' : 'warn'}">${status}</em>
       </div>
-      ${walletById(cardId)?.ccBilling?.opening?.statementId===st.id?`<div class="form-hint">${st.openingDebt>0?`หนี้ตั้งต้น ${money(st.openingDebt)}`:'รอบเริ่มต้นของบัตร'}${walletById(cardId)?.ccBilling?.opening?.provenance==='inferred'?' · วันครบกำหนดประมาณการ':''}</div><button class="btn btn-secondary btn-sm" onclick="App.openCreditOpeningForm('${esc(cardId)}')">แก้หนี้ตั้งต้น</button>`:''}
+      ${walletById(cardId)?.ccBilling?.opening?.statementId===st.id?`<div class="form-hint">${st.openingDebt>0?`หนี้ตั้งต้น ${money(st.openingDebt)}`:'รอบเริ่มต้นของบัตร'}${walletById(cardId)?.ccBilling?.opening?.provenance==='inferred'?' · วันครบกำหนดประมาณการ':''}</div><button class="btn btn-secondary btn-sm" onclick="App.openCreditOpeningForm(${MTSafeRender.jsArg(cardId)})">แก้หนี้ตั้งต้น</button>`:''}
       ${st.carriedIn>0?`<div class="form-hint">รวมยอดยกมาจากรอบก่อน ${money(st.carriedIn)}</div>`:''}
-      ${st.carriedOut>0?`<div class="form-hint">ยกยอด ${money(st.carriedOut)} ไปรอบถัดไปแล้ว</div><button class="btn btn-secondary btn-sm" onclick="App.undoCreditCarryForward('${esc(cardId)}','${esc(st.id)}')">ยกเลิกการยกยอด</button>`:''}
-      ${carryTarget?`<button class="btn btn-secondary btn-sm" onclick="App.carryForwardCreditStatement('${esc(cardId)}','${esc(st.id)}')">ยกยอดค้างไปรอบถัดไป</button>`:''}
+      ${st.carriedOut>0?`<div class="form-hint">ยกยอด ${money(st.carriedOut)} ไปรอบถัดไปแล้ว</div><button class="btn btn-secondary btn-sm" onclick="App.undoCreditCarryForward(${MTSafeRender.jsArg(cardId)},${MTSafeRender.jsArg(st.id)})">ยกเลิกการยกยอด</button>`:''}
+      ${carryTarget?`<button class="btn btn-secondary btn-sm" onclick="App.carryForwardCreditStatement(${MTSafeRender.jsArg(cardId)},${MTSafeRender.jsArg(st.id)})">ยกยอดค้างไปรอบถัดไป</button>`:''}
       <div class="statement-metrics">
         <div><span>ยอดใช้ในรอบ</span><strong>${money(st.purchaseTotal)}</strong></div>
         <div><span>ชำระแล้ว</span><strong>${money(st.paidTotal)}</strong></div>
         <div><span>ค้างชำระ</span><strong>${money(st.balanceDue)}</strong></div>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen('${esc(cardId)}')">บัญชีคะแนนบัตรเครดิต</button>
+      <button class="btn btn-secondary btn-sm" onclick="App.openRewardLedgerScreen(${MTSafeRender.jsArg(cardId)})">บัญชีคะแนนบัตรเครดิต</button>
     </div>`
   }
 
@@ -16214,10 +16577,10 @@ App._pickMerchant = function(name, opts = {}) {
     const options = rows.map(r=>`<option value="${esc(r.id)}" data-due="${esc(r.id===opening.statementId?opening.dueDate:r.dueDate)}" ${r.id===opening.statementId?'selected':''}>${esc(`${thaiDate(r.start)} – ${thaiDate(r.end)}${r.status==='open'?' (รอบปัจจุบัน)':''}`)}</option>`).join('')
     const debt = Math.round(-Number(card.openingBalance || 0) * 100) / 100
     App.openDynamicSheet('cc-opening-date', 'แก้หนี้ตั้งต้น', `
-      <div class="form-group"><label class="form-label">ยอดหนี้ตั้งต้น (฿)</label><input id="cc-opening-amount" class="form-input" type="number" inputmode="decimal" step="0.01" value="${esc(debt)}" oninput="App._previewCreditOpening('${esc(cardId)}')"><div class="form-hint">ใส่ติดลบถ้าเริ่มต้นมีเครดิตเหลือในบัตร</div><div class="form-hint" id="cc-opening-preview"></div></div>
+      <div class="form-group"><label class="form-label">ยอดหนี้ตั้งต้น (฿)</label><input id="cc-opening-amount" class="form-input" type="number" inputmode="decimal" step="0.01" value="${esc(debt)}" oninput="App._previewCreditOpening(${MTSafeRender.jsArg(cardId)})"><div class="form-hint">ใส่ติดลบถ้าเริ่มต้นมีเครดิตเหลือในบัตร</div><div class="form-hint" id="cc-opening-preview"></div></div>
       <div class="form-group"><label class="form-label">หนี้ตั้งต้นอยู่ในรอบบิล</label><select id="cc-opening-statement" class="form-input" onchange="const o=this.selectedOptions[0];document.getElementById('cc-opening-due').value=o?.dataset.due||''">${options}</select><div class="form-hint">เลือกรอบที่ยอดนี้ถูกเรียกเก็บจริงตามใบแจ้งยอด</div>${card.ccBilling.carryovers?.length?'<div class="form-hint">บัตรนี้มีการยกยอดค้างอยู่ ถ้าย้ายรอบ ยอดที่ยกไว้อาจเปลี่ยน ควรตรวจรอบบิลอีกครั้งหลังบันทึก</div>':''}</div>
       <div class="form-group"><label class="form-label">วันครบกำหนดตามใบแจ้งยอด</label><input id="cc-opening-due" class="form-input" type="date" value="${esc(opening.dueDate)}"></div>`,
-      `<button class="btn btn-primary" onclick="App.saveCreditOpening('${esc(cardId)}')">บันทึก</button>`)
+      `<button class="btn btn-primary" onclick="App.saveCreditOpening(${MTSafeRender.jsArg(cardId)})">บันทึก</button>`)
     App._previewCreditOpening(cardId)
   }
   App._previewCreditOpening = function(cardId) {
@@ -16265,12 +16628,12 @@ App._pickMerchant = function(name, opts = {}) {
     const hasRewards = Number(rewards.points || 0) > 0 || Number(rewards.cashback || 0) > 0 || Number(rewards.discount || 0) > 0
     const alreadyRecorded = st && statementRewardRecorded(st.id)
     const recordBtn = hasRewards && st
-      ? `<button class="btn btn-primary btn-sm v5-record-btn" onclick="App.recordActualRewards('${esc(cardId)}')" style="width:100%;margin-top:8px">${alreadyRecorded ? 'บันทึกแล้ว — เพิ่มอีกรายการ?' : 'บันทึกยอด'}</button>`
+      ? `<button class="btn btn-primary btn-sm v5-record-btn" onclick="App.recordActualRewards(${MTSafeRender.jsArg(cardId)})" style="width:100%;margin-top:8px">${alreadyRecorded ? 'บันทึกแล้ว — เพิ่มอีกรายการ?' : 'บันทึกยอด'}</button>`
       : ''
     return `<div class="card card-pad cc-benefit-cycle-card" style="margin-bottom:12px">
       <div class="cc-detail-header">
         <div><div style="font-size:14px;font-weight:700">สิทธิประโยชน์รอบนี้</div><div style="font-size:12px;color:var(--muted)">${st ? `${thaiDate(st.start)} ถึง ${thaiDate(st.end)}` : 'ยังไม่มีข้อมูลรอบบิล'}</div></div>
-        <button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen('${esc(cardId)}')" style="width:auto">ตั้งค่า</button>
+        <button class="btn btn-secondary btn-sm" onclick="App.openCCBenefitScreen(${MTSafeRender.jsArg(cardId)})" style="width:auto">ตั้งค่า</button>
       </div>
       <div class="reward-grid" style="margin-top:10px">
         <div class="reward-tile"><span>คะแนน</span><strong>${Number(rewards.points || 0).toLocaleString('en-US')}</strong></div>
@@ -16316,6 +16679,9 @@ App._pickMerchant = function(name, opts = {}) {
   App.openCCDetail = function(cardId) {
     const card = walletById(cardId)
     if (!card) return
+    const jsArg = typeof MTSafeRender !== 'undefined' && MTSafeRender.jsArg
+      ? MTSafeRender.jsArg
+      : value => JSON.stringify(String(value ?? ''))
     const offset = App._getCCDetailCycleOffset(cardId)
     const st = App._getCCDetailStatementAtOffset(card, offset)
     const txns = (S.transactions||[]).filter(t => t.walletId===cardId || (t.type==='cc_payment' && t.toWalletId===cardId)).sort((a,b) => String(b.date||'').localeCompare(String(a.date||''))).slice(0,20)
@@ -16338,7 +16704,7 @@ App._pickMerchant = function(name, opts = {}) {
     const heroBreakdown = committedInstallments > 0
       ? `<div style="display:flex;justify-content:space-between;font-size:11px;opacity:.75;margin-top:6px;margin-bottom:2px"><span>ค้างชำระปัจจุบัน ${money(postedOwed)}</span><span>ผ่อนกันวงเงิน ${money(committedInstallments)}</span></div>`
       : ''
-    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon||'')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm('${esc(cardId)}')" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay('${esc(cardId)}', '', '${esc(st?.id || '')}')" style="width:auto">ชำระ</button></div></div><div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}"><div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0"><div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${esc(statementText)}</div><div style="font-size:13px;opacity:.72;margin-bottom:4px">วงเงินที่ใช้ทั้งหมด</div><div class="big">${money(owed)}</div>${heroBreakdown}${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}</div><div class="cc-cycle-swipe-zone" data-card-id="${esc(cardId)}">${cycleContentHtml}</div>${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter('${esc(cardId)}')`) : ''}<div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}</div></div>${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}<div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx, { showDate: true })).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div></div>`)
+    App.openSubScreen(`<div class="sub-header"><button class="btn-icon" onclick="App.closeSubScreen()">←</button><h2>${esc(card.icon||'')} ${esc(card.name)}</h2><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="App.openWalletForm(${jsArg(cardId)})" style="width:auto">แก้ไข</button><button class="btn btn-primary btn-sm" onclick="App.closeSubScreen();App.openCCPay(${jsArg(cardId)}, '', ${jsArg(st?.id || '')})" style="width:auto">ชำระ</button></div></div><div class="sub-scroll cc-detail-screen" data-card-id="${esc(cardId)}"><div class="cc-hero" style="background:linear-gradient(135deg,${esc(card.color||'#DC2626')},${esc(card.color||'#DC2626')}BB);color:#fff;border:0"><div style="font-size:12px;opacity:.75;margin-bottom:14px">รอบบัญชีตัดวันที่ ${esc(statementText)}</div><div style="font-size:13px;opacity:.72;margin-bottom:4px">วงเงินที่ใช้ทั้งหมด</div><div class="big">${money(owed)}</div>${heroBreakdown}${limit ? `<div style="background:rgba(255,255,255,.2);border-radius:999px;height:8px;overflow:hidden;margin:14px 0 8px"><div style="height:100%;width:${usedPct}%;background:${usedPct>80?'#FCA5A5':'rgba(255,255,255,.88)'};border-radius:999px"></div></div><div style="font-size:12px;opacity:.78">ใช้ ${usedPct.toFixed(0)}%${due?` · ครบ ${esc(due.dueStr)} (${due.daysLeft} วัน)`:''}</div>` : ''}</div><div class="cc-cycle-swipe-zone" data-card-id="${esc(cardId)}">${cycleContentHtml}</div>${App._sectionHeader ? App._sectionHeader('ผ่อนชำระ', 'ดูทั้งหมด', `App.openInstallmentCenter(${jsArg(cardId)})`) : ''}<div class="card" style="margin-bottom:14px"><div style="padding:0 12px">${installments.length ? installments.map(g => `<div class="installment-mini-row"><div><b>${esc(g.merchant)}</b><span>${g.next?`งวด ${g.next.installmentNo}/${g.next.installmentMonths} · ${thaiDate(g.next.date)}`:'ครบแล้ว'}</span></div><strong>${money(g.remaining||0)}</strong></div>`).join('') : App._emptyState?.('🧾','ยังไม่มีรายการผ่อน','') || ''}</div></div>${App._sectionHeader ? App._sectionHeader('รายการล่าสุดของบัตรนี้') : ''}<div class="card"><div style="padding:0 16px">${txns.length ? txns.map(tx => App._txRow(tx, { showDate: true })).join('') : App._emptyState?.('📋','ยังไม่มีรายการ','') || ''}</div></div></div>`)
     setTimeout(() => { App._bindTxRows?.('sub-screen'); App._bindCCCycleSwipe?.(cardId) }, 0)
   }
 
@@ -16373,13 +16739,24 @@ App._pickMerchant = function(name, opts = {}) {
 
   App._applyBackupPayload = function(data) {
     const normalized = Storage.normalizeBackupPayload(data)
+    const recoveryWrite = !!Storage.hydrationStatus?.recoveryMode
+    if (recoveryWrite && !Storage.beginRecoveryWrite()) {
+      toast('โหมดกู้คืนยังไม่พร้อมรับข้อมูลสำรอง', 'error')
+      return null
+    }
+    const previousState = recoveryWrite ? JSON.parse(JSON.stringify(S)) : null
+    const pendingCollectionWrites = []
     BACKUP_SCHEMA_KEYS.forEach(key => {
       if (key === 'settings') S.settings = { ...(S.settings || {}), ...(normalized.settings || {}) }
       else if (!Storage.isStateCollection?.(key)) {
         if (key === 'aiInsightStore') {
-          try { if (typeof InsightEngine !== 'undefined') InsightEngine.saveStore(normalized.aiInsightStore) } catch (_) {}
+          if (recoveryWrite) pendingCollectionWrites.push([key, normalized[key]])
+          else {
+            try { if (typeof InsightEngine !== 'undefined') InsightEngine.saveStore(normalized.aiInsightStore) } catch (_) {}
+          }
         } else {
-          Storage.saveCollection?.(key, normalized[key])
+          if (recoveryWrite) pendingCollectionWrites.push([key, normalized[key]])
+          else Storage.saveCollection?.(key, normalized[key])
         }
       } else {
         S[key] = normalized[key]
@@ -16393,7 +16770,22 @@ App._pickMerchant = function(name, opts = {}) {
     App.ensureLedgerBaselines?.(true)
     App.repairSharedExpenseData?.({ save:false })
     App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-    persist()
+    const saved = persist()
+    if (!saved) {
+      if (recoveryWrite && previousState) Object.assign(S, previousState)
+      if (recoveryWrite) Storage.endRecoveryWrite(false)
+      App.showStorageRecoveryNotice?.()
+      toast('กู้คืนไม่สำเร็จ — ข้อมูลต้นฉบับยังถูกเก็บไว้', 'error')
+      return null
+    }
+    pendingCollectionWrites.forEach(([key, value]) => {
+      if (key === 'aiInsightStore') {
+        try { if (typeof InsightEngine !== 'undefined') InsightEngine.saveStore(value) } catch (_) {}
+      } else {
+        Storage.saveCollection?.(key, value)
+      }
+    })
+    if (recoveryWrite) Storage.endRecoveryWrite(true)
     applyTheme?.()
     App.render?.()
     return normalized
@@ -16543,7 +16935,7 @@ App._pickMerchant = function(name, opts = {}) {
       return `<div class="card card-pad goal-card">
         <div class="goal-head">
           <div class="goal-title"><span>${esc(g.icon)}</span><div><b>${esc(g.name)}</b><small>${esc(meta || 'ยังไม่ตั้งวันเป้าหมาย')}</small></div></div>
-          <button class="btn btn-secondary btn-sm" onclick="App.openGoalForm('${esc(g.id)}')" style="width:auto">แก้ไข</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.openGoalForm(${MTSafeRender.jsArg(g.id)})" style="width:auto">แก้ไข</button>
         </div>
         <div class="goal-progress-row"><strong>${fmtHidden(p.current)}</strong><span>${p.pct.toFixed(p.pct % 1 ? 1 : 0)}%</span><em>${fmtHidden(p.target)}</em></div>
         <div class="progress-bar goal-progress"><div class="progress-fill" style="width:${p.pct}%;background:${p.pct >= 100 ? 'var(--income)' : 'var(--primary)'}"></div></div>
@@ -16574,9 +16966,9 @@ App._pickMerchant = function(name, opts = {}) {
         <div class="form-group" id="goal-linked-row"><label class="form-label">กระเป๋าที่เชื่อม</label><select class="form-input" id="goal-wallet"><option value="">เลือกกระเป๋า</option>${walletOptions}</select><div class="form-hint">ยอดปัจจุบันจะอ่านจาก balance กระเป๋านี้ ไม่แก้ยอดกระเป๋าโดยตรง</div></div>
         <div class="form-split-row"><div class="form-group"><label class="form-label">วันที่อยากให้ครบ</label><input class="form-input" type="date" id="goal-target-date" value="${esc(g?.targetDate || '')}"></div><div class="form-group"><label class="form-label">ออมต่อเดือน</label><input class="form-input" type="number" min="0" id="goal-monthly" value="${g?.monthlyContribution || ''}"></div></div>
         <div class="form-group"><label class="form-label">สถานะ</label><select class="form-input" id="goal-status"><option value="active"${goal.status === 'active' ? ' selected' : ''}>กำลังใช้งาน</option><option value="completed"${goal.status === 'completed' ? ' selected' : ''}>สำเร็จแล้ว</option><option value="archived"${goal.status === 'archived' ? ' selected' : ''}>เก็บถาวร</option></select></div>
-        ${g ? `<div class="flex-row"><button class="btn btn-outline flex-1" onclick="App.archiveGoal('${esc(g.id)}')">เก็บถาวร</button><button class="btn btn-danger flex-1" onclick="App.deleteGoal('${esc(g.id)}')">ลบ</button></div>` : ''}
+        ${g ? `<div class="flex-row"><button class="btn btn-outline flex-1" onclick="App.archiveGoal(${MTSafeRender.jsArg(g.id)})">เก็บถาวร</button><button class="btn btn-danger flex-1" onclick="App.deleteGoal(${MTSafeRender.jsArg(g.id)})">ลบ</button></div>` : ''}
       </div>`,
-      `<button class="btn btn-primary btn-sm" onclick="App.saveGoal('${esc(goalId)}')" style="width:auto">บันทึก</button>`)
+      `<button class="btn btn-primary btn-sm" onclick="App.saveGoal(${MTSafeRender.jsArg(goalId)})" style="width:auto">บันทึก</button>`)
     App._syncGoalFormMode()
   }
 
@@ -16611,21 +17003,42 @@ App._pickMerchant = function(name, opts = {}) {
     if (!(raw.targetAmount > 0)) return notify('กรุณาระบุยอดเป้าหมายมากกว่า 0', 'error')
     if (mode === 'linked' && !raw.linkedWalletId) return notify('กรุณาเลือกกระเป๋าที่เชื่อม', 'error')
     const normalized = normalizeGoal(raw)
-    const idx = S.goals.findIndex(g => g.id === normalized.id)
-    if (idx >= 0) S.goals[idx] = normalized
-    else S.goals.unshift(normalized)
-    persist()
-    App.closeDynamicSheet('goal-form-overlay')
-    App.openGoalsScreen(normalized.status === 'archived')
-    notify('บันทึกเป้าหมายแล้ว', 'success')
+    const previousGoals = (S.goals || []).map(goal => ({ ...goal }))
+    commitMutation({
+      mutate: () => {
+        const idx = S.goals.findIndex(g => g.id === normalized.id)
+        if (idx >= 0) S.goals[idx] = normalized
+        else S.goals.unshift(normalized)
+      },
+      rollback: () => { S.goals = previousGoals },
+      onSuccess: () => {
+        App.closeDynamicSheet('goal-form-overlay')
+        App.openGoalsScreen(normalized.status === 'archived')
+        notify('บันทึกเป้าหมายแล้ว', 'success')
+      },
+    })
   }
 
   App.archiveGoal = function(goalId) {
     const g = (S.goals || []).find(x => x.id === goalId)
     if (!g) return
-    g.status = 'archived'
-    g.updatedAt = nowISO()
-    persist(); App.closeDynamicSheet('goal-form-overlay'); App.openGoalsScreen(true); notify('เก็บเป้าหมายแล้ว', 'success')
+    const previousStatus = g.status
+    const previousUpdatedAt = g.updatedAt
+    commitMutation({
+      mutate: () => {
+        g.status = 'archived'
+        g.updatedAt = nowISO()
+      },
+      rollback: () => {
+        g.status = previousStatus
+        g.updatedAt = previousUpdatedAt
+      },
+      onSuccess: () => {
+        App.closeDynamicSheet('goal-form-overlay')
+        App.openGoalsScreen(true)
+        notify('เก็บเป้าหมายแล้ว', 'success')
+      },
+    })
   }
 
   App.deleteGoal = function(goalId) {
@@ -16634,10 +17047,15 @@ App._pickMerchant = function(name, opts = {}) {
     const removed = S.goals.splice(idx, 1)[0]
     App.closeDynamicSheet('goal-form-overlay')
     App.openGoalsScreen()
-    App._withUndo(`ลบ “${removed.name}” แล้ว`, () => {
+    const restoreGoal = () => {
       S.goals.splice(idx, 0, removed)
       App.openGoalsScreen()
-    }, () => persist())
+    }
+    App._withUndo(`ลบ “${removed.name}” แล้ว`, restoreGoal, () => commitMutation({
+      mutate: () => {},
+      rollback: restoreGoal,
+      onSuccess: () => {},
+    }))
   }
 
   App.getUpcomingItems = function(days = 60) {
@@ -16645,6 +17063,9 @@ App._pickMerchant = function(name, opts = {}) {
     const endDate = new Date(`${t}T00:00:00`)
     endDate.setDate(endDate.getDate() + Math.max(0, Number(days || 0)))
     const end = `${endDate.getFullYear()}-${String(endDate.getMonth()+1).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')}`
+    const jsArg = typeof MTSafeRender !== 'undefined' && MTSafeRender.jsArg
+      ? MTSafeRender.jsArg
+      : value => JSON.stringify(String(value ?? ''))
     const rows = []
     ;(S.recurring || []).forEach(r => {
       if (!r || r.paused) return
@@ -16657,7 +17078,7 @@ App._pickMerchant = function(name, opts = {}) {
       const total = Number(r.totalOccurrences || r.durationMonths || 0) || 0
       let guard = 0
       while (due && due <= end && guard++ < 1000 && (!total || occurrence <= total)) {
-        rows.push({ id:`rec-${r.id}:${occurrence}:${due}`, recurringId:r.id, date:due, icon:r.icon || '🔁', title:r.name || 'รายการประจำ', amount:Number(r.amount || 0), type:'recurring', cashflowKind, walletId:r.walletId || '', status:String(due) < t ? 'overdue' : 'upcoming', action: occurrence === Number(r.nextOccurrenceNo || 1) ? `App.postRecurringNow('${esc(r.id)}')` : '', skip: occurrence === Number(r.nextOccurrenceNo || 1) ? `App.skipRecurringNow('${esc(r.id)}')` : '' })
+        rows.push({ id:`rec-${r.id}:${occurrence}:${due}`, recurringId:r.id, date:due, icon:r.icon || '🔁', title:r.name || 'รายการประจำ', amount:Number(r.amount || 0), type:'recurring', cashflowKind, walletId:r.walletId || '', status:String(due) < t ? 'overdue' : 'upcoming', action: occurrence === Number(r.nextOccurrenceNo || 1) ? `App.postRecurringNow(${jsArg(r.id)})` : '', skip: occurrence === Number(r.nextOccurrenceNo || 1) ? `App.skipRecurringNow(${jsArg(r.id)})` : '' })
         occurrence++
         if (type === 'monthly') {
           const [y,m,d] = due.split('-').map(Number)
@@ -16690,12 +17111,12 @@ App._pickMerchant = function(name, opts = {}) {
       rows.push({ id:`tx-${tx.id}`, date:tx.date, icon:tx.installmentGroupId ? '🧾' : '📅', title:tx.merchant || tx.note || App._txTypeLabel?.(tx.type) || 'รายการตามแผน', amount, type:tx.installmentGroupId ? 'installment' : 'scheduled', cashflowKind, walletId:tx.walletId || '', toWalletId:tx.toWalletId || '', status:'upcoming' })
     })
     const billingStates = (S.wallets || []).filter(w=>w.type==='credit').map(card=>({...App.getCreditCardBillingState(card),card}))
-    rows.push(...MTUpcomingObligations.projectCreditObligations({billingStates,transactions:S.transactions || [],refDate:t,endDate:end}).map(row=>({...row,open:`App.openCCBillingStatement('${esc(row.toWalletId)}','${esc(row.statementId || '')}')`})))
+    rows.push(...MTUpcomingObligations.projectCreditObligations({billingStates,transactions:S.transactions || [],refDate:t,endDate:end}).map(row=>({...row,open:`App.openCCBillingStatement(${jsArg(row.toWalletId)},${jsArg(row.statementId || '')})`})))
     ;(S.goals || []).forEach(g => {
       if (!g.targetDate || g.status === 'archived') return
       const p = App.getGoalProgress(g)
       if (p.remaining <= 0 || g.targetDate > end) return
-      rows.push({ id:`goal-${g.id}`, date:g.targetDate, icon:g.icon || '🎯', title:`เป้าหมาย ${g.name}`, amount:p.remaining, type:'goal', status:String(g.targetDate) < t ? 'overdue' : 'upcoming', open:`App.openGoalForm('${esc(g.id)}')` })
+      rows.push({ id:`goal-${g.id}`, date:g.targetDate, icon:g.icon || '🎯', title:`เป้าหมาย ${g.name}`, amount:p.remaining, type:'goal', status:String(g.targetDate) < t ? 'overdue' : 'upcoming', open:`App.openGoalForm(${jsArg(g.id)})` })
     })
     // Existing BNPL plans remain visible and payable even while creation of
     // new BNPL entries is feature-gated off.
@@ -16711,7 +17132,7 @@ App._pickMerchant = function(name, opts = {}) {
           cashflowKind: 'settlement',
           toWalletId: item.walletId,
           status: item.isOverdue ? 'overdue' : 'upcoming',
-          open: `BNPL.ui.openPayModal('${esc(item.planId)}',${item.no})`,
+          open: `BNPL.ui.openPayModal(${jsArg(item.planId)},${jsArg(item.no)})`,
         })
       })
     }
@@ -16771,6 +17192,12 @@ App._pickMerchant = function(name, opts = {}) {
   }
 
   App._applyImportMergePayload = function(payload) {
+    const recoveryWrite = !!Storage.hydrationStatus?.recoveryMode
+    if (recoveryWrite && !Storage.beginRecoveryWrite()) {
+      toast('โหมดกู้คืนยังไม่พร้อมรับข้อมูลสำรอง', 'error')
+      return null
+    }
+    const previousState = recoveryWrite ? JSON.parse(JSON.stringify(S)) : null
     const stats = {}
     S.splitBills = Storage.load?.(KEYS.splitBills) || S.splitBills || []
     S.splitPeople = Storage.load?.(KEYS.splitPeople) || S.splitPeople || []
@@ -16799,7 +17226,16 @@ App._pickMerchant = function(name, opts = {}) {
     App.ensureLedgerBaselines?.(true)
     App.repairSharedExpenseData?.({ save:false })
     App.recalculateWalletBalances?.({ save:false, recordSnapshot:true })
-    persist(); applyTheme?.(); App.render?.()
+    const saved = persist()
+    if (!saved) {
+      if (recoveryWrite && previousState) Object.assign(S, previousState)
+      if (recoveryWrite) Storage.endRecoveryWrite(false)
+      App.showStorageRecoveryNotice?.()
+      toast('กู้คืนแบบ Merge ไม่สำเร็จ — ข้อมูลต้นฉบับยังถูกเก็บไว้', 'error')
+      return null
+    }
+    if (recoveryWrite) Storage.endRecoveryWrite(true)
+    applyTheme?.(); App.render?.()
     return stats
   }
 
@@ -16853,7 +17289,15 @@ App._pickMerchant = function(name, opts = {}) {
       onConfirm() {
         try { Storage.createLocalBackup?.(S, replace ? 'before-import-replace' : 'before-import-merge') } catch (_) {}
         const stats = replace ? null : App._applyImportMergePayload(payload)
-        if (replace) App._applyBackupPayload(payload)
+        if (!replace && !stats) {
+          App._pendingImportPayload = null
+          return
+        }
+        const applied = replace ? App._applyBackupPayload(payload) : true
+        if (replace && !applied) {
+          App._pendingImportPayload = null
+          return
+        }
         App._pendingImportPayload = null
         App.closeSubScreen?.()
         if (replace) notify('นำเข้าแบบ Replace สำเร็จ', 'success')
@@ -16872,7 +17316,12 @@ App._pickMerchant = function(name, opts = {}) {
     Storage.importJSON(file, data => {
       const checked = App._validateImportPayload?.(data) || { ok:true, warnings:[], data }
       if (!checked.ok) { notify('นำเข้าไม่ได้: ' + (checked.errors || []).join(', '), 'error'); if (input) input.value = ''; return }
-      App.openImportPreview(checked.data || data, checked, input)
+      const normalizationWarnings = (Storage.lastNormalizationWarnings || []).map(warning => warning.message || String(warning))
+      const previewChecked = {
+        ...checked,
+        warnings: [...normalizationWarnings, ...(checked.warnings || [])],
+      }
+      App.openImportPreview(checked.data || data, previewChecked, input)
     }, err => { notify('นำเข้าล้มเหลว: ' + err, 'error'); if (input) input.value = '' })
   }
 
@@ -16949,7 +17398,10 @@ App._pickMerchant = function(name, opts = {}) {
       danger:true,
       confirmLabel:'กู้คืน',
       body:`จะย้อนข้อมูลกลับไปก่อน import ล่าสุด (${backup.exportedAt ? new Date(backup.exportedAt).toLocaleString('th-TH') : 'ไม่ทราบเวลา'})`,
-      onConfirm() { App._applyBackupPayload(backup); notify('กู้คืน backup แล้ว', 'success') },
+      onConfirm() {
+        const applied = App._applyBackupPayload(backup)
+        if (applied) notify('กู้คืน backup แล้ว', 'success')
+      },
     })
   }
 
@@ -17033,48 +17485,6 @@ App._pickMerchant = function(name, opts = {}) {
       if (normMerchant && tNorm && tNorm !== normMerchant) return false
       return true
     }) || null
-  }
-
-  // Double-submit guard + duplicate-check wrapper around saveTx.
-  // Pass true as first argument (internal only) to bypass the duplicate check.
-  const _prevSaveTx = App.saveTx?.bind(App)
-  App.saveTx = function(forceSkipDuplicateCheck) {
-    // Rapid double-tap guard — cleared after 600 ms
-    if (App._txSaveInProgress) return false
-    App._txSaveInProgress = true
-    setTimeout(() => { App._txSaveInProgress = false }, 600)
-
-    const isEdit = S.txMode === 'edit' && !!S.editingTxId
-
-    // Duplicate check only for new transactions
-    if (!forceSkipDuplicateCheck && !isEdit && _prevSaveTx) {
-      const draft = { ...S.tx, amount: Number(S.tx?.amount || 0) }
-      const dup   = App._detectDuplicateTx(draft, null)
-      if (dup) {
-        // Show warning — user can still proceed
-        const w       = walletById(dup.walletId)
-        const dupDesc = [dup.merchant, Calc.fmt(dup.amount), dup.date, w?.name].filter(Boolean).join(' · ')
-        App.showConfirm?.({
-          title: '⚠️ รายการที่คล้ายกัน',
-          body: `พบรายการที่ตรงกัน:\n${dupDesc}\n\nต้องการบันทึกซ้ำหรือไม่?`,
-          confirmLabel: 'บันทึกต่อไป',
-          onConfirm: () => {
-            App._txSaveInProgress = false   // reset so the force-save can proceed
-            App.saveTx(true)
-          },
-          onCancel: () => { App._txSaveInProgress = false },
-        })
-        return false
-      }
-    }
-
-    try {
-      return _prevSaveTx ? _prevSaveTx() : false
-    } catch (err) {
-      console.error('[Phase 2] saveTx failed', err)
-      App._txSaveInProgress = false
-      return false
-    }
   }
 
   // ════════════════════════════════════════════════════════════
@@ -17314,7 +17724,7 @@ App._pickMerchant = function(name, opts = {}) {
   // Override installment center to show progress bar + "ชำระแล้ว X/Y งวด"
   App.openInstallmentCenter = function(cardId = '') {
     const groups = (App.getInstallmentGroups?.() || []).filter(g => !cardId || g.walletId === cardId)
-    const back   = cardId ? `App.openCCDetail('${esc(cardId)}')` : 'App.closeSubScreen()'
+    const back   = cardId ? `App.openCCDetail(${MTSafeRender.jsArg(cardId)})` : 'App.closeSubScreen()'
 
     if (!groups.length) {
       App.openSubScreen(
@@ -17350,8 +17760,8 @@ App._pickMerchant = function(name, opts = {}) {
           <strong>${amtLabel}</strong>
           <span>${amtSub}</span>
         </div>
-        <button class="icon-btn" onclick="App.openEditInstallmentGroup('${esc(g.id)}','${esc(cardId)}')">✏️</button>
-        <button class="icon-btn icon-btn-danger" onclick="App.deleteInstallmentGroup('${esc(g.id)}')">🗑</button>
+        <button class="icon-btn" onclick="App.openEditInstallmentGroup(${MTSafeRender.jsArg(g.id)},${MTSafeRender.jsArg(cardId)})">✏️</button>
+        <button class="icon-btn icon-btn-danger" onclick="App.deleteInstallmentGroup(${MTSafeRender.jsArg(g.id)})">🗑</button>
       </div>`
     }).join('')
 
@@ -17942,7 +18352,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           </div>
           <div class="privilege-sheet-actions">
             <button class="btn btn-secondary" onclick="document.getElementById('privilege-used-overlay')?.remove()">ยกเลิก</button>
-            <button class="btn btn-primary" onclick="App.confirmPrivilegeUsed('${esc(privilege.id)}')">บันทึกการใช้</button>
+            <button class="btn btn-primary" onclick="App.confirmPrivilegeUsed(${MTSafeRender.jsArg(privilege.id)})">บันทึกการใช้</button>
           </div>
         </div>
       </div>`
@@ -17955,16 +18365,16 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (!privilege) return
     document.getElementById('privilege-actions-overlay')?.remove()
     const actions = []
-    actions.push(`<button class="btn btn-secondary" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>`)
-    actions.push(`<button class="btn btn-secondary" onclick="App.duplicatePrivilege('${esc(privilege.id)}')">ทำสำเนา</button>`)
+    actions.push(`<button class="btn btn-secondary" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.openPrivilegeForm(${MTSafeRender.jsArg(privilege.id)})">แก้ไข</button>`)
+    actions.push(`<button class="btn btn-secondary" onclick="App.duplicatePrivilege(${MTSafeRender.jsArg(privilege.id)})">ทำสำเนา</button>`)
     if (privilegeSupportsCopy(privilege)) {
-      actions.push(`<button class="btn btn-secondary" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอกโค้ด</button>`)
+      actions.push(`<button class="btn btn-secondary" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.copyPrivilegeCode(${MTSafeRender.jsArg(privilege.id)})">คัดลอกโค้ด</button>`)
     }
     if (privilege.status !== 'used') {
-      if (privilege.status !== 'archived') actions.push(`<button class="btn btn-outline" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.archivePrivilege('${esc(privilege.id)}')">เก็บถาวร</button>`)
-      else actions.push(`<button class="btn btn-outline" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.deletePrivilege('${esc(privilege.id)}')">ลบ</button>`)
+      if (privilege.status !== 'archived') actions.push(`<button class="btn btn-outline" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.archivePrivilege(${MTSafeRender.jsArg(privilege.id)})">เก็บถาวร</button>`)
+      else actions.push(`<button class="btn btn-outline" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.deletePrivilege(${MTSafeRender.jsArg(privilege.id)})">ลบ</button>`)
     } else {
-      actions.push(`<button class="btn btn-outline" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.deletePrivilege('${esc(privilege.id)}')">ลบ</button>`)
+      actions.push(`<button class="btn btn-outline" onclick="document.getElementById('privilege-actions-overlay')?.remove(); App.deletePrivilege(${MTSafeRender.jsArg(privilege.id)})">ลบ</button>`)
     }
     const el = document.createElement('div')
     el.id = 'privilege-actions-overlay'
@@ -18039,7 +18449,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
               <div class="privilege-code-list">
                 ${codes.map((code, index) => `<div class="privilege-code-chip-row">
                   <strong>${esc(code)}</strong>
-                  <button class="btn btn-secondary btn-sm" onclick="App.copyPrivilegeCode('${esc(privilege.id)}', ${index})">คัดลอก</button>
+                  <button class="btn btn-secondary btn-sm" onclick="App.copyPrivilegeCode(${MTSafeRender.jsArg(privilege.id)}, ${index})">คัดลอก</button>
                 </div>`).join('')}
               </div>
             </div>` : ''}
@@ -18047,10 +18457,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             ${renderPrivilegeNoteHtml(privilege.note)}
           </div>
           <div class="privilege-sheet-actions-stack" style="margin-top:12px">
-            ${privilegeSupportsCopy(privilege) ? `<button class="btn btn-secondary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอกโค้ด</button>` : ''}
-            ${privilege.status === 'active' ? `<button class="btn btn-primary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.openPrivilegeUsedDialog('${esc(privilege.id)}')">ใช้แล้ว</button>` : ''}
-            <button class="btn btn-secondary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>
-            <button class="btn btn-secondary" onclick="App.duplicatePrivilege('${esc(privilege.id)}')">ทำสำเนา</button>
+            ${privilegeSupportsCopy(privilege) ? `<button class="btn btn-secondary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.copyPrivilegeCode(${MTSafeRender.jsArg(privilege.id)})">คัดลอกโค้ด</button>` : ''}
+            ${privilege.status === 'active' ? `<button class="btn btn-primary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.openPrivilegeUsedDialog(${MTSafeRender.jsArg(privilege.id)})">ใช้แล้ว</button>` : ''}
+            <button class="btn btn-secondary" onclick="document.getElementById('privilege-detail-overlay')?.remove(); App.openPrivilegeForm(${MTSafeRender.jsArg(privilege.id)})">แก้ไข</button>
+            <button class="btn btn-secondary" onclick="App.duplicatePrivilege(${MTSafeRender.jsArg(privilege.id)})">ทำสำเนา</button>
           </div>
         </div>
       </div>`
@@ -18135,8 +18545,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         ${S.privilegesFilter === 'expired' && rows.length ? `<div style="padding:0 0 8px;text-align:right"><button class="btn btn-outline btn-sm" style="color:var(--expense);border-color:var(--expense)" onclick="App.archiveExpiredPrivileges()">เก็บถาวรทั้งหมด (${rows.length})</button></div>` : ''}
         <div class="privilege-search-wrap">
           <div class="search-field-wrap">
-            <input class="form-input search-input" id="privilege-search" placeholder="ค้นหาชื่อ Platform ร้านค้า โค้ด หรือโน้ต" value="${esc(S.privilegeSearch || '')}" oninput="App._syncSearchClear(this); App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}', this.value, false)">
-            <button type="button" class="search-clear-btn" aria-label="ล้างการค้นหา"${S.privilegeSearch ? '' : ' hidden'} onclick="const input=this.parentElement.querySelector('input'); input.value=''; App.openPrivilegesScreen('${esc(S.privilegesFilter || 'active')}', '', false); App._syncSearchClear(input); input.focus()">×</button>
+            <input class="form-input search-input" id="privilege-search" placeholder="ค้นหาชื่อ Platform ร้านค้า โค้ด หรือโน้ต" value="${esc(S.privilegeSearch || '')}" oninput="App._syncSearchClear(this); App.openPrivilegesScreen(${MTSafeRender.jsArg(S.privilegesFilter || 'active')}, this.value, false)">
+            <button type="button" class="search-clear-btn" aria-label="ล้างการค้นหา"${S.privilegeSearch ? '' : ' hidden'} onclick="const input=this.parentElement.querySelector('input'); input.value=''; App.openPrivilegesScreen(${MTSafeRender.jsArg(S.privilegesFilter || 'active')}, '', false); App._syncSearchClear(input); input.focus()">×</button>
           </div>
         </div>
         <div class="privilege-list" id="privilege-list-items">${listHtml}</div>
@@ -18155,14 +18565,14 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       : ''
     const metaLine = `${esc(sourceLabel)} · ${dateLabel}${qtyLabel}`
     const leadingAction = privilegeSupportsCopy(privilege)
-      ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.copyPrivilegeCode('${esc(privilege.id)}')">คัดลอก</button>`
+      ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.copyPrivilegeCode(${MTSafeRender.jsArg(privilege.id)})">คัดลอก</button>`
       : privilege.status === 'active'
-        ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>`
-        : `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeDetail('${esc(privilege.id)}')">ดูรายละเอียด</button>`
+        ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeForm(${MTSafeRender.jsArg(privilege.id)})">แก้ไข</button>`
+        : `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeDetail(${MTSafeRender.jsArg(privilege.id)})">ดูรายละเอียด</button>`
     const primaryAction = privilege.status === 'active'
-      ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeUsedDialog('${esc(privilege.id)}')">ใช้แล้ว</button>`
-      : `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeForm('${esc(privilege.id)}')">แก้ไข</button>`
-    return `<div class="card privilege-card" onclick="App.openPrivilegeDetail('${esc(privilege.id)}')">
+      ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeUsedDialog(${MTSafeRender.jsArg(privilege.id)})">ใช้แล้ว</button>`
+      : `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); App.openPrivilegeForm(${MTSafeRender.jsArg(privilege.id)})">แก้ไข</button>`
+    return `<div class="card privilege-card" onclick="App.openPrivilegeDetail(${MTSafeRender.jsArg(privilege.id)})">
       <div class="privilege-card-head">
         <div class="privilege-card-icon">${esc(privilegeTypeIcon(privilege))}</div>
         <div class="privilege-card-main">
@@ -18176,7 +18586,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       <div class="privilege-card-actions">
         ${leadingAction}
         ${primaryAction}
-        <button class="btn btn-secondary btn-sm privilege-more-btn" aria-label="ตัวเลือกเพิ่มเติม" onclick="event.stopPropagation(); App.openPrivilegeActions('${esc(privilege.id)}')">⋯</button>
+        <button class="btn btn-secondary btn-sm privilege-more-btn" aria-label="ตัวเลือกเพิ่มเติม" onclick="event.stopPropagation(); App.openPrivilegeActions(${MTSafeRender.jsArg(privilege.id)})">⋯</button>
       </div>
     </div>`
   }
@@ -18200,7 +18610,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div class="form-group">
           <label class="form-label">Template สิทธิพิเศษ</label>
           <div class="chips privilege-template-row">
-            ${PRIVILEGE_TYPES.map(([key, label]) => `<button class="chip${draft.type === key ? ' active' : ''}" onclick="App._updatePrivilegeDraft('type', '${key}'); App.openPrivilegeForm('${esc(privilegeId)}', true, false)">${label}</button>`).join('')}
+            ${PRIVILEGE_TYPES.map(([key, label]) => `<button class="chip${draft.type === key ? ' active' : ''}" onclick="App._updatePrivilegeDraft('type', '${key}'); App.openPrivilegeForm(${MTSafeRender.jsArg(privilegeId)}, true, false)">${label}</button>`).join('')}
           </div>
           <div class="form-hint">${esc(template.hint)}</div>
         </div>
@@ -18216,7 +18626,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         ${template.showFreeItemQuick || !showFreeItemName ? '' : `<div class="form-group"><label class="form-label">ชื่อของฟรี</label><input class="form-input" value="${esc(draft.freeItemName)}" placeholder="เช่น เฟรนช์ฟรายส์" oninput="App._updatePrivilegeDraft('freeItemName', this.value)"></div>`}
         <div class="form-group"><label class="form-label">จำนวนสิทธิ์</label><input id="priv-form-qty" class="form-input" type="number" min="${draft.status === 'used' ? 0 : 1}" step="1" value="${esc(draft.quantity)}" oninput="App._updatePrivilegeDraft('quantity', this.value)"></div>
         <div class="form-group"><label class="form-label">หมายเหตุ</label><textarea class="form-input" rows="4" placeholder="เงื่อนไขเพิ่มเติม" oninput="App._updatePrivilegeDraft('note', this.value)">${esc(draft.note)}</textarea></div>
-        ${existing ? `<button class="btn btn-outline privilege-delete-btn" onclick="App.deletePrivilege('${esc(existing.id)}')">ลบสิทธิพิเศษ</button>` : ''}
+        ${existing ? `<button class="btn btn-outline privilege-delete-btn" onclick="App.deletePrivilege(${MTSafeRender.jsArg(existing.id)})">ลบสิทธิพิเศษ</button>` : ''}
       `
     let overlay = document.getElementById('privilege-form-overlay')
     if (!overlay) {
@@ -18232,7 +18642,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <div class="sheet-header">
           <h2>${existing ? 'แก้ไขสิทธิพิเศษ' : 'เพิ่มสิทธิพิเศษ'}</h2>
           <div style="display:flex;align-items:center;gap:6px">
-            <button class="btn btn-primary btn-sm" onclick="App.savePrivilege('${esc(privilegeId)}')" style="width:auto">บันทึก</button>
+            <button class="btn btn-primary btn-sm" onclick="App.savePrivilege(${MTSafeRender.jsArg(privilegeId)})" style="width:auto">บันทึก</button>
             <button class="btn-icon" onclick="App.closePrivilegeForm()" aria-label="ปิด">✕</button>
           </div>
         </div>
@@ -18478,35 +18888,17 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }
 
   // ── 3.6 Reports — Trend Chart ─────────────────────────────
-  const _prevRenderReports = App.renderReports?.bind(App)
-  App.renderReports = function() {
-    const VALID_VIEWS = ['expense','income','cashflow','assets','credit','budget','trend']
-    if (!VALID_VIEWS.includes(S.rptView)) S.rptView = 'assets'
-
-    if (S.rptView !== 'trend') {
-      // Let original handle non-trend views, then append the trend chip
-      if (!VALID_VIEWS.slice(0,6).includes(S.rptView)) S.rptView = 'assets'
-      _prevRenderReports?.()
-      const viewEl = document.getElementById('report-view-chips')
-      if (viewEl && !viewEl.querySelector('[data-view="trend"]')) {
-        const btn = document.createElement('button')
-        btn.className = 'chip'
-        btn.dataset.view = 'trend'
-        btn.textContent = 'แนวโน้ม'
-        btn.onclick = () => App.setRptView('trend')
-        viewEl.appendChild(btn)
-      }
-      return
-    }
-
-    // ── Render trend view ────────────────────────────────────
+  App._reportViewExtensions ||= {}
+  App._reportViewExtensions.trend = {
+    label: 'แนวโน้ม',
+    render() {
     const months6 = Calc.getMonths(6)
     const monthEl = document.getElementById('report-month-chips')
     const viewEl  = document.getElementById('report-view-chips')
     if (monthEl) monthEl.innerHTML = months6.map(m => `<button class="chip${m===S.rptMonth?' active':''}" onclick="App.setRptMonth('${m}')">${esc(Calc.monthLabel(m))}</button>`).join('')
     if (viewEl) viewEl.innerHTML = [
       ['assets','สินทรัพย์'],['expense','ใช้จ่าย'],['income','รายรับ'],
-      ['cashflow','กระแสเงินสด'],['credit','บัตร/หนี้'],['budget','งบประมาณ'],['trend','แนวโน้ม'],
+      ['cashflow','กระแสเงินสด'],['credit','บัตร/หนี้'],['budget','งบประมาณ'],['trend','แนวโน้ม'],['calendar','ปฏิทิน'],
     ].map(([v,l]) => `<button class="chip${S.rptView===v?' active':''}" data-view="${v}" onclick="App.setRptView('${v}')">${l}</button>`).join('')
 
     // Oldest-first 6-month data
@@ -18591,6 +18983,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
 
     const content = document.getElementById('reports-content')
     if (content) content.innerHTML = html
+    },
   }
 
   // ── 4.15 Pre-Transaction Card Picker ─────────────────────
@@ -18789,7 +19182,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const monthLabel = Calc.monthLabel?.(S.rptMonth) || S.rptMonth || ''
     const viewLabel = _reportViewLabel(S.rptView)
     const actionHtml = primary.action
-      ? `<button class="ins-action-primary" data-ins-fn="${esc(primary.action.fn)}" onclick="App.insightAct('${esc(primary.id)}', this.dataset.insFn)">${esc(primary.action.label)}</button>`
+      ? `<button class="ins-action-primary" data-ins-fn="${esc(primary.action.fn)}" onclick="App.insightAct(${MTSafeRender.jsArg(primary.id)}, this.dataset.insFn)">${esc(primary.action.label)}</button>`
       : ''
 
     overlay.innerHTML = `
@@ -18837,9 +19230,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const isCreditDueToday = ins.type === '03' && Number(ins.evidence?.daysLeft) === 0
     const titleClass = `ins-title${isCreditDueToday ? ' ins-title-due-today' : ''}`
     const actionHtml = ins.action
-      ? `<button class="ins-action-primary" data-ins-fn="${esc(ins.action.fn)}" onclick="App.insightAct('${esc(ins.id)}', this.dataset.insFn)">${esc(ins.action.label)}</button>`
+      ? `<button class="ins-action-primary" data-ins-fn="${esc(ins.action.fn)}" onclick="App.insightAct(${MTSafeRender.jsArg(ins.id)}, this.dataset.insFn)">${esc(ins.action.label)}</button>`
       : ''
-    const snoozeHtml = `<select class="ins-snooze-select" onchange="if(this.value){App.insightSnooze('${esc(ins.id)}',+this.value);this.value=''}"><option value="">⏰ เตือนอีกครั้ง</option><option value="1">พรุ่งนี้ (1 วัน)</option><option value="3">3 วัน</option><option value="7">1 สัปดาห์</option></select>`
+    const snoozeHtml = `<select class="ins-snooze-select" onchange="if(this.value){App.insightSnooze(${MTSafeRender.jsArg(ins.id)},+this.value);this.value=''}"><option value="">⏰ เตือนอีกครั้ง</option><option value="1">พรุ่งนี้ (1 วัน)</option><option value="3">3 วัน</option><option value="7">1 สัปดาห์</option></select>`
     return `<div class="ins-card severity-${esc(ins.severity)}" id="ins-${esc(ins.id)}">
       <div class="ins-card-top">
         <span class="ins-icon">${icon}</span>
@@ -18847,7 +19240,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <div class="${titleClass}">${esc(ins.title)}</div>
           <div class="ins-body">${esc(ins.body)}</div>
         </div>
-        <button class="ins-dismiss-btn" onclick="App.insightDismiss('${esc(ins.id)}')" aria-label="ปิด">✕</button>
+        <button class="ins-dismiss-btn" onclick="App.insightDismiss(${MTSafeRender.jsArg(ins.id)})" aria-label="ปิด">✕</button>
       </div>
       <div class="ins-card-actions">
         ${actionHtml}
@@ -19261,8 +19654,8 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         <button class="btn-icon" onclick="App.closeSubScreen()">←</button>
         <h2>สรุปรายเดือน</h2>
         <div style="display:flex;gap:2px">
-          <button class="btn-icon" onclick="App.openMonthlyReview('${esc(prev)}', false)" title="${esc(mlbl(prev))}">‹</button>
-          <button class="btn-icon" ${isNextFuture?'disabled style="opacity:.35;pointer-events:none"':`onclick="App.openMonthlyReview('${esc(next)}', false)" title="${esc(mlbl(next))}"`}>›</button>
+          <button class="btn-icon" onclick="App.openMonthlyReview(${MTSafeRender.jsArg(prev)}, false)" title="${esc(mlbl(prev))}">‹</button>
+          <button class="btn-icon" ${isNextFuture?'disabled style="opacity:.35;pointer-events:none"':`onclick="App.openMonthlyReview(${MTSafeRender.jsArg(next)}, false)" title="${esc(mlbl(next))}"`}>›</button>
         </div>
       </div>
       <div class="sub-scroll" style="padding:12px 16px 40px">
@@ -19399,7 +19792,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     if (intent === 'priorities') {
       const recs = ctx.intelligence ? FinanceIntelligence.adaptiveRecommendations(ctx.intelligence) : []
       const rows = recs.length
-        ? recs.slice(0,3).map((r,i)=>`${i+1}. ${esc(r.title)} — ${esc(r.body)}<br><button class="chip" onclick="App.recordRecommendationFeedback('${esc(r.id)}','helpful')">มีประโยชน์</button> <button class="chip" onclick="App.recordRecommendationFeedback('${esc(r.id)}','not_relevant')">ไม่เกี่ยวข้อง</button> <button class="chip" onclick="App.recordRecommendationFeedback('${esc(r.id)}','already_knew')">รู้อยู่แล้ว</button> <button class="chip" onclick="App.recordRecommendationFeedback('${esc(r.id)}','acted')">ทำแล้ว</button>`)
+        ? recs.slice(0,3).map((r,i)=>`${i+1}. ${esc(r.title)} — ${esc(r.body)}<br><button class="chip" onclick="App.recordRecommendationFeedback(${MTSafeRender.jsArg(r.id)},'helpful')">มีประโยชน์</button> <button class="chip" onclick="App.recordRecommendationFeedback(${MTSafeRender.jsArg(r.id)},'not_relevant')">ไม่เกี่ยวข้อง</button> <button class="chip" onclick="App.recordRecommendationFeedback(${MTSafeRender.jsArg(r.id)},'already_knew')">รู้อยู่แล้ว</button> <button class="chip" onclick="App.recordRecommendationFeedback(${MTSafeRender.jsArg(r.id)},'acted')">ทำแล้ว</button>`)
         : askRecommendationLines(ctx)
       return ans('🧭', 'สิ่งที่ควรโฟกัสตอนนี้',
         rows.length
@@ -19436,7 +19829,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       const actions = ctx.intelligence ? FinanceIntelligence.actionProposals(ctx.intelligence) : []
       return ans('⚙️', 'สิ่งที่ระบบช่วยทำได้',
         actions.length
-          ? actions.map((a,i)=>`${i+1}. ${esc(a.title)} — ${esc(a.preview)}<br><button class="chip" onclick="App.openFinanceActionPreview('${esc(a.id)}')">ดูตัวอย่าง</button>`).join('<br>')
+          ? actions.map((a,i)=>`${i+1}. ${esc(a.title)} — ${esc(a.preview)}<br><button class="chip" onclick="App.openFinanceActionPreview(${MTSafeRender.jsArg(a.id)})">ดูตัวอย่าง</button>`).join('<br>')
           : 'ตอนนี้ยังไม่มีสิ่งที่เหมาะจะให้ระบบช่วยทำ')
     }
 
@@ -20113,7 +20506,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>
       <div class="sub-scroll" style="padding:16px 16px 40px">
         <div class="finance-ask-presets">
-          ${presets.map(p => `<button onclick="App._askPreset(${esc(JSON.stringify(p))})">${esc(p)}</button>`).join('')}
+          ${presets.map(p => `<button onclick="App._askPreset(${MTSafeRender.jsArg(JSON.stringify(p))})">${esc(p)}</button>`).join('')}
         </div>
         <div id="ask-answer-box">
           <div style="text-align:center;padding:20px 0;color:var(--muted);font-size:13px">เลือกคำถามด้านบน หรือพิมพ์เองด้านล่าง</div>
@@ -20370,7 +20763,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
         </div>
         <div class="card card-pad">
           <div class="finance-section-title">สิ่งที่เคยให้ระบบทำ</div>
-          ${actions.length ? actions.map(r => `<div class="finance-list-row"><b>${esc(r.title || r.type)}</b><div>${esc(r.type)}${r.undoneAt ? ' · ย้อนกลับแล้ว' : ''}</div>${!r.undoneAt ? `<div style="margin-top:6px"><button class="chip" onclick="App.undoFinanceAction('${esc(r.id)}')">ย้อนกลับ</button></div>` : ''}</div>`).join('') : '<div style="color:var(--muted)">ยังไม่มีรายการ</div>'}
+          ${actions.length ? actions.map(r => `<div class="finance-list-row"><b>${esc(r.title || r.type)}</b><div>${esc(r.type)}${r.undoneAt ? ' · ย้อนกลับแล้ว' : ''}</div>${!r.undoneAt ? `<div style="margin-top:6px"><button class="chip" onclick="App.undoFinanceAction(${MTSafeRender.jsArg(r.id)})">ย้อนกลับ</button></div>` : ''}</div>`).join('') : '<div style="color:var(--muted)">ยังไม่มีรายการ</div>'}
         </div>
       </div>`)
   }
@@ -20459,7 +20852,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           ${summary.plans.length ? summary.plans.map(p => `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
             <div class="finance-muted-row">
               <div class="finance-card-title"><span class="finance-page-cue">${App._financeLifeIcon(p.type)}</span><b>${esc(p.title)}</b></div>
-              <button class="finance-icon-action" onclick="App.deleteLifePlan('${esc(p.id)}')" aria-label="ลบแผน">ลบ</button>
+              <button class="finance-icon-action" onclick="App.deleteLifePlan(${MTSafeRender.jsArg(p.id)})" aria-label="ลบแผน">ลบ</button>
             </div>
             <div style="margin-top:8px">${App._financeMeter(p.currentAmount, Math.max(1, p.targetAmount), 'var(--primary)')}</div>
             <div style="font-size:12px;color:var(--muted);margin-top:4px">เหลือ ${fmt(p.remaining)} · ต้องออม ${p.requiredMonthly===null?'N/A':fmt(p.requiredMonthly)+'/เดือน'}</div>
@@ -20528,7 +20921,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           ${rows.length ? rows.map(r => `<div class="finance-list-row">
             <div style="font-weight:600">${esc(r.title || r.type)}</div>
             <div>${esc(r.type)}${r.undoneAt ? ' · ย้อนกลับแล้ว' : ''}</div>
-            ${!r.undoneAt ? `<div style="margin-top:6px"><button class="chip" onclick="App.undoFinanceAction('${esc(r.id)}')">ย้อนกลับ</button></div>` : ''}
+            ${!r.undoneAt ? `<div style="margin-top:6px"><button class="chip" onclick="App.undoFinanceAction(${MTSafeRender.jsArg(r.id)})">ย้อนกลับ</button></div>` : ''}
           </div>`).join('') : '<div style="color:var(--muted)">ยังไม่มีรายการ</div>'}
         </div>
       </div>`)
@@ -20613,7 +21006,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <div style="font-weight:700">${esc(action.title)}</div>
           <div style="font-size:13px;color:var(--muted);margin-top:6px">${esc(action.rationale)}</div>
           <div style="margin-top:12px">${esc(action.preview)}</div>
-          <button class="btn btn-primary" style="margin-top:14px" onclick="App.applyFinanceAction('${esc(action.id)}')">ยืนยัน</button>
+          <button class="btn btn-primary" style="margin-top:14px" onclick="App.applyFinanceAction(${MTSafeRender.jsArg(action.id)})">ยืนยัน</button>
         </div>
       </div>`)
   }
@@ -20725,7 +21118,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
             <div class="finance-list-row">
               <div style="font-weight:600">${esc(m.title || 'เหตุการณ์')}</div>
               <div style="font-size:12px;color:var(--muted)">${esc(m.type || 'general')} · ${esc(m.direction || 'expense')} · ${fmt(m.amount || 0)}${m.note ? ' · '+esc(m.note) : ''}</div>
-              <div style="margin-top:6px"><button class="chip" onclick="App.deleteFinancialMemory('${esc(m.id)}')">ลบ</button></div>
+              <div style="margin-top:6px"><button class="chip" onclick="App.deleteFinancialMemory(${MTSafeRender.jsArg(m.id)})">ลบ</button></div>
             </div>`).join('') : '<div style="color:var(--muted)">ยังไม่มีบันทึก เพิ่มเฉพาะเดือนที่มีเหตุการณ์ไม่ปกติ เช่น ทริป โบนัส หรือค่ารักษา</div>'}
         </div>
       </div>`, { animate })
@@ -20962,7 +21355,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
               <option value="too_generic">กว้างเกินไป</option>
             </select>
           </div>
-          <button class="btn btn-primary" onclick="App.saveRecommendationFeedbackReason('${esc(id)}','${esc(rating)}')">บันทึก</button>
+          <button class="btn btn-primary" onclick="App.saveRecommendationFeedbackReason(${MTSafeRender.jsArg(id)},${MTSafeRender.jsArg(rating)})">บันทึก</button>
         </div>
       </div>`)
   }
@@ -21296,21 +21689,18 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   // ─────────────────────────────────────────────────────────────
   // P3-C  Delete row slide-out
   // ─────────────────────────────────────────────────────────────
-  const _origConfirmDelete = App.confirmDeleteTx?.bind(App)
-  if (_origConfirmDelete) {
-    App.confirmDeleteTx = function () {
-      const txId = S.selectedTxId
-      if (txId) {
-        const row = document.querySelector(`[data-txid="${txId}"]`)
-        if (row) {
-          row.classList.add('mt-row-delete')
-          setTimeout(() => { try { _origConfirmDelete() } catch (_) {} }, 420)
-          return
-        }
+  App.registerDeleteTxMiddleware?.('confirm', 'delete-row-animation', ctx => {
+    const txId = S.selectedTxId
+    if (txId) {
+      const row = document.querySelector(`[data-txid="${txId}"]`)
+      if (row) {
+        row.classList.add('mt-row-delete')
+        setTimeout(() => { try { ctx.next() } catch (_) {} }, 420)
+        return true
       }
-      _origConfirmDelete()
     }
-  }
+    return ctx.next()
+  }, { priority: 200 })
 
   // ─────────────────────────────────────────────────────────────
   // P4-A  Confetti burst — window.MT_confetti(x, y)
@@ -22888,10 +23278,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     setTimeout(() => App._bindTxRows?.('tx-detail-content'), 0)
   }
 
-  // ── Patch renderReports to add ปฏิทิน view ────────────────────
-  const _prevRenderReports = App.renderReports?.bind(App)
-  App.renderReports = function () {
-    if (S.rptView === 'calendar') {
+  // ── Report view extension: ปฏิทิน ───────────────────────────
+  App._reportViewExtensions ||= {}
+  App._reportViewExtensions.calendar = {
+    label: 'ปฏิทิน',
+    render() {
       const months = Calc.getMonths(6)
       const monthEl = document.getElementById('report-month-chips')
       const viewEl  = document.getElementById('report-view-chips')
@@ -22907,20 +23298,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       ).join('')
       const content = document.getElementById('reports-content')
       if (content) content.innerHTML = renderSpendCalendar(S.rptMonth)
-      return
-    }
-
-    _prevRenderReports?.()
-
-    // Append ปฏิทิน chip if not already present
-    const viewEl = document.getElementById('report-view-chips')
-    if (viewEl && !viewEl.querySelector('.spcal-chip')) {
-      const btn = document.createElement('button')
-      btn.className = 'chip spcal-chip'
-      btn.textContent = 'ปฏิทิน'
-      btn.onclick = () => App.setRptView('calendar')
-      viewEl.appendChild(btn)
-    }
+    },
   }
 
 })()
@@ -23695,8 +24073,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return true
   }
 
-  const prevConfirmDeleteShared = App.confirmDeleteTx?.bind(App)
-  App.confirmDeleteTx = function(...args) {
+  App.registerDeleteTxMiddleware?.('confirm', 'shared-reimbursement', ctx => {
     const tx = (S.transactions || []).find(t => t.id === S.selectedTxId)
     if (tx && App.isReimbursementTx?.(tx)) {
       const parentId = tx.reimbursesSharedExpenseTxId
@@ -23704,14 +24081,14 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       App._syncSharedExpenseSettlement?.(parentId)
       finalizeSharedDelete({ closeDetail:true })
       toast('ลบรายการรับคืนแล้ว และอัปเดตยอดค้างแล้ว', 'success')
-      return
+      return true
     }
     if (tx && openDeleteSharedSourceChoice(tx, {})) return
-    return prevConfirmDeleteShared?.(...args)
-  }
+    return ctx.next()
+  }, { priority: 300 })
 
-  const prevDeleteTxFromSubShared = App.deleteTxFromSub?.bind(App)
-  App.deleteTxFromSub = function(id, backType = '', backId = '') {
+  App.registerDeleteTxMiddleware?.('sub', 'shared-reimbursement', ctx => {
+    const [id, backType = '', backId = ''] = ctx.args
     const tx = (S.transactions || []).find(t => t.id === id)
     if (tx && App.isReimbursementTx?.(tx)) {
       const parentId = tx.reimbursesSharedExpenseTxId
@@ -23719,11 +24096,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       App._syncSharedExpenseSettlement?.(parentId)
       finalizeSharedDelete({ backType, backId })
       toast('ลบรายการรับคืนแล้ว และอัปเดตยอดค้างแล้ว', 'success')
-      return
+      return true
     }
     if (tx && openDeleteSharedSourceChoice(tx, { backType, backId })) return
-    return prevDeleteTxFromSubShared?.(id, backType, backId)
-  }
+    return ctx.next()
+  }, { priority: 300 })
 
   App.repairSharedExpenseData = function({ save = false } = {}) {
     let changed = 0
