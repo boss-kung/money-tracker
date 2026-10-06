@@ -67,6 +67,12 @@
 - [x] Move one bounded calculation at a time behind a stable service interface.
 - [x] Remove only wrappers proven redundant by focused tests.
 
+### Task 4.3: Remove redundant persist wrapper
+
+- [x] Consolidate the duplicate `App._beforePersistV50` assignment into one canonical persist hook.
+- [x] Preserve V5 migration and upcoming-bill normalization ordering.
+- [x] Add a static architecture regression test preventing the duplicate wrapper from returning.
+
 ### Task 5: Phase 4 verification and handoff
 
 - [x] Run the complete Node test suite and syntax checks after each cleanup slice.

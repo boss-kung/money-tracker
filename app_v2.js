@@ -367,12 +367,6 @@ window.__mountUpcomingBillsFeature = function() {
     document.getElementById('upcoming-bill-overlay')?.remove()
   }
 
-  const prevBeforePersistV50 = App._beforePersistV50?.bind(App)
-  App._beforePersistV50 = function() {
-    prevBeforePersistV50?.()
-    ensureUpcomingBillsState()
-  }
-
   App._updateUpcomingBillDraft = function(field, value) {
     S.upcomingBillDraft ||= {}
     S.upcomingBillDraft[field] = value
@@ -10199,6 +10193,7 @@ App._pickMerchant = function(name, opts = {}) {
   // ── Persist extension ──────────────────────────────────────
   App._beforePersistV50 = function() {
     migrateToV5()
+    ensureUpcomingBillsState()
   }
 
   // ── ═══════════════════════════════════════════════════════

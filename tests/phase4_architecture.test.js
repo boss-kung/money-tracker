@@ -44,3 +44,13 @@ test('financial position delegates liability composition to Ledger', () => {
   assert.match(block, /rewardForTx:/)
   assert.doesNotMatch(block, /getCommittedInstallmentDebt/)
 })
+
+test('persist migration state uses one canonical before-commit hook', () => {
+  assert.equal((source.match(/App\._beforePersistV50\s*=\s*function/g) || []).length, 1)
+  const start = source.indexOf('  App._beforePersistV50 = function()')
+  const end = source.indexOf('\n  // ──', start)
+  assert.ok(start >= 0 && end > start, 'canonical persist hook section missing')
+  const block = source.slice(start, end)
+  assert.match(block, /migrateToV5\(\)/)
+  assert.match(block, /ensureUpcomingBillsState\(\)/)
+})
