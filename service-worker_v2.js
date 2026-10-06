@@ -108,7 +108,7 @@ async function staleWhileRevalidate(request) {
 }
 
 self.addEventListener('install', event => {
-  event.waitUntil(precache().then(() => self.skipWaiting()))
+  event.waitUntil(precache())
 })
 
 self.addEventListener('activate', event => {
