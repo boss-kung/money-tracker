@@ -950,6 +950,7 @@ let S = {
 
 let MT_STORAGE_HYDRATED = false
 let MT_STATE_COMMIT = null
+let MT_BOOT_FAST_LEDGER = true
 const MT_DERIVED_MEMO = window.MTDerivedRuntime?.createMemoStore?.({ readEpoch:() => getTODAY() }) || {
   memoize(_namespace, _key, compute) { return compute() },
   invalidate() { return 0 },
@@ -976,18 +977,29 @@ function getStateCommit() {
 }
 
 // ── Persist ──────────────────────────────────────────────────
-function persist(reason = 'app') {
+function persist(reason = 'app', options = {}) {
   if (!MT_STORAGE_HYDRATED) {
     console.warn('[Money Tracker] persist skipped before storage hydration')
     return false
   }
   if (typeof MT_DERIVED_MEMO !== 'undefined') MT_DERIVED_MEMO.invalidate(reason)
+  const persistHost = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : {})
+  if (persistHost.__MT_PERSIST_OVERRIDE && persistHost.__MT_PERSIST_OVERRIDE_ACTIVE !== true) {
+    persistHost.__MT_PERSIST_OVERRIDE_ACTIVE = true
+    try { return persistHost.__MT_PERSIST_OVERRIDE() } finally { persistHost.__MT_PERSIST_OVERRIDE_ACTIVE = false }
+  }
+  // Keep the first paint on the persisted ledger snapshot. Any user-initiated
+  // save after first paint opts into the full reward-aware calculation, while
+  // startup migrations/hydration cannot accidentally move work onto the boot
+  // critical path.
+  const firstRenderComplete = typeof MT_FIRST_RENDER_DONE !== 'undefined' && MT_FIRST_RENDER_DONE === true
+  if (firstRenderComplete && reason !== 'billing-hydration' && reason !== 'feature-hydration') MT_BOOT_FAST_LEDGER = false
   const previousBillingWallets = S.wallets
   if (typeof CreditCardCycles !== 'undefined') S.wallets = CreditCardCycles.prepareBillingMigration({ wallets:S.wallets, transactions:S.transactions, refDate:getTODAY() }).wallets
   const stateCommit = getStateCommit()
   const result = stateCommit
-    ? stateCommit.commit({ reason })
-    : { ok: Storage.saveAll(S) === true }
+    ? stateCommit.commit({ reason, ...options })
+    : { ok: Storage.saveAll(S, options) === true }
   const ok = result.ok === true
   if (!ok) {
     S.wallets = previousBillingWallets
@@ -1001,6 +1013,10 @@ function persist(reason = 'app') {
         : 'บันทึกไม่สำเร็จ — แนะนำสำรองข้อมูลก่อนลองใหม่', 'error')
     } catch (_) {}
   }
+  if (ok) {
+    App._renderRevision++
+    App._forceRenderOnNext = true
+  }
   return ok
 }
 
@@ -1008,8 +1024,13 @@ function persist(reason = 'app') {
 // mutate synchronously, provide a rollback for the in-memory snapshot, and
 // only render success UI after persist() confirms the write.
 function commitMutation({ mutate, rollback, onSuccess }) {
+  const config = arguments[0] || {}
   mutate?.()
+  const persistHost = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : {})
+  const previousPersistOverride = persistHost.__MT_PERSIST_OVERRIDE
+  persistHost.__MT_PERSIST_OVERRIDE = typeof config.persist === 'function' ? config.persist : null
   const committed = persist()
+  persistHost.__MT_PERSIST_OVERRIDE = previousPersistOverride
   if (!committed) {
     rollback?.()
     return false
@@ -1147,7 +1168,7 @@ function toast(msg, type = 'info') {
 const overlayCloseTimers = {}
 
 const App = {
-  saveAll(reason = 'app') { return persist(reason) },
+  saveAll(reason = 'app', options = {}) { return persist(reason, options) },
   showStorageRecoveryNotice() {
     const existing = document.getElementById('mt-storage-recovery-notice')
     const status = Storage.hydrationStatus
@@ -1352,6 +1373,17 @@ const App = {
   },
 
   // ── Navigation ────────────────────────────────────────────
+  _renderRevision: 0,
+  _lastPageRenderKey: '',
+  _forceRenderOnNext: false,
+  _pageRenderKey(page = S.page) {
+    const filters = page === 'transactions'
+      ? [S.txMonth, S.txType, S.txSearch, S.txWalletFilter, S.txCategoryFilter, S.txAmtMin, S.txAmtMax, S.txListLimit]
+      : page === 'reports'
+        ? [S.rptMonth, S.rptView]
+        : []
+    return `${page}|${App._renderRevision}|${JSON.stringify(filters)}`
+  },
   showPage(page) {
     page = APP_ROUTE_PAGES.has(page) ? page : 'dashboard'
     S.page = page
@@ -1363,7 +1395,12 @@ const App = {
       b.classList.toggle('active', b.dataset.tab === page)
     })
     App._syncPageChrome(page)
+    const renderKey = App._pageRenderKey(page)
+    const shouldRender = App._forceRenderOnNext || App._lastPageRenderKey !== renderKey
+    App._forceRenderOnNext = false
+    if (!shouldRender) return
     App.render()
+    App._lastPageRenderKey = App._pageRenderKey(page)
   },
 
   render() {
@@ -1629,7 +1666,9 @@ const MT_RENDER_COORDINATOR = window.MTDerivedRuntime?.createRenderCoordinator?.
   render: reasons => {
     if (!MT_STORAGE_HYDRATED) return
     const renderStart = performance.now()
-    App.showPage(S.page)
+    const isFirstRender = !MT_FIRST_RENDER_DONE
+    App._suppressScreenAnimations = !isFirstRender
+    try { App.showPage(S.page) } finally { App._suppressScreenAnimations = false }
     if (MT_FIRST_RENDER_DONE) return
     MT_FIRST_RENDER_DONE = true
     window.MTBoot?.mark?.('app.firstRender.done', {
@@ -1638,9 +1677,35 @@ const MT_RENDER_COORDINATOR = window.MTDerivedRuntime?.createRenderCoordinator?.
       duration: Math.round((performance.now() - renderStart) * 10) / 10,
     })
     requestAnimationFrame(() => requestAnimationFrame(() => requestHideBootScreen('first-render')))
+    const scheduleBootReconciliation = typeof setTimeout === 'function' ? setTimeout : null
+    scheduleBootReconciliation?.(() => {
+      const reconcileBootLedger = () => {
+        MT_BOOT_FAST_LEDGER = false
+        try {
+          App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
+          App.requestRender?.('ledger-reconciled')
+        } catch (_) {}
+      }
+      if (typeof requestIdleCallback === 'function') requestIdleCallback(reconcileBootLedger, { timeout: 2000 })
+      else reconcileBootLedger()
+    }, 3500)
   },
 }) || { request() { if (MT_STORAGE_HYDRATED) App.showPage(S.page) } }
-App.requestRender = reason => MT_RENDER_COORDINATOR.request(reason)
+App.requestRender = reason => {
+  App._forceRenderOnNext = true
+  return MT_RENDER_COORDINATOR.request(reason)
+}
+App.ensureFeatureAndCall = function(group, method, args = []) {
+  const invoke = () => {
+    const fn = App[method]
+    return typeof fn === 'function' ? fn(...args) : undefined
+  }
+  if (!window.MTFeatureLoader?.load) return invoke()
+  return window.MTFeatureLoader.load(group).then(invoke).catch(error => {
+    console.warn(`[Money Tracker] optional feature ${group} failed`, error)
+    return undefined
+  })
+}
 App.invalidateDerivedState = reason => MT_DERIVED_MEMO.invalidate(reason)
 
 /* ============================================================
@@ -2431,84 +2496,88 @@ App.pickEmoji=(p,e)=>{
     if (!root) return
     const walletId = root.querySelector('.wallet-detail-screen')?.dataset.walletId
     const ccId = root.querySelector('.cc-detail-screen')?.dataset.cardId
-    root.querySelectorAll('.tx-row').forEach(el => {
-      el.onclick = () => {
-        if (el.classList.contains('swipe-reveal-delete')) {
-          el.classList.remove('swipe-reveal-delete')
-          return
-        }
-        if (walletId) return App.openTxDetailSub(el.dataset.txid, 'wallet', walletId)
-        if (ccId) return App.openTxDetailSub(el.dataset.txid, 'cc', ccId)
-        App.openTxDetail(el.dataset.txid)
-      }
-
-      // Swipe-to-delete (skip if already bound)
-      if (el._swipeBound) return
-      el._swipeBound = true
-
-      // Inject delete action button
-      if (!el.querySelector('.tx-row-delete-action')) {
-        const delBtn = document.createElement('div')
-        delBtn.className = 'tx-row-delete-action'
-        delBtn.setAttribute('aria-label', 'ลบรายการ')
-        delBtn.innerHTML = '🗑'
-        delBtn.addEventListener('click', e => {
-          e.stopPropagation()
-          const txId = el.dataset.txid
-          App.showConfirm({
-            title: 'ลบรายการ',
-            confirmLabel: 'ลบ',
-            danger: true,
-            onConfirm() {
-              const tx = (S.transactions || []).find(t => t.id === txId)
-              if (!tx) return
-              const previousTransactions = S.transactions
-              const previousWallets = cloneCommitValue(S.wallets || [])
-              commitMutation({
-                mutate: () => {
-                  S.transactions = S.transactions.filter(t => t.id !== txId)
-                  App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
-                },
-                rollback: () => {
-                  S.transactions = previousTransactions
-                  S.wallets = previousWallets
-                },
-                onSuccess: () => {
-                  App.render()
-                  toast('ลบรายการแล้ว', 'success')
-                },
-              })
+    const confirmDelete = row => {
+      const txId = row?.dataset.txid
+      if (!txId) return
+      App.showConfirm({
+        title: 'ลบรายการ',
+        confirmLabel: 'ลบ',
+        danger: true,
+        onConfirm() {
+          const tx = (S.transactions || []).find(t => t.id === txId)
+          if (!tx) return
+          const previousTransactions = S.transactions
+          const previousWallets = cloneCommitValue(S.wallets || [])
+          commitMutation({
+            mutate: () => {
+              S.transactions = S.transactions.filter(t => t.id !== txId)
+              App.recalculateWalletBalances?.({ save: false, recordSnapshot: true })
             },
-            onCancel() { el.classList.remove('swipe-reveal-delete') }
+            rollback: () => {
+              S.transactions = previousTransactions
+              S.wallets = previousWallets
+            },
+            onSuccess: () => {
+              App.render()
+              toast('ลบรายการแล้ว', 'success')
+            },
           })
-        })
-        el.appendChild(delBtn)
-      }
+        },
+        onCancel() { row.classList.remove('swipe-reveal-delete') }
+      })
+    }
 
-      // Touch swipe detection
-      let startX = 0, startY = 0, tracking = false
-      el.addEventListener('touchstart', e => {
-        startX = e.touches[0].clientX
-        startY = e.touches[0].clientY
-        tracking = true
-      }, { passive: true })
-      el.addEventListener('touchend', e => {
-        if (!tracking) return
-        tracking = false
-        const dx = e.changedTouches[0].clientX - startX
-        const dy = e.changedTouches[0].clientY - startY
-        if (Math.abs(dy) > 40) return // ป้องกัน vertical scroll กระตุ้น swipe
-        if (dx < -60) {
-          // Close other open rows first
-          document.querySelectorAll('.tx-row.swipe-reveal-delete').forEach(r => {
-            if (r !== el) r.classList.remove('swipe-reveal-delete')
-          })
-          el.classList.add('swipe-reveal-delete')
-        } else if (dx > 30) {
-          el.classList.remove('swipe-reveal-delete')
-        }
-      }, { passive: true })
+    root.querySelectorAll('.tx-row').forEach(row => {
+      if (row.querySelector('.tx-row-delete-action')) return
+      const delBtn = document.createElement('div')
+      delBtn.className = 'tx-row-delete-action'
+      delBtn.setAttribute('aria-label', 'ลบรายการ')
+      delBtn.setAttribute('role', 'button')
+      delBtn.innerHTML = '🗑'
+      row.appendChild(delBtn)
     })
+    if (root._txDelegatedBound) return
+    root._txDelegatedBound = true
+    root._txSwipe = null
+    root.addEventListener('click', event => {
+      const row = event.target.closest?.('.tx-row')
+      if (!row || !root.contains(row)) return
+      if (event.target.closest?.('.tx-row-delete-action')) {
+        event.preventDefault()
+        event.stopPropagation()
+        confirmDelete(row)
+        return
+      }
+      if (row.classList.contains('swipe-reveal-delete')) {
+        row.classList.remove('swipe-reveal-delete')
+        return
+      }
+      if (walletId) return App.openTxDetailSub(row.dataset.txid, 'wallet', walletId)
+      if (ccId) return App.openTxDetailSub(row.dataset.txid, 'cc', ccId)
+      App.openTxDetail(row.dataset.txid)
+    })
+    // Touch swipe detection is delegated from the container to avoid rebinding rows.
+    root.addEventListener('touchstart', event => {
+      const row = event.target.closest?.('.tx-row')
+      if (!row || !root.contains(row) || !event.touches?.[0]) return
+      root._txSwipe = { row, startX: event.touches[0].clientX, startY: event.touches[0].clientY }
+    }, { passive: true })
+    root.addEventListener('touchend', event => {
+      const gesture = root._txSwipe
+      root._txSwipe = null
+      if (!gesture || !event.changedTouches?.[0]) return
+      const dx = event.changedTouches[0].clientX - gesture.startX
+      const dy = event.changedTouches[0].clientY - gesture.startY
+      if (Math.abs(dy) > 40) return
+      if (dx < -60) {
+        document.querySelectorAll('.tx-row.swipe-reveal-delete').forEach(row => {
+          if (row !== gesture.row) row.classList.remove('swipe-reveal-delete')
+        })
+        gesture.row.classList.add('swipe-reveal-delete')
+      } else if (dx > 30) {
+        gesture.row.classList.remove('swipe-reveal-delete')
+      }
+    }, { passive: true })
   }
 })();
 
@@ -2644,7 +2713,7 @@ App.pickEmoji=(p,e)=>{
       receivable && Number(receivable.expectedReimbursement || 0) > 0 ? `<div class="detail-row"><span class="detail-label">คงเหลือรอรับคืน</span><span class="detail-value" style="color:${receivable.remaining > 0 ? 'var(--income)' : receivable.status === 'over_reimbursed' ? 'var(--warning,#f59e0b)' : 'var(--muted)'}">${fmt(receivable.remaining)}${receivable.status === 'over_reimbursed' ? ' · รับเกิน' : ''}</span></div>` : '',
       splitBillLink.status === 'mismatch' ? `<div class="detail-row" style="background:rgba(245,158,11,.10);border-radius:8px;padding:8px 12px;margin:6px 0"><span class="detail-label" style="color:var(--warning,#f59e0b)">สถานะ</span><span class="detail-value" style="color:var(--warning,#f59e0b)">${esc(splitBillLink.message || 'ข้อมูลหารบิลกับรายการจ่ายยังไม่ตรงกัน')}</span></div>` : '',
       splitBillLink.status === 'missing_bill' ? `<div class="detail-row" style="background:rgba(239,68,68,.08);border-radius:8px;padding:8px 12px;margin:6px 0"><span class="detail-label" style="color:var(--expense)">สถานะ</span><span class="detail-value" style="color:var(--expense)">${esc(splitBillLink.message || 'ไม่พบบิลหารที่เคยเชื่อมไว้')}</span></div>` : '',
-      splitBillLink.billId && splitBillLink.status !== 'missing_bill' ? `<div class="detail-row"><span class="detail-label">เปิดหารบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.openSplitBillDetail(${MTSafeRender.jsArg(splitBillLink.billId)})">${splitBillLink.status === 'mismatch' ? 'อัปเดตจากบิล' : 'ดูรายละเอียด'}</button></span></div>` : '',
+      splitBillLink.billId && splitBillLink.status !== 'missing_bill' ? `<div class="detail-row"><span class="detail-label">เปิดหารบิล</span><span class="detail-value"><button class="btn btn-secondary btn-sm" style="width:auto" onclick="App.ensureFeatureAndCall('advanced','openSplitBillDetail',[${MTSafeRender.jsArg(splitBillLink.billId)}])">${splitBillLink.status === 'mismatch' ? 'อัปเดตจากบิล' : 'ดูรายละเอียด'}</button></span></div>` : '',
     ].filter(Boolean).join('') : ''
     const quickSharedRows = !splitBillLink && shared
       ? `<div class="detail-row"><span class="detail-label">จ่ายแทนทั้งหมด</span><span class="detail-value">${fmt(tx.amount)}</span></div><div class="detail-row"><span class="detail-label">นับเข้างบของเรา</span><span class="detail-value">${fmt(shared.myShare || 0)}</span></div><div class="detail-row"><span class="detail-label">รับคืนแล้ว</span><span class="detail-value" style="color:var(--income)">${fmt(sharedSettlement?.received || shared.reimbursedAmount || 0)}</span></div><div class="detail-row"><span class="detail-label">คงเหลือรอรับคืน</span><span class="detail-value" style="color:${(sharedSettlement?.remaining || shared.remainingReimbursableAmount || shared.reimbursableAmount || 0) > 0 ? 'var(--income)' : 'var(--muted)'}">${fmt(sharedSettlement?.remaining ?? shared.remainingReimbursableAmount ?? shared.reimbursableAmount ?? 0)}</span></div>`
@@ -5080,7 +5149,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App.getLedgerAmountForTx = function(tx) {
     return window.MTLedger.getLedgerAmountForTx(tx, {
       wallets:S.wallets || [],
-      rewardForTx:row => typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(row) : row.rewardEstimate,
+      rewardForTx:row => (typeof MT_BOOT_FAST_LEDGER !== 'undefined' && MT_BOOT_FAST_LEDGER) ? row.rewardEstimate : (typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(row) : row.rewardEstimate),
       preferStored:true,
     })
   }
@@ -5092,7 +5161,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App._expectedLedgerAmountForTx = function(tx) {
     return window.MTLedger.getLedgerAmountForTx(tx, {
       wallets:S.wallets || [],
-      rewardForTx:row => typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(row) : row.rewardEstimate,
+      rewardForTx:row => (typeof MT_BOOT_FAST_LEDGER !== 'undefined' && MT_BOOT_FAST_LEDGER) ? row.rewardEstimate : (typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(row) : row.rewardEstimate),
       preferStored:false,
     })
   }
@@ -5117,7 +5186,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       wallets:S.wallets || [],
       loans:S.loans || [],
       today:today(),
-      rewardForTx:tx => typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(tx) : tx.rewardEstimate,
+      rewardForTx:tx => (typeof MT_BOOT_FAST_LEDGER !== 'undefined' && MT_BOOT_FAST_LEDGER) ? tx.rewardEstimate : (typeof App.getTransactionRewardEstimate === 'function' ? App.getTransactionRewardEstimate(tx) : tx.rewardEstimate),
     })
   }
 
@@ -5232,12 +5301,46 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return tx
   }
 
+  // Reward caps and threshold triggers are scoped by card and statement cycle.
+  // Replaying only those cycles preserves durable ordering while avoiding a
+  // full transaction scan for every ordinary save.
+  App.getAffectedRewardTransactionIds = function({ changedTxs = [], previousTxs = [] } = {}) {
+    const seeds = [...(Array.isArray(changedTxs) ? changedTxs : [changedTxs]), ...(Array.isArray(previousTxs) ? previousTxs : [previousTxs])].filter(Boolean)
+    const cardIds = new Set(seeds.map(tx => String(tx.walletId || '')).filter(Boolean))
+    if (!cardIds.size) return []
+    const rules = typeof App.ensureCCBenefitRulesState === 'function' ? (App.ensureCCBenefitRulesState(), S.ccBenefitRules || []) : []
+    const cycles = []
+    cardIds.forEach(cardId => {
+      const cardRules = rules.filter(rule => String(rule.cardId || '') === cardId && rule.active !== false)
+      const cardSeeds = seeds.filter(tx => String(tx.walletId || '') === cardId)
+      const dates = cardSeeds.map(tx => App._resolveBenefitTxDate?.(tx) || String(tx.date || '').slice(0, 10)).filter(Boolean)
+      const cycleRules = cardRules.length ? cardRules : [null]
+      cycleRules.forEach(rule => dates.forEach(effectiveDate => {
+        const cycle = App.getCyclePeriodForDate(cardId, effectiveDate, rule) || {}
+        if (cycle.start && cycle.end) cycles.push({ cardId, start: cycle.start, end: cycle.end })
+      }))
+    })
+    const transactionIds = new Set()
+    ;(S.transactions || []).forEach(tx => {
+      const cardId = String(tx.walletId || '')
+      if (!cardIds.has(cardId)) return
+      const effectiveDate = App._resolveBenefitTxDate?.(tx) || String(tx.date || '').slice(0, 10)
+      if (cycles.some(cycle => cycle.cardId === cardId && effectiveDate >= cycle.start && effectiveDate <= cycle.end)) {
+        if (tx.id) transactionIds.add(tx.id)
+      }
+    })
+    seeds.forEach(tx => { if (tx.id) transactionIds.add(tx.id) })
+    return [...transactionIds]
+  }
+
   App.refreshTransactionRewardEstimates = function(options = {}) {
     App.invalidateDerivedState?.('reward-refresh')
     const save = options?.save === true
     const txs = Array.isArray(S.transactions) ? S.transactions : []
+    const transactionIds = Array.isArray(options?.transactionIds) ? new Set(options.transactionIds.map(String)) : null
+    const targetTxs = transactionIds ? txs.filter(tx => transactionIds.has(String(tx.id || ''))) : txs
     let changed = 0
-    txs.forEach(tx => {
+    targetTxs.forEach(tx => {
       const before = tx?.rewardEstimate ? JSON.stringify(tx.rewardEstimate) : ''
       const next = App._rewardEstimateForTx?.(tx) || null
       if (next) tx.rewardEstimate = next
@@ -5487,6 +5590,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App.saveTx = function(forceSkipDuplicateCheck) {
+    if (typeof MT_BOOT_FAST_LEDGER !== 'undefined') MT_BOOT_FAST_LEDGER = false
     // Keep the rapid double-submit and duplicate warning at the transaction
     // boundary itself so later feature packs cannot accidentally bypass it.
     if (App._txSaveInProgress) return false
@@ -5524,8 +5628,12 @@ Calc.getUsableMoney = function(wallets, state = null) {
     let saved = false
     const draftForRetry = S.tx ? cloneCommitValue(S.tx) : null
     const formForRetry = { txMode:S.txMode, editingTxId:S.editingTxId }
-    const commitTransaction = () => commitMutation({
+    const beforeTxIds = new Set((S.transactions || []).map(t => t.id))
+    const beforeRecIds = new Set((S.recurring || []).map(r => r.id))
+    const transactionDirtyKeys = ['transactions', 'wallets', 'merchants', 'recurring', 'bnplPlans', 'splitBills', 'splitPeople', 'netWorthSnapshots']
+    const commitTransaction = (dirtyKeys = transactionDirtyKeys) => commitMutation({
       mutate: () => {},
+      persist: () => persist('transaction', { dirtyKeys: dirtyKeys }),
       onSuccess: () => { saved = true },
       // Storage rolled back the durable snapshot; restore financial state while
       // keeping the draft and open form available for another attempt.
@@ -5535,7 +5643,6 @@ Calc.getUsableMoney = function(wallets, state = null) {
         Object.assign(S, formForRetry)
       },
     })
-    const beforeTxIds = new Set((S.transactions || []).map(t => t.id))
     const draft = { ...S.tx, amount:Number(S.tx.amount || 0) }
     const modeBefore = S.txMode
     const resetAfterSaveChrome = () => {
@@ -5607,7 +5714,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
         }
         S.transactions.unshift(...txs)
         App._registerMerchantFromTx?.(txs[0])
-        App.refreshTransactionRewardEstimates?.()
+        const transactionIds = App.getAffectedRewardTransactionIds?.({ changedTxs: txs }) || txs.map(row => row.id)
+        App.refreshTransactionRewardEstimates?.({ transactionIds })
         if (!commitTransaction()) {
           App._txSaveInProgress = false
           return false
@@ -5642,7 +5750,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
         App.linkSplitBillToTransaction?.(tx.splitBillId, tx.id, { save:false })
       }
       App._registerMerchantFromTx?.(tx)
-      App.refreshTransactionRewardEstimates?.()
+      const transactionIds = App.getAffectedRewardTransactionIds?.({ changedTxs: [tx], previousTxs: [previousTx] }) || [tx.id]
+      App.refreshTransactionRewardEstimates?.({ transactionIds })
 
       // Create BNPL plan when saving a new expense on a BNPL wallet with installments
       if (!isEdit && tx.type === 'expense' && typeof BNPL !== 'undefined') {
@@ -5694,7 +5803,8 @@ Calc.getUsableMoney = function(wallets, state = null) {
         App.showPage('transactions')
         App._syncPageChrome?.('transactions')
       }
-      toast(createdRecurring ? 'บันทึกรายการและสร้างรายการประจำแล้ว' : (isEdit ? 'แก้ไขรายการแล้ว' : 'บันทึกรายการแล้ว'), 'success')
+      if (createdRecurring) toast('บันทึกรายการและสร้างรายการประจำแล้ว', 'success')
+      else toast(isEdit ? 'แก้ไขรายการแล้ว' : 'บันทึกรายการแล้ว', 'success')
       if (createdRecurring) App.openRecurringScreen?.()
       S.txMode = 'add'; S.editingTxId = null
     } catch (err) {
@@ -5752,6 +5862,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   }
 
   App.saveCCPay = function() {
+    if (typeof MT_BOOT_FAST_LEDGER !== 'undefined') MT_BOOT_FAST_LEDGER = false
     const parsePayNumber = value => Number(String(value || '0').replace(/,/g, '')) || 0
     const isSafeAmount = value => typeof App._isSafeMoneyAmount === 'function'
       ? App._isSafeMoneyAmount(value)
@@ -6140,6 +6251,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
   App.toggleTxFilterPanel = function() { S.txFilterOpen = !S.txFilterOpen; App.renderTransactions() }
   App.clearTxFilters = function() {
     S.txType = 'all'; S.txWalletFilter = ''; S.txCategoryFilter = ''; S.txAmtMin = ''; S.txAmtMax = ''; S.txSearch = ''; S.txFilterOpen = false
+    S.txListLimit = 40
     App.renderTransactions()
   }
 
@@ -7036,6 +7148,12 @@ App._pickMerchant = function(name, opts = {}) {
     return `${d} ${TH_MONTHS[(m || 1) - 1] || ''} ${yy}`
   }
 
+  const TX_LIST_PAGE_SIZE = 40
+
+  function resetTxListWindow() {
+    S.txListLimit = TX_LIST_PAGE_SIZE
+  }
+
   function currentTxFilteredV42() {
     const q = String(S.txSearch || '').toLowerCase()
     const amtMin = S.txAmtMin ? Number(S.txAmtMin) : null
@@ -7068,8 +7186,8 @@ App._pickMerchant = function(name, opts = {}) {
       <div class="chips tx-month-row tx-month-row-compact" id="tx-month-chips">${monthChips}</div>
       <div id="tx-filter-panel" class="tx-filter-panel${S.txFilterOpen ? ' open' : ''}">
         <div class="chips tx-filter-row" id="tx-type-chips">${typeChips}</div>
-        <div class="tx-filter-grid"><select class="form-input" onchange="S.txWalletFilter=this.value;App.renderTransactionsList()">${walletOpts}</select><select class="form-input" onchange="S.txCategoryFilter=this.value;App.renderTransactionsList()">${catOpts}</select></div>
-        <div class="tx-filter-grid"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ ต่ำสุด" value="${esc(S.txAmtMin || '')}" oninput="S.txAmtMin=this.value;App.renderTransactionsList()"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ สูงสุด" value="${esc(S.txAmtMax || '')}" oninput="S.txAmtMax=this.value;App.renderTransactionsList()"></div>
+        <div class="tx-filter-grid"><select class="form-input" onchange="App.setTxWalletFilter(this.value)">${walletOpts}</select><select class="form-input" onchange="App.setTxCategoryFilter(this.value)">${catOpts}</select></div>
+        <div class="tx-filter-grid"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ ต่ำสุด" value="${esc(S.txAmtMin || '')}" oninput="App.setTxAmountFilter('min', this.value)"><input class="form-input" type="number" inputmode="numeric" placeholder="฿ สูงสุด" value="${esc(S.txAmtMax || '')}" oninput="App.setTxAmountFilter('max', this.value)"></div>
         <button class="btn btn-secondary btn-sm" onclick="App.clearTxFilters()">ล้างตัวกรอง</button>
       </div>
     </div>`
@@ -7095,12 +7213,14 @@ App._pickMerchant = function(name, opts = {}) {
     const searchClear = header.querySelector('.mt-search-clear')
     if (search) search.oninput = e => {
       S.txSearch = e.target.value
+      resetTxListWindow()
       if (searchClear) searchClear.hidden = !e.target.value
       App.renderTransactionsList()
     }
     if (search && searchClear) searchClear.onclick = () => {
       search.value = ''
       S.txSearch = ''
+      resetTxListWindow()
       searchClear.hidden = true
       App.renderTransactionsList()
       search.focus()
@@ -7111,6 +7231,7 @@ App._pickMerchant = function(name, opts = {}) {
   App.renderTransactionsList = function() {
     const months = Calc.getMonths(6)
     const filtered = currentTxFilteredV42()
+    if (!Number.isFinite(Number(S.txListLimit)) || Number(S.txListLimit) < TX_LIST_PAGE_SIZE) resetTxListWindow()
     const expenseAmountForList = tx => tx.type === 'expense'
       ? Number(Calc.getExpenseLedgerAmount?.(tx) ?? tx.ledgerAmount ?? tx.amount ?? 0)
       : Number(tx.amount || 0)
@@ -7119,7 +7240,8 @@ App._pickMerchant = function(name, opts = {}) {
       .filter(t => t.type === 'expense')
       .reduce((s,t) => s + expenseAmountForList(t), 0)
     updateTxFilterToggleLabel()
-    const byDate = {}; filtered.forEach(t => { (byDate[t.date] ||= []).push(t) })
+    const visibleFiltered = filtered.slice(0, S.txListLimit)
+    const byDate = {}; visibleFiltered.forEach(t => { (byDate[t.date] ||= []).push(t) })
     const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a))
     let html = txStaticControlsHtml(months)
     html += dates.length ? '' : App._emptyState('📋','ไม่มีรายการ', S.txSearch ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีรายการในช่วงนี้')
@@ -7132,6 +7254,9 @@ App._pickMerchant = function(name, opts = {}) {
       const label = Calc.labelDate ? Calc.labelDate(date) : date
       html += `<div class="tx-date-header"><span>${esc(label)}</span><div>${dayInc ? `<b class="c-income">+${money(dayInc)}</b>` : ''}${dayExp ? `<b class="c-expense">-${money(dayExp)}</b>` : ''}</div></div><div class="tx-group-card">${rows.map(t => App._txRow(t)).join('')}</div>`
     })
+    if (visibleFiltered.length < filtered.length) {
+      html += `<div class="tx-load-more-wrap"><button type="button" class="btn btn-secondary tx-load-more" aria-controls="tx-list-content" aria-label="แสดงรายการเพิ่มเติม" onclick="App.loadMoreTransactions()">แสดงรายการเพิ่มเติม (${visibleFiltered.length}/${filtered.length})</button></div>`
+    }
     const el = document.getElementById('tx-list-content')
     if (el) {
       const saved = el.scrollTop
@@ -7145,8 +7270,21 @@ App._pickMerchant = function(name, opts = {}) {
     if (expEl) expEl.textContent = '-' + money(expense)
     App._bindTxRows?.('tx-list-content')
   }
-  App.setTxMonth = function(m) { S.txMonth = m; App.renderTransactions() }
-  App.setTxType = function(t) { S.txType = t; App.renderTransactions() }
+  App.loadMoreTransactions = function() {
+    const current = Number(S.txListLimit) || TX_LIST_PAGE_SIZE
+    S.txListLimit = current + TX_LIST_PAGE_SIZE
+    App.renderTransactionsList()
+  }
+  App.setTxWalletFilter = function(value) { S.txWalletFilter = value || ''; resetTxListWindow(); App.renderTransactionsList() }
+  App.setTxCategoryFilter = function(value) { S.txCategoryFilter = value || ''; resetTxListWindow(); App.renderTransactionsList() }
+  App.setTxAmountFilter = function(kind, value) {
+    if (kind === 'min') S.txAmtMin = value || ''
+    if (kind === 'max') S.txAmtMax = value || ''
+    resetTxListWindow()
+    App.renderTransactionsList()
+  }
+  App.setTxMonth = function(m) { S.txMonth = m; resetTxListWindow(); App.renderTransactions() }
+  App.setTxType = function(t) { S.txType = t; resetTxListWindow(); App.renderTransactions() }
 
   // iOS keyboard/select guard: hide nav/FAB while form controls are active.
   function isFormControl(el) { return !!el && (el.matches?.('input:not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, [contenteditable="true"]')) }
@@ -12572,7 +12710,16 @@ App._pickMerchant = function(name, opts = {}) {
   let cryptoSearchToken = 0
   let cryptoSyncInFlight = null
   let cryptoAutoSyncThrottleUntil = 0
+  let marketSyncIdleHandle = 0
+  let marketSyncIdlePromise = null
   let coinCapCache = { fetchedAt: 0, rows: [] }
+
+  function comparableMarketData(value) {
+    return JSON.stringify(value || {}, (key, item) => {
+      if (key === 'updatedAt' || key === 'fetchedAt' || key === 'lastUpdatedAt') return undefined
+      return item
+    })
+  }
 
   function normalizeCryptoName(value = '') {
     return String(value || '')
@@ -13063,6 +13210,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (cryptoSyncInFlight) return cryptoSyncInFlight
     cryptoSyncInFlight = (async () => {
       const attemptAt = nowISO()
+      const marketBefore = comparableMarketData(S.marketPrices)
       const activeAssets = collectActiveCryptoAssets()
       const activeIds = [...new Set(activeAssets.map(asset => normalizeCoinGeckoId(asset?.coinGeckoId)).filter(Boolean))]
       if (!activeIds.length) {
@@ -13074,9 +13222,8 @@ App._pickMerchant = function(name, opts = {}) {
           errorAt: '',
           errorMessage: '',
         })
-        persist()
         if (!silent) notify('ยังไม่มีเหรียญที่ sync ราคาอัตโนมัติได้ ใช้ราคาสำรองแทน', 'warn')
-        return { syncedIds: [], failedIds: [], usedFallback: false }
+        return { syncedIds: [], failedIds: [], usedFallback: false, changed: false }
       }
       if (navigator.onLine === false) {
         updateCryptoSyncMeta({
@@ -13087,9 +13234,8 @@ App._pickMerchant = function(name, opts = {}) {
           errorAt: nowISO(),
           errorMessage: 'offline',
         })
-        persist()
         if (!silent) notify('ออฟไลน์อยู่ ใช้ราคาเดิมหรือราคาสำรองแทน', 'warn')
-        return { syncedIds: [], failedIds: activeIds, usedFallback: false, offline: true }
+        return { syncedIds: [], failedIds: activeIds, usedFallback: false, offline: true, changed: false }
       }
 
       const geckoSources = {}
@@ -13138,11 +13284,10 @@ App._pickMerchant = function(name, opts = {}) {
         syncedIds: finalSyncedIds,
         failedIds: finalFailedIds,
       })
-      persist()
-      App.render?.()
       const cryptoSubScreenOpen = document.getElementById('sub-screen')?.classList.contains('open')
         && (document.querySelector('#sub-screen .sub-header h2')?.textContent || '').includes('Crypto Portfolio')
-      if (cryptoSubScreenOpen) App.openCryptoPortfolioDetail()
+      const marketDataChanged = finalSyncedIds.length > 0 && comparableMarketData(S.marketPrices) !== marketBefore
+      if (cryptoSubScreenOpen && marketDataChanged) App.openCryptoPortfolioDetail()
 
       if (!silent) {
         if (finalSyncedIds.length && !finalFailedIds.length) {
@@ -13153,7 +13298,7 @@ App._pickMerchant = function(name, opts = {}) {
           notify('Sync ราคา Crypto ไม่สำเร็จ ใช้ราคาสำรองแทน', 'error')
         }
       }
-      return { syncedIds: finalSyncedIds, failedIds: finalFailedIds, usedFallback: fallbackSyncedIds.length > 0 }
+      return { syncedIds: finalSyncedIds, failedIds: finalFailedIds, usedFallback: fallbackSyncedIds.length > 0, changed: marketDataChanged }
     })()
     try {
       return await cryptoSyncInFlight
@@ -13169,7 +13314,7 @@ App._pickMerchant = function(name, opts = {}) {
     if (now < cryptoAutoSyncThrottleUntil) return Promise.resolve(null)
     cryptoAutoSyncThrottleUntil = now + 60 * 1000
     if (!cryptoPricesAreStale()) return Promise.resolve(null)
-    return syncCryptoPrices({ silent: true, reason })
+    return syncMarketSuite({ cryptoOnly: true, silent: true, reason })
   }
 
   async function syncMarketSuite({ cryptoOnly = false, silent = false } = {}) {
@@ -13178,6 +13323,7 @@ App._pickMerchant = function(name, opts = {}) {
       if (!silent) notify('ออฟไลน์อยู่ ใช้ราคาเดิมหรือราคาสำรองแทน', 'warn')
       return { syncedIds: [], failedIds: [], offline: true }
     }
+    const marketBefore = comparableMarketData(S.marketPrices)
     const next = { ...(S.marketPrices || {}), crypto: { ...(S.marketPrices?.crypto || {}) } }
     let fxOk = false
     let goldOk = false
@@ -13195,11 +13341,13 @@ App._pickMerchant = function(name, opts = {}) {
       } catch (_) {}
     }
 
-    next.updatedAt = nowISO()
     next.crypto = { ...(S.marketPrices?.crypto || {}), ...(next.crypto || {}) }
+    const marketDataChanged = comparableMarketData(next) !== marketBefore
+    if (!marketDataChanged) return { syncedIds: cryptoResult?.syncedIds || [], failedIds: cryptoResult?.failedIds || [], changed: false }
+    next.updatedAt = nowISO()
     S.marketPrices = next
-    persist()
-    App.render?.()
+    persist('market-sync', { dirtyKeys: ['marketPrices', 'cryptoSyncMeta'] })
+    App.requestRender?.('market-sync')
 
     if (cryptoOnly) {
       if (!silent) {
@@ -13207,13 +13355,14 @@ App._pickMerchant = function(name, opts = {}) {
         else if (cryptoOk) notify('Sync ราคา Crypto ได้บางส่วน บางเหรียญใช้ราคาสำรองเดิม', 'warn')
         else notify('Sync ราคา Crypto ไม่สำเร็จ ใช้ราคาสำรองแทน', 'warn')
       }
-      return
+      return { syncedIds: cryptoResult?.syncedIds || [], failedIds: cryptoResult?.failedIds || [], changed: true }
     }
 
     if (!silent) {
       if (cryptoOk || fxOk || goldOk) notify(goldOk ? 'Sync ราคาทอง, Crypto และ FX สำเร็จ' : 'อัปเดตราคาแล้ว', 'success')
       else notify('Sync ราคาไม่ได้ ใช้ราคาสำรองแทน', 'error')
     }
+    return { syncedIds: cryptoResult?.syncedIds || [], failedIds: cryptoResult?.failedIds || [], changed: true }
   }
 
   App.refreshCryptoPrices = function() {
@@ -13231,12 +13380,31 @@ App._pickMerchant = function(name, opts = {}) {
 
   const MARKET_AUTO_SYNC_STALE_MS = 15 * 60 * 1000
 
+  App.scheduleIdleMarketSync = function(reason = 'auto') {
+    if (marketSyncIdlePromise) return marketSyncIdlePromise
+    marketSyncIdlePromise = new Promise(resolve => {
+      const run = () => {
+        marketSyncIdleHandle = 0
+        syncMarketSuite({ cryptoOnly: false, silent: true, reason })
+          .catch(() => null)
+          .then(resolve)
+          .finally(() => { marketSyncIdlePromise = null })
+      }
+      if (typeof window.requestIdleCallback === 'function') {
+        marketSyncIdleHandle = window.requestIdleCallback(run, { timeout: 1800 })
+      } else {
+        marketSyncIdleHandle = window.setTimeout(run, 0)
+      }
+    })
+    return marketSyncIdlePromise
+  }
+
   App._autoSyncMarketIfStale = function() {
     if (navigator.onLine === false) return
     const updatedAt = S.marketPrices?.updatedAt
     const age = updatedAt ? Date.now() - new Date(updatedAt).getTime() : Infinity
     if (age < MARKET_AUTO_SYNC_STALE_MS) return
-    syncMarketSuite({ cryptoOnly: false, silent: true }).catch(() => {})
+    return App.scheduleIdleMarketSync('stale-market')
   }
 
   App.openCryptoHoldingForm = function(holdingId = '') {
@@ -13637,7 +13805,7 @@ App._pickMerchant = function(name, opts = {}) {
     App.openCryptoPortfolioDetail()
     notify(holdingId ? 'อัปเดตเหรียญแล้ว' : 'เพิ่มเหรียญแล้ว', 'success')
     if (coinGeckoId) {
-      await syncCryptoPrices({ silent: true })
+      await syncMarketSuite({ cryptoOnly: true, silent: true })
       App.openCryptoPortfolioDetail()
     }
   }
@@ -16240,9 +16408,11 @@ App._pickMerchant = function(name, opts = {}) {
       card,
       transactions: S.transactions || [],
       refDate,
-      rewardForTx: tx => App.getTransactionRewardEstimate?.(tx) || { points:0, cashback:0, discount:0 },
+      rewardForTx: tx => (typeof MT_BOOT_FAST_LEDGER !== 'undefined' && MT_BOOT_FAST_LEDGER)
+        ? (tx.rewardEstimate || { points:0, cashback:0, discount:0 })
+        : (App.getTransactionRewardEstimate?.(tx) || { points:0, cashback:0, discount:0 }),
       amountForTx: tx => typeof App._expectedLedgerAmountForTx === 'function'
-        ? App._expectedLedgerAmountForTx(tx)
+        ? ((typeof MT_BOOT_FAST_LEDGER !== 'undefined' && MT_BOOT_FAST_LEDGER) ? window.MTLedger.getLedgerAmountForTx(tx, { wallets: S.wallets || [], preferStored: true }) : App._expectedLedgerAmountForTx(tx))
         : (App.getLedgerAmountForTx?.(tx) || tx.amount || 0),
       isPostedTx: tx => !tx.date || String(tx.date) <= String(refDate),
     }
@@ -17261,10 +17431,7 @@ App._pickMerchant = function(name, opts = {}) {
   window.visualViewport?.addEventListener('scroll', syncViewportSoon, { passive:true })
   document.addEventListener('focusin', syncViewportSoon, true)
   document.addEventListener('focusout', () => setTimeout(syncViewportSoon, 120), true)
-  setTimeout(() => {
-    try { App.maybeAutoSyncCryptoPrices?.('startup') } catch (_) {}
-  }, 1200)
-  persist()
+  persist('feature-hydration')
 })()
 
 /* ============================================================
@@ -20630,7 +20797,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
           <div class="card card-pad"><div style="font-size:12px;color:var(--muted)">สุทธิ</div><div style="font-size:22px;font-weight:700">${fmt(s.netSettlement)}</div></div>
         </div>
         ${App._financeJourneyLinks([
-          ['ไปหารบิล','App.openSplitBillScreen()'],
+          ['ไปหารบิล',"App.ensureFeatureAndCall('advanced','openSplitBillScreen')"],
         ])}
         ${s.balances.length ? `<div class="card card-pad">
           <div class="finance-section-title">ยอดตามคน</div>
@@ -21302,8 +21469,10 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     const btn = document.querySelector(`.nav-btn[data-tab="${page}"]`)
     if (!btn) return
     btn.classList.remove('mt-nav-bounce')
-    void btn.offsetWidth
-    btn.classList.add('mt-nav-bounce')
+    requestAnimationFrame(() => {
+      if (!btn.isConnected || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+      btn.classList.add('mt-nav-bounce')
+    })
     setTimeout(() => btn.classList.remove('mt-nav-bounce'), 560)
     // W11: add body class for magnetic FAB CSS targeting
     document.body.className = document.body.className
@@ -21322,6 +21491,7 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
   }, { phase: 'before', priority: 10 })
 
   MTScreenHooks.register('dashboard', 'animations.dashboard', function (context) {
+    if (App._suppressScreenAnimations) return
     const _prevVals = context.metadata.previousValues || {}
     try {
       _runDashCountUp()
@@ -23263,9 +23433,9 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>
       <div class="sec-title">เงินร่วมกัน</div>
       <div class="card card-pad">
-        ${row({ icon: '🍽️', label: 'หารบิล', value: splitBillCount ? `${splitBillCount} บิล` : '', onclick: 'App.openSplitBillScreen()' })}
+        ${row({ icon: '🍽️', label: 'หารบิล', value: splitBillCount ? `${splitBillCount} บิล` : '', onclick: "App.ensureFeatureAndCall('advanced','openSplitBillScreen')" })}
         ${row({ icon: '🤝', label: 'เงินที่แชร์กับคนอื่น', onclick: 'App.openSharedFinanceDashboard()' })}
-        ${(() => { const lo = (typeof LoanStore !== 'undefined') ? LoanStore.outstanding() : []; const tot = lo.reduce((s,l) => s+(Number(l.amount||0) - (l.repayments||[]).reduce((ss,r)=>ss+Number(r.amount||0),0)), 0); return row({ icon: '💸', label: 'ให้ยืมเงิน', value: lo.length ? `${lo.length} ราย · ${Calc.fmt(tot)}` : '', onclick: 'App.openLoansScreen()' }) })()}
+        ${(() => { const lo = (typeof LoanStore !== 'undefined') ? LoanStore.outstanding() : []; const tot = lo.reduce((s,l) => s+(Number(l.amount||0) - (l.repayments||[]).reduce((ss,r)=>ss+Number(r.amount||0),0)), 0); return row({ icon: '💸', label: 'ให้ยืมเงิน', value: lo.length ? `${lo.length} ราย · ${Calc.fmt(tot)}` : '', onclick: "App.ensureFeatureAndCall('advanced','openLoansScreen')" }) })()}
       </div>
       <div class="sec-title">ผู้ช่วยส่วนตัว</div>
       <div class="card card-pad">
@@ -23973,7 +24143,11 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
     return changed
   }
 
-  try { App.repairSharedExpenseData?.({ save:true }) } catch (err) { console.warn('shared expense repair failed', err) }
+  const scheduleSharedExpenseRepair = () => {
+    try { App.repairSharedExpenseData?.({ save:true }) } catch (err) { console.warn('shared expense repair failed', err) }
+  }
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(scheduleSharedExpenseRepair, { timeout: 5000 })
+  else setTimeout(scheduleSharedExpenseRepair, 3500)
 })()
 
 /* ============================================================
@@ -24155,3 +24329,6 @@ window.MTScreenHooks?.install?.(App, {
 
 // The initial frame renders after all features and screen adapters are installed.
 App.requestRender('features-ready')
+setTimeout(() => {
+  try { window.MTFeatureLoader?.schedule?.(['notifications', 'advanced', 'capture', 'onboarding']) } catch (_) {}
+}, 2500)

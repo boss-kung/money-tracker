@@ -1,0 +1,1194 @@
+{
+  "generatedAt": "2026-10-04T13:18:09.786Z",
+  "url": "http://127.0.0.1:8765/index.html?nosw=1&nonoti=1&noapplock=1&noFinanceRebuild=1",
+  "results": [
+    {
+      "n": 1000,
+      "rules": false,
+      "run": 1,
+      "errors": [],
+      "firstRender": 270.7,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0.1,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 46.6
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 46.7
+        },
+        {
+          "name": "app_v2.version",
+          "at": 102,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 102.2
+        },
+        {
+          "name": "app.init.start",
+          "at": 102.3
+        },
+        {
+          "name": "storage.init.done",
+          "at": 103,
+          "duration": 0.7
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 116.9
+        },
+        {
+          "name": "app.init.done",
+          "at": 117.3,
+          "duration": 15
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 181.2,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 191.7,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 205.8,
+          "duration": 14.1
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 270.7,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 79.7
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 292.4,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 138.10000002384186,
+          "duration": 87
+        },
+        {
+          "start": 227.2000000178814,
+          "duration": 83
+        }
+      ],
+      "txCount": 1000,
+      "ruleCount": 0,
+      "descendants": 450
+    },
+    {
+      "n": 1000,
+      "rules": false,
+      "run": 2,
+      "errors": [],
+      "firstRender": 254.7,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 24.9
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 26.2
+        },
+        {
+          "name": "app_v2.version",
+          "at": 89.9,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 90.2
+        },
+        {
+          "name": "app.init.start",
+          "at": 90.5
+        },
+        {
+          "name": "storage.init.done",
+          "at": 91.2,
+          "duration": 0.7
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 104.4
+        },
+        {
+          "name": "app.init.done",
+          "at": 105.1,
+          "duration": 14.6
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 168.5,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 178.3,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 192.5,
+          "duration": 14.2
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 254.7,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 77.3
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 277.9,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 103.40000000596046,
+          "duration": 86
+        },
+        {
+          "start": 191,
+          "duration": 80
+        }
+      ],
+      "txCount": 1000,
+      "ruleCount": 0,
+      "descendants": 450
+    },
+    {
+      "n": 1000,
+      "rules": false,
+      "run": 3,
+      "errors": [],
+      "firstRender": 260,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 18.4
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 18.8
+        },
+        {
+          "name": "app_v2.version",
+          "at": 95.2,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 95.4
+        },
+        {
+          "name": "app.init.start",
+          "at": 95.6
+        },
+        {
+          "name": "storage.init.done",
+          "at": 96.4,
+          "duration": 0.8
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 109.6
+        },
+        {
+          "name": "app.init.done",
+          "at": 110.2,
+          "duration": 14.6
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 173.7,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 183.5,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 197.4,
+          "duration": 13.9
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 260,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 77.3
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 276.2,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 105.30000001192093,
+          "duration": 86
+        },
+        {
+          "start": 192.90000000596046,
+          "duration": 80
+        }
+      ],
+      "txCount": 1000,
+      "ruleCount": 0,
+      "descendants": 450
+    },
+    {
+      "n": 1000,
+      "rules": true,
+      "run": 1,
+      "errors": [],
+      "firstRender": 275,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 24.5
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 24.5
+        },
+        {
+          "name": "app_v2.version",
+          "at": 110.1,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 110.4
+        },
+        {
+          "name": "app.init.start",
+          "at": 110.6
+        },
+        {
+          "name": "storage.init.done",
+          "at": 111.3,
+          "duration": 0.7
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 124.7
+        },
+        {
+          "name": "app.init.done",
+          "at": 125.4,
+          "duration": 14.8
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 188.7,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 199.3,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 213.2,
+          "duration": 13.9
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 275,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 76.5
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 292.6,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 122.90000000596046,
+          "duration": 86
+        },
+        {
+          "start": 211.30000001192093,
+          "duration": 79
+        }
+      ],
+      "txCount": 1000,
+      "ruleCount": 5,
+      "descendants": 450
+    },
+    {
+      "n": 1000,
+      "rules": true,
+      "run": 2,
+      "errors": [],
+      "firstRender": 248.5,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0.1,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 17.8
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 18.7
+        },
+        {
+          "name": "app_v2.version",
+          "at": 83.7,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 83.9
+        },
+        {
+          "name": "app.init.start",
+          "at": 84.1
+        },
+        {
+          "name": "storage.init.done",
+          "at": 84.8,
+          "duration": 0.6
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 98.2
+        },
+        {
+          "name": "app.init.done",
+          "at": 98.9,
+          "duration": 14.8
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 162.4,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 172.2,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 186.4,
+          "duration": 14.2
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 248.5,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 77.3
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 265.7,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 102.2000000178814,
+          "duration": 85
+        },
+        {
+          "start": 189.7000000178814,
+          "duration": 80
+        }
+      ],
+      "txCount": 1000,
+      "ruleCount": 5,
+      "descendants": 450
+    },
+    {
+      "n": 1000,
+      "rules": true,
+      "run": 3,
+      "errors": [],
+      "firstRender": 262.9,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0.1,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 22.8
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 22.9
+        },
+        {
+          "name": "app_v2.version",
+          "at": 98.5,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 98.7
+        },
+        {
+          "name": "app.init.start",
+          "at": 98.9
+        },
+        {
+          "name": "storage.init.done",
+          "at": 99.6,
+          "duration": 0.7
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 113.1
+        },
+        {
+          "name": "app.init.done",
+          "at": 113.7,
+          "duration": 14.8
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 177.6,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 187.6,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 201.6,
+          "duration": 14
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 262.9,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 76.3
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 283.6,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 109.69999998807907,
+          "duration": 86
+        },
+        {
+          "start": 197.90000000596046,
+          "duration": 79
+        }
+      ],
+      "txCount": 1000,
+      "ruleCount": 5,
+      "descendants": 450
+    },
+    {
+      "n": 5000,
+      "rules": false,
+      "run": 1,
+      "errors": [],
+      "firstRender": 388.8,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0.1,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 22.2
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 22.3
+        },
+        {
+          "name": "app_v2.version",
+          "at": 90.1,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 90.3
+        },
+        {
+          "name": "app.init.start",
+          "at": 90.5
+        },
+        {
+          "name": "storage.init.done",
+          "at": 92.2,
+          "duration": 1.7
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 124.9
+        },
+        {
+          "name": "app.init.done",
+          "at": 125.6,
+          "duration": 35.1
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 266.5,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 277.6,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 316.2,
+          "duration": 38.6
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 388.8,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 112.1
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 411.9,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 104.80000001192093,
+          "duration": 184
+        },
+        {
+          "start": 291.5,
+          "duration": 115
+        }
+      ],
+      "txCount": 5000,
+      "ruleCount": 0,
+      "descendants": 450
+    },
+    {
+      "n": 5000,
+      "rules": false,
+      "run": 2,
+      "errors": [],
+      "firstRender": 376.8,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0.1,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 17.2
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 22.8
+        },
+        {
+          "name": "app_v2.version",
+          "at": 90.3,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 90.4
+        },
+        {
+          "name": "app.init.start",
+          "at": 90.6
+        },
+        {
+          "name": "storage.init.done",
+          "at": 92.5,
+          "duration": 1.9
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 123.8
+        },
+        {
+          "name": "app.init.done",
+          "at": 124.5,
+          "duration": 33.9
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 261.1,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 271.3,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 308.1,
+          "duration": 36.9
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 376.8,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 106.4
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 399.1,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 113,
+          "duration": 178
+        },
+        {
+          "start": 293.30000001192093,
+          "duration": 109
+        }
+      ],
+      "txCount": 5000,
+      "ruleCount": 0,
+      "descendants": 450
+    },
+    {
+      "n": 5000,
+      "rules": false,
+      "run": 3,
+      "errors": [],
+      "firstRender": 384.8,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0.1,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 21.9
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 22.9
+        },
+        {
+          "name": "app_v2.version",
+          "at": 97.4,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 97.6
+        },
+        {
+          "name": "app.init.start",
+          "at": 97.8
+        },
+        {
+          "name": "storage.init.done",
+          "at": 99.6,
+          "duration": 1.8
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 132
+        },
+        {
+          "name": "app.init.done",
+          "at": 132.8,
+          "duration": 35
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 270.1,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 280.5,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 317.5,
+          "duration": 37
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 384.8,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 105.2
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 401.3,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 110.5,
+          "duration": 180
+        },
+        {
+          "start": 292.80000001192093,
+          "duration": 108
+        }
+      ],
+      "txCount": 5000,
+      "ruleCount": 0,
+      "descendants": 450
+    },
+    {
+      "n": 5000,
+      "rules": true,
+      "run": 1,
+      "errors": [],
+      "firstRender": 389.1,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0.1,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 24.6
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 24.9
+        },
+        {
+          "name": "app_v2.version",
+          "at": 94.8,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 95.1
+        },
+        {
+          "name": "app.init.start",
+          "at": 95.3
+        },
+        {
+          "name": "storage.init.done",
+          "at": 97.2,
+          "duration": 1.9
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 129.7
+        },
+        {
+          "name": "app.init.done",
+          "at": 130.5,
+          "duration": 35.1
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 269.9,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 280.5,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 317.7,
+          "duration": 37.2
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 389.1,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 109.4
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 405.6,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 111.69999998807907,
+          "duration": 183
+        },
+        {
+          "start": 296.69999998807907,
+          "duration": 112
+        }
+      ],
+      "txCount": 5000,
+      "ruleCount": 5,
+      "descendants": 450
+    },
+    {
+      "n": 5000,
+      "rules": true,
+      "run": 2,
+      "errors": [],
+      "firstRender": 380.5,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0.2,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 21.2
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 21.3
+        },
+        {
+          "name": "app_v2.version",
+          "at": 90.9,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 91.1
+        },
+        {
+          "name": "app.init.start",
+          "at": 91.3
+        },
+        {
+          "name": "storage.init.done",
+          "at": 93.3,
+          "duration": 2
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 125.4
+        },
+        {
+          "name": "app.init.done",
+          "at": 126.2,
+          "duration": 34.9
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 265.3,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 275.3,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 312.3,
+          "duration": 37
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 380.5,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 106
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 397.9,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 103.39999997615814,
+          "duration": 182
+        },
+        {
+          "start": 287,
+          "duration": 109
+        }
+      ],
+      "txCount": 5000,
+      "ruleCount": 5,
+      "descendants": 450
+    },
+    {
+      "n": 5000,
+      "rules": true,
+      "run": 3,
+      "errors": [],
+      "firstRender": 379.9,
+      "bootLog": [
+        {
+          "name": "html.inline.start",
+          "at": 0.2,
+          "flags": {
+            "debugBoot": false,
+            "noServiceWorker": true,
+            "noNotifications": true,
+            "noAppLock": true,
+            "noFinanceRebuild": true
+          }
+        },
+        {
+          "name": "css.main.loaded",
+          "at": 25.5
+        },
+        {
+          "name": "boot.dom.inserted",
+          "at": 25.6
+        },
+        {
+          "name": "app_v2.version",
+          "at": 91.1,
+          "version": "2026.10.04-css-cleanup-r137"
+        },
+        {
+          "name": "appLock.disabledByFlag",
+          "at": 91.2
+        },
+        {
+          "name": "app.init.start",
+          "at": 91.5
+        },
+        {
+          "name": "storage.init.done",
+          "at": 93.4,
+          "duration": 1.9
+        },
+        {
+          "name": "serviceWorker.disabledByFlag",
+          "at": 125.9
+        },
+        {
+          "name": "app.init.done",
+          "at": 126.7,
+          "duration": 35.2
+        },
+        {
+          "name": "financeApp.rebuild.schedule.skip",
+          "at": 265.2,
+          "reason": "flag"
+        },
+        {
+          "name": "app.renderDashboard.start",
+          "at": 274.8,
+          "month": "2026-10"
+        },
+        {
+          "name": "app.renderDashboard.done",
+          "at": 311.6,
+          "duration": 36.8
+        },
+        {
+          "name": "app.firstRender.done",
+          "at": 379.9,
+          "page": "dashboard",
+          "reasons": [
+            "initial",
+            "upcoming-bills-ready",
+            "features-ready"
+          ],
+          "duration": 106
+        },
+        {
+          "name": "bootScreen.hideRequested",
+          "at": 396.6,
+          "reason": "first-render"
+        }
+      ],
+      "long": [
+        {
+          "start": 107.30000001192093,
+          "duration": 181
+        },
+        {
+          "start": 290.19999998807907,
+          "duration": 109
+        }
+      ],
+      "txCount": 5000,
+      "ruleCount": 5,
+      "descendants": 450
+    }
+  ]
+}

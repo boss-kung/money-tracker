@@ -464,10 +464,13 @@ const Storage = {
     }
   },
 
-  verifyState(state, keys = []) {
-    const keyList = Array.isArray(keys) && keys.length
-      ? keys
-      : ['transactions', 'wallets', 'categories', 'settings', 'recurring', 'upcomingBills']
+  verifyState(state, keys = undefined) {
+    // An explicit empty list is meaningful for dirty saves: the write loop has
+    // already read back those keys, so do not silently fall back to unrelated
+    // collections that may not exist on older or quota-constrained devices.
+    const keyList = keys === undefined
+      ? ['transactions', 'wallets', 'categories', 'settings', 'recurring', 'upcomingBills']
+      : (Array.isArray(keys) ? keys : [keys])
     const failures = []
     keyList.forEach(name => {
       const storageKey = KEYS[name]
@@ -535,7 +538,7 @@ const Storage = {
     return data
   },
 
-  saveAll(state) {
+  saveAll(state, { dirtyKeys = undefined, _quotaRetried = false, _rollbackSnapshot = null } = {}) {
     if (!state || typeof state !== 'object') return false
     if (Storage.hydrationStatus?.recoveryMode && !Storage._recoveryWriteAuthorized) {
       Storage.lastSaveError = { key: '*', message: 'recovery mode blocks implicit state writes', at: new Date().toISOString() }
@@ -546,7 +549,6 @@ const Storage = {
       return false
     }
 
-    const expectedRevision = Number(Storage.stateRevision || 0)
     const currentMeta = Storage._readStateMeta()
     const baselineRevision = Number(Storage.stateRevision || 0)
     if (Storage.isStale && currentMeta.revision === baselineRevision) {
@@ -558,10 +560,36 @@ const Storage = {
       Storage.lastSaveError = { key: LOCAL_STATE_LOCK_KEY, message: 'another tab is saving state', at: new Date().toISOString() }
       return false
     }
-    const entries = Object.entries(COLLECTIONS).filter(([, descriptor]) => descriptor.state !== false)
+    const requestedNames = Array.isArray(dirtyKeys) && dirtyKeys.length
+      ? new Set(dirtyKeys.map(name => {
+          const entry = Object.entries(COLLECTIONS).find(([collectionName, descriptor]) => collectionName === name || descriptor.key === name)
+          return entry?.[0] || String(name)
+        }))
+      : null
+    const entries = Object.entries(COLLECTIONS).filter(([name, descriptor]) => {
+      if (descriptor.state === false) return false
+      return !requestedNames || requestedNames.has(name)
+    })
     const previous = new Map()
     const serialized = new Map()
+    const rollbackSnapshot = _rollbackSnapshot instanceof Map ? _rollbackSnapshot : previous
+    const restoreSnapshot = snapshot => {
+      const entries = [...snapshot].map(([key, raw]) => {
+        let current = null
+        try { current = localStorage.getItem(key) } catch (_) {}
+        const currentSize = current === null || current === undefined ? 0 : String(current).length
+        const targetSize = raw === null || raw === undefined ? 0 : String(raw).length
+        return { key, raw, releasedBytes: currentSize - targetSize }
+      }).sort((a, b) => b.releasedBytes - a.releasedBytes)
+      entries.forEach(({ key, raw }) => {
+        try {
+          if (raw === null || raw === undefined) localStorage.removeItem(key)
+          else localStorage.setItem(key, raw)
+        } catch (_) {}
+      })
+    }
     let committed = false
+    let saveError = null
     try {
       const lockedMeta = Storage._readStateMeta()
       if (lockedMeta.revision !== baselineRevision) return Storage._rejectStaleSave(baselineRevision, lockedMeta.revision)
@@ -579,9 +607,11 @@ const Storage = {
         if (previous.get(key) !== payload) localStorage.setItem(key, payload)
         if (localStorage.getItem(key) !== payload) throw new Error(`readback mismatch after save: ${key}`)
       }
-      const verification = Storage.verifyState(state, ['transactions', 'wallets', 'settings', 'upcomingBills'])
-      committed = verification.ok
-      if (!committed) throw new Error(`state verification failed: ${verification.failures.join(', ')}`)
+      const requiredVerificationKeys = requestedNames
+        ? ['transactions', 'wallets', 'settings', 'upcomingBills'].filter(name => requestedNames.has(name))
+        : ['transactions', 'wallets', 'settings', 'upcomingBills']
+      const verification = Storage.verifyState(state, requiredVerificationKeys)
+      if (!verification.ok) throw new Error(`state verification failed: ${verification.failures.join(', ')}`)
       const nextMeta = {
         revision: baselineRevision + 1,
         writerId: Storage._writerId,
@@ -591,29 +621,50 @@ const Storage = {
       if (localStorage.getItem(LOCAL_STATE_META_KEY) !== Storage._stringify(nextMeta)) {
         throw new Error('state metadata readback mismatch after save')
       }
-      Storage.lastSaveError = null
-      Storage.lastVerifyError = null
-      Storage.lastConflict = null
-      Storage.stateRevision = nextMeta.revision
-      Storage.isStale = false
-      Storage._publishRevision(nextMeta.revision)
-      return true
+      committed = true
     } catch (e) {
-      Storage.lastSaveError = { key: '*', message: e?.message || 'save failed', at: new Date().toISOString() }
-      return false
+      saveError = e
     } finally {
       if (!committed) {
         // Best-effort rollback restores the last coherent snapshot. Existing values
         // are never replaced by a partially-written state when one key fails.
-        for (const [key, raw] of previous) {
-          try {
-            if (raw === null || raw === undefined) localStorage.removeItem(key)
-            else localStorage.setItem(key, raw)
-          } catch (_) {}
-        }
+        restoreSnapshot(rollbackSnapshot)
       }
       Storage._releaseStateLock(lock)
     }
+
+    if (committed) {
+      Storage.lastSaveError = null
+      Storage.lastVerifyError = null
+      Storage.lastConflict = null
+      Storage.stateRevision = baselineRevision + 1
+      Storage.isStale = false
+      Storage._publishRevision(Storage.stateRevision)
+      return true
+    }
+
+    const isQuotaError = saveError?.name === 'QuotaExceededError'
+      || saveError?.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    if (isQuotaError && !_quotaRetried) {
+      let freedSpace = false
+      try {
+        if (localStorage.getItem('mt_pre_import_backup') !== null) {
+          localStorage.removeItem('mt_pre_import_backup')
+          freedSpace = true
+        }
+      } catch (_) {}
+      if (Storage.pruneLocalBackups(1)) freedSpace = true
+      if (freedSpace) {
+        return Storage.saveAll(state, {
+          dirtyKeys,
+          _quotaRetried: true,
+          _rollbackSnapshot: rollbackSnapshot,
+        })
+      }
+    }
+
+    Storage.lastSaveError = { key: '*', message: saveError?.message || 'save failed', at: new Date().toISOString() }
+    return false
   },
 
   buildExportPayload(state, { preferState = false } = {}) {

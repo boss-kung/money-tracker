@@ -43,7 +43,9 @@
       }
     }
 
-    function commit({ reason = 'unspecified' } = {}) {
+    function commit({ reason = 'unspecified', dirtyKeys = undefined } = {}) {
+      const meta = { reason }
+      if (Array.isArray(dirtyKeys) && dirtyKeys.length) meta.dirtyKeys = [...new Set(dirtyKeys.map(String))]
       if (!isReady()) {
         return { ok: false, reason, error: new StateCommitError('NOT_READY', 'State storage is not hydrated') }
       }
@@ -54,14 +56,14 @@
       }
 
       try {
-        before.forEach(fn => fn(state, { reason }))
+        before.forEach(fn => fn(state, meta))
       } catch (error) {
         return { ok: false, reason, error: new StateCommitError('PREPARE_FAILED', 'State preparation failed', error) }
       }
 
       let saved = false
       try {
-        saved = storage.saveAll(state) === true
+        saved = storage.saveAll(state, { dirtyKeys: meta.dirtyKeys }) === true
       } catch (error) {
         return { ok: false, reason, error: new StateCommitError('WRITE_FAILED', 'State storage threw while saving', error) }
       }
@@ -71,7 +73,7 @@
 
       const observerErrors = []
       after.forEach(fn => {
-        try { fn(state, { reason }) } catch (error) { observerErrors.push(error) }
+        try { fn(state, meta) } catch (error) { observerErrors.push(error) }
       })
       return { ok: true, reason, observerErrors }
     }

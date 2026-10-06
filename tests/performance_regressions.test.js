@@ -27,6 +27,12 @@ test('persist invalidates derived calculations and reward and billing paths use 
   assert.match(app, /App\.getCreditCardBillingState\s*=\s*function[\s\S]{0,500}MT_DERIVED_MEMO\.memoize/)
 })
 
+test('persist exposes optional dirty-key metadata through the State Commit seam', () => {
+  assert.match(app, /function persist\(reason = 'app', options = \{\}\)/)
+  assert.match(app, /stateCommit\.commit\(\{ reason, \.\.\.options \}\)/)
+  assert.match(app, /saveAll\(reason = 'app', options = \{\}\) \{ return persist\(reason, options\) \}/)
+})
+
 test('initial page render is scheduled through the coalescing coordinator', () => {
   assert.match(app, /createRenderCoordinator/)
   assert.match(app, /App\.requestRender\('initial'\)/)
@@ -35,4 +41,20 @@ test('initial page render is scheduled through the coalescing coordinator', () =
   assert.doesNotMatch(app, /\/\/ Initial render\s+const renderStart = performance\.now\(\)\s+App\.showPage\(S\.page\)/)
   assert.match(onboarding, /App\.requestRender\('onboarding-ready'\)/)
   assert.doesNotMatch(onboarding, /if\s*\(p === 'dashboard'\)\s*App\.renderDashboard\(\)/)
+})
+
+test('render requests can force a page redraw after a durable revision change', () => {
+  assert.match(app, /App\._forceRenderOnNext\s*=\s*true/)
+  assert.match(app, /App\._renderRevision\+\+/)
+  assert.match(app, /_pageRenderKey\s*\(/)
+  assert.match(app, /_renderRevision/)
+})
+
+test('successful persistence advances the render revision while failed commits do not', () => {
+  assert.match(app, /if \(ok\) \{[\s\S]{0,120}App\._renderRevision\+\+[\s\S]{0,120}App\._forceRenderOnNext\s*=\s*true/)
+})
+
+test('coordinator redraws after first paint without replaying dashboard animations', () => {
+  assert.match(app, /App\._suppressScreenAnimations/)
+  assert.match(app, /if \(App\._suppressScreenAnimations\) return/)
 })

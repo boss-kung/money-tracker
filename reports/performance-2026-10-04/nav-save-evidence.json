@@ -1,0 +1,72 @@
+{
+  "generatedAt": "2026-10-04T13:18:20.299Z",
+  "url": "http://127.0.0.1:8765/index.html?nosw=1&nonoti=1&noapplock=1&noFinanceRebuild=1",
+  "results": [
+    {
+      "n": 1000,
+      "errors": [],
+      "navigation": {
+        "syncMs": 5.0999999940395355,
+        "visibleMs": 105.90000000596046
+      },
+      "save": {
+        "syncMs": 3.800000011920929,
+        "visibleMs": 34
+      },
+      "rowsInitial": 40,
+      "rowsAfterLoadMore": 80,
+      "descendantsInitial": 743,
+      "descendantsAfterLoadMore": 1108,
+      "long": [
+        {
+          "start": 197.30000001192093,
+          "duration": 80
+        },
+        {
+          "start": 1302.5,
+          "duration": 96
+        },
+        {
+          "start": 1403.0999999940395,
+          "duration": 194
+        }
+      ],
+      "transactionCount": 1000
+    },
+    {
+      "n": 5000,
+      "errors": [],
+      "navigation": {
+        "syncMs": 6.4000000059604645,
+        "visibleMs": 108.90000000596046
+      },
+      "save": {
+        "syncMs": 14,
+        "visibleMs": 33.400000005960464
+      },
+      "rowsInitial": 40,
+      "rowsAfterLoadMore": 80,
+      "descendantsInitial": 754,
+      "descendantsAfterLoadMore": 1098,
+      "long": [
+        {
+          "start": 104.69999998807907,
+          "duration": 124
+        },
+        {
+          "start": 230.69999998807907,
+          "duration": 107
+        },
+        {
+          "start": 1363.5,
+          "duration": 99
+        },
+        {
+          "start": 1465.5,
+          "duration": 197
+        }
+      ],
+      "transactionCount": 5000
+    }
+  ]
+}

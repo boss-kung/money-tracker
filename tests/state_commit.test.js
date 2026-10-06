@@ -57,9 +57,40 @@ test('State Commit reports hydration and preparation failures without writing', 
   assert.equal(writes, 0)
 })
 
+test('State Commit forwards reason and dirty keys to preparation, storage, and observers', () => {
+  const events = []
+  const state = { transactions: [] }
+  const commit = StateCommit.create({
+    readState: () => state,
+    storage: {
+      saveAll(value, options) {
+        assert.equal(value, state)
+        assert.deepEqual(options, { dirtyKeys: ['transactions'] })
+        events.push('write')
+        return true
+      },
+    },
+    beforeCommit: [(_value, meta) => {
+      assert.deepEqual(meta, { reason: 'transaction', dirtyKeys: ['transactions'] })
+      events.push('prepare')
+    }],
+    afterCommit: [(_value, meta) => {
+      assert.deepEqual(meta, { reason: 'transaction', dirtyKeys: ['transactions'] })
+      events.push('notify')
+    }],
+  })
+
+  assert.deepEqual(commit.commit({ reason: 'transaction', dirtyKeys: ['transactions'] }), {
+    ok: true,
+    reason: 'transaction',
+    observerErrors: [],
+  })
+  assert.deepEqual(events, ['prepare', 'write', 'notify'])
+})
+
 test('App.saveAll stays the stable State Commit Interface instead of a wrapper chain', () => {
   const app = fs.readFileSync(path.join(__dirname, '..', 'app_v2.js'), 'utf8')
-  assert.match(app, /saveAll\(reason = 'app'\) \{ return persist\(reason\) \}/)
+  assert.match(app, /saveAll\(reason = 'app', options = \{\}\) \{ return persist\(reason, options\) \}/)
   assert.doesNotMatch(app, /App\.saveAll\s*=/)
   assert.match(app, /addAfterCommit\(/)
 })

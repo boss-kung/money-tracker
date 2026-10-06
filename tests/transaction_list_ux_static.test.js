@@ -31,3 +31,34 @@ test('transaction screen keeps only a thin sticky bar while filters open below i
   assert.match(css, /\.tx-filter-panel\s*\{[\s\S]*position:\s*static/)
   assert.match(css, /#page-transactions \.tx-summary-cards[\s\S]*position:\s*static/)
 })
+
+test('transaction list uses a bounded render window with an accessible load-more action', () => {
+  assert.match(appSource, /const TX_LIST_PAGE_SIZE\s*=\s*40/)
+  assert.match(appSource, /App\.loadMoreTransactions\s*=\s*function/)
+  assert.match(appSource, /filtered\.slice\(0,\s*S\.txListLimit\)/)
+  assert.match(appSource, /aria-controls="tx-list-content"/)
+  assert.match(css, /\.tx-load-more[\s\S]*min-height:\s*44px/)
+})
+
+test('transaction rows share one delegated interaction boundary', () => {
+  const binder = appSource.match(/App\._bindTxRows = function[\s\S]*?\n  \}\n\}\)\(\)/)?.[0] || ''
+  assert.match(binder, /root\.addEventListener\('click'/)
+  assert.match(binder, /root\.addEventListener\('touchstart'/)
+  assert.match(binder, /closest\??\.\('\.tx-row'/)
+  assert.doesNotMatch(binder, /el\.onclick\s*=/)
+  assert.doesNotMatch(binder, /el\.addEventListener\('touchstart'/)
+  assert.doesNotMatch(binder, /el\.addEventListener\('touchend'/)
+})
+
+test('page render keys include durable revision and active transaction filters', () => {
+  assert.match(appSource, /_renderRevision:\s*0/)
+  assert.match(appSource, /_pageRenderKey\s*\(page = S\.page\)/)
+  assert.match(appSource, /S\.txSearch[\s\S]{0,240}S\.txListLimit/)
+  assert.match(appSource, /App\.requestRender = reason => \{[\s\S]{0,220}_forceRenderOnNext/)
+})
+
+test('navigation animation is scheduled without a forced layout read', () => {
+  const navBlock = appSource.match(/P1-D[\s\S]*?P1-E/)?.[0] || ''
+  assert.match(navBlock, /requestAnimationFrame/)
+  assert.doesNotMatch(navBlock, /offsetWidth/)
+})
