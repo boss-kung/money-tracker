@@ -1,0 +1,95 @@
+{
+  "schema_version": "money-tracker.capture-fixtures.v1",
+  "cases": [
+    {
+      "fixture": "work/fixtures/scb-single.input.json",
+      "expected": {
+        "source": "scb_connect",
+        "bank": "SCB",
+        "amount": 80.00,
+        "direction": "debit",
+        "merchant": "MBR9",
+        "account_last4": "4078",
+        "card_last4": null,
+        "transaction_datetime": "2026-10-05T21:39:00+07:00",
+        "parse_status": "complete",
+        "latest_block_amount": 80.00
+      }
+    },
+    {
+      "fixture": "work/fixtures/scb-multiple.input.json",
+      "expected": {
+        "source": "scb_connect",
+        "bank": "SCB",
+        "amount": 350.00,
+        "direction": "debit",
+        "merchant": "THE COFFEE CLUB",
+        "account_last4": "4078",
+        "card_last4": null,
+        "transaction_datetime": "2026-10-06T09:12:00+07:00",
+        "parse_status": "complete",
+        "latest_block_amount": 350.00
+      }
+    },
+    {
+      "fixture": "work/fixtures/uob-thai.input.json",
+      "expected": {
+        "source": "uob_thai",
+        "bank": "UOB",
+        "amount": 1250.75,
+        "direction": "debit",
+        "merchant": "CENTRAL ONLINE",
+        "account_last4": null,
+        "card_last4": "1234",
+        "transaction_datetime": "2026-10-06T14:22:00+07:00",
+        "parse_status": "complete",
+        "latest_block_amount": 1250.75
+      }
+    },
+    {
+      "fixture": "work/fixtures/uob-english.input.json",
+      "expected": {
+        "source": "uob_thai",
+        "bank": "UOB",
+        "amount": 499.00,
+        "direction": "debit",
+        "merchant": "NETFLIX.COM",
+        "account_last4": null,
+        "card_last4": "5678",
+        "transaction_datetime": "2026-10-06T08:05:00+07:00",
+        "parse_status": "complete",
+        "latest_block_amount": 499.00
+      }
+    },
+    {
+      "fixture": "work/fixtures/line-wallet.input.json",
+      "expected": {
+        "source": "line_wallet",
+        "bank": null,
+        "amount": 299.00,
+        "direction": "debit",
+        "merchant": "LINE STORE",
+        "account_last4": null,
+        "card_last4": null,
+        "transaction_datetime": "2026-10-06T10:15:00+07:00",
+        "parse_status": "complete",
+        "latest_block_amount": 299.00
+      }
+    },
+    {
+      "fixture": "work/fixtures/invalid.input.json",
+      "expected": {
+        "source": "unknown",
+        "bank": null,
+        "amount": null,
+        "direction": "unknown",
+        "merchant": null,
+        "account_last4": null,
+        "card_last4": null,
+        "transaction_datetime": null,
+        "parse_status": "invalid",
+        "latest_block_amount": null
+      }
+    }
+  ]
+}

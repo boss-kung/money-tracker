@@ -1,0 +1,6 @@
+{
+  "raw_text": "UOB Thai\nมีการใช้บัตร UOB-1234 จำนวน 1,250.75 THB\nที่ร้าน CENTRAL ONLINE\nวันที่/เวลา 06/10/2026 14:22\nวงเงินคงเหลือใช้ได้ 45,000.00 THB",
+  "capture_method": "line_notification",
+  "captured_at": "2026-10-06T14:23:00+07:00",
+  "force_test": true
+}
