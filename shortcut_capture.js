@@ -300,7 +300,7 @@
             await openDraft(id)
             injectReviewDisclosure()
           } else if (action === 'dismiss') {
-            root.App?.showConfirm?.({ title: 'ซ่อนรายการนี้?', body: 'รายการจะย้ายไปอยู่ในรายการที่ซ่อน และกู้คืนได้ภายหลัง', danger: true, confirmLabel: 'ซ่อนรายการ', onConfirm: async () => { await dismiss(id); await openInbox(inboxView) } })
+            root.App?.showConfirm?.({ title: 'ซ่อนรายการนี้?', body: 'รายการจะย้ายไปอยู่ในรายการที่ซ่อน และกู้คืนได้ภายหลัง', danger: true, confirmLabel: 'ซ่อนรายการ', onConfirm: async () => { try { await dismiss(id); await openInbox(inboxView) } catch (error) { toast(error?.message || 'ซ่อนรายการไม่สำเร็จ', 'error'); rerenderInbox(error) } } })
           } else if (action === 'restore') {
             await restore(id)
             await openInbox(inboxView)
