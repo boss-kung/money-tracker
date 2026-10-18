@@ -6,14 +6,14 @@
       "expected": {
         "source": "scb_connect",
         "bank": "SCB",
-        "amount": 80.00,
+        "amount": "80.00",
         "direction": "debit",
         "merchant": "MBR9",
         "account_last4": "4078",
         "card_last4": null,
         "transaction_datetime": "2026-10-05T21:39:00+07:00",
         "parse_status": "complete",
-        "latest_block_amount": 80.00
+        "latest_block_amount": "80.00"
       }
     },
     {
@@ -21,14 +21,14 @@
       "expected": {
         "source": "scb_connect",
         "bank": "SCB",
-        "amount": 350.00,
+        "amount": "350.00",
         "direction": "debit",
         "merchant": "THE COFFEE CLUB",
         "account_last4": "4078",
         "card_last4": null,
         "transaction_datetime": "2026-10-06T09:12:00+07:00",
         "parse_status": "complete",
-        "latest_block_amount": 350.00
+        "latest_block_amount": "350.00"
       }
     },
     {
@@ -36,14 +36,14 @@
       "expected": {
         "source": "scb_connect",
         "bank": "SCB",
-        "amount": 2000.00,
+        "amount": "2000.00",
         "direction": "credit",
         "merchant": "SOMCHAI P.",
         "account_last4": "4078",
         "card_last4": null,
         "transaction_datetime": "2026-10-06T11:45:00+07:00",
         "parse_status": "complete",
-        "latest_block_amount": 2000.00
+        "latest_block_amount": "2000.00"
       }
     },
     {
@@ -51,14 +51,14 @@
       "expected": {
         "source": "uob_thai",
         "bank": "UOB",
-        "amount": 1250.75,
+        "amount": "1250.75",
         "direction": "debit",
         "merchant": "CENTRAL ONLINE",
         "account_last4": null,
         "card_last4": "1234",
         "transaction_datetime": "2026-10-06T14:22:00+07:00",
         "parse_status": "complete",
-        "latest_block_amount": 1250.75
+        "latest_block_amount": "1250.75"
       }
     },
     {
@@ -66,14 +66,14 @@
       "expected": {
         "source": "scb_connect",
         "bank": "SCB",
-        "amount": 80.00,
+        "amount": "80.00",
         "direction": "debit",
         "merchant": "MBR9",
         "account_last4": "4078",
         "card_last4": null,
         "transaction_datetime": "2026-10-06T21:39:00+07:00",
         "parse_status": "complete",
-        "latest_block_amount": 80.00
+        "latest_block_amount": "80.00"
       }
     },
     {
@@ -81,14 +81,14 @@
       "expected": {
         "source": "uob_thai",
         "bank": "UOB",
-        "amount": 499.00,
+        "amount": "499.00",
         "direction": "debit",
         "merchant": "NETFLIX.COM",
         "account_last4": null,
         "card_last4": "5678",
         "transaction_datetime": "2026-10-06T08:05:00+07:00",
         "parse_status": "complete",
-        "latest_block_amount": 499.00
+        "latest_block_amount": "499.00"
       }
     },
     {
@@ -96,14 +96,14 @@
       "expected": {
         "source": "line_wallet",
         "bank": null,
-        "amount": 299.00,
+        "amount": "299.00",
         "direction": "debit",
         "merchant": "LINE STORE",
         "account_last4": null,
         "card_last4": null,
         "transaction_datetime": "2026-10-06T10:15:00+07:00",
         "parse_status": "complete",
-        "latest_block_amount": 299.00
+        "latest_block_amount": "299.00"
       }
     },
     {

@@ -98,12 +98,12 @@ function last4(value: unknown): string | null {
   return value
 }
 
-export function canonicalDedupeMaterial(capture: Partial<CaptureEnvelopeV1> & Record<string, unknown>): string {
+export async function canonicalDedupeMaterial(capture: Partial<CaptureEnvelopeV1> & Record<string, unknown>): Promise<string> {
   const amount = canonicalAmount(capture.amount)
   const identifier = String(capture.account_last4 || capture.card_last4 || '')
   const date = String(capture.transaction_datetime || capture.captured_at || '').slice(0, 10)
   const description = normalizeCaptureText(capture.description || capture.merchant || '').toLocaleLowerCase('en-US')
-  const relevant = normalizeCaptureText(capture.relevant_text)
+  const relevant = await sha256Hex(normalizeCaptureText(capture.relevant_text))
   return [
     `v${capture.dedupe_version ?? 1}`,
     String(capture.source || ''),
@@ -162,7 +162,7 @@ export async function validateCaptureV1(input: unknown): Promise<ValidatedCaptur
     dedupe_version: 1,
     dedupe_key: dedupeKey,
   }
-  const expectedKey = await sha256Hex(canonicalDedupeMaterial(normalized))
+  const expectedKey = await sha256Hex(await canonicalDedupeMaterial(normalized))
   if (expectedKey !== dedupeKey) throw invalid('invalid_dedupe_key')
   return normalized
 }

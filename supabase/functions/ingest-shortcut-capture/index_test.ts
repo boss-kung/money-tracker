@@ -23,7 +23,7 @@ function capture(overrides: Record<string, unknown> = {}) {
 }
 
 async function withKey(input: Record<string, unknown>) {
-  return { ...input, dedupe_key: await sha256Hex(canonicalDedupeMaterial(input)) }
+  return { ...input, dedupe_key: await sha256Hex(await canonicalDedupeMaterial(input)) }
 }
 
 function request(bodyValue: unknown, auth = token, options: { stream?: ReadableStream<Uint8Array>; contentLength?: string } = {}) {

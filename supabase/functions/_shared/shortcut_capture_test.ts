@@ -47,7 +47,7 @@ function capture(overrides: Record<string, unknown> = {}) {
 async function withDedupeKey(input: Record<string, unknown>) {
   return {
     ...input,
-    dedupe_key: await sha256Hex(canonicalDedupeMaterial(input)),
+    dedupe_key: await sha256Hex(await canonicalDedupeMaterial(input)),
   }
 }
 

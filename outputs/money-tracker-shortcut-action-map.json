@@ -2,10 +2,10 @@
   "schema_version": "money-tracker.shortcut-action-map.v1",
   "config": {
     "mode": "test",
-    "endpoint": "https://YOUR-MONEY-TRACKER.example/api/transactions",
-    "api_key": "REPLACE_WITH_SCOPED_API_KEY",
+    "endpoint": "https://<project-ref>.supabase.co/functions/v1/ingest-shortcut-capture",
+    "api_key": "REPLACE_WITH_ONE_TIME_DEVICE_TOKEN",
     "payload_schema_version": "money-tracker.capture.v1",
-    "parser_version": "ios-shortcut-1.0.0"
+    "parser_version": "ios-shortcut-1.1.0"
   },
   "input": {
     "required": ["raw_text", "capture_method"],
@@ -72,7 +72,8 @@
     "THB",
     "account_last4 or card_last4 or empty text",
     "transaction_datetime or captured_at date",
-    "trimmed lowercase description"
+    "trimmed lowercase description",
+    "SHA-256 of normalized relevant_text"
   ],
   "dedupe_separator": "|",
   "dedupe_algorithm": "SHA-256 lowercase hexadecimal",
@@ -97,12 +98,16 @@
     "dedupe_version",
     "dedupe_key"
   ],
+  "payload_types": {
+    "amount": "canonical decimal string with exactly two fractional digits",
+    "dedupe_key": "lowercase SHA-256 hex string"
+  },
   "never_post_when": [
     "source is unknown",
     "amount is missing or not positive",
     "mode is test",
     "force_test is true",
     "endpoint is not HTTPS",
-    "endpoint or API key still contains a placeholder"
+    "endpoint or device token still contains a placeholder"
   ]
 }

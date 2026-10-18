@@ -17,6 +17,16 @@ function normalizeForParsing(text) {
   return text.replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
 }
 
+function normalizeRelevantText(text) {
+  return text
+    .normalize("NFKC")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t\f\v]+/g, " ")
+    .replace(/\n[ \t]*\n+/g, "\n")
+    .trim();
+}
+
 function lastMatch(text, patterns) {
   const matches = patterns.flatMap((pattern) =>
     [...text.matchAll(pattern)].map((match) => ({ index: match.index, text: match[0] })),
@@ -27,7 +37,7 @@ function lastMatch(text, patterns) {
 function amount(text) {
   if (!text) return null;
   const parsed = Number(text.replaceAll(",", ""));
-  return Number.isFinite(parsed) ? Math.abs(parsed) : null;
+  return Number.isFinite(parsed) ? Math.abs(parsed).toFixed(2) : null;
 }
 
 function transactionDate(text) {
@@ -42,7 +52,7 @@ function clean(value) {
 }
 
 function canonicalDescription(value) {
-  return clean(value)?.toLocaleLowerCase("en-US") ?? "";
+  return normalizeRelevantText(value ?? "").toLocaleLowerCase("en-US");
 }
 
 function fingerprint(payload) {
@@ -51,11 +61,12 @@ function fingerprint(payload) {
     "v1",
     payload.source,
     payload.direction,
-    payload.amount.toFixed(2),
+    payload.amount,
     payload.currency,
     payload.account_last4 ?? payload.card_last4 ?? "",
     payload.transaction_datetime ?? payload.captured_at.slice(0, 10),
     canonicalDescription(payload.description),
+    createHash("sha256").update(normalizeRelevantText(payload.relevant_text)).digest("hex"),
   ].join("|");
   return createHash("sha256").update(basis).digest("hex");
 }
@@ -63,7 +74,7 @@ function fingerprint(payload) {
 function emptyPayload(input, capturedAt) {
   return {
     schema_version: "money-tracker.capture.v1",
-    parser_version: "reference-parser-1.0.0",
+    parser_version: "reference-parser-1.1.0",
     source: "unknown",
     bank: null,
     amount: null,
@@ -142,7 +153,7 @@ export function parseMoneyTrackerEnvelope(input) {
     payload.direction = "debit";
   }
 
-  payload.relevant_text = block;
+  payload.relevant_text = block ? normalizeRelevantText(block) : null;
   payload.description = payload.merchant;
   payload.transaction_datetime = block ? transactionDate(block) : null;
   if (payload.source !== "unknown" && payload.amount !== null && payload.amount > 0) {

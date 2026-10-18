@@ -16,10 +16,10 @@
 
 1. `Dictionary` ตั้งชื่อผลลัพธ์เป็น `Config`:
    - `mode` (Text): `test`
-   - `endpoint` (Text): `https://YOUR-MONEY-TRACKER.example/api/transactions`
-   - `api_key` (Text): `REPLACE_WITH_SCOPED_API_KEY`
+   - `endpoint` (Text): `https://<project-ref>.supabase.co/functions/v1/ingest-shortcut-capture`
+   - `api_key` (Text): `REPLACE_WITH_ONE_TIME_DEVICE_TOKEN` (วาง Token ที่สร้างจาก Money Tracker > เพิ่มเติม > ตั้งค่า > เชื่อมต่อ iOS Shortcut)
    - `schema_version` (Text): `money-tracker.capture.v1`
-   - `parser_version` (Text): `ios-shortcut-1.0.0`
+   - `parser_version` (Text): `ios-shortcut-1.1.0`
 2. `Get Dictionary from Input` ใช้ `Shortcut Input`; ตั้งผลลัพธ์เป็น `Input`.
 3. `Get Dictionary Value` จาก `Input` จำนวน 4 ครั้ง:
    - `raw_text` → `RawText`
@@ -188,7 +188,7 @@ UOB-(\d{4})
 ### 1.8 Validate และสร้าง dedupe key
 
 1. ถ้า `source != unknown` และ `amount > 0` ให้ `parse_status = complete`; นอกนั้นคง `invalid`.
-2. `Format Number` ของ `amount`: Decimal, 2 decimal places, locale ที่ใช้จุดเป็น decimal → `Amount2`.
+2. `Format Number` ของ `amount`: Decimal, 2 decimal places, locale ที่ใช้จุดเป็น decimal → `Amount2`; แปลงเป็น Text เพื่อส่งเป็น canonical string เช่น `80.00`.
 3. `If account_last4 has any value` ใช้ค่านั้น; Otherwise ใช้ `card_last4`; ถ้ายังไม่มีให้ Text ว่าง → `Identifier`.
 4. ถ้า `transaction_datetime` มีค่า ใช้ค่านั้น → `DateKey`; Otherwise ใช้ 10 ตัวแรกของ `CapturedAt` (`yyyy-MM-dd`).
 5. ถ้า `description` ไม่มีค่าใช้ Text ว่าง; ถ้ามีให้:
@@ -199,13 +199,13 @@ UOB-(\d{4})
 6. `Text` หนึ่งบรรทัด:
 
 ```text
-v1|[source]|[direction]|[Amount2]|THB|[Identifier]|[DateKey]|[DescriptionKey]
+v1|[source]|[direction]|[Amount2]|THB|[Identifier]|[DateKey]|[DescriptionKey]|[RelevantHash]
 ```
 
-7. `Hash`: SHA-256 → `Change Case: lowercase` → `dedupe_key`.
+7. สร้าง `RelevantHash`: `Hash` ของ `RelevantText` ที่ normalize แล้วด้วย SHA-256; ต่อท้าย canonical line แล้ว `Hash` อีกครั้ง → `Change Case: lowercase` → `dedupe_key`.
 8. ถ้า `parse_status != complete` ให้คง `dedupe_key = Nothing`.
 
-ห้ามใส่ `raw_text`, `relevant_text` หรือ `capture_method` ลง hash มิฉะนั้น notification กับ screen ของ transaction เดียวกันจะ dedupe ไม่ได้
+ห้ามใส่ `raw_text` หรือ `capture_method` ลง canonical line มิฉะนั้น notification กับ screen ของ transaction เดียวกันจะ dedupe ไม่ได้; ใช้เฉพาะ `SHA-256(normalized relevant_text)` เป็นส่วนท้ายของ line.
 
 ### 1.9 Payload Dictionary
 
@@ -217,7 +217,7 @@ v1|[source]|[direction]|[Amount2]|THB|[Identifier]|[DateKey]|[DescriptionKey]
 | `parser_version` | Text จาก Config |
 | `source` | Text |
 | `bank` | Text หรือ `Nothing` |
-| `amount` | Number หรือ `Nothing` |
+| `amount` | Text canonical เช่น `80.00` หรือ `Nothing` |
 | `currency` | `THB` |
 | `direction` | Text |
 | `merchant` | Text หรือ `Nothing` |
@@ -241,7 +241,7 @@ v1|[source]|[direction]|[Amount2]|THB|[Identifier]|[DateKey]|[DescriptionKey]
 
 1. `If parse_status is not complete`: `Quick Look Payload` → `Stop and Output Payload`.
 2. `If ForceTest is true`: `Quick Look Payload` → `Stop and Output Payload`.
-3. อ่าน `mode`, `endpoint`, `api_key` จาก `Config`.
+3. อ่าน `mode`, `endpoint`, `api_key` จาก `Config`; `api_key` ในที่นี้คือ device Token ที่ Money Tracker แสดงครั้งเดียว ไม่ใช่ service-role key.
 4. `If mode is test`: `Quick Look Payload` → `Stop and Output Payload`.
 5. Production gate ต้องผ่านทุกข้อ:
    - `mode is production`

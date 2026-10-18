@@ -7,14 +7,17 @@
 | รายการ | ผล | หลักฐาน/ขอบเขต |
 |---|---|---|
 | Worktree แยก | ผ่าน | `/Users/bosskung/.codex/worktrees/money-tracker-ios-shortcut/Money Tracker` จาก `origin/main` |
-| Baseline repository tests | ผ่าน | `node --test tests/*.test.js` → 454/454 |
+| Repository regression tests | ผ่าน | `node --test tests/*.test.js` → 474/474 |
 | Fixture JSON 8 input + 1 expected file | ผ่าน | JSON parser อ่านได้ครบ; ครอบคลุม SCB credit และ mixed-source latest block เพิ่มเติม |
 | Native draft `Money Tracker Parser` ใน Shortcuts | สร้างได้แต่ยังไม่พร้อม Production | มี input dictionary, regex block, Last Item, amount/merchant/last4 extraction, payload preview; ยังไม่ผ่าน contract ครบ |
 | Native parser fixture run | ยืนยันว่า draft ไม่ครบ | ได้ `work/results/scb-single-output.json` หนึ่งครั้ง แต่ `transaction_datetime`/`relevant_text` ว่างและไม่มี `dedupe_key`; การรันซ้ำค้างที่ interactive `Quick Look` จึงยกเลิก |
 | Export `.shortcut` | ล้มเหลวภายนอก | Shortcuts Export “For Anyone” ตอบ `NSURLErrorDomain error 500`; wrapper ที่ปรากฏภายหลังเป็น AEA เสียและตรวจไม่ได้ |
 | Local Shortcuts DB fallback | ถูกระบบปฏิเสธ | macOS TCC ตอบ `Operation not permitted`; ไม่พยายามข้ามการป้องกัน |
 | Signed/importable `.shortcut` | ไม่ได้สร้าง | `aea id` ตอบ `invalid auth data blob`; `shortcuts sign` ตอบ `Failed to verify this shortcut`; ไม่ส่งไฟล์เสียให้ผู้ใช้ |
-| Reference parser contract | ผ่าน | `node --test work/reference-parser.test.mjs` → 10/10 |
+| Reference parser contract | ผ่าน | `node --test work/reference-parser.test.mjs` → 10/10; canonical amount is a two-decimal string and v1 key includes the normalized relevant-text hash |
+| Security static gates | ผ่าน | `node --test tests/shortcut_capture_security_static.test.js` → JWT boundary, auth ordering, no service-role client surface, and no payload logging |
+| Live pgTAP migration gate | ต้องรันใน environment ที่มี Docker/Supabase | `supabase test db --workdir supabase` เชื่อม `127.0.0.1:54322` ไม่ได้ใน sandbox นี้; migration ยังไม่ถือว่า live-verified |
+| Release contract | ผ่าน | `2026.10.18-shortcut-inbox-r143`; `scripts/update-release-version.js` regenerated `index.html` and `demo/index.html` query versions |
 | Cross-path dedupe stability | ผ่านใน reference contract | notification/screen variant ของ SCB เดียวกันได้ SHA-256 key เดียวกัน |
 | Latest relevant block | ผ่านใน reference contract | เลือก block ท้ายสุดทั้งกรณี source เดียวและหลาย source บนหน้าจอ |
 | Existing user shortcuts | ไม่แก้ไข | ไม่แตะ `Log LINE Notifications from UOB and SCB`, `Money Tracker`, `Get What’s On Screen` |
@@ -58,7 +61,7 @@ fail 0
 - Input validation.
 - Dedupe key ข้าม `line_notification`/`whats_on_screen`.
 
-Reference parser เป็น executable specification บน Mac เท่านั้น ไม่ใช่ dependency ของ Shortcut และไม่ถูกใช้ส่งข้อมูล
+Reference parser เป็น executable specification บน Mac เท่านั้น ไม่ใช่ dependency ของ Shortcut และไม่ถูกใช้ส่งข้อมูล. จำนวนเงินใน payload เป็นข้อความ canonical เช่น `80.00`; dedupe v1 ต่อท้าย SHA-256 ของ `relevant_text` ที่ normalize แล้ว ก่อนทำ SHA-256 ชั้นนอก
 
 ## ขอบเขตการยืนยันไฟล์
 
@@ -81,3 +84,4 @@ Reference parser เป็น executable specification บน Mac เท่า�
 - endpoint/API key ทุกจุดเป็น placeholder.
 - fixture เป็นข้อมูลสังเคราะห์.
 - ไม่มีการอ่านหรือส่งข้อความ LINE/ข้อมูลธุรกรรมจริง.
+- ยังไม่ถือว่า production-ready จนกว่าจะรัน local Supabase/Docker, deploy secrets, และทำ synthetic smoke test ตาม `docs/SHORTCUT_INBOX_DEPLOYMENT.md`.

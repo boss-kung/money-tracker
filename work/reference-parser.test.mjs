@@ -19,7 +19,7 @@ for (const fixtureCase of expected.cases) {
     }
 
     assert.equal(actual.schema_version, "money-tracker.capture.v1");
-    assert.equal(actual.parser_version, "reference-parser-1.0.0");
+    assert.equal(actual.parser_version, "reference-parser-1.1.0");
     assert.equal(actual.capture_method, input.capture_method);
     assert.equal(actual.raw_text, input.raw_text);
 
