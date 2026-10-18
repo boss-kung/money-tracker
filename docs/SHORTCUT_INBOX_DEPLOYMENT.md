@@ -44,7 +44,7 @@ Confirm the scheduled cleanup job exists and is enabled. Its job removes expired
 
 Importing a `.shortcut` does not install an iPhone Personal Automation. On the iPhone, create `Shortcuts → Automation → Notification`, choose `App = LINE`, add `Run Shortcut → Money Tracker - Notification Inbox`, and pass the `Notification` magic variable as the Shortcut Input. Keep `Ask Before Running` enabled for the first test. A normal LINE notification without this device-local trigger cannot reach the ingestion endpoint.
 
-The notification Shortcut expects non-empty input. If it is run manually without input, it must stop locally rather than submit an empty capture. Background automation may not display Quick Look; the authoritative result is the authenticated Money Tracker Inbox after refresh.
+The notification Shortcut expects non-empty input. The current installed action graph does not yet contain a local no-input guard, so a manual run without input may make a rejected request; the backend rejects it and creates no transaction or Inbox item. Background automation may not display Quick Look; the authoritative result is the authenticated Money Tracker Inbox after refresh.
 
 ## Synthetic smoke test
 
