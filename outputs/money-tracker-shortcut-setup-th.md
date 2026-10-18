@@ -307,7 +307,8 @@ Shortcuts รุ่นปัจจุบันมี trigger ชื่อ `Notif
 3. SCB สองรายการและหลายธนาคารบนจอต้องได้ block รายการหลังสุด.
 4. ส่ง transaction เดียวกันผ่าน notification และ screen; `dedupe_key` ต้องเหมือนกันและเป็น hex 64 ตัว.
 5. Invalid ต้องเป็น `source = unknown`, `amount = null`, `parse_status = invalid`, และห้ามมี prompt ขอ network.
-6. บน Mac ตรวจ reference logic ได้ด้วย:
+6. ใน Production capture แรกต้องตอบ `202 queued`; ส่ง payload เดิมซ้ำต้องตอบ `200 duplicate` พร้อม `capture_id` เดิม.
+7. บน Mac ตรวจ reference logic ได้ด้วย:
 
 ```sh
 node --test work/reference-parser.test.mjs
@@ -317,10 +318,11 @@ reference parser มีไว้ตรวจ contract เท่านั้น �
 
 ## 5. เปิด Production
 
-1. สร้าง ingestion token ที่จำกัดสิทธิ์เฉพาะ endpoint รับ transaction; ห้ามใช้ admin/service-role key.
+1. ใน Money Tracker เปิด **เพิ่มเติม → ตั้งค่า → เชื่อมต่อ iOS Shortcut** แล้วสร้าง device Token; ห้ามใช้ admin/service-role key.
 2. ใช้ HTTPS endpoint จริงและเปลี่ยน placeholder ทั้ง endpoint/key.
 3. ทดสอบ Quick Look ครบทุก source ก่อน.
 4. เปลี่ยน `mode` จาก `test` เป็น `production` เป็นขั้นตอนสุดท้าย.
-5. ผู้ที่แก้ Shortcut ได้จะเห็น API key; หากต้องการความลับจริง ให้ใช้ token อายุสั้นหรือให้ backend ออก scoped token.
+5. หลังส่งสำเร็จ ให้เปิด Transactions → รายการจาก Shortcut, รีวิว/แก้ไข และกดบันทึกเอง; Shortcut ไม่มี action auto-save.
+6. ผู้ที่แก้ Shortcut ได้จะเห็น device Token; หากสงสัยว่ารั่ว ให้ revoke จากหน้าตั้งค่าแล้วสร้าง Token ใหม่.
 
 หากภายหลัง Apple export กลับมาใช้งานได้ ให้ export “For Anyone”, sign/validate แล้วทดลอง preview import โดยไม่กดแทน Shortcut เดิมจนกว่าจะตรวจชื่อและ action ครบ
