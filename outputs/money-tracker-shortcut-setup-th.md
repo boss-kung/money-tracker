@@ -8,6 +8,18 @@
 - `money-tracker-test-fixtures.json` — expected result ของ 6 กรณี
 - `../work/reference-parser.mjs` และ `../work/reference-parser.test.mjs` — reference ที่รันบน Mac เพื่อยืนยัน regex/dedupe; ไม่ใช่ runtime ของ iPhone
 
+## 0. สำคัญ: ไฟล์ Shortcut ไม่ได้สร้าง Notification Automation
+
+การนำเข้าไฟล์ `.shortcut` จะติดตั้งเฉพาะ action ของ Shortcut เท่านั้น ไม่ได้สร้างตัวเรียกเมื่อ LINE แจ้งเตือนให้เอง ต้องสร้าง Personal Automation บน iPhone เพิ่ม:
+
+1. เปิด `Shortcuts` → `Automation` → `New Automation` → `Notification`.
+2. เลือก `App = LINE` และเริ่มต้นใช้ filter กว้าง เช่น `UOB` หรือไม่ใส่ข้อความกรอง.
+3. เพิ่ม action `Run Shortcut` → `Money Tracker - Notification Inbox`.
+4. ในช่องรับ Input ของ `Run Shortcut` เลือก Magic Variable **Notification**.
+5. เปิด `Ask Before Running` ไว้ระหว่างทดสอบก่อน แล้วค่อยปิดเมื่อยืนยันผลแล้ว.
+
+ถ้า Automation ไม่ส่ง Magic Variable `Notification` เข้าไป `Get Text from Input` จะได้ค่าว่างและจะไม่มีรายการเข้า Inbox. การรัน Shortcut จากแอป Shortcuts โดยไม่มี input ก็ไม่ใช่การทดสอบ Notification path.
+
 ## 1. สร้าง `Money Tracker Parser`
 
 สร้าง Shortcut ใหม่ชื่อนี้ตรงตัว และใช้เฉพาะ action มาตรฐานของ Apple

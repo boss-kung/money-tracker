@@ -4,6 +4,20 @@
 
 ## ผลสรุป
 
+## Root-cause verification
+
+- The imported Notification Shortcut contains actions for reading input, building the capture envelope, posting it, and showing the response; the `.shortcut` file does **not** install an iPhone Notification Automation.
+- The required device-local Automation must pass the `Notification` magic variable into `Money Tracker - Notification Inbox`.
+- A UOB LINE preview that omits the full available-credit line is currently rejected by the server block matcher; the compact-notification parser change is tracked separately from the device trigger fix.
+
+## Recovery run — 2026-10-18
+
+- Compact UOB Thai/English notification parsing: **ผ่าน** — `deno test supabase/functions/_shared/shortcut_capture_parser_test.ts` → 6/6.
+- Edge Function, crypto, capture, and Inbox contract tests: **ผ่าน** — Deno suite → 30/30.
+- Money Tracker Shortcut Inbox client/security/transaction tests: **ผ่าน** — Node suite → 23/23.
+- Local database migration gate: **ยังตรวจไม่ได้** — local Postgres `127.0.0.1:54322` ไม่พร้อมใน environment นี้.
+- Live Supabase `202 queued`/duplicate smoke: **ยังไม่รัน** — ต้องทำจาก environment ที่มี network และ Token ทดสอบ; ยังไม่ส่งข้อมูลจริงจาก session นี้.
+
 | รายการ | ผล | หลักฐาน/ขอบเขต |
 |---|---|---|
 | Worktree แยก | ผ่าน | `/Users/bosskung/.codex/worktrees/money-tracker-ios-shortcut/Money Tracker` จาก `origin/main` |

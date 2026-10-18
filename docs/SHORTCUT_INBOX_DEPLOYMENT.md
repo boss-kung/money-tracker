@@ -40,6 +40,12 @@ Confirm the scheduled cleanup job exists and is enabled. Its job removes expired
 5. Paste the Token into the `Authorization: Bearer ...` header and use the production ingestion URL shown in that guide.
 6. Run a harmless synthetic or personal notification. Switch to the Inbox and review/edit before pressing Save; the Shortcut never writes a transaction directly.
 
+### Notification automation check
+
+Importing a `.shortcut` does not install an iPhone Personal Automation. On the iPhone, create `Shortcuts → Automation → Notification`, choose `App = LINE`, add `Run Shortcut → Money Tracker - Notification Inbox`, and pass the `Notification` magic variable as the Shortcut Input. Keep `Ask Before Running` enabled for the first test. A normal LINE notification without this device-local trigger cannot reach the ingestion endpoint.
+
+The notification Shortcut expects non-empty input. If it is run manually without input, it must stop locally rather than submit an empty capture. Background automation may not display Quick Look; the authoritative result is the authenticated Money Tracker Inbox after refresh.
+
 ## Synthetic smoke test
 
 Use only a fixture such as the SCB text in `work/fixtures/scb-single.input.json`. The expected first response is HTTP `202` with `{ "status": "queued", "duplicate": false }`. Repeating the exact same payload must return HTTP `200` with `{ "duplicate": true }` and the same `capture_id`.
