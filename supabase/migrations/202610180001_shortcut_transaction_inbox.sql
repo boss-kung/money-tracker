@@ -51,8 +51,11 @@ alter table public.mt_shortcut_captures enable row level security;
 revoke all on table public.mt_shortcut_tokens from public, anon, authenticated;
 revoke all on table public.mt_shortcut_captures from public, anon, authenticated;
 
+drop function if exists public.mt_shortcut_create_token(uuid, text, bytea, text);
+
 create or replace function public.mt_shortcut_create_token(
   p_user_id uuid,
+  p_token_id uuid,
   p_label text,
   p_secret_verifier bytea,
   p_secret_prefix text
@@ -65,7 +68,7 @@ as $$
 declare
   token_id uuid;
 begin
-  if p_user_id is null or p_secret_verifier is null or p_secret_prefix is null then
+  if p_user_id is null or p_token_id is null or p_secret_verifier is null or p_secret_prefix is null then
     raise exception 'invalid_token_input' using errcode = '22023';
   end if;
   if char_length(trim(p_label)) < 1 or char_length(trim(p_label)) > 64 then
@@ -81,8 +84,8 @@ begin
     raise exception 'active_token_limit' using errcode = 'P0001';
   end if;
 
-  insert into public.mt_shortcut_tokens(user_id, label, secret_verifier, secret_prefix)
-  values (p_user_id, trim(p_label), p_secret_verifier, p_secret_prefix)
+  insert into public.mt_shortcut_tokens(id, user_id, label, secret_verifier, secret_prefix)
+  values (p_token_id, p_user_id, trim(p_label), p_secret_verifier, p_secret_prefix)
   returning id into token_id;
   return token_id;
 end;
@@ -330,7 +333,7 @@ exception when duplicate_object then
 end;
 $schedule$;
 
-revoke all on function public.mt_shortcut_create_token(uuid, text, bytea, text) from public, anon, authenticated;
+revoke all on function public.mt_shortcut_create_token(uuid, uuid, text, bytea, text) from public, anon, authenticated;
 revoke all on function public.mt_shortcut_take_rate_slot(uuid, timestamptz, integer) from public, anon, authenticated;
 revoke all on function public.mt_shortcut_claim_capture(uuid, uuid, bytea, text, timestamptz) from public, anon, authenticated;
 revoke all on function public.mt_shortcut_release_capture(uuid, uuid, bytea) from public, anon, authenticated;
@@ -339,7 +342,7 @@ revoke all on function public.mt_shortcut_dismiss_capture(uuid, uuid, bytea, tim
 revoke all on function public.mt_shortcut_restore_capture(uuid, uuid, timestamptz) from public, anon, authenticated;
 revoke all on function public.mt_shortcut_cleanup(timestamptz) from public, anon, authenticated;
 
-grant execute on function public.mt_shortcut_create_token(uuid, text, bytea, text) to service_role;
+grant execute on function public.mt_shortcut_create_token(uuid, uuid, text, bytea, text) to service_role;
 grant execute on function public.mt_shortcut_take_rate_slot(uuid, timestamptz, integer) to service_role;
 grant execute on function public.mt_shortcut_claim_capture(uuid, uuid, bytea, text, timestamptz) to service_role;
 grant execute on function public.mt_shortcut_release_capture(uuid, uuid, bytea) to service_role;
