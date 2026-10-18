@@ -139,6 +139,19 @@ Deno.test('server parser accepts compact SCB and LINE Wallet notification previe
   equal(line.merchant, 'Bakery')
 })
 
+Deno.test('server parser preserves SCB credit notification date with an at-sign time', async () => {
+  const result = await parseRawShortcutCapture({
+    raw_text: 'SCB Connect\nรายการเงินเข้า 200.00 บาท เข้าบัญชี X-4078 วันที่ 18/10/2026 @20:42 ยอดเงินที่ใช้ได้ 950.46 บาท',
+    capture_method: 'line_notification',
+    captured_at: '2026-10-18T20:42:30+07:00',
+  })
+  equal(result.source, 'scb_connect')
+  equal(result.direction, 'credit')
+  equal(result.amount, '200.00')
+  equal(result.account_last4, '4078')
+  equal(result.transaction_datetime, '2026-10-18T20:42:00+07:00')
+})
+
 Deno.test('notification and screen raw captures share a dedupe key', async () => {
   const text = [
     'รายการเงินออก -80.00 บาท',

@@ -42,12 +42,13 @@ Header: Authorization = Bearer <device token>
 
 1. เลือก trigger `Notification` และ App = `LINE`
 2. เริ่มต้นใช้ filter กว้าง เช่น `UOB` หรือไม่ใส่ filter เพื่อไม่ให้ตัดแจ้งเตือนทิ้งก่อนทดสอบ
-3. เพิ่ม action `Run Shortcut` → ชื่อ Shortcut ที่ติดตั้งไว้ (ชุดนี้ใช้ `Money Tracker - Notification Inbox`; ถ้าสร้างตามคู่มือเดิมใช้ `Money Tracker Capture`)
-4. ในช่องรับ Input ให้เลือก Magic Variable `Notification`
-5. เปิด `Ask Before Running` ไว้ก่อนเพื่อยืนยันว่า Automation ถูกเรียกจริง
-6. ปิด `Ask Before Running` ได้หลังจากทดสอบผ่านแล้ว
+3. เพิ่ม action `Text` ก่อน `Run Shortcut` แล้วใส่ Magic Variable จาก `Notification` โดยเลือก `Title`, `Subtitle` และ `Message/Body` ที่มีอยู่ คั่นแต่ละส่วนด้วยบรรทัดใหม่
+4. เพิ่ม action `Run Shortcut` → ชื่อ Shortcut ที่ติดตั้งไว้ (ชุดนี้ใช้ `Money Tracker - Notification Inbox`; ถ้าสร้างตามคู่มือเดิมใช้ `Money Tracker Capture`)
+5. ตั้ง Input ของ `Run Shortcut` เป็นผลลัพธ์จาก action `Text` นี้ ไม่ใช่ `Notification` object ตรง ๆ
+6. เปิด `Ask Before Running` ไว้ก่อนเพื่อยืนยันว่า Automation ถูกเรียกจริง
+7. ปิด `Ask Before Running` ได้หลังจากทดสอบผ่านแล้ว
 
-ถ้า `Run Shortcut` ไม่ได้รับ `Notification` จะไม่มีข้อมูลให้ส่งและจะไม่เกิดรายการใน Inbox. การรัน Shortcut จากแอป Shortcuts โดยไม่ส่ง input ไม่ใช่การทดสอบ Notification path.
+ถ้าส่ง `Notification` object ตรง ๆ บางรุ่นของ iOS จะได้เฉพาะชื่อแอปหรือข้อความว่าง ทำให้ parser หา transaction ไม่เจอ. การรัน Shortcut จากแอป Shortcuts โดยไม่ส่ง input ไม่ใช่การทดสอบ Notification path.
 
 ถ้าต้องรองรับหลายข้อความ ให้สร้าง Automation แยกกัน เพราะ filter หลายตัวใน automation เดียวอาจถูกตีความเป็น AND
 

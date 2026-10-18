@@ -58,7 +58,7 @@ function amount(value: string | undefined): string | null {
 }
 
 function dateFromText(text: string): string | null {
-  const match = text.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/u)
+  const match = text.match(/(\d{2})\/(\d{2})\/(\d{4})\s+@?(\d{2}):(\d{2})/u)
   if (!match) return null
   const [, day, month, year, hour, minute] = match
   return `${year}-${month}-${day}T${hour}:${minute}:00+07:00`
