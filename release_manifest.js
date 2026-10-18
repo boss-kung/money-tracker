@@ -41,6 +41,8 @@
     './bnpl.js',
     './split_bill.js',
     './quick_capture.js',
+    './shortcut_capture_core.js',
+    './shortcut_capture.js',
     './thai_bank_holidays.js',
     './manifest.json',
     './assets/icon.svg',
@@ -58,6 +60,8 @@
     './split_bill.js',
     './loans_v2.js',
     './quick_capture.js',
+    './shortcut_capture_core.js',
+    './shortcut_capture.js',
     './onboarding.js',
   ])
   const networkFirstFiles = Object.freeze(coreAssets

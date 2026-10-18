@@ -1099,3 +1099,64 @@ html.dark.ui-v2 .mt-net-card {
     linear-gradient(135deg, #1355c9 0%, #0a3d99 48%, #072a70 100%) !important;
 }
 html.dark.ui-v2 .mt-net-card::after { background: var(--bg); }
+
+/* Shortcut transaction inbox — review-first, touch friendly, and safe on iOS. */
+.shortcut-inbox-button {
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  width:100%; min-height:44px; margin:8px 0; padding:10px 14px;
+  border:1px solid var(--border); border-radius:12px; background:var(--surface);
+  color:var(--text); font:inherit; text-align:left; cursor:pointer;
+}
+.shortcut-inbox-badge {
+  display:inline-flex; align-items:center; justify-content:center; min-width:24px; min-height:24px;
+  padding:2px 7px; border-radius:999px; background:var(--primary); color:#fff; font-size:12px; font-weight:700;
+}
+.shortcut-inbox-screen,
+.shortcut-token-screen { padding:0 16px max(32px, env(safe-area-inset-bottom)); color:var(--text); }
+.shortcut-inbox-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:14px 0; }
+.shortcut-inbox-header h2 { margin:0; font-size:18px; }
+.shortcut-inbox-header p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+.shortcut-inbox-header-actions { display:flex; gap:6px; }
+.shortcut-inbox-nav,
+.shortcut-inbox-dismiss,
+.shortcut-token-revoke,
+.shortcut-token-copy { min-height:44px; border:0; border-radius:10px; padding:8px 12px; background:var(--surface-2, var(--bg)); color:var(--primary); font:inherit; cursor:pointer; }
+.shortcut-inbox-list { display:grid; gap:8px; }
+.shortcut-inbox-item { display:flex; align-items:stretch; gap:6px; padding:10px; border:1px solid var(--border); border-radius:14px; background:var(--surface); }
+.shortcut-inbox-open { display:flex; align-items:center; justify-content:space-between; gap:12px; flex:1; min-width:0; min-height:44px; padding:2px; border:0; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.shortcut-inbox-item-main { display:flex; flex-direction:column; min-width:0; gap:4px; }
+.shortcut-inbox-item-main strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.shortcut-inbox-item-main span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:12px; }
+.shortcut-inbox-item-amount { display:flex; flex-direction:column; align-items:flex-end; flex:0 0 auto; font-weight:700; white-space:nowrap; }
+.shortcut-inbox-item-amount small { margin-top:3px; color:var(--muted); font-size:10px; font-weight:400; }
+.shortcut-inbox-dismiss { color:var(--muted); background:transparent; }
+.shortcut-inbox-state { padding:28px 12px; border:1px dashed var(--border); border-radius:12px; color:var(--muted); text-align:center; }
+.shortcut-inbox-error { color:var(--expense, #b91c1c); border-color:color-mix(in srgb, var(--expense, #b91c1c) 35%, var(--border)); }
+.shortcut-inbox-footnote { margin:14px 2px 0; color:var(--muted); font-size:11px; line-height:1.5; }
+.shortcut-inbox-raw { margin:12px 0; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2, var(--bg)); }
+.shortcut-inbox-raw summary { min-height:44px; display:flex; align-items:center; cursor:pointer; color:var(--muted); }
+.shortcut-inbox-raw pre { max-height:220px; overflow:auto; margin:8px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; font:12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.shortcut-token-settings { margin-top:12px; }
+.shortcut-token-settings-row { width:100%; border:0; color:inherit; background:transparent; text-align:left; font:inherit; cursor:pointer; }
+.shortcut-token-settings-help { margin-top:2px; color:var(--muted); font-size:12px; font-weight:400; }
+.shortcut-token-form { margin:4px 0 14px; padding:14px; border:1px solid var(--border); border-radius:14px; background:var(--surface); }
+.shortcut-token-form label { display:block; margin-bottom:8px; color:var(--muted); font-size:12px; }
+.shortcut-token-form > div { display:flex; align-items:center; gap:8px; }
+.shortcut-token-form input { min-height:44px; flex:1; min-width:0; }
+.shortcut-token-form button { min-height:44px; width:auto; white-space:nowrap; }
+.shortcut-token-list { display:grid; gap:8px; }
+.shortcut-token-row { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:56px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:var(--surface); }
+.shortcut-token-row > div { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.shortcut-token-row small { color:var(--muted); font-size:11px; }
+.shortcut-token-revoke { color:var(--expense, #b91c1c); }
+.shortcut-token-issued { margin:0 0 14px; padding:14px; border:1px solid var(--primary); border-radius:14px; background:var(--primary-soft, var(--surface)); }
+.shortcut-token-issued p { margin:4px 0 8px; color:var(--muted); font-size:12px; }
+.shortcut-token-issued code { display:block; padding:10px; border-radius:8px; background:var(--bg); overflow-wrap:anywhere; user-select:all; font-size:11px; }
+.shortcut-token-issued .shortcut-token-copy { margin-top:10px; background:var(--primary); color:#fff; }
+@media (max-width: 420px) {
+  .shortcut-inbox-header { flex-direction:column; }
+  .shortcut-inbox-header-actions { width:100%; }
+  .shortcut-inbox-nav { flex:1; }
+  .shortcut-token-form > div { align-items:stretch; flex-direction:column; }
+  .shortcut-token-form button { width:100%; }
+}
