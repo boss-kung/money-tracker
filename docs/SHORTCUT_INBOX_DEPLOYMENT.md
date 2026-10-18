@@ -36,8 +36,9 @@ Confirm the scheduled cleanup job exists and is enabled. Its job removes expired
 1. Sign in to Money Tracker.
 2. Open **เพิ่มเติม → ตั้งค่า → เชื่อมต่อ iOS Shortcut**.
 3. Create a labelled device Token and copy it immediately. The plaintext Token is shown once; it is not retrievable from the app or API later.
-4. Paste the Token into the Shortcut's `Config.api_key` field and set `mode` to `test` first.
-5. Run synthetic fixtures in Quick Look. Switch to `production` only after the parser, review, save, duplicate, and offline checks pass.
+4. Use `outputs/money-tracker-shortcut-simple-setup-th.md`: the Shortcut sends only `raw_text` and `capture_method`; the server parses UOB, SCB Connect, and LINE Wallet.
+5. Paste the Token into the `Authorization: Bearer ...` header and use the production ingestion URL shown in that guide.
+6. Run a harmless synthetic or personal notification. Switch to the Inbox and review/edit before pressing Save; the Shortcut never writes a transaction directly.
 
 ## Synthetic smoke test
 

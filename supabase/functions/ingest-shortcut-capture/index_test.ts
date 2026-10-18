@@ -106,6 +106,23 @@ Deno.test('accepts a validated capture only after encryption, returning a queued
   if (!db.calls.some(call => call.method === 'mt_shortcut_captures:insert')) throw new Error('capture was not inserted')
 })
 
+Deno.test('accepts a raw text envelope and parses it before encryption', async () => {
+  const db = fakeDatabase({ tokenRow: { id: tokenId, user_id: userId, secret_verifier: new TextEncoder().encode(`${secret}:${'pepper'.repeat(4)}`), revoked_at: null } })
+  const handler = createIngestShortcutCaptureHandler(deps(db))
+  const response = await handler(request({
+    raw_text: 'รายการเงินออก -80.00 บาท\nจากบัญชี THANAPHORN U. X-4078\nเข้าบัญชี MBR9\nยอดเงินที่ใช้ได้ 1,088.37 บาท',
+    capture_method: 'whats_on_screen',
+    captured_at: '2026-10-05T21:40:00+07:00',
+  }))
+  equal(response.status, 202)
+  const insert = db.calls.find(call => call.method === 'mt_shortcut_captures:insert')
+  if (!insert) throw new Error('raw capture was not inserted')
+  const row = (insert.args as unknown[])[0] as Record<string, unknown>
+  equal(row.schema_version, 'money-tracker.capture.v1')
+  equal(row.dedupe_version, 1)
+  if (row.dedupe_key === undefined || String(row.dedupe_key).length !== 64) throw new Error('raw capture missing dedupe key')
+})
+
 Deno.test('rejects revoked tokens and rate-limited tokens without parsing capture details', async () => {
   const revoked = fakeDatabase({ tokenRow: { id: tokenId, user_id: userId, secret_verifier: new TextEncoder().encode(`${secret}:${'pepper'.repeat(4)}`), revoked_at: '2026-10-17T00:00:00Z' } })
   const handler = createIngestShortcutCaptureHandler(deps(revoked))

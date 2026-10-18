@@ -4,6 +4,7 @@ import {
   type ValidatedCaptureV1,
   ShortcutRequestError,
 } from '../_shared/shortcut_capture.ts'
+import { parseRawShortcutCapture } from '../_shared/shortcut_capture_parser.ts'
 import {
   encryptCapture,
   loadInboxKeyring,
@@ -141,6 +142,12 @@ function parseBody(bytes: Uint8Array): unknown {
   }
 }
 
+function isRawCaptureEnvelope(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return typeof record.raw_text === 'string' && typeof record.capture_method === 'string' && !('source' in record)
+}
+
 export function createIngestShortcutCaptureHandler(deps: IngestShortcutCaptureDeps): (req: Request) => Promise<Response> {
   return async req => {
     const options = handleOptions(req)
@@ -177,7 +184,10 @@ export function createIngestShortcutCaptureHandler(deps: IngestShortcutCaptureDe
       const input = parseBody(bodyBytes)
       let capture: ValidatedCaptureV1
       try {
-        capture = await validateCaptureV1(input)
+        const parsed = isRawCaptureEnvelope(input)
+          ? await parseRawShortcutCapture(input, deps.now().toISOString())
+          : input
+        capture = await validateCaptureV1(parsed)
       } catch (error) {
         if (error instanceof ShortcutRequestError) throw error
         throw new IngestRequestError(400, 'invalid_capture')
