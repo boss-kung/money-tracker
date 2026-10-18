@@ -20,8 +20,8 @@ test('capture drafts reject recurring/installment fan-out while leaving transfer
 })
 
 test('existing capture metadata is preserved through cleanTxFromDraft edits', () => {
-  const start = source.indexOf('  function cleanTxFromDraft(id)')
-  const end = source.indexOf('  App.saveTx = function()', start)
+  const start = source.indexOf('  function cleanTxFromDraft(')
+  const end = source.indexOf('  App.saveTx = function(', start)
   assert.ok(start >= 0 && end > start)
   const clean = source.slice(start, end)
   assert.match(clean, /existingTx[\s\S]{0,500}externalCapture/)
