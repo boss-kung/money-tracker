@@ -38,13 +38,16 @@ Header: Authorization = Bearer <device token>
 
 ## 2. ใช้กับ LINE Notification
 
-สร้าง Personal Automation ในแอป Shortcuts:
+การติดตั้ง Shortcut อย่างเดียว **ยังไม่สร้าง Automation** ให้ ต้องสร้าง Personal Automation บน iPhone:
 
 1. เลือก trigger `Notification` และ App = `LINE`
-2. ตั้ง filter เป็นข้อความธุรกรรม เช่น `มีการใช้บัตร`, `รายการเงินออก`, `รายการเงินเข้า` หรือ `LINE Pay Purchase`
+2. เริ่มต้นใช้ filter กว้าง เช่น `UOB` หรือไม่ใส่ filter เพื่อไม่ให้ตัดแจ้งเตือนทิ้งก่อนทดสอบ
 3. เพิ่ม action `Run Shortcut` → `Money Tracker Capture`
-4. ถ้ามีช่องรับ Input ให้เลือก Magic Variable `Notification`
-5. ปิด `Ask Before Running` เฉพาะเมื่อทดสอบแล้วว่าต้องการให้ทำงานอัตโนมัติ
+4. ในช่องรับ Input ให้เลือก Magic Variable `Notification`
+5. เปิด `Ask Before Running` ไว้ก่อนเพื่อยืนยันว่า Automation ถูกเรียกจริง
+6. ปิด `Ask Before Running` ได้หลังจากทดสอบผ่านแล้ว
+
+ถ้า `Run Shortcut` ไม่ได้รับ `Notification` จะไม่มีข้อมูลให้ส่งและจะไม่เกิดรายการใน Inbox. การรัน Shortcut จากแอป Shortcuts โดยไม่ส่ง input ไม่ใช่การทดสอบ Notification path.
 
 ถ้าต้องรองรับหลายข้อความ ให้สร้าง Automation แยกกัน เพราะ filter หลายตัวใน automation เดียวอาจถูกตีความเป็น AND
 
