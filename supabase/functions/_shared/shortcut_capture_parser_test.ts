@@ -61,6 +61,43 @@ Deno.test('server parser supports UOB Thai and LINE Wallet', async () => {
   equal(line.amount, '45.00')
 })
 
+Deno.test('server parser accepts compact UOB notification previews without available credit', async () => {
+  const thai = await parseRawShortcutCapture({
+    raw_text: 'UOB แจ้งเตือน\nมีการใช้บัตร UOB-1234 จำนวน 1,250.75 THB ที่ร้าน CENTRAL ONLINE',
+    capture_method: 'line_notification',
+    captured_at: '2026-10-05T09:01:00+07:00',
+  })
+  equal(thai.source, 'uob_thai')
+  equal(thai.bank, 'UOB')
+  equal(thai.amount, '1250.75')
+  equal(thai.card_last4, '1234')
+  equal(thai.merchant, 'CENTRAL ONLINE')
+  equal(thai.transaction_datetime, null)
+
+  const english = await parseRawShortcutCapture({
+    raw_text: 'UOB\nYou have spent THB 499.00 on card ending 5678 at NETFLIX.COM',
+    capture_method: 'line_notification',
+    captured_at: '2026-10-05T09:01:00+07:00',
+  })
+  equal(english.source, 'uob_thai')
+  equal(english.bank, 'UOB')
+  equal(english.amount, '499.00')
+  equal(english.card_last4, '5678')
+  equal(english.merchant, 'NETFLIX.COM')
+  equal(english.transaction_datetime, null)
+})
+
+Deno.test('server parser still rejects compact UOB text without a positive amount', async () => {
+  await rejectsCode(
+    () => parseRawShortcutCapture({
+      raw_text: 'มีการใช้บัตร UOB-1234 ที่ร้าน CENTRAL ONLINE',
+      capture_method: 'line_notification',
+      captured_at: '2026-10-05T09:01:00+07:00',
+    }),
+    'invalid_capture',
+  )
+})
+
 Deno.test('notification and screen raw captures share a dedupe key', async () => {
   const text = [
     'รายการเงินออก -80.00 บาท',

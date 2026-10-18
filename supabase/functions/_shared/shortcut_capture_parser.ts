@@ -9,11 +9,19 @@ import {
 const CAPTURE_METHODS = new Set(['line_notification', 'whats_on_screen'])
 const PARSER_VERSION = 'shortcut-server-1.0.0'
 
-const BLOCK_PATTERNS = [
+const FULL_BLOCK_PATTERNS = [
   /มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?วงเงินคงเหลือใช้ได้\s*[\d,]+(?:\.\d{1,2})?\s*THB/giu,
   /You have spent[\s\S]*?Available credit:\s*THB\s*[\d,]+(?:\.\d{1,2})?/giu,
   /รายการเงิน(?:ออก|เข้า)\s*-?[\d,]+(?:\.\d{1,2})?\s*บาท[\s\S]*?ยอดเงินที่ใช้ได้\s*[\d,]+(?:\.\d{1,2})?\s*บาท/giu,
   /LINE Pay Purchase[\s\S]*?Balance:\s*(?:THB\s*)?[\d,]+(?:\.\d{1,2})?/giu,
+]
+
+// LINE may deliver only the notification preview, which often omits the
+// available-credit/date suffix present in the full UOB screen. These relaxed
+// patterns are deliberately enabled only for line_notification captures.
+const COMPACT_UOB_NOTIFICATION_PATTERNS = [
+  /มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?จำนวน\s*[\d,]+(?:\.\d{1,2})?\s*THB[\s\S]*/giu,
+  /You have spent[\s\S]*?THB\s*[\d,]+(?:\.\d{1,2})?[\s\S]*/giu,
 ]
 
 function invalid(): never {
@@ -28,8 +36,11 @@ function normalizeForParsing(text: string): string {
   return text.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ')
 }
 
-function latestBlock(text: string): string | null {
-  const matches = BLOCK_PATTERNS.flatMap(pattern => [...text.matchAll(pattern)].map(match => ({ index: match.index ?? -1, text: match[0] })))
+function latestBlock(text: string, captureMethod: string): string | null {
+  const patterns = captureMethod === 'line_notification'
+    ? [...COMPACT_UOB_NOTIFICATION_PATTERNS, ...FULL_BLOCK_PATTERNS]
+    : FULL_BLOCK_PATTERNS
+  const matches = patterns.flatMap(pattern => [...text.matchAll(pattern)].map(match => ({ index: match.index ?? -1, text: match[0] })))
   return matches.sort((left, right) => left.index - right.index).at(-1)?.text ?? null
 }
 
@@ -67,7 +78,7 @@ export async function parseRawShortcutCapture(input: unknown, now = new Date().t
   if (!isRecord(input) || typeof input.capture_method !== 'string' || !CAPTURE_METHODS.has(input.capture_method)) invalid()
   const originalText = rawText(input.raw_text)
   const capturedAt = timestamp(input.captured_at, now)
-  const block = latestBlock(normalizeForParsing(originalText))
+  const block = latestBlock(normalizeForParsing(originalText), input.capture_method)
   if (!block) invalid()
 
   const payload: ValidatedCaptureV1 = {
@@ -97,7 +108,7 @@ export async function parseRawShortcutCapture(input: unknown, now = new Date().t
     payload.source = 'uob_thai'
     payload.bank = 'UOB'
     payload.amount = amount(block.match(thai ? /จำนวน\s*([\d,]+(?:\.\d{1,2})?)\s*THB/u : /spent\s+THB\s*([\d,]+(?:\.\d{1,2})?)/iu)?.[1]) || ''
-    payload.merchant = clean(block.match(thai ? /ที่ร้าน\s*([^\n\r]+)/u : /\sat\s+(.+?)\s+on\s+\d{2}\//iu)?.[1])
+    payload.merchant = clean(block.match(thai ? /ที่ร้าน\s*([^\n\r]+)/u : /\sat\s+(.+?)(?:\s+on\s+\d{2}\/|[\n\r]|$)/iu)?.[1])
     payload.card_last4 = block.match(thai ? /UOB-(\d{4})/u : /ending\s+(\d{4})/iu)?.[1] ?? null
   } else if (/รายการเงิน(?:ออก|เข้า)/u.test(block)) {
     const money = block.match(/รายการเงิน(ออก|เข้า)\s*-?([\d,]+(?:\.\d{1,2})?)\s*บาท/u)
