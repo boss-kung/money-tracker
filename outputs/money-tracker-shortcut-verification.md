@@ -12,8 +12,8 @@
 
 ## Recovery run — 2026-10-18
 
-- Compact UOB Thai/English notification parsing: **ผ่าน** — `deno test supabase/functions/_shared/shortcut_capture_parser_test.ts` → 6/6.
-- Edge Function, crypto, capture, and Inbox contract tests: **ผ่าน** — Deno suite → 30/30.
+- Compact UOB Thai/English notification parsing: **ผ่าน** — `deno test supabase/functions/_shared/shortcut_capture_parser_test.ts` → 7/7, including latest-block selection across compact notifications.
+- Edge Function, crypto, capture, and Inbox contract tests: **ผ่าน** — Deno suite → 31/31.
 - Money Tracker Shortcut Inbox client/security/transaction tests: **ผ่าน** — targeted Node suite → 23/23; full repository Node suite → 513/513.
 - Local database migration gate: **ยังตรวจไม่ได้** — local Postgres `127.0.0.1:54322` ไม่พร้อมใน environment นี้.
 - Live Supabase `202 queued`/duplicate smoke: **ยังไม่รัน** — ต้องทำจาก environment ที่มี network และ Token ทดสอบ; ยังไม่ส่งข้อมูลจริงจาก session นี้.

@@ -20,8 +20,8 @@ const FULL_BLOCK_PATTERNS = [
 // available-credit/date suffix present in the full UOB screen. These relaxed
 // patterns are deliberately enabled only for line_notification captures.
 const COMPACT_UOB_NOTIFICATION_PATTERNS = [
-  /มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?จำนวน\s*[\d,]+(?:\.\d{1,2})?\s*THB[\s\S]*/giu,
-  /You have spent[\s\S]*?THB\s*[\d,]+(?:\.\d{1,2})?[\s\S]*/giu,
+  /มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?จำนวน\s*[\d,]+(?:\.\d{1,2})?\s*THB[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent)|$)/giu,
+  /You have spent[\s\S]*?THB\s*[\d,]+(?:\.\d{1,2})?[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent)|$)/giu,
 ]
 
 function invalid(): never {

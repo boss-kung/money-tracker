@@ -98,6 +98,20 @@ Deno.test('server parser still rejects compact UOB text without a positive amoun
   )
 })
 
+Deno.test('server parser selects the latest compact UOB notification block', async () => {
+  const result = await parseRawShortcutCapture({
+    raw_text: [
+      'มีการใช้บัตร UOB-1111 จำนวน 10.00 THB ที่ร้าน OLD MERCHANT',
+      'มีการใช้บัตร UOB-2222 จำนวน 20.00 THB ที่ร้าน NEW MERCHANT',
+    ].join('\n'),
+    capture_method: 'line_notification',
+    captured_at: '2026-10-05T09:01:00+07:00',
+  })
+  equal(result.amount, '20.00')
+  equal(result.card_last4, '2222')
+  equal(result.merchant, 'NEW MERCHANT')
+})
+
 Deno.test('notification and screen raw captures share a dedupe key', async () => {
   const text = [
     'รายการเงินออก -80.00 บาท',
