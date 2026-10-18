@@ -5358,8 +5358,24 @@ Calc.getUsableMoney = function(wallets, state = null) {
     return settlement
   }
 
+  function normalizeShortcutExternalCapture(value) {
+    const raw = value && typeof value === 'object' ? value : null
+    const captureId = String(raw?.captureId || raw?.capture_id || '').trim()
+    if (!captureId) return undefined
+    const dedupeVersion = Number(raw?.dedupeVersion ?? raw?.dedupe_version ?? 1)
+    const dedupeKey = String(raw?.dedupeKey || raw?.dedupe_key || '').trim()
+    if (!Number.isSafeInteger(dedupeVersion) || dedupeVersion < 1 || !/^[0-9a-f]{64}$/.test(dedupeKey)) return undefined
+    return {
+      provider: String(raw?.provider || raw?.source || 'shortcut').trim().slice(0, 64),
+      captureId,
+      dedupeVersion,
+      dedupeKey,
+    }
+  }
+
   function cleanTxFromDraft(id) {
     const existingTx = (S.transactions || []).find(row => row.id === id)
+    const externalCapture = normalizeShortcutExternalCapture(S.tx?.externalCapture || existingTx?.externalCapture)
     const wallet = walletById(S.tx.walletId)
     const useRewardRules = !!(wallet && wallet.type === 'credit' && S.tx.type === 'expense')
     let sharedExpense = normalizeSharedExpenseDraft(S.tx)
@@ -5423,6 +5439,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
       rewardRulesTouched: useRewardRules ? S.tx.rewardRulesTouched === true : undefined,
       rewardIncludePoints: S.tx.rewardIncludePoints !== false,
       rewardIncludeCashback: S.tx.rewardIncludeCashback !== false,
+      externalCapture,
     }
     const reward = App._rewardEstimateForTx(tx)
     if (reward) tx.rewardEstimate = reward
@@ -5458,6 +5475,9 @@ Calc.getUsableMoney = function(wallets, state = null) {
     const beforeRecIds = new Set((S.recurring || []).map(r => r.id))
     const isEdit = S.txMode === 'edit' && !!S.editingTxId
     const draft = { ...S.tx, amount:Number(S.tx.amount || 0) }
+    const externalCapture = typeof normalizeShortcutExternalCapture === 'function'
+      ? normalizeShortcutExternalCapture(draft.externalCapture)
+      : undefined
     const modeBefore = S.txMode
     const resetAfterSaveChrome = () => {
       try { document.activeElement?.blur?.() } catch (_) {}
@@ -5475,6 +5495,19 @@ Calc.getUsableMoney = function(wallets, state = null) {
     try {
       const err = App.validateTransactionDraft(draft, { isEdit, editingTxId: S.editingTxId })
       if (err) { toast(err, 'error'); return false }
+      if (externalCapture && (draft.isRecurring || draft.isInstallment)) {
+        toast('รายการจาก Shortcut ต้องบันทึกเป็นรายการเดียว ไม่รองรับรายการประจำหรือผ่อนหลายงวด', 'error')
+        return false
+      }
+      if (externalCapture && !isEdit) {
+        const existingCapture = (S.transactions || []).find(tx =>
+          tx.id !== S.editingTxId && tx.externalCapture?.captureId === externalCapture.captureId,
+        )
+        if (existingCapture) {
+          toast('รายการจาก Shortcut นี้ถูกบันทึกแล้ว', 'warn')
+          return false
+        }
+      }
       if (draft.type === 'income' && draft.reimbursesSharedExpenseTxId) {
         const parentSettlement = App.getSharedReceivableForTx?.(draft.reimbursesSharedExpenseTxId)
         const currentEditingAmount = isEdit
@@ -5543,7 +5576,7 @@ Calc.getUsableMoney = function(wallets, state = null) {
         return true
       }
 
-      const tx = cleanTxFromDraft(isEdit ? S.editingTxId : Calc.genId())
+      const tx = cleanTxFromDraft(isEdit ? S.editingTxId : (externalCapture ? `shortcut:${externalCapture.captureId}` : Calc.genId()))
       const previousTx = isEdit ? (S.transactions || []).find(t => t.id === S.editingTxId) : null
       if (isEdit) {
         const idx = S.transactions.findIndex(t => t.id === S.editingTxId)
@@ -23946,6 +23979,7 @@ window.MTScreenHooks?.install?.(App, {
   transactions: 'renderTransactions',
   transactionList: 'renderTransactionsList',
   transactionSave: 'saveTx',
+  transactionClose: 'closeAddTx',
   more: 'renderMore',
   addTransactionDetail: '_renderAddTxDetail',
 })
