@@ -112,6 +112,33 @@ Deno.test('server parser selects the latest compact UOB notification block', asy
   equal(result.merchant, 'NEW MERCHANT')
 })
 
+Deno.test('server parser accepts compact SCB and LINE Wallet notification previews', async () => {
+  const scb = await parseRawShortcutCapture({
+    raw_text: [
+      'SCB Connect',
+      'รายการเงินออก',
+      '-80.00 บาท',
+      'จากบัญชี THANAPHORN U. X-4078',
+      'เข้าบัญชี MBR9',
+    ].join('\n'),
+    capture_method: 'line_notification',
+    captured_at: '2026-10-05T09:01:00+07:00',
+  })
+  equal(scb.source, 'scb_connect')
+  equal(scb.amount, '80.00')
+  equal(scb.merchant, 'MBR9')
+  equal(scb.account_last4, '4078')
+
+  const line = await parseRawShortcutCapture({
+    raw_text: 'LINE Pay Purchase ฿45.00\nMerchant: Bakery',
+    capture_method: 'line_notification',
+    captured_at: '2026-10-05T09:01:00+07:00',
+  })
+  equal(line.source, 'line_wallet')
+  equal(line.amount, '45.00')
+  equal(line.merchant, 'Bakery')
+})
+
 Deno.test('notification and screen raw captures share a dedupe key', async () => {
   const text = [
     'รายการเงินออก -80.00 บาท',

@@ -16,12 +16,15 @@ const FULL_BLOCK_PATTERNS = [
   /LINE Pay Purchase[\s\S]*?Balance:\s*(?:THB\s*)?[\d,]+(?:\.\d{1,2})?/giu,
 ]
 
-// LINE may deliver only the notification preview, which often omits the
-// available-credit/date suffix present in the full UOB screen. These relaxed
-// patterns are deliberately enabled only for line_notification captures.
-const COMPACT_UOB_NOTIFICATION_PATTERNS = [
-  /มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?จำนวน\s*[\d,]+(?:\.\d{1,2})?\s*THB[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent)|$)/giu,
-  /You have spent[\s\S]*?THB\s*[\d,]+(?:\.\d{1,2})?[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent)|$)/giu,
+// LINE may deliver only a notification preview, which often omits the
+// available-credit/balance/date suffix present in the full bank screen. These
+// relaxed patterns are deliberately enabled only for line_notification
+// captures and stop at the next transaction anchor so the latest block wins.
+const COMPACT_NOTIFICATION_PATTERNS = [
+  /มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?จำนวน\s*[\d,]+(?:\.\d{1,2})?\s*THB[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
+  /You have spent[\s\S]*?THB\s*[\d,]+(?:\.\d{1,2})?[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
+  /รายการเงิน(?:ออก|เข้า)\s*-?[\d,]+(?:\.\d{1,2})?\s*บาท[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
+  /LINE Pay Purchase\s*(?:฿|THB\s*)?[\d,]+(?:\.\d{1,2})?[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
 ]
 
 function invalid(): never {
@@ -38,7 +41,7 @@ function normalizeForParsing(text: string): string {
 
 function latestBlock(text: string, captureMethod: string): string | null {
   const patterns = captureMethod === 'line_notification'
-    ? [...COMPACT_UOB_NOTIFICATION_PATTERNS, ...FULL_BLOCK_PATTERNS]
+    ? [...COMPACT_NOTIFICATION_PATTERNS, ...FULL_BLOCK_PATTERNS]
     : FULL_BLOCK_PATTERNS
   const matches = patterns.flatMap(pattern => [...text.matchAll(pattern)].map(match => ({ index: match.index ?? -1, text: match[0] })))
   return matches.sort((left, right) => left.index - right.index).at(-1)?.text ?? null
