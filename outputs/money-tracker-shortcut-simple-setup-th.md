@@ -42,7 +42,7 @@ Header: Authorization = Bearer <device token>
 
 1. เลือก trigger `Notification` และ App = `LINE`
 2. เริ่มต้นใช้ filter กว้าง เช่น `UOB` หรือไม่ใส่ filter เพื่อไม่ให้ตัดแจ้งเตือนทิ้งก่อนทดสอบ
-3. เพิ่ม action `Run Shortcut` → `Money Tracker Capture`
+3. เพิ่ม action `Run Shortcut` → ชื่อ Shortcut ที่ติดตั้งไว้ (ชุดนี้ใช้ `Money Tracker - Notification Inbox`; ถ้าสร้างตามคู่มือเดิมใช้ `Money Tracker Capture`)
 4. ในช่องรับ Input ให้เลือก Magic Variable `Notification`
 5. เปิด `Ask Before Running` ไว้ก่อนเพื่อยืนยันว่า Automation ถูกเรียกจริง
 6. ปิด `Ask Before Running` ได้หลังจากทดสอบผ่านแล้ว
@@ -53,7 +53,7 @@ Header: Authorization = Bearer <device token>
 
 ## 3. ใช้จับจากหน้าจอ
 
-เปิดหน้า UOB, SCB Connect หรือ LINE Wallet แล้วรัน `Money Tracker Capture` จากแอป Shortcuts, Action Button หรือ Back Tap
+เปิดหน้า UOB, SCB Connect หรือ LINE Wallet แล้วรัน Shortcut ชื่อเดียวกับที่ตั้งไว้จากแอป Shortcuts, Action Button หรือ Back Tap
 
 เมื่อไม่มี Shortcut Input ระบบจะใช้ `Get What's On Screen` เอง และเลือกธุรกรรมล่าสุดบนหน้าจอ
 
