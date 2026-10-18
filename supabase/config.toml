@@ -1,0 +1,7 @@
+project_id = "money-tracker"
+
+[functions.manage-shortcut-tokens]
+verify_jwt = true
+
+[functions.shortcut-inbox]
+verify_jwt = true
