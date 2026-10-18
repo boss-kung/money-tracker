@@ -45,6 +45,10 @@ function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
+function byteaHex(value: Uint8Array): string {
+  return `\\x${Array.from(value, byte => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
 function parseLabel(value: unknown): string {
   if (typeof value !== 'string') throw new TokenRequestError(400, 'invalid_label')
   const label = value.normalize('NFKC').trim()
@@ -89,7 +93,7 @@ async function createToken(supabase: AdminClientLike, userId: string, label: str
     p_user_id: userId,
     p_token_id: generated.tokenId,
     p_label: label,
-    p_secret_verifier: verifier,
+    p_secret_verifier: byteaHex(verifier),
     p_secret_prefix: generated.secretPrefix,
   })
   if (error) mapCreateError(error)

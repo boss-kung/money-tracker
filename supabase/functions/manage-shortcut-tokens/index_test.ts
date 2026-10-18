@@ -112,7 +112,7 @@ Deno.test('create trims a safe label and returns the plaintext token once', asyn
   equal(response.status, 201)
   equal(await json(response), { id: token.tokenId, label: 'My iPhone', token: token.token })
   equal(db.calls.find(call => call.method === 'rpc:mt_shortcut_create_token')?.args, {
-    p_user_id: 'user-1', p_token_id: token.tokenId, p_label: 'My iPhone', p_secret_verifier: new TextEncoder().encode(`${token.secret}:${'pepper'.repeat(4)}`), p_secret_prefix: 'ssssssss',
+    p_user_id: 'user-1', p_token_id: token.tokenId, p_label: 'My iPhone', p_secret_verifier: '\\x' + Array.from(new TextEncoder().encode(`${token.secret}:${'pepper'.repeat(4)}`), byte => byte.toString(16).padStart(2, '0')).join(''), p_secret_prefix: 'ssssssss',
   })
 })
 

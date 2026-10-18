@@ -13,6 +13,7 @@
   const claims = new Map()
   let activeCaptureId = ''
   let loaded = false
+  let pendingCount = 0
   let inboxView = 'pending'
   let inboxError = ''
   let tokenResult = null
@@ -83,10 +84,9 @@
     if (!userId) return
     try { root.localStorage?.setItem(`${ACK_PREFIX}${userId}`, JSON.stringify(queue)) } catch (_) {}
   }
-  function enqueue(job) {
-    const scope = authSnapshot()
-    if (!scope.userId) return
-    writeQueue(scope.userId, core.mergeAckJob(readQueue(scope.userId), job))
+  function enqueue(job, userId = authSnapshot().userId) {
+    if (!userId) return
+    writeQueue(userId, core.mergeAckJob(readQueue(userId), job))
   }
   function clientDeviceId() {
     try {
@@ -116,6 +116,7 @@
     ensureScope(scope)
     summaries.clear()
     for (const item of Array.isArray(result.items) ? result.items : []) summaries.set(String(item.capture_id), safeSummary(item))
+    if (selectedView === 'pending') pendingCount = Number.isFinite(Number(result.count)) ? Number(result.count) : summaries.size
     loaded = true
     inboxError = ''
     updateInboxBadge()
@@ -143,11 +144,12 @@
   async function dismiss(id) {
     const capture = claims.get(String(id))
     const result = await request('shortcut-inbox', '/dismiss', { method: 'POST', body: { capture_id: String(id), ...(capture?.claim_secret ? { claim_secret: capture.claim_secret } : {}) } })
-    claims.delete(String(id)); removeSummary(id)
+    claims.delete(String(id)); removeSummary(id); pendingCount = Math.max(0, pendingCount - 1); updateInboxBadge()
     return result
   }
   async function restore(id) {
     const result = await request('shortcut-inbox', '/restore', { method: 'POST', body: { capture_id: String(id) } })
+    pendingCount += 1; updateInboxBadge()
     return result
   }
   async function listTokens() { return request('manage-shortcut-tokens', '') }
@@ -158,10 +160,13 @@
     const transactionId = core.transactionId(capture.captureId)
     try {
       const result = await request('shortcut-inbox', '/consume', { method: 'POST', body: { capture_id: capture.captureId, claim_secret: capture.claim_secret, transaction_id: transactionId } }, scope)
-      claims.delete(capture.captureId); removeSummary(capture.captureId); if (activeCaptureId === capture.captureId) activeCaptureId = ''
+      claims.delete(capture.captureId); removeSummary(capture.captureId); pendingCount = Math.max(0, pendingCount - 1); updateInboxBadge(); if (activeCaptureId === capture.captureId) activeCaptureId = ''
       return result
     } catch (error) {
-      if (error.retryable) enqueue(core.makeAckJob(capture.captureId, transactionId, capture.capture?.dedupe_version, capture.capture?.dedupe_key, new Date().toISOString()))
+      if (error.retryable || error.code === 'capture_claimed') {
+        ensureScope(scope)
+        enqueue(core.makeAckJob(capture.captureId, transactionId, capture.capture?.dedupe_version, capture.capture?.dedupe_key, new Date().toISOString()), scope.userId)
+      }
       throw error
     }
   }
@@ -176,7 +181,7 @@
         await request('shortcut-inbox', '/ack', { method: 'POST', body: { capture_id: job.captureId } }, scope)
         queue = queue.filter(item => item.captureId !== job.captureId)
       } catch (error) {
-        if (!error.retryable) queue = queue.filter(item => item.captureId !== job.captureId)
+        if (!error.retryable && error.code !== 'capture_claimed') queue = queue.filter(item => item.captureId !== job.captureId)
         else queue = core.mergeAckJob(queue, { ...job, attempts: Number(job.attempts || 0) + 1, nextAttemptAt: new Date().toISOString() })
       }
     }
@@ -194,7 +199,7 @@
     })
     root.S.txMode = 'add'
     root.S.editingTxId = null
-    root.S.tx = { ...(root.S.tx || {}), ...mapped.draft, externalCapture: { provider: payload.source, captureId: String(id), dedupeVersion: payload.dedupe_version, dedupeKey: payload.dedupe_key } }
+    root.S.tx = { ...(root.S.tx || {}), ...mapped.draft, externalCapture: { provider: 'ios_shortcut', captureId: String(id), dedupeVersion: payload.dedupe_version, dedupeKey: payload.dedupe_key } }
     activeCaptureId = String(id)
     root.App?.openOverlay?.('overlay-add-tx')
     root.App?._renderAddTxDetail?.()
@@ -203,18 +208,20 @@
 
   function onTransactionSave(context) {
     if (context?.result !== true || !activeCaptureId) return undefined
-    const capture = claims.get(activeCaptureId)
+    const captureId = activeCaptureId
+    const capture = claims.get(captureId)
     if (!capture) return undefined
-    const type = capture.capture?.direction === 'credit' ? 'income' : 'expense'
-    if (['expense', 'income'].includes(type) && capture.capture) {
+    const savedType = root.S?.tx?.type
+    activeCaptureId = ''
+    if (['expense', 'income'].includes(savedType) && capture.capture) {
       const mappedWallet = root.S?.tx?.walletId
-      const key = core.aliasKey({ ...capture.capture, direction: type === 'income' ? 'credit' : 'debit' })
+      const key = core.aliasKey({ ...capture.capture, direction: savedType === 'income' ? 'credit' : 'debit' })
       if (key && mappedWallet) {
         root.S.wallets = core.rememberWalletAlias(root.S.wallets || [], mappedWallet, key)
         try { root.persist?.('shortcut.capture.alias', { dirtyKeys: ['wallets'] }) } catch (_) {}
       }
     }
-    const promise = acknowledge(capture).catch(error => {
+    const promise = acknowledge({ ...capture, captureId }).catch(error => {
       if (error.code !== 'AUTH_SCOPE_CHANGED') toast('บันทึกแล้ว แต่รอเชื่อมต่อ Inbox เพื่อยืนยัน', 'warn')
       return null
     })
@@ -340,7 +347,7 @@
     const doc = root.document
     const screen = doc?.querySelector?.('.shortcut-token-screen')
     if (!screen) return
-    screen.querySelector('[data-shortcut-token-action="close"]')?.addEventListener('click', () => root.App?.closeSubScreen?.())
+    screen.querySelector('[data-shortcut-token-action="close"]')?.addEventListener('click', () => { tokenResult = null; root.App?.closeSubScreen?.() })
     screen.querySelector('[data-shortcut-token-form]')?.addEventListener('submit', async event => {
       event.preventDefault()
       const label = screen.querySelector('#shortcut-token-label')?.value || ''
@@ -370,7 +377,7 @@
 
   function updateInboxBadge() {
     const badge = root.document?.querySelector?.('.shortcut-inbox-badge')
-    if (badge) { const count = summaries.size; badge.textContent = count > 99 ? '99+' : String(count); badge.hidden = count < 1 }
+    if (badge) { const count = pendingCount; badge.textContent = count > 99 ? '99+' : String(count); badge.hidden = count < 1 }
   }
 
   function injectTransactionsInbox() {
@@ -422,7 +429,7 @@
   root.MTScreenHooks?.register?.('transactions', 'shortcut-capture.inbox-button', injectTransactionsInbox, { priority: 200 })
   root.MTScreenHooks?.register?.('more', 'shortcut-capture.token-settings', injectTokenSettings, { priority: 200 })
   root.MTScreenHooks?.register?.('addTransactionDetail', 'shortcut-capture.review-disclosure', injectReviewDisclosure, { priority: 200 })
-  root.addEventListener?.('mt:auth-state-changed', () => { summaries.clear(); claims.clear(); activeCaptureId = ''; loaded = false })
+  root.addEventListener?.('mt:auth-state-changed', () => { summaries.clear(); claims.clear(); activeCaptureId = ''; pendingCount = 0; tokenResult = null; loaded = false })
   root.addEventListener?.('online', () => { retryAcknowledgements().catch(() => {}) })
   root.addEventListener?.('pageshow', () => { refresh().catch(() => {}); retryAcknowledgements().catch(() => {}) })
   root.document?.addEventListener?.('visibilitychange', () => { if (root.document.visibilityState === 'visible') { refresh().catch(() => {}); retryAcknowledgements().catch(() => {}) } })
