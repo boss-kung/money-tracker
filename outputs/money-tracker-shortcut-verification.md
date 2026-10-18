@@ -8,20 +8,20 @@
 
 - The imported Notification Shortcut contains actions for reading input, building the capture envelope, posting it, and showing the response; the `.shortcut` file does **not** install an iPhone Notification Automation.
 - The required device-local Automation must pass the `Notification` magic variable into `Money Tracker - Notification Inbox`.
-- A UOB LINE preview that omits the full available-credit line is currently rejected by the server block matcher; the compact-notification parser change is tracked separately from the device trigger fix.
+- Before this recovery run, a UOB LINE preview that omitted the full available-credit line was rejected by the server block matcher; the compact-notification parser now accepts that notification-only shape while keeping full-screen parsing strict.
 
 ## Recovery run — 2026-10-18
 
 - Compact UOB Thai/English notification parsing: **ผ่าน** — `deno test supabase/functions/_shared/shortcut_capture_parser_test.ts` → 6/6.
 - Edge Function, crypto, capture, and Inbox contract tests: **ผ่าน** — Deno suite → 30/30.
-- Money Tracker Shortcut Inbox client/security/transaction tests: **ผ่าน** — Node suite → 23/23.
+- Money Tracker Shortcut Inbox client/security/transaction tests: **ผ่าน** — targeted Node suite → 23/23; full repository Node suite → 513/513.
 - Local database migration gate: **ยังตรวจไม่ได้** — local Postgres `127.0.0.1:54322` ไม่พร้อมใน environment นี้.
 - Live Supabase `202 queued`/duplicate smoke: **ยังไม่รัน** — ต้องทำจาก environment ที่มี network และ Token ทดสอบ; ยังไม่ส่งข้อมูลจริงจาก session นี้.
 
 | รายการ | ผล | หลักฐาน/ขอบเขต |
 |---|---|---|
-| Worktree แยก | ผ่าน | `/Users/bosskung/.codex/worktrees/money-tracker-ios-shortcut/Money Tracker` จาก `origin/main` |
-| Repository regression tests | ผ่าน | `node --test tests/*.test.js` → 474/474 |
+| Worktree แยก | ผ่าน | `/Users/bosskung/.codex/worktrees/shortcut-notification-fix/Money Tracker` จาก `origin/main` |
+| Repository regression tests | ผ่าน | `node --test tests/*.test.js` → 513/513 |
 | Fixture JSON 8 input + 1 expected file | ผ่าน | JSON parser อ่านได้ครบ; ครอบคลุม SCB credit และ mixed-source latest block เพิ่มเติม |
 | Native draft `Money Tracker Parser` ใน Shortcuts | สร้างได้แต่ยังไม่พร้อม Production | มี input dictionary, regex block, Last Item, amount/merchant/last4 extraction, payload preview; ยังไม่ผ่าน contract ครบ |
 | Native parser fixture run | ยืนยันว่า draft ไม่ครบ | ได้ `work/results/scb-single-output.json` หนึ่งครั้ง แต่ `transaction_datetime`/`relevant_text` ว่างและไม่มี `dedupe_key`; การรันซ้ำค้างที่ interactive `Quick Look` จึงยกเลิก |
