@@ -5,3 +5,6 @@ verify_jwt = true
 
 [functions.shortcut-inbox]
 verify_jwt = true
+
+[functions.ingest-shortcut-capture]
+verify_jwt = false
