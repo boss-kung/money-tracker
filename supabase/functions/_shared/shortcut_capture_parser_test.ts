@@ -96,6 +96,14 @@ Deno.test('server parser still rejects compact UOB text without a positive amoun
     }),
     'invalid_capture',
   )
+  await rejectsCode(
+    () => parseRawShortcutCapture({
+      raw_text: 'มีการใช้บัตร UOB-1234 ที่ร้าน CENTRAL ONLINE วงเงินคงเหลือใช้ได้ 3,000.00 THB',
+      capture_method: 'line_notification',
+      captured_at: '2026-10-05T09:01:00+07:00',
+    }),
+    'invalid_capture',
+  )
 })
 
 Deno.test('server parser selects the latest compact UOB notification block', async () => {
@@ -137,6 +145,45 @@ Deno.test('server parser accepts compact SCB and LINE Wallet notification previe
   equal(line.source, 'line_wallet')
   equal(line.amount, '45.00')
   equal(line.merchant, 'Bakery')
+})
+
+Deno.test('server parser accepts the observed UOB Thai notification preview', async () => {
+  const result = await parseRawShortcutCapture({
+    raw_text: [
+      'UOB Thai',
+      'มีการใช้บัตร UOB-0386 @TMN 7-11 104.00 THB วันที่ 18/10 วงเงินคงเหลือใช้ได้ 82,941.00 THB',
+      'You have spent THB 104.00 using UOB card (ending UOB-0386) at @TMN 7-11 ...',
+    ].join('\n'),
+    capture_method: 'line_notification',
+    captured_at: '2026-10-18T22:48:41+07:00',
+  })
+  equal(result.source, 'uob_thai')
+  equal(result.amount, '104.00')
+  equal(result.card_last4, '0386')
+  equal(result.merchant, '@TMN 7-11')
+})
+
+Deno.test('server parser accepts a UOB Thai-only notification preview without จำนวน', async () => {
+  const result = await parseRawShortcutCapture({
+    raw_text: 'UOB Thai\nมีการใช้บัตร UOB-0386 @TMN 7-11 104.00 THB วันที่ 18/10 วงเงินคงเหลือใช้ได้ 82,941.00 THB',
+    capture_method: 'line_notification',
+    captured_at: '2026-10-18T22:48:41+07:00',
+  })
+  equal(result.source, 'uob_thai')
+  equal(result.amount, '104.00')
+  equal(result.card_last4, '0386')
+  equal(result.merchant, '@TMN 7-11')
+})
+
+Deno.test('server parser accepts LINE Wallet spacing after the baht symbol', async () => {
+  const result = await parseRawShortcutCapture({
+    raw_text: 'LINE Wallet\nLINE Pay Purchase ฿ 49.00 Payment complete. Merchant:\nMcDonald',
+    capture_method: 'line_notification',
+    captured_at: '2026-10-18T22:48:27+07:00',
+  })
+  equal(result.source, 'line_wallet')
+  equal(result.amount, '49.00')
+  equal(result.merchant, 'McDonald')
 })
 
 Deno.test('server parser preserves SCB credit notification date with an at-sign time', async () => {

@@ -21,10 +21,10 @@ const FULL_BLOCK_PATTERNS = [
 // relaxed patterns are deliberately enabled only for line_notification
 // captures and stop at the next transaction anchor so the latest block wins.
 const COMPACT_NOTIFICATION_PATTERNS = [
-  /มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?จำนวน\s*[\d,]+(?:\.\d{1,2})?\s*THB[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
+  /มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?(?:จำนวน\s*)?[\d,]+(?:\.\d{1,2})?\s*THB[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
   /You have spent[\s\S]*?THB\s*[\d,]+(?:\.\d{1,2})?[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
   /รายการเงิน(?:ออก|เข้า)\s*-?[\d,]+(?:\.\d{1,2})?\s*บาท[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
-  /LINE Pay Purchase\s*(?:฿|THB\s*)?[\d,]+(?:\.\d{1,2})?[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
+  /LINE Pay Purchase\s*(?:฿\s*|THB\s*)?[\d,]+(?:\.\d{1,2})?[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
 ]
 
 function invalid(): never {
@@ -48,7 +48,7 @@ function latestBlock(text: string, captureMethod: string): string | null {
 }
 
 function clean(value: string | undefined): string | null {
-  return value?.trim().replace(/[ \t]+/g, ' ') || null
+  return value?.trim().replace(/[ \t]+/g, ' ').replace(/\s*(?:…|\.\.\.)\s*$/u, '') || null
 }
 
 function amount(value: string | undefined): string | null {
@@ -110,9 +110,12 @@ export async function parseRawShortcutCapture(input: unknown, now = new Date().t
     const thai = /มีการใช้บัตร/u.test(block)
     payload.source = 'uob_thai'
     payload.bank = 'UOB'
-    payload.amount = amount(block.match(thai ? /จำนวน\s*([\d,]+(?:\.\d{1,2})?)\s*THB/u : /spent\s+THB\s*([\d,]+(?:\.\d{1,2})?)/iu)?.[1]) || ''
-    payload.merchant = clean(block.match(thai ? /ที่ร้าน\s*([^\n\r]+)/u : /\sat\s+(.+?)(?:\s+on\s+\d{2}\/|[\n\r]|$)/iu)?.[1])
-    payload.card_last4 = block.match(thai ? /UOB-(\d{4})/u : /ending\s+(\d{4})/iu)?.[1] ?? null
+    const transactionText = thai ? block.split(/วงเงินคงเหลือใช้ได้/iu, 1)[0] : block
+    payload.amount = amount(transactionText.match(thai ? /(?:จำนวน\s*)?([\d,]+(?:\.\d{1,2})?)\s*THB/u : /spent\s+THB\s*([\d,]+(?:\.\d{1,2})?)/iu)?.[1]) || ''
+    const thaiMerchant = block.match(/ที่ร้าน\s*([^\n\r]+)/u)?.[1]
+      ?? block.match(/UOB-\d{4}\s+(?:จำนวน\s*)?(.+?)\s+[\d,]+(?:\.\d{1,2})?\s*THB/iu)?.[1]
+    payload.merchant = clean(thai ? thaiMerchant : block.match(/\sat\s+(.+?)(?:\s+on\s+\d{2}\/|[\n\r]|$)/iu)?.[1])
+    payload.card_last4 = block.match(thai ? /UOB-(\d{4})/u : /ending\s+(?:UOB-)?(\d{4})/iu)?.[1] ?? null
   } else if (/รายการเงิน(?:ออก|เข้า)/u.test(block)) {
     const money = block.match(/รายการเงิน(ออก|เข้า)\s*-?([\d,]+(?:\.\d{1,2})?)\s*บาท/u)
     const credit = money?.[1] === 'เข้า'
@@ -124,7 +127,7 @@ export async function parseRawShortcutCapture(input: unknown, now = new Date().t
     payload.account_last4 = block.match(credit ? /เข้าบัญชี[^\n\r]*X-(\d{4})/u : /จากบัญชี[^\n\r]*X-(\d{4})/u)?.[1] ?? null
   } else if (/LINE Pay Purchase/iu.test(block)) {
     payload.source = 'line_wallet'
-    payload.amount = amount(block.match(/LINE Pay Purchase\s*(?:฿|THB\s*)?([\d,]+(?:\.\d{1,2})?)/iu)?.[1]) || ''
+    payload.amount = amount(block.match(/LINE Pay Purchase\s*(?:฿\s*|THB\s*)?([\d,]+(?:\.\d{1,2})?)/iu)?.[1]) || ''
     payload.merchant = clean(block.match(/Merchant:\s*([^\n\r]+)/iu)?.[1])
   }
 
