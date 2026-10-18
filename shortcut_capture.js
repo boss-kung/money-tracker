@@ -266,6 +266,7 @@
       ? `<div class="shortcut-inbox-state shortcut-inbox-error" role="alert">เชื่อมต่อ Inbox ไม่สำเร็จ · ${escapeHtml(error.message || error.code || 'ลองใหม่อีกครั้ง')}</div>`
       : rows || `<div class="shortcut-inbox-state">${dismissed ? 'ยังไม่มีรายการที่ซ่อน' : (state.loaded ? 'ยังไม่มีรายการรอตรวจสอบ' : 'กำลังโหลดรายการ…')}</div>`
     return `<section class="shortcut-inbox-screen" aria-label="Shortcut Inbox">
+      <div class="sub-header shortcut-inbox-sub-header"><button type="button" class="btn-icon" data-shortcut-inbox-action="close" aria-label="ย้อนกลับ">←</button><h2>รายการจาก Shortcut</h2><div></div></div>
       <div class="shortcut-inbox-header"><div><h2>รายการจาก Shortcut</h2><p>${dismissed ? 'รายการที่ซ่อนไว้ กู้คืนกลับมารีวิวได้' : 'ตรวจสอบและแก้ไขก่อนกดบันทึกจริง'}</p></div>
         <div class="shortcut-inbox-header-actions"><button type="button" class="shortcut-inbox-nav" data-shortcut-inbox-action="toggle-view">${dismissed ? 'กลับ Inbox' : 'รายการที่ซ่อน'}</button><button type="button" class="shortcut-inbox-nav" data-shortcut-inbox-action="refresh">รีเฟรช</button></div>
       </div>
@@ -293,7 +294,9 @@
         const action = button.dataset.shortcutInboxAction
         const id = button.dataset.shortcutInboxId
         try {
-          if (action === 'open') {
+          if (action === 'close') {
+            root.App?.closeSubScreen?.()
+          } else if (action === 'open') {
             await openDraft(id)
             injectReviewDisclosure()
           } else if (action === 'dismiss') {
@@ -326,7 +329,7 @@
     const tokens = Array.isArray(result?.tokens) ? result.tokens : []
     const rows = tokens.map(item => `<div class="shortcut-token-row"><div><strong>${escapeHtml(item.label || 'iOS Shortcut')}</strong><small>${escapeHtml(item.secret_prefix || '')} · ${item.revoked_at ? 'ถูกยกเลิก' : 'ใช้งานอยู่'}</small></div>${item.revoked_at ? '' : `<button type="button" class="shortcut-token-revoke" data-shortcut-token-id="${escapeHtml(item.id)}">ยกเลิก</button>`}</div>`).join('')
     const issued = tokenResult?.token ? `<div class="shortcut-token-issued" role="status"><strong>คัดลอก Token นี้ตอนนี้</strong><p>Token จะแสดงครั้งเดียวและจะไม่สามารถดูซ้ำได้</p><code>${escapeHtml(tokenResult.token)}</code><button type="button" class="btn btn-primary shortcut-token-copy" data-shortcut-token-copy="${escapeHtml(tokenResult.token)}">คัดลอก Token</button></div>` : ''
-    return `<section class="shortcut-token-screen"><div class="shortcut-inbox-header"><div><h2>เชื่อมต่อ iOS Shortcut</h2><p>สร้าง Token สำหรับส่งแจ้งเตือนเข้า Money Tracker</p></div></div>
+    return `<section class="shortcut-token-screen"><div class="sub-header shortcut-token-sub-header"><button type="button" class="btn-icon" data-shortcut-token-action="close" aria-label="ย้อนกลับ">←</button><h2>เชื่อมต่อ iOS Shortcut</h2><div></div></div><div class="shortcut-inbox-header"><div><h2>เชื่อมต่อ iOS Shortcut</h2><p>สร้าง Token สำหรับส่งแจ้งเตือนเข้า Money Tracker</p></div></div>
       ${issue ? `<div class="shortcut-inbox-state shortcut-inbox-error" role="alert">${escapeHtml(issue.message || issue.code || 'โหลด Token ไม่สำเร็จ')}</div>` : ''}
       ${issued}<form class="shortcut-token-form" data-shortcut-token-form><label for="shortcut-token-label">ชื่ออุปกรณ์หรือ Shortcut</label><div><input id="shortcut-token-label" class="form-input" maxlength="64" required placeholder="เช่น iPhone ส่วนตัว"><button type="submit" class="btn btn-primary">สร้าง Token</button></div></form>
       <div class="shortcut-token-list">${rows || '<div class="shortcut-inbox-state">ยังไม่มี Token</div>'}</div>
@@ -337,6 +340,7 @@
     const doc = root.document
     const screen = doc?.querySelector?.('.shortcut-token-screen')
     if (!screen) return
+    screen.querySelector('[data-shortcut-token-action="close"]')?.addEventListener('click', () => root.App?.closeSubScreen?.())
     screen.querySelector('[data-shortcut-token-form]')?.addEventListener('submit', async event => {
       event.preventDefault()
       const label = screen.querySelector('#shortcut-token-label')?.value || ''
