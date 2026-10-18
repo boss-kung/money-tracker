@@ -1,4 +1,37 @@
 const Calc = {
+  // Monetary values are persisted as decimal numbers for backwards
+  // compatibility, but every aggregate is normalized through integer satang.
+  // This prevents binary floating point drift (for example 0.1 + 0.2).
+  toMoneyCents(value) {
+    const number = Number(value)
+    if (!Number.isFinite(number)) return null
+    const cents = Math.round(number * 100)
+    return Number.isSafeInteger(cents) ? cents : null
+  },
+
+  fromMoneyCents(cents) {
+    return Number.isSafeInteger(Number(cents)) ? Number(cents) / 100 : 0
+  },
+
+  isSafeMoneyAmount(value) {
+    return Calc.toMoneyCents(value) !== null
+  },
+
+  roundMoney(value) {
+    const cents = Calc.toMoneyCents(value)
+    return cents === null ? 0 : Calc.fromMoneyCents(cents)
+  },
+
+  sumMoney(values) {
+    let cents = 0
+    for (const value of values || []) {
+      const next = Calc.toMoneyCents(value)
+      if (next === null || !Number.isSafeInteger(cents + next)) return 0
+      cents += next
+    }
+    return Calc.fromMoneyCents(cents)
+  },
+
   // ── Formatting ──────────────────────────────────────────────
   fmt(n) {
     const val = Math.abs(Number(n) || 0)
@@ -291,16 +324,30 @@ const Calc = {
     const cashNetCashflow = cashInflow - cashOutflow
     const savingsRate = income > 0 ? (netCashflow / income) * 100 : null
     return {
-      income: Math.round(income * 100) / 100,
-      expense: Math.round(expense * 100) / 100,
-      reimbursementInflow: Math.round(reimbursementInflow * 100) / 100,
-      transfer: Math.round(transfer * 100) / 100,
-      ccPayment: Math.round(ccPayment * 100) / 100,
-      bnplPayment: Math.round(bnplPayment * 100) / 100,
-      netCashflow: Math.round(netCashflow * 100) / 100,
-      cashNetCashflow: Math.round(cashNetCashflow * 100) / 100,
+      income: Calc.roundMoney(income),
+      expense: Calc.roundMoney(expense),
+      reimbursementInflow: Calc.roundMoney(reimbursementInflow),
+      transfer: Calc.roundMoney(transfer),
+      ccPayment: Calc.roundMoney(ccPayment),
+      bnplPayment: Calc.roundMoney(bnplPayment),
+      netCashflow: Calc.roundMoney(netCashflow),
+      cashNetCashflow: Calc.roundMoney(cashNetCashflow),
       savingsRate: savingsRate === null ? null : Math.round(savingsRate * 10) / 10,
     }
+  },
+
+  // Future scheduled rows are projections, not actuals. Consumers that need
+  // a forward-looking view should request this explicitly instead of changing
+  // the semantics of the posted-only monthly reporting contract.
+  getMonthlyScheduledTotals(transactions, month) {
+    const txns = (transactions || []).filter(t => String(t?.date || '').startsWith(month) && !Calc.isPostedTx(t))
+    let income = 0
+    let expense = 0
+    txns.forEach(t => {
+      if (t.type === 'income' && !Calc.isReimbursementTx(t)) income += Number(t.amount || 0)
+      else if (t.type === 'expense') expense += Calc.getExpenseLedgerAmount(t)
+    })
+    return { income:Calc.roundMoney(income), expense:Calc.roundMoney(expense), net:Calc.roundMoney(income - expense) }
   },
 
   getCategoryBreakdown(transactions, month, opts = {}) {
@@ -479,7 +526,7 @@ const Calc = {
   getMonthlyStats(transactions, month, loans = [], wallets = []) {
     // Only count posted transactions — future-scheduled items (installments, etc.)
     // must not inflate or deflate the reported income/expense for the month.
-    const txns = transactions.filter(t => t.date.startsWith(month) && Calc.isPostedTx(t))
+    const txns = (transactions || []).filter(t => String(t?.date || '').startsWith(month) && Calc.isPostedTx(t))
     let income = 0, expense = 0, reimbursementInflow = 0
     const byCategory = {}
 
@@ -495,22 +542,31 @@ const Calc = {
       }
     })
 
-    const net         = income - expense
-    const cashNet     = Calc.getMonthlyIncomeExpense(transactions, month, loans, wallets).cashNetCashflow
-    const savingsRate = income > 0 ? Math.max(0, (net / income) * 100) : 0
-    return { income, expense, reimbursementInflow, net, cashNet, savingsRate, byCategory }
+    const monthly = Calc.getMonthlyIncomeExpense(transactions, month, loans, wallets)
+    const byCategoryRounded = Object.fromEntries(Object.entries(byCategory).map(([id, amount]) => [id, Calc.roundMoney(amount)]))
+    return {
+      income: monthly.income,
+      expense: monthly.expense,
+      reimbursementInflow: monthly.reimbursementInflow,
+      net: monthly.netCashflow,
+      cashNet: monthly.cashNetCashflow,
+      savingsRate: monthly.savingsRate,
+      byCategory: byCategoryRounded,
+    }
   },
 
   getBudgetProgress(transactions, budgets, categories, month) {
     const txns = transactions.filter(t => t.date.startsWith(month) && t.type === 'expense' && Calc.isPostedTx(t))
     return budgets.map(b => {
-      const spent = txns
+      const spent = Calc.roundMoney(txns
         .filter(t => t.categoryId === b.categoryId)
-        .reduce((s, t) => s + Calc.getExpenseLedgerAmount(t), 0)
+        .reduce((s, t) => s + Calc.getExpenseLedgerAmount(t), 0))
       const cat   = categories.expense.find(c => c.id === b.categoryId)
-      const rawPct = b.monthlyLimit > 0 ? (spent / b.monthlyLimit) * 100 : 0
+      const limitCents = Calc.toMoneyCents(b.monthlyLimit)
+      const spentCents = Calc.toMoneyCents(spent)
+      const rawPct = limitCents > 0 && spentCents !== null ? (spentCents / limitCents) * 100 : 0
       const pct   = Math.min(rawPct, 100)  // สำหรับ CSS bar width (ไม่ overflow layout)
-      const over  = spent > b.monthlyLimit
+      const over  = limitCents !== null && spentCents !== null ? spentCents > limitCents : false
       return { ...b, spent, pct, rawPct, over, icon: cat?.icon || '📦', label: cat?.label || b.categoryId, color: cat?.color || '#6B7280' }
     }).filter(b => b.monthlyLimit > 0)
   },

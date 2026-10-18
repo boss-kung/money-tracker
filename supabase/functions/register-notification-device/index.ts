@@ -1,5 +1,6 @@
 import { adminClient, requestErrorBody, requestErrorStatus, requireAuthenticatedUserId, requireInstallOwnership } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
+import { ensureNotificationPreferenceDefaults } from '../_shared/notification_registration.ts'
 
 type WebPushSubscription = {
   endpoint: string
@@ -46,15 +47,12 @@ Deno.serve(async req => {
       .upsert(device, { onConflict: 'install_id' })
     if (error) throw error
 
-    await supabase
-      .from('mt_notification_preferences')
-      .upsert({
-        install_id: installId,
-        user_id: userId,
-        daily_expense_enabled: true,
-        timezone: device.timezone,
-        hide_amounts_in_notification: Boolean(body.hideAmounts),
-      }, { onConflict: 'install_id', ignoreDuplicates: false })
+    await ensureNotificationPreferenceDefaults(supabase, {
+      installId,
+      userId,
+      timezone: device.timezone,
+      hideAmounts: Boolean(body.hideAmounts),
+    })
 
     return jsonResponse({ ok: true }, 200, req)
   } catch (error) {

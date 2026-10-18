@@ -1,7 +1,7 @@
 # Money Tracker Performance Optimization Design
 
-**Date:** 2026-10-04  
-**Status:** Design for review  
+**Date:** 2026-10-04
+**Status:** Design for review
 **Scope:** app boot, page navigation, transaction save feedback, and durable-state work scheduling
 
 ## Goal

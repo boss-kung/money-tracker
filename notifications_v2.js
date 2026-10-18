@@ -957,7 +957,7 @@
         <div class="card card-pad">
           <div class="form-group">
             <label class="form-label">Trigger</label>
-            <select class="form-input" id="nr-trigger" onchange="App.changeNotificationRuleTrigger('${esc(rule.id)}', this.value)">
+            <select class="form-input" id="nr-trigger" onchange="App.changeNotificationRuleTrigger(${MTSafeRender.jsArg(rule.id)}, this.value)">
               <optgroup label="⏰ ตามเวลา">
                 <option value="daily_time"${selected('daily_time', rule.triggerType)}>ทุกวัน</option>
                 <option value="weekday_only_time"${selected('weekday_only_time', rule.triggerType)}>จันทร์–ศุกร์ เท่านั้น</option>

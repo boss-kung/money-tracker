@@ -1,5 +1,6 @@
 import { adminClient, requestErrorBody, requestErrorStatus, requireAuthenticatedUserId, requireInstallOwnership } from '../_shared/supabase.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
+import { replaceNotificationRules } from '../_shared/notification_rule_sync.ts'
 
 type CustomRule = {
   id?: string
@@ -115,20 +116,9 @@ Deno.serve(async req => {
 
     const supabase = adminClient()
     await requireInstallOwnership(supabase, installId, userId)
-    const { error: deleteError } = await supabase
-      .from('mt_notification_rules')
-      .delete()
-      .eq('install_id', installId)
-    if (deleteError) throw deleteError
+    const result = await replaceNotificationRules(supabase, { installId, userId, rows })
 
-    if (rows.length) {
-      const { error } = await supabase
-        .from('mt_notification_rules')
-        .insert(rows)
-      if (error) throw error
-    }
-
-    return jsonResponse({ ok: true, synced: rows.length }, 200, req)
+    return jsonResponse({ ok: true, synced: result.synced }, 200, req)
   } catch (error) {
     return jsonResponse(requestErrorBody(error), requestErrorStatus(error), req)
   }

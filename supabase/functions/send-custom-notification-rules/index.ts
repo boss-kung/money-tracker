@@ -7,7 +7,7 @@ import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 
 const WINDOW_MINUTES = 15
 
-type DeviceRow = { install_id: string; push_subscription: WebPushSubscription | null }
+type DeviceRow = { install_id: string; user_id: string; push_subscription: WebPushSubscription | null }
 type RuleRow = {
   install_id: string
   user_id: string
@@ -162,9 +162,10 @@ Deno.serve(async req => {
     const supabase = adminClient()
     const { data: devices, error: devicesError } = await supabase
       .from('mt_notification_devices')
-      .select('install_id, push_subscription')
+      .select('install_id, user_id, push_subscription')
       .eq('enabled', true)
       .eq('permission', 'granted')
+      .not('user_id', 'is', null)
     if (devicesError) throw devicesError
 
     const deviceRows = (devices || []) as DeviceRow[]
@@ -180,12 +181,14 @@ Deno.serve(async req => {
       .select('install_id, user_id, rule_id, title, body, route, action_label, trigger_type, trigger_config')
       .eq('enabled', true)
       .in('install_id', installIds)
+      .not('user_id', 'is', null)
     if (rulesError) throw rulesError
 
     const { data: snapshots, error: snapshotError } = await supabase
       .from('mt_notification_snapshots')
       .select('install_id, snapshot_date, today_tx_count, last_tx_date, upcoming_bills, credit_due, budget_alerts, recurring_due, privileges_expiring, last_exported_at')
       .in('install_id', installIds)
+      .not('user_id', 'is', null)
     if (snapshotError) throw snapshotError
 
     const devicesByInstallId = new Map<string, DeviceRow[]>()

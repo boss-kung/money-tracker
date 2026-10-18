@@ -1,4 +1,6 @@
 import { adminClient, requestErrorStatus, requireCronSecret } from '../_shared/supabase.ts'
+import { claimDailyNotification } from '../_shared/notification_daily_claim.ts'
+import { deliverClaimedNotification } from '../_shared/notification_delivery.ts'
 import { sendWebPush } from '../_shared/webpush.ts'
 import type { WebPushSubscription } from '../_shared/webpush.ts'
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
@@ -40,6 +42,7 @@ Deno.serve(async req => {
       .select('install_id, user_id, push_subscription, enabled, permission')
       .eq('enabled', true)
       .eq('permission', 'granted')
+      .not('user_id', 'is', null)
     if (error) throw error
 
     const deviceRows = (devices || []) as DeviceRow[]
@@ -65,6 +68,7 @@ Deno.serve(async req => {
         skipped++
         continue
       }
+      const pushSubscription = device.push_subscription
 
       const prefs = prefsByInstallId.get(installId)
       if (prefs?.daily_expense_enabled !== true) {
@@ -72,23 +76,32 @@ Deno.serve(async req => {
         continue
       }
 
-      const { data: existing } = await supabase
-        .from('mt_notification_logs')
-        .select('id, status')
-        .eq('install_id', installId)
-        .eq('notification_type', 'daily_expense')
-        .eq('dedupe_key', dedupeKey)
-        .maybeSingle()
-      if (existing?.status === 'sent') {
-        skipped++
-        continue
-      }
-
       const title = 'อย่าลืมจดรายจ่ายวันนี้'
       const body = 'เปิดแอปเพื่อบันทึกหรือทบทวนรายการของคุณ'
-
-      try {
-        await sendWebPush(device.push_subscription, {
+      const delivery = await deliverClaimedNotification({
+        logStore: {
+          claim: () => claimDailyNotification(supabase, {
+            installId,
+            userId: device.user_id,
+            dedupeKey,
+            title,
+            body,
+          }),
+          finish: async (token, status, errorMessage) => {
+            const { data, error: finishError } = await supabase
+              .from('mt_notification_logs')
+              .update({ status, error: errorMessage || null, sent_at: new Date().toISOString(), lease_until: null })
+              .eq('install_id', installId)
+              .eq('user_id', device.user_id)
+              .eq('notification_type', 'daily_expense')
+              .eq('dedupe_key', dedupeKey)
+              .eq('lease_token', token)
+              .select('id')
+            if (finishError) throw finishError
+            if (!data?.length) throw new Error('Daily notification claim was superseded')
+          },
+        },
+        transport: () => sendWebPush(pushSubscription, {
           title,
           body,
           icon: './assets/icon.svg',
@@ -99,34 +112,12 @@ Deno.serve(async req => {
             { action: 'addTx', title: 'เพิ่มรายจ่าย' },
             { action: 'open', title: 'เปิดแอป' },
           ],
-        })
-
-        await supabase.from('mt_notification_logs').upsert({
-          install_id: installId,
-          user_id: device.user_id,
-          notification_type: 'daily_expense',
-          dedupe_key: dedupeKey,
-          title,
-          body,
-          status: 'sent',
-          fcm_message_id: null,
-          error: null,
-        }, { onConflict: 'install_id,notification_type,dedupe_key' })
-        sent++
-      } catch (sendError) {
-        const message = sendError instanceof Error ? sendError.message : String(sendError)
-        failures.push({ installId, error: message })
-        await supabase.from('mt_notification_logs').upsert({
-          install_id: installId,
-          user_id: device.user_id,
-          notification_type: 'daily_expense',
-          dedupe_key: dedupeKey,
-          title,
-          body,
-          status: 'error',
-          error: message,
-        }, { onConflict: 'install_id,notification_type,dedupe_key' })
-      }
+        }),
+        isStillCurrent: async () => true,
+      })
+      if (delivery.sent) sent++
+      else if (delivery.reason === 'already-claimed') skipped++
+      else failures.push({ installId, error: delivery.reason })
     }
 
     return jsonResponse({ ok: true, date: today, sent, skipped, failures }, 200, req)

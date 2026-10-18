@@ -66,7 +66,7 @@
     const doneCount = [hasWallet, hasTx, reportVisited].filter(Boolean).length
     const pct       = Math.round(doneCount / 3 * 100)
 
-    function stepRow(done, emoji, label, action, disabled) {
+    function stepRow(done, emoji, label, actionKey, disabled) {
       if (done) {
         return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border)">
           <span style="font-size:16px;width:22px;text-align:center;color:var(--income)">✓</span>
@@ -76,7 +76,7 @@
       const btnStyle = disabled
         ? 'width:auto;flex-shrink:0;opacity:.35;cursor:not-allowed'
         : 'width:auto;flex-shrink:0'
-      const btnAttr  = disabled ? 'disabled' : `onclick="${esc(action)}"`
+      const btnAttr  = disabled ? 'disabled' : `data-ob-action="${esc(actionKey)}"`
       return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border)">
         <span style="font-size:16px;width:22px;text-align:center">${esc(emoji)}</span>
         <span style="flex:1;font-size:13px;color:var(--text)">${esc(label)}</span>
@@ -95,11 +95,19 @@
       <div style="height:4px;background:var(--border);border-radius:999px;overflow:hidden;margin-bottom:4px">
         <div style="height:100%;width:${pct}%;background:var(--primary);border-radius:999px;transition:width .4s"></div>
       </div>
-      ${stepRow(hasWallet, '👛', 'เพิ่มกระเป๋าเงิน', "App.showPage('wallets')", false)}
-      ${stepRow(hasTx,     '📝', 'บันทึกรายการแรก',  'App.openAddTx()',          !hasWallet)}
-      ${stepRow(reportVisited, '📊', 'ดูรายงานเดือนนี้', "App.showPage('reports')", !hasTx)}
+      ${stepRow(hasWallet, '👛', 'เพิ่มกระเป๋าเงิน', 'wallets', false)}
+      ${stepRow(hasTx,     '📝', 'บันทึกรายการแรก',  'first-tx', !hasWallet)}
+      ${stepRow(reportVisited, '📊', 'ดูรายงานเดือนนี้', 'reports', !hasTx)}
     `
     netCard.insertAdjacentElement('afterend', card)
+    card.querySelectorAll('[data-ob-action]').forEach(button => {
+      button.addEventListener('click', () => {
+        const action = button.dataset.obAction
+        if (action === 'wallets') App.showPage?.('wallets')
+        else if (action === 'first-tx') App.openAddTx?.()
+        else if (action === 'reports') App.showPage?.('reports')
+      })
+    })
   }, { priority: 100 })
 
   // ════════════════════════════════════════════════════════════

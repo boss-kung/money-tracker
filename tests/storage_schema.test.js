@@ -16,7 +16,16 @@ function fakeLocalStorage() {
 global.localStorage = fakeLocalStorage()
 const Storage = require('../storage_v2.js')
 
-test.beforeEach(() => { global.localStorage = fakeLocalStorage() })
+test.beforeEach(() => {
+  global.localStorage = fakeLocalStorage()
+  Storage.stateRevision = 0
+  Storage.isStale = false
+  Storage.lastConflict = null
+  Storage.lastSaveError = null
+  Storage.lastVerifyError = null
+  Storage._recoveryWriteAuthorized = false
+  Storage.hydrationStatus = { recoveryMode:false, corruptCollections:[], quarantinedAt:null, quarantineKey:'mt_corrupt_quarantine' }
+})
 
 test('Storage schema drives State save and hydration for every State collection', () => {
   const state = {}
@@ -66,10 +75,11 @@ test('saving unchanged collections avoids rewriting them while changed data pers
   const write = localStorage.setItem
   localStorage.setItem = (key, value) => { writes.push(key); write(key, value) }
   assert.equal(Storage.saveAll(state), true)
-  assert.deepEqual(writes, [])
+  assert.deepEqual(writes.filter(key => !['mt_state_lock', 'mt_state_meta'].includes(key)), [])
+  assert.equal(writes.filter(key => key === 'mt_state_meta').length, 1)
   state.transactions.push({ id:'new', amount:10 })
   assert.equal(Storage.saveAll(state), true)
-  assert.deepEqual(writes, ['mt_transactions'])
+  assert.deepEqual(writes.filter(key => !['mt_state_lock', 'mt_state_meta'].includes(key)), ['mt_transactions'])
   assert.deepEqual(Storage.loadCollection('transactions'), state.transactions)
 })
 
@@ -327,4 +337,24 @@ test('backup normalization keeps Split Bill collections object-shaped', () => {
   assert.deepEqual(normalized.splitBills, [{ id: 'bill-1', title: 'Dinner' }])
   assert.deepEqual(normalized.splitPeople, [{ id: 'person-1', name: 'A' }])
   assert.deepEqual(normalized.splitBillDraft.items, [{ id: 'item-1', price: 10 }])
+})
+
+test('backup normalization drops hostile IDs and executable-looking fields', () => {
+  const hostile = "x');globalThis.pwned=true;//"
+  const normalized = Storage.normalizeBackupPayload({
+    transactions: [
+      { id: hostile, amount: 10, action: 'globalThis.pwned=true', onclick: 'alert(1)' },
+      { id: 'tx-safe', amount: 20, handler: 'run()', code: 'evil()' },
+    ],
+    wallets: [{ id: 'wallet-safe', name: 'Cash', open: 'javascript:alert(1)' }],
+    categories: {
+      expense: [{ id: hostile, label: 'bad' }, { id: 'cat-safe', label: 'safe', onload: 'evil()' }],
+      income: [],
+    },
+  })
+
+  assert.deepEqual(normalized.transactions, [{ id: 'tx-safe', amount: 20 }])
+  assert.deepEqual(normalized.wallets, [{ id: 'wallet-safe', name: 'Cash' }])
+  assert.deepEqual(normalized.categories.expense, [{ id: 'cat-safe', label: 'safe' }])
+  assert.ok(Storage.lastNormalizationWarnings.some(warning => warning.reason === 'invalid-id'))
 })

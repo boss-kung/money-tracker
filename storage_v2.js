@@ -52,15 +52,174 @@ const KEYS = Object.freeze(Object.fromEntries(Object.entries(COLLECTIONS).map(([
 const BACKUP_SCHEMA_VERSION = 4
 const LOCAL_BACKUP_KEY = 'mt_local_backup_snapshots'
 const LOCAL_BACKUP_LIMIT = 3
+const LOCAL_STATE_META_KEY = 'mt_state_meta'
+const LOCAL_STATE_LOCK_KEY = 'mt_state_lock'
+const LOCAL_STATE_LOCK_TTL_MS = 4000
+const LOCAL_RECOVERY_QUARANTINE_KEY = 'mt_corrupt_quarantine'
+const LOCAL_RECOVERY_QUARANTINE_LIMIT = 12
 const BACKUP_SCHEMA_KEYS = Object.freeze(Object.keys(COLLECTIONS))
 const BACKUP_DEFAULTS = Object.freeze(Object.fromEntries(BACKUP_SCHEMA_KEYS.map(name => [name, COLLECTIONS[name].defaultValue({ hasExistingPrimaryData:true })])))
 
 const Storage = {
   collectionNames: BACKUP_SCHEMA_KEYS,
+  stateRevision: 0,
+  isStale: false,
+  lastConflict: null,
+  hydrationStatus: { recoveryMode: false, corruptCollections: [], quarantinedAt: null, quarantineKey: LOCAL_RECOVERY_QUARANTINE_KEY },
   lastLoadError: null,
   lastSaveError: null,
   lastVerifyError: null,
   _lastStorageToastAt: 0,
+  lastNormalizationWarnings: [],
+  _writerId: `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+  _syncInstalled: false,
+  _broadcastChannel: null,
+
+  _readStateMeta() {
+    if (!Storage.isLocalStorageReadable()) return { revision: 0, writerId: '', savedAt: '' }
+    try {
+      const raw = localStorage.getItem(LOCAL_STATE_META_KEY)
+      if (!raw) return { revision: 0, writerId: '', savedAt: '' }
+      const parsed = JSON.parse(raw)
+      const revision = Number(parsed?.revision)
+      return {
+        revision: Number.isSafeInteger(revision) && revision >= 0 ? revision : 0,
+        writerId: String(parsed?.writerId || ''),
+        savedAt: String(parsed?.savedAt || ''),
+      }
+    } catch (_) {
+      return { revision: 0, writerId: '', savedAt: '' }
+    }
+  },
+
+  _installCrossTabSync() {
+    if (Storage._syncInstalled) return
+    Storage._syncInstalled = true
+    const observeRevision = revision => {
+      const next = Number(revision)
+      if (!Number.isSafeInteger(next) || next <= Storage.stateRevision) return
+      Storage.isStale = true
+    }
+    try {
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('storage', event => {
+          if (event?.key !== LOCAL_STATE_META_KEY || !event.newValue) return
+          try { observeRevision(JSON.parse(event.newValue)?.revision) } catch (_) {}
+        })
+      }
+    } catch (_) {}
+    try {
+      if (typeof window !== 'undefined' && typeof window.BroadcastChannel === 'function') {
+        Storage._broadcastChannel = new window.BroadcastChannel('money-tracker-state')
+        Storage._broadcastChannel.onmessage = event => observeRevision(event?.data?.revision)
+      }
+    } catch (_) {
+      Storage._broadcastChannel = null
+    }
+  },
+
+  _publishRevision(revision) {
+    try {
+      Storage._broadcastChannel?.postMessage({ revision, writerId: Storage._writerId })
+    } catch (_) {}
+  },
+
+  _acquireStateLock() {
+    if (!Storage.isLocalStorageReadable() || typeof localStorage.setItem !== 'function') return null
+    const now = Date.now()
+    const owner = Storage._writerId
+    const lock = { owner, expiresAt: now + LOCAL_STATE_LOCK_TTL_MS }
+    try {
+      const existingRaw = localStorage.getItem(LOCAL_STATE_LOCK_KEY)
+      if (existingRaw) {
+        const existing = JSON.parse(existingRaw)
+        if (existing?.owner && existing.owner !== owner && Number(existing.expiresAt) > now) return null
+      }
+      localStorage.setItem(LOCAL_STATE_LOCK_KEY, JSON.stringify(lock))
+      const written = JSON.parse(localStorage.getItem(LOCAL_STATE_LOCK_KEY) || '{}')
+      return written.owner === owner ? lock : null
+    } catch (_) {
+      return null
+    }
+  },
+
+  _releaseStateLock(lock) {
+    if (!lock) return
+    try {
+      const current = JSON.parse(localStorage.getItem(LOCAL_STATE_LOCK_KEY) || '{}')
+      if (current.owner === lock.owner) localStorage.removeItem(LOCAL_STATE_LOCK_KEY)
+    } catch (_) {}
+  },
+
+  _rejectStaleSave(expectedRevision, actualRevision) {
+    Storage.isStale = true
+    Storage.lastConflict = {
+      expectedRevision,
+      actualRevision,
+      writerId: Storage._writerId,
+      at: new Date().toISOString(),
+    }
+    Storage.lastSaveError = null
+    return false
+  },
+
+  _readRaw(key) {
+    if (!Storage.isLocalStorageReadable()) return { status: 'unavailable', raw: null, value: null }
+    let raw
+    try { raw = localStorage.getItem(key) } catch (error) {
+      Storage.lastLoadError = { key, message: error?.message || 'localStorage read failed', at: new Date().toISOString() }
+      return { status: 'unavailable', raw: null, value: null, error }
+    }
+    if (raw === null) return { status: 'missing', raw: null, value: null }
+    try {
+      return { status: 'valid', raw, value: JSON.parse(raw) }
+    } catch (error) {
+      Storage.lastLoadError = { key, message: error?.message || 'JSON parse failed', at: new Date().toISOString() }
+      return { status: 'corrupt', raw, value: null, error }
+    }
+  },
+
+  _quarantineCorrupt(entries) {
+    if (!Array.isArray(entries) || !entries.length) return null
+    const createdAt = new Date().toISOString()
+    const rows = entries.map(entry => ({
+      collection: entry.collection,
+      key: entry.key,
+      raw: entry.raw,
+      message: entry.message || 'JSON parse failed',
+      quarantinedAt: createdAt,
+    }))
+    try {
+      let previous = []
+      try {
+        const parsed = JSON.parse(localStorage.getItem(LOCAL_RECOVERY_QUARANTINE_KEY) || '[]')
+        if (Array.isArray(parsed)) previous = parsed
+      } catch (_) {}
+      localStorage.setItem(
+        LOCAL_RECOVERY_QUARANTINE_KEY,
+        JSON.stringify([...rows, ...previous].slice(0, LOCAL_RECOVERY_QUARANTINE_LIMIT)),
+      )
+    } catch (_) {}
+    return createdAt
+  },
+
+  beginRecoveryWrite() {
+    if (!Storage.hydrationStatus?.recoveryMode) return false
+    Storage._recoveryWriteAuthorized = true
+    return true
+  },
+
+  endRecoveryWrite(success = false) {
+    const completed = success === true && Storage._recoveryWriteAuthorized === true
+    Storage._recoveryWriteAuthorized = false
+    if (!completed) return false
+    Storage.hydrationStatus = {
+      ...Storage.hydrationStatus,
+      recoveryMode: false,
+      corruptCollections: [],
+    }
+    return true
+  },
 
   _stripDangerousKeys(obj) {
     if (!obj || typeof obj !== 'object') return obj
@@ -72,6 +231,56 @@ const Storage = {
       clean[key] = (val && typeof val === 'object') ? Storage._stripDangerousKeys(val) : val
     }
     return clean
+  },
+
+  _stripExecutableFields(value) {
+    if (Array.isArray(value)) return value.map(item => Storage._stripExecutableFields(item))
+    if (!value || typeof value !== 'object') return value
+    const clean = {}
+    for (const key of Object.keys(value)) {
+      if (/^(?:on[a-z]+|action|open|skip|handler|fn|code)$/i.test(key)) continue
+      clean[key] = Storage._stripExecutableFields(value[key])
+    }
+    return clean
+  },
+
+  _normalizeImportedValue(value, collection) {
+    if (Array.isArray(value)) return Storage._normalizeImportedArray(value, collection)
+    if (!value || typeof value !== 'object') return value
+    const clean = {}
+    for (const key of Object.keys(value)) {
+      if (/^(?:on[a-z]+|action|open|skip|handler|fn|code)$/i.test(key)) continue
+      clean[key] = Storage._normalizeImportedValue(value[key], `${collection}.${key}`)
+    }
+    return clean
+  },
+
+  _isSafeImportedId(value) {
+    return typeof value === 'string'
+      && value.length > 0
+      && value.length <= 160
+      && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value)
+  },
+
+  _normalizeImportedArray(value, collection) {
+    if (!Array.isArray(value)) return value
+    const rows = []
+    value.forEach((row, index) => {
+      const clean = Storage._normalizeImportedValue(row, collection)
+      if (clean && typeof clean === 'object' && !Array.isArray(clean) && Object.prototype.hasOwnProperty.call(clean, 'id')) {
+        if (!Storage._isSafeImportedId(clean.id)) {
+          Storage.lastNormalizationWarnings.push({
+            collection,
+            index,
+            reason: 'invalid-id',
+            message: `${collection}[${index}] ถูกข้ามเพราะ id ไม่ปลอดภัย`,
+          })
+          return
+        }
+      }
+      rows.push(clean)
+    })
+    return rows
   },
 
   isLocalStorageReadable() {
@@ -151,17 +360,13 @@ const Storage = {
   },
 
   load(key) {
-    if (!Storage.isLocalStorageReadable()) {
-      Storage.lastLoadError = { key, message: 'localStorage unavailable', at: new Date().toISOString() }
-      return null
-    }
-    try { return JSON.parse(localStorage.getItem(key)) } catch (e) {
-      Storage.lastLoadError = { key, message: e?.message || 'JSON parse failed', at: new Date().toISOString() }
+    const result = Storage._readRaw(key)
+    if (result.status === 'corrupt') {
       setTimeout(() => {
         if (typeof toast === 'function') toast('พบข้อมูลบางส่วนอ่านไม่ได้ ระบบใช้ค่าปลอดภัยแทน', 'warn')
       }, 0)
-      return null
     }
+    return result.value
   },
 
   loadCollection(nameOrKey, fallback) {
@@ -184,6 +389,10 @@ const Storage = {
   },
 
   save(key, data, _retried = false) {
+    if (Storage.hydrationStatus?.recoveryMode && !Storage._recoveryWriteAuthorized) {
+      Storage.lastSaveError = { key, message: 'recovery mode blocks implicit writes', at: new Date().toISOString() }
+      return false
+    }
     if (!Storage.isLocalStorageWritable()) {
       Storage.lastSaveError = { key, message: 'localStorage unavailable', at: new Date().toISOString() }
       setTimeout(() => {
@@ -282,30 +491,75 @@ const Storage = {
     //   mt_pre_migration_backup — one-time safety net for the statusNormV1 migration
     try { localStorage.removeItem('mt_pre_import_backup') } catch (_) {}
     try { localStorage.removeItem('mt_pre_migration_backup') } catch (_) {}
+    Storage._installCrossTabSync()
+    const meta = Storage._readStateMeta()
+    Storage.stateRevision = meta.revision
+    Storage.isStale = false
+    Storage.lastConflict = null
+    Storage._recoveryWriteAuthorized = false
+    Storage.hydrationStatus = {
+      recoveryMode: false,
+      corruptCollections: [],
+      quarantinedAt: null,
+      quarantineKey: LOCAL_RECOVERY_QUARANTINE_KEY,
+    }
     const data = {}
+    const corruptEntries = []
     const hasExistingPrimaryData = typeof localStorage !== 'undefined' && [
       KEYS.transactions,
       KEYS.wallets,
       KEYS.categories,
       KEYS.settings,
-    ].some(key => localStorage.getItem(key) !== null)
+    ].some(key => {
+      try { return localStorage.getItem(key) !== null } catch (_) { return false }
+    })
     Object.entries(COLLECTIONS).forEach(([name, descriptor]) => {
       if (descriptor.state === false) return
-      const loaded = Storage.load(descriptor.key)
-      data[name] = loaded !== null && loaded !== undefined
-        ? loaded
+      const result = Storage._readRaw(descriptor.key)
+      if (result.status === 'corrupt') corruptEntries.push({
+        collection: name,
+        key: descriptor.key,
+        raw: result.raw,
+        message: result.error?.message || 'JSON parse failed',
+      })
+      data[name] = result.status === 'valid'
+        ? result.value
         : descriptor.defaultValue({ hasExistingPrimaryData, name })
     })
+    if (corruptEntries.length) {
+      const quarantinedAt = Storage._quarantineCorrupt(corruptEntries)
+      Storage.hydrationStatus = {
+        recoveryMode: true,
+        corruptCollections: corruptEntries.map(entry => entry.collection),
+        quarantinedAt,
+        quarantineKey: LOCAL_RECOVERY_QUARANTINE_KEY,
+      }
+    }
     return data
   },
 
   saveAll(state, { dirtyKeys = undefined, _quotaRetried = false, _rollbackSnapshot = null } = {}) {
     if (!state || typeof state !== 'object') return false
+    if (Storage.hydrationStatus?.recoveryMode && !Storage._recoveryWriteAuthorized) {
+      Storage.lastSaveError = { key: '*', message: 'recovery mode blocks implicit state writes', at: new Date().toISOString() }
+      return false
+    }
     if (!Storage.isLocalStorageReadable()) {
       Storage.lastSaveError = { key: '*', message: 'localStorage unavailable', at: new Date().toISOString() }
       return false
     }
 
+    const currentMeta = Storage._readStateMeta()
+    const baselineRevision = Number(Storage.stateRevision || 0)
+    if (Storage.isStale && currentMeta.revision === baselineRevision) {
+      return Storage._rejectStaleSave(baselineRevision, currentMeta.revision)
+    }
+    if (currentMeta.revision !== baselineRevision) return Storage._rejectStaleSave(baselineRevision, currentMeta.revision)
+    const lock = Storage._acquireStateLock()
+    if (!lock) {
+      Storage.lastSaveError = { key: LOCAL_STATE_LOCK_KEY, message: 'another tab is saving state', at: new Date().toISOString() }
+      return false
+    }
     const requestedNames = Array.isArray(dirtyKeys) && dirtyKeys.length
       ? new Set(dirtyKeys.map(name => {
           const entry = Object.entries(COLLECTIONS).find(([collectionName, descriptor]) => collectionName === name || descriptor.key === name)
@@ -334,7 +588,12 @@ const Storage = {
         } catch (_) {}
       })
     }
+    let committed = false
+    let saveError = null
     try {
+      const lockedMeta = Storage._readStateMeta()
+      if (lockedMeta.revision !== baselineRevision) return Storage._rejectStaleSave(baselineRevision, lockedMeta.revision)
+      previous.set(LOCAL_STATE_META_KEY, localStorage.getItem(LOCAL_STATE_META_KEY))
       entries.forEach(([name, descriptor]) => {
         const value = state[name] !== undefined
           ? state[name]
@@ -342,14 +601,6 @@ const Storage = {
         previous.set(descriptor.key, localStorage.getItem(descriptor.key))
         serialized.set(descriptor.key, Storage._stringify(value))
       })
-    } catch (e) {
-      Storage.lastSaveError = { key: '*', message: e?.message || 'save snapshot failed', at: new Date().toISOString() }
-      return false
-    }
-
-    let committed = false
-    let saveError = null
-    try {
       for (const [key, payload] of serialized) {
         // The full snapshot remains available for verification and rollback.
         // Avoid synchronous storage writes for collections that did not change.
@@ -360,8 +611,17 @@ const Storage = {
         ? ['transactions', 'wallets', 'settings', 'upcomingBills'].filter(name => requestedNames.has(name))
         : ['transactions', 'wallets', 'settings', 'upcomingBills']
       const verification = Storage.verifyState(state, requiredVerificationKeys)
-      committed = verification.ok
-      if (!committed) throw new Error(`state verification failed: ${verification.failures.join(', ')}`)
+      if (!verification.ok) throw new Error(`state verification failed: ${verification.failures.join(', ')}`)
+      const nextMeta = {
+        revision: baselineRevision + 1,
+        writerId: Storage._writerId,
+        savedAt: new Date().toISOString(),
+      }
+      localStorage.setItem(LOCAL_STATE_META_KEY, Storage._stringify(nextMeta))
+      if (localStorage.getItem(LOCAL_STATE_META_KEY) !== Storage._stringify(nextMeta)) {
+        throw new Error('state metadata readback mismatch after save')
+      }
+      committed = true
     } catch (e) {
       saveError = e
     } finally {
@@ -370,16 +630,21 @@ const Storage = {
         // are never replaced by a partially-written state when one key fails.
         restoreSnapshot(rollbackSnapshot)
       }
+      Storage._releaseStateLock(lock)
     }
 
-    if (!saveError) {
+    if (committed) {
       Storage.lastSaveError = null
       Storage.lastVerifyError = null
+      Storage.lastConflict = null
+      Storage.stateRevision = baselineRevision + 1
+      Storage.isStale = false
+      Storage._publishRevision(Storage.stateRevision)
       return true
     }
 
-    const isQuotaError = saveError.name === 'QuotaExceededError'
-      || saveError.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    const isQuotaError = saveError?.name === 'QuotaExceededError'
+      || saveError?.name === 'NS_ERROR_DOM_QUOTA_REACHED'
     if (isQuotaError && !_quotaRetried) {
       let freedSpace = false
       try {
@@ -424,6 +689,7 @@ const Storage = {
 
   normalizeBackupPayload(raw) {
     if (!raw || typeof raw !== 'object') throw new Error('ไฟล์สำรองข้อมูลไม่ถูกต้อง')
+    Storage.lastNormalizationWarnings = []
     const backup = Storage._stripDangerousKeys({ ...raw })
     const schemaVersion = Number(backup.backupSchemaVersion || backup.version || 1)
     if (!Array.isArray(backup.transactions) || !Array.isArray(backup.wallets)) throw new Error('ไม่พบข้อมูลหลักของแอป')
@@ -441,15 +707,16 @@ const Storage = {
       // from external backup files to prevent code injection via crafted backup files
       if (key === 'aiInsightStore') {
         const emptyStore = JSON.parse(JSON.stringify(fallback))
-        if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
-          if (Array.isArray(incoming.insights)) {
-            emptyStore.insights = incoming.insights
+        const safeIncoming = Storage._normalizeImportedValue(incoming, key)
+        if (safeIncoming && typeof safeIncoming === 'object' && !Array.isArray(safeIncoming)) {
+          if (Array.isArray(safeIncoming.insights)) {
+            emptyStore.insights = safeIncoming.insights
               .filter(i => i && typeof i === 'object' && typeof i.id === 'string')
-              .map(({ action: _action, ...safe }) => safe)
+              .map(i => Storage._stripExecutableFields(i))
           }
-          if (Array.isArray(incoming.hiddenTypes)) emptyStore.hiddenTypes = incoming.hiddenTypes.filter(t => typeof t === 'string')
-          if (Array.isArray(incoming.feedback)) emptyStore.feedback = incoming.feedback.filter(f => f && typeof f === 'object')
-          if (typeof incoming.version === 'number') emptyStore.version = incoming.version
+          if (Array.isArray(safeIncoming.hiddenTypes)) emptyStore.hiddenTypes = safeIncoming.hiddenTypes.filter(t => typeof t === 'string')
+          if (Array.isArray(safeIncoming.feedback)) emptyStore.feedback = safeIncoming.feedback.filter(f => f && typeof f === 'object')
+          if (typeof safeIncoming.version === 'number') emptyStore.version = safeIncoming.version
         }
         normalized[key] = emptyStore
         return
@@ -460,8 +727,8 @@ const Storage = {
           normalized[key] = null
           return
         }
-        const draft = { ...incoming }
-        if (Array.isArray(draft.items)) draft.items = draft.items.filter(item => item && typeof item === 'object' && !Array.isArray(item))
+        const draft = Storage._normalizeImportedValue(incoming, key)
+        if (Array.isArray(draft.items)) draft.items = Storage._normalizeImportedArray(draft.items, `${key}.items`).filter(item => item && typeof item === 'object' && !Array.isArray(item))
         if (Array.isArray(draft.peopleIds)) draft.peopleIds = draft.peopleIds.filter(id => typeof id === 'string' || typeof id === 'number').map(String)
         if (Array.isArray(draft.pipeline)) draft.pipeline = draft.pipeline.filter(step => step && typeof step === 'object' && !Array.isArray(step))
         if (!draft.payments || typeof draft.payments !== 'object' || Array.isArray(draft.payments)) draft.payments = {}
@@ -470,19 +737,20 @@ const Storage = {
       }
 
       if (key === 'splitBills' || key === 'splitPeople') {
-        normalized[key] = Array.isArray(incoming)
-          ? incoming.filter(row => row && typeof row === 'object' && !Array.isArray(row))
-          : []
+        normalized[key] = Storage._normalizeImportedArray(incoming, key)
+          ?.filter(row => row && typeof row === 'object' && !Array.isArray(row)) || []
         return
       }
 
       if (incoming === undefined || incoming === null) {
         normalized[key] = JSON.parse(JSON.stringify(fallback))
       } else if (Array.isArray(fallback)) {
-        normalized[key] = Array.isArray(incoming) ? incoming : JSON.parse(JSON.stringify(fallback))
+        normalized[key] = Array.isArray(incoming)
+          ? Storage._normalizeImportedArray(incoming, key)
+          : JSON.parse(JSON.stringify(fallback))
       } else if (typeof fallback === 'object') {
         normalized[key] = typeof incoming === 'object' && !Array.isArray(incoming)
-          ? { ...JSON.parse(JSON.stringify(fallback)), ...incoming }
+          ? Storage._normalizeImportedValue({ ...JSON.parse(JSON.stringify(fallback)), ...incoming }, key)
           : JSON.parse(JSON.stringify(fallback))
       } else {
         normalized[key] = incoming
@@ -596,13 +864,26 @@ const Storage = {
     reader.readAsText(file)
   },
 
-  reset() {
+  reset({ allowRecovery = false } = {}) {
+    if (Storage.hydrationStatus?.recoveryMode && !allowRecovery) return false
     Object.values(KEYS).forEach(k => {
       try { localStorage.removeItem(k) } catch (_) {}
     })
+    try { localStorage.removeItem(LOCAL_STATE_META_KEY) } catch (_) {}
+    try { localStorage.removeItem(LOCAL_STATE_LOCK_KEY) } catch (_) {}
     try { localStorage.removeItem(LOCAL_BACKUP_KEY) } catch (_) {}
     try { localStorage.removeItem('mt_pre_import_backup') } catch (_) {}
     try { localStorage.removeItem('mt_pre_migration_backup') } catch (_) {}
+    Storage.stateRevision = 0
+    Storage.isStale = false
+    Storage.lastConflict = null
+    Storage._recoveryWriteAuthorized = false
+    Storage.hydrationStatus = {
+      ...Storage.hydrationStatus,
+      recoveryMode: false,
+      corruptCollections: [],
+    }
+    return true
   },
 }
 

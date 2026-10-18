@@ -3,6 +3,7 @@
 
   window.MT_DEMO_MODE = true
   window.MT_DEMO_STORAGE_DISABLED = true
+  window.MT_DEBUG_FLAGS = { ...(window.MT_DEBUG_FLAGS || {}), noServiceWorker: true }
 
   const memory = new Map()
   const demoStorage = {
