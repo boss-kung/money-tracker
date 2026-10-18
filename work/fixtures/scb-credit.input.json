@@ -1,0 +1,6 @@
+{
+  "raw_text": "SCB Connect\nรายการเงินเข้า 2,000.00 บาท\nจากบัญชี SOMCHAI P.\nเข้าบัญชี THANAPHORN U. X-4078\nวันที่/เวลา 06/10/2026 11:45\nยอดเงินที่ใช้ได้ 2,818.37 บาท",
+  "capture_method": "line_notification",
+  "captured_at": "2026-10-06T11:46:00+07:00",
+  "force_test": true
+}

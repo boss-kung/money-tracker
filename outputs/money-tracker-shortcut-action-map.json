@@ -1,0 +1,108 @@
+{
+  "schema_version": "money-tracker.shortcut-action-map.v1",
+  "config": {
+    "mode": "test",
+    "endpoint": "https://YOUR-MONEY-TRACKER.example/api/transactions",
+    "api_key": "REPLACE_WITH_SCOPED_API_KEY",
+    "payload_schema_version": "money-tracker.capture.v1",
+    "parser_version": "ios-shortcut-1.0.0"
+  },
+  "input": {
+    "required": ["raw_text", "capture_method"],
+    "optional": ["captured_at", "force_test"],
+    "capture_methods": ["line_notification", "whats_on_screen"]
+  },
+  "normalization": [
+    { "pattern": "\\r\\n?", "replacement": "\\n" },
+    { "pattern": "\\u00A0", "replacement": " " },
+    { "pattern": "[ \\t]+", "replacement": " " }
+  ],
+  "latest_block": {
+    "combined_pattern": "(?is)(?:มีการใช้บัตร\\s+UOB-\\d{4}[\\s\\S]*?วงเงินคงเหลือใช้ได้\\s*[\\d,]+(?:\\.\\d{1,2})?\\s*THB|You have spent[\\s\\S]*?Available credit:\\s*THB\\s*[\\d,]+(?:\\.\\d{1,2})?|รายการเงิน(?:ออก|เข้า)\\s*-?[\\d,]+(?:\\.\\d{1,2})?\\s*บาท[\\s\\S]*?ยอดเงินที่ใช้ได้\\s*[\\d,]+(?:\\.\\d{1,2})?\\s*บาท|LINE Pay Purchase[\\s\\S]*?Balance:\\s*(?:THB\\s*)?[\\d,]+(?:\\.\\d{1,2})?)",
+    "selection": "Match all supported blocks, then Get Item from List: Last Item",
+    "classification": "Inspect only the selected block for UOB, SCB, or LINE Wallet anchors"
+  },
+  "sources": [
+    {
+      "source": "uob_thai",
+      "bank": "UOB",
+      "block_pattern": "(?is)(?:มีการใช้บัตร\\s+UOB-\\d{4}[\\s\\S]*?วงเงินคงเหลือใช้ได้\\s*[\\d,]+(?:\\.\\d{1,2})?\\s*THB|You have spent[\\s\\S]*?Available credit:\\s*THB\\s*[\\d,]+(?:\\.\\d{1,2})?)",
+      "amount_patterns": [
+        "จำนวน\\s*([\\d,]+(?:\\.\\d{1,2})?)\\s*THB",
+        "(?i)spent\\s+THB\\s*([\\d,]+(?:\\.\\d{1,2})?)"
+      ],
+      "merchant_patterns": [
+        "ที่ร้าน\\s*([^\\n\\r]+)",
+        "(?i)\\sat\\s+(.+?)\\s+on\\s+\\d{2}/"
+      ],
+      "card_last4_patterns": ["UOB-(\\d{4})", "(?i)ending\\s+(\\d{4})"],
+      "direction": "debit"
+    },
+    {
+      "source": "scb_connect",
+      "bank": "SCB",
+      "block_pattern": "(?is)รายการเงิน(?:ออก|เข้า)\\s*-?[\\d,]+(?:\\.\\d{1,2})?\\s*บาท[\\s\\S]*?ยอดเงินที่ใช้ได้\\s*[\\d,]+(?:\\.\\d{1,2})?\\s*บาท",
+      "amount_pattern": "รายการเงิน(ออก|เข้า)\\s*-?([\\d,]+(?:\\.\\d{1,2})?)\\s*บาท",
+      "merchant_patterns": {
+        "debit": "เข้าบัญชี\\s+([^\\n\\r]+)",
+        "credit": "จากบัญชี\\s+([^\\n\\r]+)"
+      },
+      "account_last4_patterns": {
+        "debit": "จากบัญชี[^\\n\\r]*X-(\\d{4})",
+        "credit": "เข้าบัญชี[^\\n\\r]*X-(\\d{4})"
+      },
+      "direction_rule": "Group 1 เข้า => credit; otherwise debit"
+    },
+    {
+      "source": "line_wallet",
+      "bank": null,
+      "block_pattern": "(?is)LINE Pay Purchase[\\s\\S]*?Balance:\\s*(?:THB\\s*)?[\\d,]+(?:\\.\\d{1,2})?",
+      "amount_pattern": "(?i)LINE Pay Purchase\\s*(?:฿|THB\\s*)?([\\d,]+(?:\\.\\d{1,2})?)",
+      "merchant_pattern": "(?i)Merchant:\\s*([^\\n\\r]+)",
+      "direction": "debit"
+    }
+  ],
+  "transaction_datetime_pattern": "(\\d{2})/(\\d{2})/(\\d{4})\\s+(\\d{2}):(\\d{2})",
+  "transaction_datetime_output": "group3-group2-group1Tgroup4:group5:00+07:00",
+  "dedupe_basis": [
+    "v1",
+    "source",
+    "direction",
+    "amount with exactly two decimals",
+    "THB",
+    "account_last4 or card_last4 or empty text",
+    "transaction_datetime or captured_at date",
+    "trimmed lowercase description"
+  ],
+  "dedupe_separator": "|",
+  "dedupe_algorithm": "SHA-256 lowercase hexadecimal",
+  "payload_fields": [
+    "schema_version",
+    "parser_version",
+    "source",
+    "bank",
+    "amount",
+    "currency",
+    "direction",
+    "merchant",
+    "description",
+    "account_last4",
+    "card_last4",
+    "transaction_datetime",
+    "captured_at",
+    "capture_method",
+    "raw_text",
+    "relevant_text",
+    "parse_status",
+    "dedupe_version",
+    "dedupe_key"
+  ],
+  "never_post_when": [
+    "source is unknown",
+    "amount is missing or not positive",
+    "mode is test",
+    "force_test is true",
+    "endpoint is not HTTPS",
+    "endpoint or API key still contains a placeholder"
+  ]
+}

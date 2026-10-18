@@ -32,6 +32,21 @@
       }
     },
     {
+      "fixture": "work/fixtures/scb-credit.input.json",
+      "expected": {
+        "source": "scb_connect",
+        "bank": "SCB",
+        "amount": 2000.00,
+        "direction": "credit",
+        "merchant": "SOMCHAI P.",
+        "account_last4": "4078",
+        "card_last4": null,
+        "transaction_datetime": "2026-10-06T11:45:00+07:00",
+        "parse_status": "complete",
+        "latest_block_amount": 2000.00
+      }
+    },
+    {
       "fixture": "work/fixtures/uob-thai.input.json",
       "expected": {
         "source": "uob_thai",
@@ -44,6 +59,21 @@
         "transaction_datetime": "2026-10-06T14:22:00+07:00",
         "parse_status": "complete",
         "latest_block_amount": 1250.75
+      }
+    },
+    {
+      "fixture": "work/fixtures/mixed-latest.input.json",
+      "expected": {
+        "source": "scb_connect",
+        "bank": "SCB",
+        "amount": 80.00,
+        "direction": "debit",
+        "merchant": "MBR9",
+        "account_last4": "4078",
+        "card_last4": null,
+        "transaction_datetime": "2026-10-06T21:39:00+07:00",
+        "parse_status": "complete",
+        "latest_block_amount": 80.00
       }
     },
     {
