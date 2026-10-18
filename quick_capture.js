@@ -130,6 +130,10 @@
     return ''
   }
 
+  // Narrow public seam used by Shortcut review mapping; parsing and save actions
+  // remain private to this feature module.
+  globalThis.MTQuickCapture = Object.freeze({ inferCategoryId })
+
   // ── Parser: Relative date ─────────────────────────────────
   function extractDate(text) {
     const t = today()
