@@ -2,6 +2,8 @@
 
 Shortcut นี้ไม่ต้องมี regex หรือ JSON 19 ช่องบน iPhone อีกต่อไป ตัว Shortcut ส่งเพียงข้อความดิบกับชนิดการจับภาพ แล้ว Money Tracker จะ parse UOB, SCB และ LINE Wallet ฝั่ง server
 
+เวอร์ชัน Native ที่แก้ไขจะตรวจ input ก่อนส่งทุกครั้ง ถ้า Automation ไม่ส่งข้อความ จะขึ้นคำแนะนำบนเครื่องและไม่ยิง request ที่ทำให้เกิด `invalid_capture`.
+
 ## 1. สร้าง Shortcut เดียว
 
 สร้าง Shortcut ชื่อ `Money Tracker Capture` แล้วใส่ action ตามลำดับนี้:
@@ -44,7 +46,7 @@ Header: Authorization = Bearer <device token>
 2. เริ่มต้นใช้ filter กว้าง เช่น `UOB` หรือไม่ใส่ filter เพื่อไม่ให้ตัดแจ้งเตือนทิ้งก่อนทดสอบ
 3. เพิ่ม action `Text` ก่อน `Run Shortcut` แล้วใส่ Magic Variable จาก `Notification` โดยเลือก `Title`, `Subtitle` และ `Message/Body` ที่มีอยู่ คั่นแต่ละส่วนด้วยบรรทัดใหม่
 4. เพิ่ม action `Run Shortcut` → ชื่อ Shortcut ที่ติดตั้งไว้ (ชุดนี้ใช้ `Money Tracker - Notification Inbox`; ถ้าสร้างตามคู่มือเดิมใช้ `Money Tracker Capture`)
-5. ตั้ง Input ของ `Run Shortcut` เป็นผลลัพธ์จาก action `Text` นี้ ไม่ใช่ `Notification` object ตรง ๆ
+5. ตั้ง Input ของ `Run Shortcut` เป็นผลลัพธ์จาก action `Text` นี้ ไม่ใช่ `Notification` object ตรง ๆ. ถ้าใช้ไฟล์ Native ที่สร้างใหม่และต้องการส่ง object ตรง ๆ ให้ตั้งเป็น Magic Variable `Notification`; แต่แบบ Text รวมฟิลด์จะเสถียรกว่าบน iOS รุ่นต่าง ๆ
 6. เปิด `Ask Before Running` ไว้ก่อนเพื่อยืนยันว่า Automation ถูกเรียกจริง
 7. ปิด `Ask Before Running` ได้หลังจากทดสอบผ่านแล้ว
 
