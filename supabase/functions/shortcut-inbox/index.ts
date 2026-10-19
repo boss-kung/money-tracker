@@ -106,6 +106,14 @@ async function decryptRow(row: CaptureRow, userId: string, deps: ShortcutInboxDe
   }
 }
 
+async function reclaimExpiredClaims(supabase: AdminClientLike, userId: string, deps: ShortcutInboxDeps): Promise<void> {
+  const result = await supabase.rpc('mt_shortcut_reclaim_expired_claims', {
+    p_user_id: userId,
+    p_now: deps.now().toISOString(),
+  })
+  if (result.error) throw result.error
+}
+
 function preview(row: CaptureRow, payload: Record<string, unknown>) {
   return {
     capture_id: String(row.id), status: String(row.status), accepted_at: row.accepted_at, updated_at: row.updated_at,
@@ -158,6 +166,7 @@ export function createShortcutInboxHandler(deps: ShortcutInboxDeps): (req: Reque
         const limit = pageSize(url.searchParams.get('limit'))
         const after = cursor(url.searchParams.get('cursor'))
         if (!['count', 'pending', 'dismissed'].includes(view)) throw new InboxRequestError(400, 'invalid_view')
+        if (view !== 'dismissed') await reclaimExpiredClaims(supabase, userId, deps)
         let query = supabase.from('mt_shortcut_captures').select(view === 'count' ? 'id' : '*', view === 'count' ? { count: 'exact', head: true } : undefined).eq('user_id', userId).eq('status', view === 'dismissed' ? 'dismissed' : 'pending')
         if (after) query = query.or(`accepted_at.lt.${after.acceptedAt},and(accepted_at.eq.${after.acceptedAt},id.lt.${after.id})`)
         query = query.order('accepted_at', { ascending: false }).order('id', { ascending: false }).limit(limit)

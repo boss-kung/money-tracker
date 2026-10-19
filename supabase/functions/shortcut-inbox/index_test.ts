@@ -91,6 +91,16 @@ Deno.test('count clamps the page and cursor uses accepted_at plus id', async () 
   if (!db.calls.some(call => call.method === 'mt_shortcut_captures:limit' && JSON.stringify(call.args) === JSON.stringify([50]))) throw new Error('limit was not clamped')
 })
 
+Deno.test('pending and count views reclaim expired claim leases before listing', async () => {
+  const db = database({ rows: [captureRow({ status: 'claimed', claim_expires_at: '2026-10-17T23:59:00Z' })] })
+  const handler = createShortcutInboxHandler(deps(db))
+  equal((await handler(req('GET', '/shortcut-inbox?view=pending'))).status, 200)
+  equal((await handler(req('GET', '/shortcut-inbox?view=count'))).status, 200)
+  const reclaimCalls = db.calls.filter(call => call.method === 'rpc:mt_shortcut_reclaim_expired_claims')
+  equal(reclaimCalls.length, 2)
+  equal((reclaimCalls[0]?.args as Record<string, unknown>).p_user_id, userId)
+})
+
 Deno.test('claim records device id and returns one-time secret with full decrypted payload', async () => {
   const db = database({ row: captureRow() })
   const handler = createShortcutInboxHandler(deps(db))

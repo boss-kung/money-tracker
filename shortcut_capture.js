@@ -192,21 +192,29 @@
 
   async function openDraft(id) {
     const capture = claims.get(String(id)) || await claim(id)
-    const payload = capture.capture || capture
-    const state = appState()
-    if (!state) throw new TransportError('APP_STATE_UNAVAILABLE', 'app_state_unavailable')
-    const mapped = core.mapCaptureToDraft({ ...payload, capture_id: String(id) }, {
-      wallets: state.wallets || [],
-      suggestCategory: (value, type) => root.MTQuickCapture?.inferCategoryId?.(`${value.merchant || ''} ${value.description || ''}`, type) || '',
-      suggestWallet: value => root.App?._suggestWalletForMerchant?.(value.merchant, value.direction === 'credit' ? 'income' : 'expense') || '',
-    })
-    state.txMode = 'add'
-    state.editingTxId = null
-    state.tx = { ...(state.tx || {}), ...mapped.draft, externalCapture: { provider: 'ios_shortcut', captureId: String(id), dedupeVersion: payload.dedupe_version, dedupeKey: payload.dedupe_key } }
-    activeCaptureId = String(id)
-    root.App?.openOverlay?.('overlay-add-tx')
-    root.App?._renderAddTxDetail?.()
-    return mapped
+    try {
+      const payload = capture.capture || capture
+      const state = appState()
+      if (!state) throw new TransportError('APP_STATE_UNAVAILABLE', 'app_state_unavailable')
+      const mapped = core.mapCaptureToDraft({ ...payload, capture_id: String(id) }, {
+        wallets: state.wallets || [],
+        suggestCategory: (value, type) => root.MTQuickCapture?.inferCategoryId?.(`${value.merchant || ''} ${value.description || ''}`, type) || '',
+        suggestWallet: value => root.App?._suggestWalletForMerchant?.(value.merchant, value.direction === 'credit' ? 'income' : 'expense') || '',
+      })
+      state.txMode = 'add'
+      state.editingTxId = null
+      state.tx = { ...(state.tx || {}), ...mapped.draft, externalCapture: { provider: 'ios_shortcut', captureId: String(id), dedupeVersion: payload.dedupe_version, dedupeKey: payload.dedupe_key } }
+      activeCaptureId = String(id)
+      root.App?.openOverlay?.('overlay-add-tx')
+      root.App?._renderAddTxDetail?.()
+      return mapped
+    } catch (error) {
+      // Claiming happens before mapping so only one reviewer can edit a draft.
+      // If the app cannot open the review surface, release the lease instead of
+      // leaving the capture invisible to the pending Inbox forever.
+      try { await release(id) } catch (_) {}
+      throw error
+    }
   }
 
   function onTransactionSave(context) {
