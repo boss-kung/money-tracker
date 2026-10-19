@@ -38,7 +38,7 @@ test('client and database surfaces do not expose service-role access or capture 
 })
 
 test('release is pinned to the shortcut inbox contract version', () => {
-  assert.equal(manifest.version, '2026.10.18-shortcut-inbox-r143')
+  assert.equal(manifest.version, '2026.10.19-shortcut-inbox-r144')
 })
 
 test('shortcut inbox state RPCs avoid the PostgreSQL CURRENT_TIME name collision', () => {

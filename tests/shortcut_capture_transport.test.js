@@ -85,6 +85,23 @@ test('claim uses one stable non-secret browser device UUID and save hook acknowl
   assert.equal(env.calls.filter(call => call.url.endsWith('/consume')).length, 1)
 })
 
+test('opens a capture draft through the app state accessor when state is not a window global', async () => {
+  const captureId = '22222222-2222-4222-8222-222222222222'
+  const appState = { wallets: [{ id: 'wallet-1', type: 'bank' }], transactions: [], tx: {} }
+  const env = setup({ fetchImpl: async url => url.endsWith('/claim')
+    ? response(200, { capture_id: captureId, capture: { source: 'scb_connect', amount: '80.00', direction: 'debit', merchant: 'MBR9', description: 'MBR9', account_last4: '4078', captured_at: '2026-10-18T00:00:00Z', dedupe_version: 1, dedupe_key: 'a'.repeat(64) }, claim_secret: 'claim-secret' })
+    : response(200, { items: [] }) })
+  delete global.S
+  global.App._getState = () => appState
+
+  await env.api.openDraft(captureId)
+
+  assert.equal(appState.txMode, 'add')
+  assert.equal(appState.editingTxId, null)
+  assert.equal(appState.tx.merchant, 'MBR9')
+  assert.equal(appState.tx.externalCapture.captureId, captureId)
+})
+
 test('transient acknowledgement failure queues once and retry is scoped to the current user', async () => {
   const captureId = '22222222-2222-4222-8222-222222222222'
   const env = setup({ fetchImpl: async url => url.endsWith('/claim')

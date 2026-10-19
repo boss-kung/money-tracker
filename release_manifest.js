@@ -5,7 +5,7 @@
   if (root) root.MT_RELEASE = manifest
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict'
-  const version = '2026.10.18-shortcut-inbox-r143'
+  const version = '2026.10.19-shortcut-inbox-r144'
   const coreAssets = Object.freeze([
     './',
     './index.html',

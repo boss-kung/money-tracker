@@ -1168,6 +1168,9 @@ function toast(msg, type = 'info') {
 const overlayCloseTimers = {}
 
 const App = {
+  // Deferred feature modules access state through this narrow bridge. Keep the
+  // mutable state lexical instead of exposing the full object as window.S.
+  _getState() { return S },
   saveAll(reason = 'app', options = {}) { return persist(reason, options) },
   showStorageRecoveryNotice() {
     const existing = document.getElementById('mt-storage-recovery-notice')

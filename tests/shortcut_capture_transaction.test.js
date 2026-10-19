@@ -5,6 +5,11 @@ const path = require('node:path')
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'app_v2.js'), 'utf8')
 
+test('deferred capture modules can access lexical app state through a narrow bridge', () => {
+  assert.match(source, /_getState\(\)\s*\{\s*return S\s*\}/)
+  assert.doesNotMatch(source, /window\.S\s*=\s*S/)
+})
+
 test('reviewed captures are deterministic, metadata-bearing transactions only after save', () => {
   assert.match(source, /externalCapture/)
   assert.match(source, /shortcut:\$\{[^}]*captureId/)

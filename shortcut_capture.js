@@ -98,6 +98,7 @@
 
   function toast(message, type = 'info') { try { root.toast?.(message, type) } catch (_) {} }
   function removeSummary(id) { summaries.delete(String(id)) }
+  function appState() { return root.App?._getState?.() || root.S || null }
 
   function escapeHtml(value) {
     if (root.MTSafeRender?.escapeHtml) return root.MTSafeRender.escapeHtml(value)
@@ -192,14 +193,16 @@
   async function openDraft(id) {
     const capture = claims.get(String(id)) || await claim(id)
     const payload = capture.capture || capture
+    const state = appState()
+    if (!state) throw new TransportError('APP_STATE_UNAVAILABLE', 'app_state_unavailable')
     const mapped = core.mapCaptureToDraft({ ...payload, capture_id: String(id) }, {
-      wallets: root.S?.wallets || [],
+      wallets: state.wallets || [],
       suggestCategory: (value, type) => root.MTQuickCapture?.inferCategoryId?.(`${value.merchant || ''} ${value.description || ''}`, type) || '',
       suggestWallet: value => root.App?._suggestWalletForMerchant?.(value.merchant, value.direction === 'credit' ? 'income' : 'expense') || '',
     })
-    root.S.txMode = 'add'
-    root.S.editingTxId = null
-    root.S.tx = { ...(root.S.tx || {}), ...mapped.draft, externalCapture: { provider: 'ios_shortcut', captureId: String(id), dedupeVersion: payload.dedupe_version, dedupeKey: payload.dedupe_key } }
+    state.txMode = 'add'
+    state.editingTxId = null
+    state.tx = { ...(state.tx || {}), ...mapped.draft, externalCapture: { provider: 'ios_shortcut', captureId: String(id), dedupeVersion: payload.dedupe_version, dedupeKey: payload.dedupe_key } }
     activeCaptureId = String(id)
     root.App?.openOverlay?.('overlay-add-tx')
     root.App?._renderAddTxDetail?.()
@@ -211,13 +214,14 @@
     const captureId = activeCaptureId
     const capture = claims.get(captureId)
     if (!capture) return undefined
-    const savedType = root.S?.tx?.type
+    const state = appState()
+    const savedType = state?.tx?.type
     activeCaptureId = ''
     if (['expense', 'income'].includes(savedType) && capture.capture) {
-      const mappedWallet = root.S?.tx?.walletId
+      const mappedWallet = state?.tx?.walletId
       const key = core.aliasKey({ ...capture.capture, direction: savedType === 'income' ? 'credit' : 'debit' })
       if (key && mappedWallet) {
-        root.S.wallets = core.rememberWalletAlias(root.S.wallets || [], mappedWallet, key)
+        state.wallets = core.rememberWalletAlias(state.wallets || [], mappedWallet, key)
         try { root.persist?.('shortcut.capture.alias', { dirtyKeys: ['wallets'] }) } catch (_) {}
       }
     }
