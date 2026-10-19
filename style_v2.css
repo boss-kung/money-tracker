@@ -9431,3 +9431,12 @@ html.mt-auth-gated #app {
     flex-direction: column;
   }
 }
+
+/* Keep transaction review drawers edge-to-edge. A late desktop max-width
+   rule otherwise makes the detail drawer look like a narrow centered card. */
+#overlay-add-tx .sheet,
+#overlay-tx-detail .sheet {
+  width: 100% !important;
+  max-width: none !important;
+  margin-inline: 0 !important;
+}
