@@ -10,6 +10,7 @@ const manage = read('supabase/functions/manage-shortcut-tokens/index.ts')
 const ingest = read('supabase/functions/ingest-shortcut-capture/index.ts')
 const inbox = read('supabase/functions/shortcut-inbox/index.ts')
 const migration = read('supabase/migrations/202610180001_shortcut_transaction_inbox.sql')
+const inboxTimeFixMigration = read('supabase/migrations/202610190001_fix_shortcut_inbox_time_variable.sql')
 const manifest = require('../release_manifest.js')
 
 test('only the public ingestion edge function disables gateway JWT verification', () => {
@@ -38,4 +39,15 @@ test('client and database surfaces do not expose service-role access or capture 
 
 test('release is pinned to the shortcut inbox contract version', () => {
   assert.equal(manifest.version, '2026.10.18-shortcut-inbox-r143')
+})
+
+test('shortcut inbox state RPCs avoid the PostgreSQL CURRENT_TIME name collision', () => {
+  const sql = inboxTimeFixMigration.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, '')
+  assert.doesNotMatch(sql, /\bcurrent_time\b/i)
+  assert.match(sql, /create or replace function public\.mt_shortcut_claim_capture/i)
+  assert.match(sql, /create or replace function public\.mt_shortcut_consume_capture/i)
+  assert.match(sql, /create or replace function public\.mt_shortcut_dismiss_capture/i)
+  assert.match(sql, /create or replace function public\.mt_shortcut_restore_capture/i)
+  assert.match(sql, /create or replace function public\.mt_shortcut_cleanup/i)
+  assert.match(sql, /now_ts\s+timestamptz/i)
 })
