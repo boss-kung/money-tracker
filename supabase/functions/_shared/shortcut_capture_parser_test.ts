@@ -186,6 +186,17 @@ Deno.test('server parser accepts LINE Wallet spacing after the baht symbol', asy
   equal(result.merchant, 'McDonald')
 })
 
+Deno.test('server parser accepts a compact notification preview captured with Get On-Screen', async () => {
+  const result = await parseRawShortcutCapture({
+    raw_text: 'LINE Wallet\nLINE Pay Purchase ฿ 49.00 Payment complete. Merchant:\nMcDonald',
+    capture_method: 'whats_on_screen',
+    captured_at: '2026-10-20T14:39:16+07:00',
+  })
+  equal(result.source, 'line_wallet')
+  equal(result.amount, '49.00')
+  equal(result.merchant, 'McDonald')
+})
+
 Deno.test('server parser preserves SCB credit notification date with an at-sign time', async () => {
   const result = await parseRawShortcutCapture({
     raw_text: 'SCB Connect\nรายการเงินเข้า 200.00 บาท เข้าบัญชี X-4078 วันที่ 18/10/2026 @20:42 ยอดเงินที่ใช้ได้ 950.46 บาท',
