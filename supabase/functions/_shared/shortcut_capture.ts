@@ -104,6 +104,10 @@ export async function canonicalDedupeMaterial(capture: Partial<CaptureEnvelopeV1
   const date = String(capture.transaction_datetime || capture.captured_at || '').slice(0, 10)
   const description = normalizeCaptureText(capture.description || capture.merchant || '').toLocaleLowerCase('en-US')
   const relevant = await sha256Hex(normalizeCaptureText(capture.relevant_text))
+  // Previews without a transaction time read identically for repeat purchases,
+  // so only captures within the same 5-minute capture window count as retries.
+  // shortcut: a retry straddling a window boundary shows as a second Inbox item, add a lookback query if that becomes common.
+  const window = capture.transaction_datetime ? '' : String(Math.floor(Date.parse(String(capture.captured_at || '')) / 300_000))
   return [
     `v${capture.dedupe_version ?? 1}`,
     String(capture.source || ''),
@@ -114,6 +118,8 @@ export async function canonicalDedupeMaterial(capture: Partial<CaptureEnvelopeV1
     date,
     description,
     relevant,
+    // Appended only when set so keys for timed captures stay unchanged.
+    ...(window ? [window] : []),
   ].join('|')
 }
 
