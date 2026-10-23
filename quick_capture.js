@@ -380,75 +380,168 @@
   // Returns a function: query → best-matching merchant object (or null)
   function _buildMerchantLookup(merchants) {
     if (!merchants || !merchants.length) return () => null
-    const STRIP = /^(?:ร้านอาหาร|ร้านกาแฟ|ร้านขนม|ร้าน|คาเฟ่|café|cafe|restaurant|the\s+)/i
-    const SPLIT = /[\s\-_.\/,&()+]+/
+
+    const STRIP_PREFIX = /^(?:(?:ร้านอาหาร|ร้านกาแฟ|ร้านขนม|ร้าน)\s*|(?:restaurant|the)\s+)/i
+    const LEGAL_SUFFIXES = new Set([
+      'co', 'company', 'ltd', 'limited', 'inc', 'incorporated',
+      'corp', 'corporation', 'plc', 'pte', 'llc',
+      'thailand', 'ประเทศไทย', 'จำกัด', 'มหาชน',
+    ])
+
+    function merchantParts(value) {
+      const original = String(value || '').normalize('NFKC').toLowerCase().trim()
+      let comparable = original
+        .replace(/[\(\[\{][^\)\]\}]{1,80}[\)\]\}]/g, ' ')
+        .replace(STRIP_PREFIX, '')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+      let tokens = comparable.split(' ').filter(Boolean)
+      if (tokens[0] === 'บริษัท') tokens.shift()
+      while (tokens.length > 1 && LEGAL_SUFFIXES.has(tokens[tokens.length - 1])) tokens.pop()
+      if (!tokens.length) tokens = original.split(/[^\p{L}\p{N}]+/gu).filter(Boolean)
+
+      comparable = tokens.join(' ')
+      return {
+        original,
+        comparable,
+        compact: tokens.join(''),
+        tokens: tokens.filter(t => t.length >= 2),
+      }
+    }
+
+    function tokenOverlap(a, b) {
+      if (!a.length || !b.length) return 0
+      const bSet = new Set(b)
+      const hits = a.filter(token => token.length >= 3 && bSet.has(token)).length
+      return hits / Math.max(a.length, b.length)
+    }
+
+    function isSubsequence(shorter, longer) {
+      if (shorter.length < 2) return false
+      let si = 0
+      for (let li = 0; li < longer.length && si < shorter.length; li++) {
+        if (longer[li] === shorter[si]) si++
+      }
+      return si === shorter.length && shorter.length / longer.length >= 0.5
+    }
+
+    function isCrossScript(a, b) {
+      const aThai = /[ก-๛]/.test(a)
+      const bThai = /[ก-๛]/.test(b)
+      const aLatin = /[a-z]/.test(a)
+      const bLatin = /[a-z]/.test(b)
+      return (aThai && bLatin) || (aLatin && bThai)
+    }
 
     const entries = (merchants || [])
       .filter(m => (m.name || '').length >= 2)
       .map(m => {
-        const raw    = (m.name || '').toLowerCase().trim()
-        const norm   = raw.replace(STRIP, '').trim()
-        const tokens = norm.split(SPLIT).filter(t => t.length >= 2)
-        const pKey   = _phoneticKey(_thaiRomanize(norm) || norm)
-        return { m, raw, norm, tokens, pKey }
+        const parts = merchantParts(m.name)
+        const pKey = _phoneticKey(_thaiRomanize(parts.comparable) || parts.comparable)
+        return { m, ...parts, pKey, lexical: parts.original }
       })
 
     return function fuzzyFind(query) {
       if (!query || query.length < 2) return null
-      const qRaw    = query.toLowerCase().trim()
-      const qNorm   = qRaw.replace(STRIP, '').trim()
-      const qTokens = qNorm.split(SPLIT).filter(t => t.length >= 2)
-
-      let best = null, bestScore = 0
+      const q = merchantParts(query)
+      if (q.compact.length < 2) return null
+      const qKey = _phoneticKey(_thaiRomanize(q.comparable) || q.comparable)
+      const matches = []
 
       for (const e of entries) {
-        if (!e.raw) continue
+        if (!e.compact) continue
         let score = 0
+        let tier = ''
 
-        // Tier 1 — exact or substring (raw)
-        if (qRaw === e.raw || qRaw.includes(e.raw) || e.raw.includes(qRaw)) {
-          score = 1.0
+        // Exact normalized spelling always wins over broader containment.
+        if (q.comparable === e.comparable || q.compact === e.compact) {
+          score = 100
+          tier = 'exact'
         }
-        // Tier 2 — normalized substring (strips ร้าน/cafe prefix from both sides)
-        else if (qNorm.length >= 2 && e.norm.length >= 2 &&
-                 (qNorm.includes(e.norm) || e.norm.includes(qNorm))) {
-          score = 0.85
+
+        // Bank descriptions often contain multiple merchant components separated by
+        // punctuation. Prefer the longest exact component, not the first merchant.
+        else if (e.compact.length >= 4 && q.tokens.includes(e.compact)) {
+          score = 94
+          tier = 'component'
         }
-        // Tier 3 — token overlap (each token must be ≥3 chars to avoid noise)
-        else if (qTokens.length && e.tokens.length) {
-          let hits = 0
-          for (const qt of qTokens) {
-            if (qt.length < 3) continue
-            if (e.tokens.some(t => t === qt || (t.length >= 3 && (t.includes(qt) || qt.includes(t))))) hits++
-          }
-          if (hits > 0) score = 0.5 + 0.35 * (hits / Math.max(qTokens.length, e.tokens.length))
-        }
-        // Tier 4 — Thai phonetic skeleton (e.g. "ไว้สตอรี่" ↔ "white story")
-        // Thai SR drops English final consonants (/t/ /d/ /s/) so we also accept
-        // prefix containment: "w" ⊂ "wt" means all Thai consonants appear in English word
-        if (score === 0 && e.pKey.length >= 2) {
-          const qKey = _phoneticKey(_thaiRomanize(qNorm))
-          if (qKey.length >= 2) {
-            const dist = _editDist(qKey, e.pKey)
-            const sim  = 1 - dist / Math.max(qKey.length, e.pKey.length)
-            // Subsequence check: all consonants of shorter appear in longer in order
-            // e.g. "wstr" ⊆ "wtstry" → Thai SR dropped final /t/ but all Thai consonants present
-            const shorter = qKey.length <= e.pKey.length ? qKey : e.pKey
-            const longer  = qKey.length <= e.pKey.length ? e.pKey : qKey
-            let si = 0
-            for (let li = 0; li < longer.length && si < shorter.length; li++) {
-              if (longer[li] === shorter[si]) si++
-            }
-            const isSubseq = shorter.length >= 2 && si === shorter.length
-              && shorter.length / longer.length >= 0.5
-            if (sim >= 0.65 || isSubseq) score = 0.65
+
+        // Safe subset matching: require a meaningful shorter name and at least half
+        // coverage, so tiny generic fragments cannot hijack an imported merchant.
+        else {
+          const shorter = q.compact.length <= e.compact.length ? q.compact : e.compact
+          const longer = q.compact.length <= e.compact.length ? e.compact : q.compact
+          const coverage = shorter.length / longer.length
+          if (shorter.length >= 4 && coverage >= 0.5 && longer.includes(shorter)) {
+            score = 82
+            tier = 'containment'
           }
         }
 
-        if (score > bestScore) { bestScore = score; best = e.m }
+        if (score === 0) {
+          const overlap = tokenOverlap(q.tokens, e.tokens)
+          if (overlap >= 0.5) {
+            score = 74 + overlap * 6
+            tier = 'tokens'
+          }
+        }
+
+        // A clear one-character misspelling such as Starbuks → Starbucks.
+        if (score === 0 && q.compact.length >= 5 && e.compact.length >= 5) {
+          const dist = _editDist(q.compact, e.compact)
+          const similarity = 1 - dist / Math.max(q.compact.length, e.compact.length)
+          if (similarity >= 0.82 && dist <= 2) {
+            score = 68 + similarity * 6
+            tier = 'edit'
+          }
+        }
+
+        // Thai phonetic skeleton (e.g. "ไว้สตอรี่" ↔ "white story").
+        if (score === 0 && isCrossScript(q.comparable, e.comparable) && qKey.length >= 2 && e.pKey.length >= 2) {
+          const dist = _editDist(qKey, e.pKey)
+          const similarity = 1 - dist / Math.max(qKey.length, e.pKey.length)
+          const shorter = qKey.length <= e.pKey.length ? qKey : e.pKey
+          const longer = qKey.length <= e.pKey.length ? e.pKey : qKey
+          if (similarity >= 0.65 || isSubsequence(shorter, longer)) {
+            score = 64 + Math.max(similarity, 0.65) * 6
+            tier = 'phonetic'
+          }
+        }
+
+        if (score > 0) {
+          matches.push({
+            merchant: e.m,
+            score,
+            tier,
+            specificity: e.compact.length,
+            lexical: e.lexical,
+          })
+        }
       }
 
-      return bestScore >= 0.6 ? best : null
+      matches.sort((a, b) =>
+        b.score - a.score ||
+        b.specificity - a.specificity ||
+        a.lexical.localeCompare(b.lexical)
+      )
+
+      const best = matches[0]
+      const runnerUp = matches[1]
+      if (!best) return null
+
+      // A single generic fragment shared by multiple stores is not enough evidence.
+      // Multi-component imports may use specificity (SHOPEEFOOD over SHOPEE), but
+      // equal-specificity components and close fuzzy results remain unmodified.
+      if (runnerUp) {
+        const sameTier = runnerUp.tier === best.tier
+        if (best.tier === 'component' && sameTier && best.specificity === runnerUp.specificity) return null
+        if (q.tokens.length === 1 && sameTier && ['containment', 'tokens'].includes(best.tier)) return null
+        if (['edit', 'phonetic'].includes(best.tier) && best.score - runnerUp.score < 3) return null
+      }
+
+      return best.merchant
     }
   }
 
@@ -479,9 +572,10 @@
     }
 
     // 2. Fuzzy / exact merchant match against known merchants
-    const fuzzyM = fuzzyFind?.(text) || (() => {
-      // Fallback: exact substring (original behaviour when no fuzzyFind passed)
-      return (S.merchants || [])
+    const fuzzyM = typeof fuzzyFind === 'function' ? fuzzyFind(text) : (() => {
+      // Fallback: exact substring only when no matcher was supplied. A null result
+      // from the ranked matcher is deliberate (for example, an ambiguous name).
+      return [...(S.merchants || [])]
         .sort((a, b) => (b.name || '').length - (a.name || '').length)
         .find(m => { const mn = (m.name || '').toLowerCase(); return mn && (lower.includes(mn) || mn.includes(lower)) })
     })()
@@ -972,31 +1066,24 @@
     }
   }
 
-  // ── FAB mic button ────────────────────────────────────────
-  function _injectMicFab() {
-    if (document.getElementById('fab-mic')) return
+  // ── Shortcut capture launcher ─────────────────────────────
+  function _injectShortcutButton() {
+    if (document.getElementById('fab-shortcut')) return
     const fab = document.getElementById('fab')
     if (!fab) return
     const btn      = document.createElement('button')
-    btn.id         = 'fab-mic'
+    btn.id         = 'fab-shortcut'
     btn.type       = 'button'
-    btn.setAttribute('aria-label', 'บันทึกเร็ว (Quick Capture)')
+    btn.setAttribute('aria-label', 'รายการจาก Shortcut')
     btn.onclick    = () => App.openQuickCapture()
-    btn.innerHTML  = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none"
-      stroke="currentColor" stroke-width="2" stroke-linecap="round"
-      stroke-linejoin="round" aria-hidden="true">
-      <rect x="9" y="2" width="6" height="11" rx="3"/>
-      <path d="M5 10a7 7 0 0 0 14 0"/>
-      <line x1="12" y1="19" x2="12" y2="22"/>
-      <line x1="8"  y1="22" x2="16" y2="22"/>
-    </svg>`
+    btn.textContent = 'รายการจาก Shortcut'
     fab.insertAdjacentElement('beforebegin', btn)
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', _injectMicFab)
+    document.addEventListener('DOMContentLoaded', _injectShortcutButton)
   } else {
-    setTimeout(_injectMicFab, 0)
+    setTimeout(_injectShortcutButton, 0)
   }
 
 })()

@@ -8,13 +8,14 @@ const Calc = require('../calculations.js')
 const root = path.join(__dirname, '..')
 const read = file => fs.readFileSync(path.join(root, file), 'utf8')
 
-function quickParser() {
+function quickParser(overrides = {}) {
   const source = read('quick_capture.js')
   const context = {
     S: {
       wallets: [{ id:'cash', name:'เงินสด', type:'cash' }],
       categories: { expense:[{ id:'food', label:'อาหาร' }], income:[{ id:'salary', label:'เงินเดือน' }] },
       merchants: [],
+      ...overrides,
     },
     App: {},
     MTSafeRender: require('../safe_render.js'),
@@ -27,6 +28,45 @@ function quickParser() {
   vm.runInNewContext(`${source.slice(0, source.indexOf('  // ── Speech API'))}\nApp.__parseQuickCapture = parseQuickCapture;})()`, context)
   return context.App.__parseQuickCapture
 }
+
+test('merchant matching prefers the most specific canonical name independent of array order', () => {
+  for (const merchants of [
+    [{ id:'shopee', name:'SHOPEE' }, { id:'food', name:'SHOPEEFOOD' }],
+    [{ id:'food', name:'SHOPEEFOOD' }, { id:'shopee', name:'SHOPEE' }],
+  ]) {
+    const parse = quickParser({ merchants })
+    assert.equal(parse('SHOPEE*SHOPEEFOOD 450').merchant, 'SHOPEEFOOD')
+    assert.equal(parse('SHOPEE 450').merchant, 'SHOPEE')
+  }
+})
+
+test('merchant matching removes corporate noise and accepts a clear near spelling', () => {
+  const parse = quickParser({ merchants: [
+    { id:'gowabi', name:'Gowabi' },
+    { id:'starbucks', name:'Starbucks' },
+  ] })
+  assert.equal(parse('GoWabi (Thailand) Co., Ltd. 990').merchant, 'Gowabi')
+  assert.equal(parse('Starbuks 180').merchant, 'Starbucks')
+})
+
+test('merchant matching keeps the imported text when a fuzzy result is ambiguous', () => {
+  const parse = quickParser({ merchants: [
+    { id:'cafe-amazon', name:'Cafe Amazon' },
+    { id:'amazon-prime', name:'Amazon Prime' },
+  ] })
+  assert.equal(parse('Amazon 250').merchant, 'Amazon')
+
+  const nearTie = quickParser({ merchants: [
+    { id:'starbucks', name:'Starbucks' },
+    { id:'starbacks', name:'Starbacks' },
+  ] })
+  assert.equal(nearTie('Starbcks 180').merchant, 'Starbcks')
+})
+
+test('merchant matching does not use a Latin phonetic skeleton for unrelated brands', () => {
+  const parse = quickParser({ merchants: [{ id:'grab', name:'Grab' }] })
+  assert.equal(parse('GoWabi (Thailand) Co., Ltd. 990').merchant, 'GoWabi (Thailand) Co., Ltd.')
+})
 
 test('Thai word amounts keep the merchant and use the local calendar date', () => {
   const parse = quickParser()
