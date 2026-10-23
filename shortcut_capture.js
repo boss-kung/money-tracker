@@ -115,9 +115,16 @@
     const selectedView = view === 'dismissed' ? 'dismissed' : 'pending'
     const result = await request('shortcut-inbox', `?view=${selectedView}&limit=50`, {}, scope)
     ensureScope(scope)
+    const reviewed = selectedView === 'pending'
+      ? [...claims.entries()].map(([id, claim]) => [id, safeSummary({ ...(summaries.get(id) || {}), capture_id: id, ...(claim.capture || {}) })])
+      : []
     summaries.clear()
     for (const item of Array.isArray(result.items) ? result.items : []) summaries.set(String(item.capture_id), safeSummary(item))
-    if (selectedView === 'pending') pendingCount = Number.isFinite(Number(result.count)) ? Number(result.count) : summaries.size
+    for (const [id, item] of reviewed) if (!summaries.has(id)) summaries.set(id, item)
+    if (selectedView === 'pending') {
+      const serverCount = Number.isFinite(Number(result.count)) ? Number(result.count) : summaries.size
+      pendingCount = Math.max(serverCount, summaries.size)
+    }
     loaded = true
     inboxError = ''
     updateInboxBadge()
@@ -244,8 +251,9 @@
   function onTransactionClose() {
     if (!activeCaptureId) return undefined
     const id = activeCaptureId
-    if (!online()) { claims.delete(id); activeCaptureId = ''; return undefined }
-    return release(id).catch(() => { claims.delete(id); if (activeCaptureId === id) activeCaptureId = '' })
+    activeCaptureId = ''
+    if (!online()) return undefined
+    return release(id).catch(() => undefined)
   }
 
   function snapshot() {

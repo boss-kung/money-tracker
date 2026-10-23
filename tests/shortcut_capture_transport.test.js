@@ -116,6 +116,48 @@ test('releases a claim when opening a draft fails before the review drawer opens
   assert.equal(env.calls.filter(call => call.url.endsWith('/release')).length, 1)
 })
 
+test('refresh keeps an unsaved reviewed capture while release is in flight', async () => {
+  const captureId = '22222222-2222-4222-8222-222222222222'
+  let finishRelease
+  const env = setup({ fetchImpl: async url => {
+    if (url.endsWith('/claim')) return response(200, {
+      capture_id: captureId,
+      capture: { capture_id: captureId, amount: 80, direction: 'debit', merchant: 'MBR9', captured_at: '2026-10-18T00:00:00Z' },
+      claim_secret: 'claim-secret',
+    })
+    if (url.endsWith('/release')) return new Promise(resolve => { finishRelease = resolve })
+    return response(200, { count: 0, items: [] })
+  } })
+
+  await env.api.openDraft(captureId)
+  const closing = env.listeners['transactionClose:shortcut-capture.release-claim']()
+  await env.api.refresh()
+
+  assert.deepEqual(env.api.snapshot().summaries.map(item => item.capture_id), [captureId])
+  finishRelease(response(200, { ok: true }))
+  await closing
+})
+
+test('failed release keeps the reviewed claim reusable instead of losing it', async () => {
+  const captureId = '22222222-2222-4222-8222-222222222222'
+  const env = setup({ fetchImpl: async url => {
+    if (url.endsWith('/claim')) return response(200, {
+      capture_id: captureId,
+      capture: { capture_id: captureId, amount: 80, direction: 'debit', merchant: 'MBR9', captured_at: '2026-10-18T00:00:00Z' },
+      claim_secret: 'claim-secret',
+    })
+    if (url.endsWith('/release')) return response(503, { error: 'inbox_failed' })
+    return response(200, { count: 0, items: [] })
+  } })
+
+  await env.api.openDraft(captureId)
+  await env.listeners['transactionClose:shortcut-capture.release-claim']()
+  await env.api.openDraft(captureId)
+
+  assert.equal(env.calls.filter(call => call.url.endsWith('/claim')).length, 1)
+  assert.deepEqual(env.api.snapshot().summaries.map(item => item.capture_id), [captureId])
+})
+
 test('opening an actual Shortcut review resolves merchants before wallet suggestions', async () => {
   const quickSource = fs.readFileSync(path.join(__dirname, '..', 'quick_capture.js'), 'utf8')
   const context = { S: { categories: {} }, MTSafeRender: require('../safe_render.js') }

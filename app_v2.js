@@ -2950,7 +2950,7 @@ App.pickEmoji=(p,e)=>{
     const box = document.getElementById('add-tx-content')
     if (!box) return
     box.innerHTML = `<div style="display:flex;flex-direction:column;height:100%">
-      <div class="sheet-header"><h2>${esc(title)}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
+      <div class="sheet-header"><h2>${esc(title)}</h2><button class="btn-icon" onclick="App.closeAddTx()">✕</button></div>
       <div class="type-tabs">${tabs.map(([v,l,i]) => `<button class="type-tab type-${v}${S.tx.type === v ? ' active' : ''}" onclick="App._setTxType('${v}')"><span aria-hidden="true">${i}</span> ${l}</button>`).join('')}</div>
       <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 20px">
         <div class="tx-amount-display-wrap">
@@ -3537,7 +3537,7 @@ App.pickEmoji=(p,e)=>{
     if (!box) return
     const _scrollEl = box.querySelector('.add-detail-scroll')
     const _savedScroll = _scrollEl ? _scrollEl.scrollTop : 0
-    box.innerHTML = `<div class="sheet-header"><h2>${S.txMode === 'edit' ? 'แก้ไขรายละเอียด' : 'รายละเอียดรายการ'}</h2><button class="btn-icon" onclick="App.closeOverlay('overlay-add-tx')">✕</button></div>
+    box.innerHTML = `<div class="sheet-header"><h2>${S.txMode === 'edit' ? 'แก้ไขรายละเอียด' : 'รายละเอียดรายการ'}</h2><button class="btn-icon" onclick="App.closeAddTx()">✕</button></div>
       <div class="add-detail-shell">
         <div class="add-detail-scroll">
           <div class="amount-summary-card ${type === 'income' ? 'income' : type === 'transfer' ? 'transfer' : 'expense'}" onclick="App._backToAmount()"><div><small><b>${type === 'income' ? 'รายรับ' : type === 'transfer' ? 'โอนเงิน' : 'รายจ่าย'}</b><span> · แตะเพื่อแก้ไข</span></small><strong>${type === 'income' ? '+' : type === 'expense' ? '-' : ''}฿${display}</strong></div><div style="font-size:20px">✏️</div></div>
