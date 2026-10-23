@@ -25,7 +25,7 @@ function quickParser(overrides = {}) {
     document: {},
     console,
   }
-  vm.runInNewContext(`${source.slice(0, source.indexOf('  // ── Speech API'))}\nApp.__parseQuickCapture = parseQuickCapture;})()`, context)
+  vm.runInNewContext(source.replace(/\}\)\(\)\s*$/, 'App.__parseQuickCapture = parseQuickCapture;})()'), context)
   return context.App.__parseQuickCapture
 }
 

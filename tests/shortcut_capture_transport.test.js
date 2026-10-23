@@ -1,6 +1,8 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const fs = require('node:fs')
+const vm = require('node:vm')
 
 const modulePath = path.join(__dirname, '..', 'shortcut_capture.js')
 const core = require('../shortcut_capture_core.js')
@@ -112,6 +114,34 @@ test('releases a claim when opening a draft fails before the review drawer opens
 
   await assert.rejects(env.api.openDraft(captureId), error => error.code === 'APP_STATE_UNAVAILABLE')
   assert.equal(env.calls.filter(call => call.url.endsWith('/release')).length, 1)
+})
+
+test('opening an actual Shortcut review resolves merchants before wallet suggestions', async () => {
+  const quickSource = fs.readFileSync(path.join(__dirname, '..', 'quick_capture.js'), 'utf8')
+  const context = { S: { categories: {} }, MTSafeRender: require('../safe_render.js') }
+  vm.runInNewContext(quickSource, context)
+  const merchants = ['SHOPEE', 'SHOPEEFOOD', 'Gowabi', 'Starbucks', 'Cafe Amazon', 'Amazon Prime'].map(name => ({ id: name, name }))
+  for (const order of [merchants, [...merchants].reverse()]) {
+    for (const [input, expected] of [
+      ['SHOPEE*SHOPEEFOOD', 'SHOPEEFOOD'],
+      ['GoWabi (Thailand) Co., Ltd.', 'Gowabi'],
+      ['Starbuks', 'Starbucks'],
+      ['Amazon', 'Amazon'],
+      ['Unknown Store', 'Unknown Store'],
+    ]) {
+      const env = setup({ fetchImpl: async () => response(200, { capture: {
+        merchant: input, amount: 59, direction: 'debit', captured_at: '2026-10-23T10:00:00Z',
+      }, claim_secret: 'test-claim' }) })
+      global.S.merchants = order
+      global.MTQuickCapture = context.MTQuickCapture
+      let walletQuery
+      global.App._suggestWalletForMerchant = merchant => { walletQuery = merchant; return 'wallet-1' }
+      await env.api.openDraft('test-capture')
+      assert.equal(global.S.tx.merchant, expected, input)
+      assert.equal(walletQuery, expected)
+    }
+  }
+  delete global.MTQuickCapture
 })
 
 test('transient acknowledgement failure queues once and retry is scoped to the current user', async () => {

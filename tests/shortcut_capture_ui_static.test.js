@@ -2,16 +2,36 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const vm = require('node:vm')
 
 const root = path.join(__dirname, '..')
 const quick = fs.readFileSync(path.join(root, 'quick_capture.js'), 'utf8')
+const capture = fs.readFileSync(path.join(root, 'shortcut_capture.js'), 'utf8')
 const css = fs.readFileSync(path.join(root, 'style_v2.css'), 'utf8')
 
-test('the floating Shortcut launcher uses an explicit accessible text label', () => {
-  assert.match(quick, /btn\.id\s*=\s*'fab-shortcut'/)
-  assert.match(quick, /btn\.textContent\s*=\s*'รายการจาก Shortcut'/)
-  assert.match(quick, /aria-label',\s*'รายการจาก Shortcut'/)
-  assert.doesNotMatch(quick, /btn\.id\s*=\s*'fab-mic'/)
+test('one icon-only accessible launcher opens Shortcut Inbox instead of Quick Capture', async () => {
+  let button, opened, insertions = 0
+  const handlers = {}
+  const hooks = {}
+  const doc = {
+    getElementById: id => id === 'fab' ? { insertAdjacentElement: (_, value) => { button = value; insertions++ } } : button,
+    createElement: () => ({ setAttribute: (key, value) => { handlers[key] = value }, addEventListener: (key, value) => { handlers[key] = value } }),
+    addEventListener: () => {},
+  }
+  vm.runInNewContext(capture, {
+    document: doc, App: { openSubScreen: html => { opened = html } },
+    MTShortcutCaptureCore: require('../shortcut_capture_core.js'),
+    MTScreenHooks: { register: (screen, id, callback) => { hooks[id] = callback } },
+  })
+  assert.equal(button.id, 'fab-shortcut')
+  assert.equal(handlers['aria-label'], 'รายการจาก Shortcut')
+  assert.match(button.innerHTML, /<svg[^>]*aria-hidden="true"/)
+  assert.doesNotMatch(button.innerHTML, /รายการจาก Shortcut/)
+  await handlers.click()
+  assert.match(opened, /Shortcut Inbox/)
+  hooks['shortcut-capture.inbox-button']()
+  assert.equal(insertions, 1)
+  assert.doesNotMatch(quick, /openQuickCapture|overlay-quick-capture|qc-mic-btn|บันทึกเร็ว/)
 })
 
 test('only the Add Transaction overlay and sheet are forced to the full viewport width', () => {
@@ -33,6 +53,6 @@ test('mobile transaction and Shortcut inputs keep iOS from auto-zooming below 16
   const mobileStart = css.lastIndexOf('@media (max-width: 480px)')
   assert.notEqual(mobileStart, -1, 'missing narrow-mobile form rules')
   const mobileRules = css.slice(mobileStart, mobileStart + 500)
-  assert.match(mobileRules, /input\.form-input[^\{]*#qc-input[^\{]*\{\s*font-size:\s*16px\s*!important/)
+  assert.match(mobileRules, /input\.form-input[^\{]*\.search-input[^\{]*\{\s*font-size:\s*16px\s*!important/)
   assert.match(mobileRules, /\.form-input\[type="date"\]\s*\{\s*font-size:\s*16px\s*!important/)
 })

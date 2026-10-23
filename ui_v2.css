@@ -1101,16 +1101,6 @@ html.dark.ui-v2 .mt-net-card {
 html.dark.ui-v2 .mt-net-card::after { background: var(--bg); }
 
 /* Shortcut transaction inbox — review-first, touch friendly, and safe on iOS. */
-.shortcut-inbox-button {
-  display:flex; align-items:center; justify-content:space-between; gap:10px;
-  width:100%; min-height:44px; margin:8px 0; padding:10px 14px;
-  border:1px solid var(--border); border-radius:12px; background:var(--surface);
-  color:var(--text); font:inherit; text-align:left; cursor:pointer;
-}
-.shortcut-inbox-badge {
-  display:inline-flex; align-items:center; justify-content:center; min-width:24px; min-height:24px;
-  padding:2px 7px; border-radius:999px; background:var(--primary); color:#fff; font-size:12px; font-weight:700;
-}
 .shortcut-inbox-screen,
 .shortcut-token-screen { padding:0 16px max(32px, env(safe-area-inset-bottom)); color:var(--text); }
 .shortcut-inbox-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:14px 0; }

@@ -1,5 +1,27 @@
 # Shortcut Capture UI and Merchant Matching Design
 
+## Follow-up correction: actual Shortcut Inbox flow (r148)
+
+The original implementation renamed the Quick Capture launcher but still opened
+the voice/free-text flow. Its merchant matcher was not called by
+`MTShortcutCapture.openDraft`, which maps server captures directly to transactions.
+
+The floating launcher now belongs to `shortcut_capture.js`, uses an icon-only inbox
+tray above Add Transaction, and opens Shortcut Inbox directly. Remove the old
+Quick Capture screen and speech actions, including the duplicate Inbox header button.
+Expose the existing matcher as a pure suggestion and resolve against the current
+merchant catalog before mapping a capture or suggesting its wallet/category.
+
+The r147 Add Transaction viewport-width rule is already present. Add a non-shrinking
+sheet constraint and a 16px search-input focus guard. Verify the actual Inbox → review
+flow at 320px, 390px, and 440px in both themes; record measured edges rather than
+assuming that static CSS tests prove behavior on physical iOS hardware. The demo
+also needs the existing shared UI stylesheet for Shortcut Inbox styling.
+
+Regression coverage must invoke `openDraft` with the real suggestion module and
+assert canonical merchant names, including array-order independence and ambiguous
+fallback. Verify that the launcher actually opens Inbox and has no visible text.
+
 ## Intent
 
 Make the Shortcut capture flow feel like a first-class transaction entry path: the launcher is explicit, the transaction detail drawer always fills the iPhone viewport width, and imported merchant text resolves to the most specific existing merchant without creating avoidable duplicates.

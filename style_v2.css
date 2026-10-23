@@ -1791,15 +1791,14 @@ body.is-more #fab:active {
   position: absolute !important;
   right: max(16px, var(--safe-r)) !important;
   bottom: calc(var(--nav-h) + var(--safe-b) + var(--app-bottom-gap) + 6px + var(--fab-size, 56px) + 12px) !important;
-  width: auto !important;
-  max-width: calc(100vw - 32px) !important;
+  width: 46px !important;
   height: 46px !important;
-  padding: 0 14px !important;
-  border-radius: 14px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
   background: var(--surface) !important;
   color: var(--primary) !important;
   border: 1.5px solid var(--border) !important;
-  box-shadow: 0 4px 14px rgba(0,0,0,.12) !important;
+  box-shadow: var(--shadow-sm) !important;
   font-weight: 700 !important;
   line-height: 1 !important;
   white-space: nowrap !important;
@@ -1831,10 +1830,30 @@ body.is-transactions #fab-shortcut:active {
   box-shadow: 0 2px 8px rgba(0,0,0,.1) !important;
 }
 
-html.dark #fab-shortcut {
-  background: var(--card) !important;
-  box-shadow: 0 4px 14px rgba(0,0,0,.3) !important;
+#fab-shortcut svg {
+  width: 24px;
+  height: 24px;
 }
+
+#fab-shortcut .shortcut-inbox-badge {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--expense);
+  color: white;
+  font-size: 11px;
+  line-height: 1;
+  text-align: center;
+}
+
+#fab-shortcut .shortcut-inbox-badge[hidden] { display: none; }
 
 .card,
 .wallet-card,
@@ -1930,6 +1949,8 @@ textarea.form-input:focus {
 
 #overlay-add-tx > #sheet-add-tx {
   width: 100vw !important;
+  min-width: 100% !important;
+  flex-shrink: 0 !important;
   max-width: none !important;
   margin-inline: 0 !important;
 }
@@ -3644,7 +3665,7 @@ body {
 
 @media (max-width: 480px){
   .form-split-row{grid-template-columns:1fr!important;gap:10px!important}
-  input.form-input, select.form-input, textarea.form-input, #qc-input{font-size:16px!important}
+  input.form-input, select.form-input, textarea.form-input, .search-input{font-size:16px!important}
   .form-input[type="date"]{
     font-size:16px!important;
   }

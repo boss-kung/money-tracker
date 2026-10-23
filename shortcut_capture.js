@@ -196,7 +196,8 @@
       const payload = capture.capture || capture
       const state = appState()
       if (!state) throw new TransportError('APP_STATE_UNAVAILABLE', 'app_state_unavailable')
-      const mapped = core.mapCaptureToDraft({ ...payload, capture_id: String(id) }, {
+      const merchant = root.MTQuickCapture?.matchMerchant?.(payload.merchant, state.merchants || [])
+      const mapped = core.mapCaptureToDraft({ ...payload, merchant: merchant?.name || payload.merchant, capture_id: String(id) }, {
         wallets: state.wallets || [],
         suggestCategory: (value, type) => root.MTQuickCapture?.inferCategoryId?.(`${value.merchant || ''} ${value.description || ''}`, type) || '',
         suggestWallet: value => root.App?._suggestWalletForMerchant?.(value.merchant, value.direction === 'credit' ? 'income' : 'expense') || '',
@@ -392,20 +393,20 @@
     if (badge) { const count = pendingCount; badge.textContent = count > 99 ? '99+' : String(count); badge.hidden = count < 1 }
   }
 
-  function injectTransactionsInbox() {
+  function injectShortcutLauncher() {
     const doc = root.document
-    const content = doc?.querySelector?.('#page-transactions')
-    if (!content) return
-    let button = doc.getElementById?.('shortcut-inbox-button')
+    const fab = doc?.getElementById?.('fab')
+    if (!fab) return
+    let button = doc.getElementById('fab-shortcut')
     if (!button) {
       button = doc.createElement('button')
-      button.id = 'shortcut-inbox-button'
+      button.id = 'fab-shortcut'
       button.type = 'button'
-      button.className = 'shortcut-inbox-button'
-      button.innerHTML = '<span>📥 รายการจาก Shortcut</span><span class="shortcut-inbox-badge" hidden>0</span>'
+      button.setAttribute('aria-label', 'รายการจาก Shortcut')
+      button.title = 'รายการจาก Shortcut'
+      button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v10m-4-4 4 4 4-4M5 10l-2 5v5h18v-5l-2-5M3 15h5l2 3h4l2-3h5"/></svg><span class="shortcut-inbox-badge" hidden>0</span>'
       button.addEventListener('click', () => openInbox())
-      const header = content.querySelector('.page-header')
-      ;(header || content).appendChild(button)
+      fab.insertAdjacentElement('beforebegin', button)
     }
     updateInboxBadge()
   }
@@ -438,13 +439,15 @@
   const api = Object.freeze({ refresh, claim, release, dismiss, restore, openDraft, openInbox, openTokenSettings, listTokens, createToken, revokeToken, retryAcknowledgements, snapshot })
   root.MTScreenHooks?.register?.('transactionSave', 'shortcut-capture.save-before-ack', onTransactionSave, { priority: 200 })
   root.MTScreenHooks?.register?.('transactionClose', 'shortcut-capture.release-claim', onTransactionClose, { priority: 200 })
-  root.MTScreenHooks?.register?.('transactions', 'shortcut-capture.inbox-button', injectTransactionsInbox, { priority: 200 })
+  root.MTScreenHooks?.register?.('transactions', 'shortcut-capture.inbox-button', injectShortcutLauncher, { priority: 200 })
   root.MTScreenHooks?.register?.('more', 'shortcut-capture.token-settings', injectTokenSettings, { priority: 200 })
   root.MTScreenHooks?.register?.('addTransactionDetail', 'shortcut-capture.review-disclosure', injectReviewDisclosure, { priority: 200 })
   root.addEventListener?.('mt:auth-state-changed', () => { summaries.clear(); claims.clear(); activeCaptureId = ''; pendingCount = 0; tokenResult = null; loaded = false })
   root.addEventListener?.('online', () => { retryAcknowledgements().catch(() => {}) })
   root.addEventListener?.('pageshow', () => { refresh().catch(() => {}); retryAcknowledgements().catch(() => {}) })
   root.document?.addEventListener?.('visibilitychange', () => { if (root.document.visibilityState === 'visible') { refresh().catch(() => {}); retryAcknowledgements().catch(() => {}) } })
+  if (root.document?.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', injectShortcutLauncher)
+  else injectShortcutLauncher()
   if (root.window === root && root.document) setTimeout(() => { refresh().catch(() => {}); retryAcknowledgements().catch(() => {}) }, 0)
   return api
 })
