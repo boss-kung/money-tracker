@@ -8,6 +8,8 @@ const Calc = require('../calculations.js')
 const Ledger = require('../ledger.js')
 
 test('money aggregation rounds at the satang boundary and keeps scheduled rows out of actuals', () => {
+  const originalGetToday = global.getTODAY
+  global.getTODAY = () => '2026-10-06'
   const transactions = [
     { id:'i1', type:'income', walletId:'cash', amount:0.1, date:'2026-10-05' },
     { id:'i2', type:'income', walletId:'cash', amount:0.2, date:'2026-10-05' },
@@ -15,20 +17,25 @@ test('money aggregation rounds at the satang boundary and keeps scheduled rows o
     { id:'e2', type:'expense', walletId:'cash', categoryId:'food', amount:0.2, date:'2026-10-05' },
     { id:'future', type:'expense', walletId:'cash', categoryId:'food', amount:100, date:'2026-10-20', scheduled:true },
   ]
-  const actual = Calc.getMonthlyIncomeExpense(transactions, '2026-10')
-  const stats = Calc.getMonthlyStats(transactions, '2026-10')
-  const budget = Calc.getBudgetProgress(transactions, [{ categoryId:'food', monthlyLimit:0.3 }], { expense:[{ id:'food', label:'อาหาร' }] }, '2026-10')[0]
+  try {
+    const actual = Calc.getMonthlyIncomeExpense(transactions, '2026-10')
+    const stats = Calc.getMonthlyStats(transactions, '2026-10')
+    const budget = Calc.getBudgetProgress(transactions, [{ categoryId:'food', monthlyLimit:0.3 }], { expense:[{ id:'food', label:'อาหาร' }] }, '2026-10')[0]
 
-  assert.equal(Calc.isSafeMoneyAmount(0.1 + 0.2), true)
-  assert.equal(actual.income, 0.3)
-  assert.equal(actual.expense, 0.3)
-  assert.equal(actual.netCashflow, 0)
-  assert.equal(stats.income, actual.income)
-  assert.equal(stats.expense, actual.expense)
-  assert.equal(stats.savingsRate, actual.savingsRate)
-  assert.equal(budget.spent, 0.3)
-  assert.equal(budget.over, false)
-  assert.equal(Calc.getMonthlyScheduledTotals(transactions, '2026-10').expense, 100)
+    assert.equal(Calc.isSafeMoneyAmount(0.1 + 0.2), true)
+    assert.equal(actual.income, 0.3)
+    assert.equal(actual.expense, 0.3)
+    assert.equal(actual.netCashflow, 0)
+    assert.equal(stats.income, actual.income)
+    assert.equal(stats.expense, actual.expense)
+    assert.equal(stats.savingsRate, actual.savingsRate)
+    assert.equal(budget.spent, 0.3)
+    assert.equal(budget.over, false)
+    assert.equal(Calc.getMonthlyScheduledTotals(transactions, '2026-10').expense, 100)
+  } finally {
+    if (originalGetToday === undefined) delete global.getTODAY
+    else global.getTODAY = originalGetToday
+  }
 })
 
 test('money validator rejects non-finite and unsafe-cent amounts', () => {
