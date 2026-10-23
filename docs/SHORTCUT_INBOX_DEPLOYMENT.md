@@ -40,11 +40,13 @@ Confirm the scheduled cleanup job exists and is enabled. Its job removes expired
 5. Paste the Token into the `Authorization: Bearer ...` header and use the production ingestion URL shown in that guide.
 6. Run a harmless synthetic or personal notification. Switch to the Inbox and review/edit before pressing Save; the Shortcut never writes a transaction directly.
 
+For the manual screen path, leave the bank/LINE screen visible and launch **Money Tracker - Manual Screen Capture** from Control Center, the Action Button, Back Tap, or Siri. Do not press Run inside the Shortcuts editor: `Get What's On Screen` would read the editor instead of the bank message, the server would correctly reject it as `invalid_capture`, and the URL action can remain spinning until its timeout.
+
 ### Notification automation check
 
 Importing a `.shortcut` does not install an iPhone Personal Automation. On the iPhone, create `Shortcuts → Automation → Notification`, choose `App = LINE`, build a `Text` action from the Notification's available `Title`, `Subtitle`, and `Message/Body` fields, then add `Run Shortcut → Money Tracker - Notification Inbox` with that Text as its input. Passing the Notification object directly can lose the message body on some iOS versions. Keep `Ask Before Running` enabled for the first test. A normal LINE notification without this device-local trigger cannot reach the ingestion endpoint.
 
-The corrected native workflow has a local guard: a missing input shows a diagnostic and stops before `Get Contents of URL`. If that diagnostic appears, repair the Automation's `Run Shortcut` input rather than changing the Token. Background automation may not display Quick Look; the authoritative result is the authenticated Money Tracker Inbox after refresh.
+The corrected native workflow has a local guard: a missing input shows a diagnostic and stops before `Get Contents of URL`. If that diagnostic appears, repair the Automation's `Run Shortcut` input rather than changing the Token. Production workflows intentionally end after `Get Contents of URL`; do not append Quick Look because it waits for dismissal and can leave an automation or overlay run looking stuck. The authoritative result is the authenticated Money Tracker Inbox after refresh.
 
 ## Synthetic smoke test
 

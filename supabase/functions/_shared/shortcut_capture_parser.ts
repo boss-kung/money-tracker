@@ -16,10 +16,9 @@ const FULL_BLOCK_PATTERNS = [
   /LINE Pay Purchase[\s\S]*?Balance:\s*(?:THB\s*)?[\d,]+(?:\.\d{1,2})?/giu,
 ]
 
-// LINE may deliver only a notification preview, which often omits the
-// available-credit/balance/date suffix present in the full bank screen. These
-// relaxed patterns are deliberately enabled only for line_notification
-// captures and stop at the next transaction anchor so the latest block wins.
+// LINE and Get On-Screen may return only a notification preview, which often
+// omits the available-credit/balance/date suffix present in the full screen.
+// These patterns stop at the next transaction anchor so the latest block wins.
 const COMPACT_NOTIFICATION_PATTERNS = [
   /มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?(?:จำนวน\s*)?[\d,]+(?:\.\d{1,2})?\s*THB[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
   /You have spent[\s\S]*?THB\s*[\d,]+(?:\.\d{1,2})?[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
@@ -39,10 +38,8 @@ function normalizeForParsing(text: string): string {
   return text.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ')
 }
 
-function latestBlock(text: string, captureMethod: string): string | null {
-  const patterns = captureMethod === 'line_notification'
-    ? [...COMPACT_NOTIFICATION_PATTERNS, ...FULL_BLOCK_PATTERNS]
-    : FULL_BLOCK_PATTERNS
+function latestBlock(text: string): string | null {
+  const patterns = [...COMPACT_NOTIFICATION_PATTERNS, ...FULL_BLOCK_PATTERNS]
   const matches = patterns.flatMap(pattern => [...text.matchAll(pattern)].map(match => ({ index: match.index ?? -1, text: match[0] })))
   return matches.sort((left, right) => left.index - right.index).at(-1)?.text ?? null
 }
@@ -81,7 +78,7 @@ export async function parseRawShortcutCapture(input: unknown, now = new Date().t
   if (!isRecord(input) || typeof input.capture_method !== 'string' || !CAPTURE_METHODS.has(input.capture_method)) invalid()
   const originalText = rawText(input.raw_text)
   const capturedAt = timestamp(input.captured_at, now)
-  const block = latestBlock(normalizeForParsing(originalText), input.capture_method)
+  const block = latestBlock(normalizeForParsing(originalText))
   if (!block) invalid()
 
   const payload: ValidatedCaptureV1 = {

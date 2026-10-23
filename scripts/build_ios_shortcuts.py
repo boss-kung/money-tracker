@@ -109,16 +109,7 @@ def request_action(action_uuid: str, raw_text_uuid: str, capture_method: str) ->
             "WFAllowsCellularAccess": 1,
             "WFAllowsRedirects": 1,
             "WFIgnoreCookies": 0,
-            "WFTimeout": 60,
-        },
-    }
-
-
-def quick_look_action(request_uuid: str) -> dict:
-    return {
-        "WFWorkflowActionIdentifier": "is.workflow.actions.previewdocument",
-        "WFWorkflowActionParameters": {
-            "WFInput": direct_token(request_uuid, "Contents of URL"),
+            "WFTimeout": 15,
         },
     }
 
@@ -182,7 +173,6 @@ def make_workflow(name: str, capture_method: str, manual: bool) -> dict:
         actions.extend([
             dictionary_action(dictionary_uuid, text_uuid, capture_method),
             request_action(request_uuid, text_uuid, capture_method),
-            quick_look_action(request_uuid),
         ])
     else:
         grouping_uuid = uid()
@@ -190,7 +180,6 @@ def make_workflow(name: str, capture_method: str, manual: bool) -> dict:
             conditional_action(uid(), grouping_uuid, 0, text_uuid),
             dictionary_action(dictionary_uuid, text_uuid, capture_method),
             request_action(request_uuid, text_uuid, capture_method),
-            quick_look_action(request_uuid),
             conditional_action(uid(), grouping_uuid, 1),
             show_result_action(
                 "Money Tracker: ไม่ได้รับข้อความจาก Notification Automation\n"

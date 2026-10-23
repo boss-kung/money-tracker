@@ -186,6 +186,17 @@ Deno.test('server parser accepts LINE Wallet spacing after the baht symbol', asy
   equal(result.merchant, 'McDonald')
 })
 
+Deno.test('server parser accepts a compact notification preview captured with Get On-Screen', async () => {
+  const result = await parseRawShortcutCapture({
+    raw_text: 'LINE Wallet\nLINE Pay Purchase ฿ 49.00 Payment complete. Merchant:\nMcDonald',
+    capture_method: 'whats_on_screen',
+    captured_at: '2026-10-20T14:39:16+07:00',
+  })
+  equal(result.source, 'line_wallet')
+  equal(result.amount, '49.00')
+  equal(result.merchant, 'McDonald')
+})
+
 Deno.test('server parser preserves SCB credit notification date with an at-sign time', async () => {
   const result = await parseRawShortcutCapture({
     raw_text: 'SCB Connect\nรายการเงินเข้า 200.00 บาท เข้าบัญชี X-4078 วันที่ 18/10/2026 @20:42 ยอดเงินที่ใช้ได้ 950.46 บาท',
@@ -216,4 +227,14 @@ Deno.test('notification and screen raw captures share a dedupe key', async () =>
 Deno.test('server parser rejects unsupported or non-transaction text', async () => {
   await rejectsCode(() => parseRawShortcutCapture({ raw_text: 'hello', capture_method: 'whats_on_screen' }), 'invalid_capture')
   await rejectsCode(() => parseRawShortcutCapture({ raw_text: 'รายการเงินออก -80.00 บาท', capture_method: 'email' }), 'invalid_capture')
+})
+
+Deno.test('timeless previews dedupe quick retries but keep a repeat purchase later the same day', async () => {
+  const raw_text = 'LINE Wallet\nLINE Pay Purchase ฿ 49.00 Payment complete. Merchant:\nMcDonald'
+  const capture = (captured_at: string) => parseRawShortcutCapture({ raw_text, capture_method: 'whats_on_screen', captured_at })
+  const first = await capture('2026-10-20T08:00:05+07:00')
+  const retry = await capture('2026-10-20T08:00:40+07:00')
+  const later = await capture('2026-10-20T12:30:00+07:00')
+  equal(retry.dedupe_key, first.dedupe_key, 'retry')
+  if (later.dedupe_key === first.dedupe_key) throw new Error('repeat purchase collapsed into the first capture')
 })
