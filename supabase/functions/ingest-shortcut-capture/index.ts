@@ -4,7 +4,7 @@ import {
   type ValidatedCaptureV1,
   ShortcutRequestError,
 } from '../_shared/shortcut_capture.ts'
-import { parseRawShortcutCapture } from '../_shared/shortcut_capture_parser.ts'
+import { parseRawShortcutCaptures, type RawCaptureBatch } from '../_shared/shortcut_capture_parser.ts'
 import {
   encryptCapture,
   loadInboxKeyring,
@@ -110,6 +110,43 @@ function duplicateResponse(capture: { id: string }) {
   return { status: 'queued', capture_id: capture.id, duplicate: true }
 }
 
+type IngestItemResult =
+  | { item: number; status: 'queued'; capture_id: string; duplicate: false }
+  | { item: number; status: 'duplicate'; capture_id: string; duplicate: true }
+  | { item: number; status: 'failed'; code: 'unreadable_capture' }
+
+function batchMessage(queued: number, duplicate: number, failed: number): string {
+  return `เข้า Inbox ${queued} รายการ • ซ้ำ ${duplicate} รายการ • อ่านไม่สำเร็จ ${failed} รายการ`
+}
+
+function aggregateResponse(results: IngestItemResult[], found: number, req: Request): Response {
+  const queued = results.filter(result => result.status === 'queued').length
+  const duplicate = results.filter(result => result.status === 'duplicate').length
+  const failed = results.filter(result => result.status === 'failed').length
+  const payload = {
+    status: failed > 0 ? 'partial' : queued > 0 ? 'queued' : 'duplicate',
+    message: batchMessage(queued, duplicate, failed),
+    found,
+    queued,
+    duplicate,
+    failed,
+    results,
+  }
+  return jsonResponse(payload, queued > 0 ? 202 : 200, req)
+}
+
+function unreadableResponse(batch: RawCaptureBatch, req: Request): Response {
+  return jsonResponse({
+    error: 'invalid_capture',
+    code: 'invalid_capture',
+    found: batch.found,
+    queued: 0,
+    duplicate: 0,
+    failed: batch.failures.length,
+    results: batch.failures.map(({ item, code }) => ({ item, status: 'failed' as const, code })),
+  }, 400, req)
+}
+
 async function readBoundedBody(req: Request): Promise<Uint8Array> {
   if (!req.body) throw new IngestRequestError(400, 'invalid_capture')
   const reader = req.body.getReader()
@@ -182,52 +219,90 @@ export function createIngestShortcutCaptureHandler(deps: IngestShortcutCaptureDe
       if (rate.data !== true) throw new IngestRequestError(429, 'rate_limited')
 
       const input = parseBody(bodyBytes)
-      let capture: ValidatedCaptureV1
+      let batch: RawCaptureBatch
       try {
-        const parsed = isRawCaptureEnvelope(input)
-          ? await parseRawShortcutCapture(input, deps.now().toISOString())
-          : input
-        capture = await validateCaptureV1(parsed)
+        if (isRawCaptureEnvelope(input)) {
+          batch = await parseRawShortcutCaptures(input, deps.now().toISOString())
+        } else {
+          const capture = await validateCaptureV1(input)
+          batch = { found: 1, captures: [{ item: 1, capture }], failures: [] }
+        }
       } catch (error) {
         if (error instanceof ShortcutRequestError) throw error
         throw new IngestRequestError(400, 'invalid_capture')
       }
 
       const userId = String(row.user_id)
-      const existing = await existingCapture(supabase, userId, capture)
-      if (existing) return jsonResponse(duplicateResponse(existing), 200, req)
+      if (!batch.captures.length) return unreadableResponse(batch, req)
 
-      const captureId = deps.randomUUID()
-      const keyring = await deps.loadKeyring()
-      const encrypted = await deps.encrypt(capture, {
-        captureId,
-        userId,
-        schemaVersion: capture.schema_version,
-      }, keyring)
-
-      const inserted = await supabase.from('mt_shortcut_captures').insert({
-        id: captureId,
-        user_id: userId,
-        token_id: parsedToken.tokenId,
-        schema_version: capture.schema_version,
-        dedupe_version: capture.dedupe_version,
-        dedupe_key: capture.dedupe_key,
-        status: 'pending',
-        ciphertext: byteaHex(encrypted.ciphertext),
-        iv: byteaHex(encrypted.iv),
-        encryption_key_version: encrypted.keyVersion,
-        accepted_at: deps.now().toISOString(),
-        updated_at: deps.now().toISOString(),
-      }).select('id').maybeSingle()
-      if (!inserted.error) return jsonResponse({ status: 'queued', capture_id: captureId, duplicate: false }, 202, req)
-
-      // A concurrent retry may win the unique dedupe constraint. The encrypted
-      // bytes are intentionally discarded and the winner is returned instead.
-      if (String(Reflect.get(inserted.error as object, 'code')) === '23505') {
-        const winner = await existingCapture(supabase, userId, capture)
-        if (winner) return jsonResponse(duplicateResponse(winner), 200, req)
+      const results = new Map<number, IngestItemResult>()
+      for (const failure of batch.failures) {
+        results.set(failure.item, { item: failure.item, status: 'failed', code: failure.code })
       }
-      throw inserted.error
+
+      const pending: Array<{ item: number; capture: ValidatedCaptureV1; captureId: string; encrypted?: EncryptedCapture }> = []
+      for (const parsedCapture of batch.captures) {
+        const capture = await validateCaptureV1(parsedCapture.capture)
+        const existing = await existingCapture(supabase, userId, capture)
+        if (existing) {
+          results.set(parsedCapture.item, { item: parsedCapture.item, status: 'duplicate', capture_id: existing.id, duplicate: true })
+          continue
+        }
+        pending.push({ item: parsedCapture.item, capture, captureId: deps.randomUUID() })
+      }
+
+      if (pending.length) {
+        const keyring = await deps.loadKeyring()
+        for (const item of pending) {
+          item.encrypted = await deps.encrypt(item.capture, {
+            captureId: item.captureId,
+            userId,
+            schemaVersion: item.capture.schema_version,
+          }, keyring)
+        }
+
+        for (const item of pending) {
+          const encrypted = item.encrypted as EncryptedCapture
+          const inserted = await supabase.from('mt_shortcut_captures').insert({
+            id: item.captureId,
+            user_id: userId,
+            token_id: parsedToken.tokenId,
+            schema_version: item.capture.schema_version,
+            dedupe_version: item.capture.dedupe_version,
+            dedupe_key: item.capture.dedupe_key,
+            status: 'pending',
+            ciphertext: byteaHex(encrypted.ciphertext),
+            iv: byteaHex(encrypted.iv),
+            encryption_key_version: encrypted.keyVersion,
+            accepted_at: deps.now().toISOString(),
+            updated_at: deps.now().toISOString(),
+          }).select('id').maybeSingle()
+          if (!inserted.error) {
+            results.set(item.item, { item: item.item, status: 'queued', capture_id: item.captureId, duplicate: false })
+            continue
+          }
+
+          // A concurrent retry may win the unique dedupe constraint. The
+          // encrypted bytes are intentionally discarded and the winner is
+          // returned instead.
+          if (String(Reflect.get(inserted.error as object, 'code')) === '23505') {
+            const winner = await existingCapture(supabase, userId, item.capture)
+            if (winner) {
+              results.set(item.item, { item: item.item, status: 'duplicate', capture_id: winner.id, duplicate: true })
+              continue
+            }
+          }
+          throw inserted.error
+        }
+      }
+
+      const orderedResults = [...results.values()].sort((left, right) => left.item - right.item)
+      if (batch.found === 1 && batch.failures.length === 0) {
+        const only = orderedResults[0]
+        if (only.status === 'queued') return jsonResponse({ status: 'queued', capture_id: only.capture_id, duplicate: false }, 202, req)
+        if (only.status === 'duplicate') return jsonResponse(duplicateResponse({ id: only.capture_id }), 200, req)
+      }
+      return aggregateResponse(orderedResults, batch.found, req)
     } catch (error) {
       return responseError(error, req)
     }

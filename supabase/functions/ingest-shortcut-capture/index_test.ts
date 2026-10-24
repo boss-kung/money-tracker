@@ -1,4 +1,5 @@
 import { canonicalDedupeMaterial, sha256Hex } from '../_shared/shortcut_capture.ts'
+import { parseRawShortcutCaptures } from '../_shared/shortcut_capture_parser.ts'
 import { createIngestShortcutCaptureHandler, type IngestShortcutCaptureDeps } from './index.ts'
 
 function equal(actual: unknown, expected: unknown, message = '') {
@@ -11,6 +12,7 @@ const tokenId = '11111111-1111-4111-8111-111111111111'
 const userId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const secret = 's'.repeat(43)
 const token = `mtst_v1.${tokenId}.${secret}`
+const tokenRow = { id: tokenId, user_id: userId, secret_verifier: new TextEncoder().encode(`${secret}:${'pepper'.repeat(4)}`), revoked_at: null }
 
 function capture(overrides: Record<string, unknown> = {}) {
   return {
@@ -33,13 +35,20 @@ function request(bodyValue: unknown, auth = token, options: { stream?: ReadableS
   })
 }
 
+type FakeInsertResult = { data: unknown; error: unknown }
+
 function fakeDatabase(options: {
   tokenRow?: Record<string, unknown> | null
   existing?: Record<string, unknown> | null
   rate?: boolean
-  insert?: { data: unknown; error: unknown }
+  existingByDedupe?: Map<string, Record<string, unknown>>
+  rows?: Map<string, Record<string, unknown>>
+  insert?: FakeInsertResult
+  insertSequence?: FakeInsertResult[]
+  events?: string[]
 }) {
   const calls: { method: string; args?: unknown }[] = []
+  let insertCount = 0
   const database = {
     calls,
     async rpc(name: string, args: Record<string, unknown>) {
@@ -48,16 +57,27 @@ function fakeDatabase(options: {
     },
     from(table: string) {
       const query: Record<string, any> = {}
-      const state = { table, operation: 'select' }
+      const state: { table: string; operation: string; filters: Record<string, unknown>; insertRow?: Record<string, unknown> } = { table, operation: 'select', filters: {} }
       query.select = (...args: unknown[]) => { calls.push({ method: `${table}:select`, args }); return query }
-      query.eq = (...args: unknown[]) => { calls.push({ method: `${table}:eq`, args }); return query }
+      query.eq = (...args: unknown[]) => { state.filters[String(args[0])] = args[1]; calls.push({ method: `${table}:eq`, args }); return query }
       query.is = (...args: unknown[]) => { calls.push({ method: `${table}:is`, args }); return query }
-      query.insert = (...args: unknown[]) => { state.operation = 'insert'; calls.push({ method: `${table}:insert`, args }); return query }
+      query.insert = (...args: unknown[]) => { state.operation = 'insert'; state.insertRow = args[0] as Record<string, unknown>; calls.push({ method: `${table}:insert`, args }); return query }
       query.maybeSingle = async () => {
         calls.push({ method: `${table}:maybeSingle` })
         if (table === 'mt_shortcut_tokens') return { data: options.tokenRow ?? null, error: null }
-        if (state.operation === 'insert') return options.insert ?? { data: { id: 'capture-1' }, error: null }
-        return { data: options.existing ?? null, error: null }
+        if (state.operation === 'insert') {
+          options.events?.push('insert')
+          const dedupeKey = String(state.insertRow?.dedupe_key ?? '')
+          const implicitRace = options.rows?.has(dedupeKey)
+            ? { data: null, error: { code: '23505', message: 'mt_shortcut_captures_dedupe_uq' } }
+            : undefined
+          const outcome = options.insertSequence?.[insertCount] ?? options.insert ?? implicitRace ?? { data: { id: state.insertRow?.id ?? 'capture-1' }, error: null }
+          insertCount += 1
+          if (!outcome.error && options.rows && state.insertRow?.dedupe_key) options.rows.set(String(state.insertRow.dedupe_key), { id: String(state.insertRow.id), status: 'pending' })
+          return outcome
+        }
+        const key = String(state.filters.dedupe_key ?? '')
+        return { data: options.rows?.get(key) ?? options.existingByDedupe?.get(key) ?? options.existing ?? null, error: null }
       }
       return query
     },
@@ -78,6 +98,35 @@ function deps(db: ReturnType<typeof fakeDatabase>, overrides: Partial<IngestShor
     now: () => new Date('2026-10-18T00:00:00Z'),
   }
   return { ...base, ...overrides }
+}
+
+function uobPairText(amount: string, card: string, merchant: string) {
+  return [
+    `มีการใช้บัตร UOB-${card} ${merchant} ${amount} THB วันที่/เวลา 24/10/2026 16:00 วงเงินคงเหลือใช้ได้ 90,000.00 THB`,
+    `You have spent THB ${amount} using UOB card (ending UOB-${card}) at ${merchant} on 24/10/2026 16:00. Available credit: THB 90,000.00`,
+  ].join('\n')
+}
+
+function twoUobTransactions() {
+  return `${uobPairText('12.34', '1111', '@SHOP ONE')}\n${uobPairText('56.78', '1111', '@SHOP TWO')}`
+}
+
+function twoScbTransactions(second = 'complete') {
+  return [
+    'รายการเงินออก -20.00 บาท',
+    'จากบัญชี SAMPLE X-1111',
+    'เข้าบัญชี FIRST SHOP',
+    'ยอดเงินที่ใช้ได้ 2,000.00 บาท',
+    'รายการเงินออก -80.00 บาท',
+    'จากบัญชี SAMPLE X-1111',
+    'เข้าบัญชี SECOND SHOP',
+    ...(second === 'complete' ? ['ยอดเงินที่ใช้ได้ 1,920.00 บาท'] : []),
+  ].join('\n')
+}
+
+async function parsedCaptures(rawText: string, captureMethod: 'line_notification' | 'whats_on_screen' = 'line_notification') {
+  const result = await parseRawShortcutCaptures({ raw_text: rawText, capture_method: captureMethod, captured_at: '2026-10-24T16:20:00+07:00' })
+  return result.captures
 }
 
 async function validRequest(overrides: Record<string, unknown> = {}) {
@@ -157,6 +206,199 @@ Deno.test('maps a uniqueness race to the winner and leaves no duplicate row', as
   const response = await handler(await validRequest())
   equal(response.status, 200)
   equal(await body(response), { status: 'queued', capture_id: 'capture-winner', duplicate: true })
+})
+
+Deno.test('queues two parsed UOB transactions as independent encrypted rows', async () => {
+  const events: string[] = []
+  const db = fakeDatabase({ tokenRow, rows: new Map(), events })
+  const ids = [
+    '22222222-2222-4222-8222-222222222222',
+    '33333333-3333-4333-8333-333333333333',
+  ]
+  const encryptedContexts: Array<Record<string, unknown>> = []
+  const handler = createIngestShortcutCaptureHandler(deps(db, {
+    randomUUID: () => ids.shift() as string,
+    encrypt: async (payload, context) => {
+      events.push('encrypt')
+      encryptedContexts.push({ ...context, dedupeKey: payload.dedupe_key })
+      return { ciphertext: new Uint8Array([9]), iv: new Uint8Array([encryptedContexts.length]), keyVersion: 1 }
+    },
+  }))
+  const response = await handler(request({ raw_text: twoUobTransactions(), capture_method: 'line_notification', captured_at: '2026-10-24T16:20:00+07:00' }))
+  equal(response.status, 202)
+  equal(await body(response), {
+    status: 'queued',
+    message: 'เข้า Inbox 2 รายการ • ซ้ำ 0 รายการ • อ่านไม่สำเร็จ 0 รายการ',
+    found: 2,
+    queued: 2,
+    duplicate: 0,
+    failed: 0,
+    results: [
+      { item: 1, status: 'queued', capture_id: '22222222-2222-4222-8222-222222222222', duplicate: false },
+      { item: 2, status: 'queued', capture_id: '33333333-3333-4333-8333-333333333333', duplicate: false },
+    ],
+  })
+  equal(events, ['encrypt', 'encrypt', 'insert', 'insert'])
+  equal(encryptedContexts.map(context => context.captureId), [
+    '22222222-2222-4222-8222-222222222222',
+    '33333333-3333-4333-8333-333333333333',
+  ])
+  const inserts = db.calls.filter(call => call.method === 'mt_shortcut_captures:insert').map(call => (call.args as unknown[])[0] as Record<string, unknown>)
+  equal(inserts.map(row => [row.id, row.dedupe_key]), [
+    ['22222222-2222-4222-8222-222222222222', encryptedContexts[0].dedupeKey],
+    ['33333333-3333-4333-8333-333333333333', encryptedContexts[1].dedupeKey],
+  ])
+  if (String(encryptedContexts[0].dedupeKey) === String(encryptedContexts[1].dedupeKey)) throw new Error('batch items must have different dedupe keys')
+})
+
+Deno.test('returns ordered queued and duplicate results for a mixed batch', async () => {
+  const rawText = twoUobTransactions()
+  const captures = await parsedCaptures(rawText)
+  const existingByDedupe = new Map([[captures[1].capture.dedupe_key, { id: 'existing-second', status: 'pending' }]])
+  const db = fakeDatabase({ tokenRow, existingByDedupe })
+  const handler = createIngestShortcutCaptureHandler(deps(db))
+  const response = await handler(request({ raw_text: rawText, capture_method: 'line_notification', captured_at: '2026-10-24T16:20:00+07:00' }))
+  equal(response.status, 202)
+  equal(await body(response), {
+    status: 'queued',
+    message: 'เข้า Inbox 1 รายการ • ซ้ำ 1 รายการ • อ่านไม่สำเร็จ 0 รายการ',
+    found: 2,
+    queued: 1,
+    duplicate: 1,
+    failed: 0,
+    results: [
+      { item: 1, status: 'queued', capture_id: '22222222-2222-4222-8222-222222222222', duplicate: false },
+      { item: 2, status: 'duplicate', capture_id: 'existing-second', duplicate: true },
+    ],
+  })
+})
+
+Deno.test('returns a partial result for one queued and one unreadable group', async () => {
+  const db = fakeDatabase({ tokenRow })
+  const handler = createIngestShortcutCaptureHandler(deps(db))
+  const response = await handler(request({ raw_text: twoScbTransactions('incomplete'), capture_method: 'whats_on_screen', captured_at: '2026-10-24T16:20:00+07:00' }))
+  equal(response.status, 202)
+  equal(await body(response), {
+    status: 'partial',
+    message: 'เข้า Inbox 1 รายการ • ซ้ำ 0 รายการ • อ่านไม่สำเร็จ 1 รายการ',
+    found: 2,
+    queued: 1,
+    duplicate: 0,
+    failed: 1,
+    results: [
+      { item: 1, status: 'queued', capture_id: '22222222-2222-4222-8222-222222222222', duplicate: false },
+      { item: 2, status: 'failed', code: 'unreadable_capture' },
+    ],
+  })
+})
+
+Deno.test('returns a partial result for one duplicate and one unreadable group', async () => {
+  const first = await parsedCaptures(twoScbTransactions('incomplete'), 'whats_on_screen')
+  const existingByDedupe = new Map([[first[0].capture.dedupe_key, { id: 'existing-first', status: 'pending' }]])
+  const db = fakeDatabase({ tokenRow, existingByDedupe })
+  const handler = createIngestShortcutCaptureHandler(deps(db))
+  const response = await handler(request({ raw_text: twoScbTransactions('incomplete'), capture_method: 'whats_on_screen', captured_at: '2026-10-24T16:20:00+07:00' }))
+  equal(response.status, 200)
+  equal(await body(response), {
+    status: 'partial',
+    message: 'เข้า Inbox 0 รายการ • ซ้ำ 1 รายการ • อ่านไม่สำเร็จ 1 รายการ',
+    found: 2,
+    queued: 0,
+    duplicate: 1,
+    failed: 1,
+    results: [
+      { item: 1, status: 'duplicate', capture_id: 'existing-first', duplicate: true },
+      { item: 2, status: 'failed', code: 'unreadable_capture' },
+    ],
+  })
+})
+
+Deno.test('returns only safe failure ordinals when every group is unreadable', async () => {
+  const db = fakeDatabase({ tokenRow })
+  const handler = createIngestShortcutCaptureHandler(deps(db))
+  const response = await handler(request({ raw_text: twoScbTransactions('incomplete').replace('ยอดเงินที่ใช้ได้ 2,000.00 บาท', ''), capture_method: 'whats_on_screen', captured_at: '2026-10-24T16:20:00+07:00' }))
+  equal(response.status, 400)
+  equal(await body(response), {
+    error: 'invalid_capture',
+    code: 'invalid_capture',
+    found: 2,
+    queued: 0,
+    duplicate: 0,
+    failed: 2,
+    results: [
+      { item: 1, status: 'failed', code: 'unreadable_capture' },
+      { item: 2, status: 'failed', code: 'unreadable_capture' },
+    ],
+  })
+  if (db.calls.some(call => call.method === 'mt_shortcut_captures:insert')) throw new Error('unreadable batch must not insert')
+})
+
+Deno.test('rejects more than ten groups before encryption or inserts', async () => {
+  const rawText = Array.from({ length: 11 }, (_, index) => `LINE Pay Purchase ฿${index + 1}.00\nMerchant: STORE ${index + 1}`).join('\n')
+  const db = fakeDatabase({ tokenRow })
+  let encrypted = false
+  const handler = createIngestShortcutCaptureHandler(deps(db, { encrypt: async () => { encrypted = true; return { ciphertext: new Uint8Array([1]), iv: new Uint8Array(12), keyVersion: 1 } } }))
+  const response = await handler(request({ raw_text: rawText, capture_method: 'line_notification', captured_at: '2026-10-24T16:20:00+07:00' }))
+  equal(response.status, 400)
+  equal(await body(response), { error: 'too_many_captures', code: 'too_many_captures' })
+  equal(encrypted, false)
+  if (db.calls.some(call => call.method === 'mt_shortcut_captures:insert')) throw new Error('too many groups must not insert')
+})
+
+Deno.test('resolves identical same-language candidates in one request as queued then duplicate', async () => {
+  const rawText = [
+    'มีการใช้บัตร UOB-1111 @SAME SHOP 12.34 THB วันที่ 24/10 วงเงินคงเหลือใช้ได้ 90,000.00 THB',
+    'มีการใช้บัตร UOB-1111 @SAME SHOP 12.34 THB วันที่ 24/10 วงเงินคงเหลือใช้ได้ 90,000.00 THB',
+  ].join('\n')
+  const db = fakeDatabase({ tokenRow, rows: new Map() })
+  const handler = createIngestShortcutCaptureHandler(deps(db))
+  const response = await handler(request({ raw_text: rawText, capture_method: 'line_notification', captured_at: '2026-10-24T16:20:00+07:00' }))
+  equal(response.status, 202)
+  const result = await body(response)
+  equal(result.queued, 1)
+  equal(result.duplicate, 1)
+  equal(result.failed, 0)
+  equal(result.results, [
+    { item: 1, status: 'queued', capture_id: '22222222-2222-4222-8222-222222222222', duplicate: false },
+    { item: 2, status: 'duplicate', capture_id: '22222222-2222-4222-8222-222222222222', duplicate: true },
+  ])
+})
+
+Deno.test('encrypts every new item before inserting any batch row', async () => {
+  const events: string[] = []
+  const db = fakeDatabase({ tokenRow, events })
+  const handler = createIngestShortcutCaptureHandler(deps(db, { encrypt: async () => { events.push('encrypt'); return { ciphertext: new Uint8Array([1]), iv: new Uint8Array(12), keyVersion: 1 } } }))
+  const response = await handler(request({ raw_text: twoUobTransactions(), capture_method: 'line_notification', captured_at: '2026-10-24T16:20:00+07:00' }))
+  equal(response.status, 202)
+  equal(events, ['encrypt', 'encrypt', 'insert', 'insert'])
+
+  const failingDb = fakeDatabase({ tokenRow, events: [] })
+  let encryptCount = 0
+  const failing = createIngestShortcutCaptureHandler(deps(failingDb, { encrypt: async () => { encryptCount += 1; if (encryptCount === 2) throw new Error('cipher failed'); return { ciphertext: new Uint8Array([1]), iv: new Uint8Array(12), keyVersion: 1 } } }))
+  equal((await failing(request({ raw_text: twoUobTransactions(), capture_method: 'line_notification', captured_at: '2026-10-24T16:20:00+07:00' }))).status, 500)
+  if (failingDb.calls.some(call => call.method === 'mt_shortcut_captures:insert')) throw new Error('encryption failure must not insert')
+})
+
+Deno.test('retry converges after the second insert fails', async () => {
+  const rows = new Map<string, Record<string, unknown>>()
+  const db = fakeDatabase({
+    tokenRow,
+    rows,
+    insertSequence: [
+      { data: { id: 'first-id' }, error: null },
+      { data: null, error: { code: 'XX999', message: 'temporary database failure' } },
+    ],
+  })
+  const ids = ['first-id', 'second-id']
+  const handler = createIngestShortcutCaptureHandler(deps(db, { randomUUID: () => ids.shift() as string }))
+  const input = { raw_text: twoUobTransactions(), capture_method: 'line_notification', captured_at: '2026-10-24T16:20:00+07:00' }
+  equal((await handler(request(input))).status, 500)
+  const retry = await handler(request(input))
+  equal(retry.status, 202)
+  const result = await body(retry)
+  equal(result.queued, 1)
+  equal(result.duplicate, 1)
+  equal(rows.size, 2)
 })
 
 Deno.test('bounds streamed bodies and never inserts when encryption fails', async () => {
