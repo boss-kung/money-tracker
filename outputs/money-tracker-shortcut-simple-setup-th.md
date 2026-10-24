@@ -58,14 +58,18 @@ Header: Authorization = Bearer <device token>
 
 เปิดหน้า UOB, SCB Connect หรือ LINE Wallet แล้วรัน Shortcut ชื่อเดียวกับที่ตั้งไว้จากแอป Shortcuts, Action Button หรือ Back Tap
 
-เมื่อไม่มี Shortcut Input ระบบจะใช้ `Get What's On Screen` เอง และเลือกธุรกรรมล่าสุดบนหน้าจอ
+เมื่อไม่มี Shortcut Input ระบบจะใช้ `Get What's On Screen` เอง แล้วส่งข้อความหน้าจอทั้งก้อนให้ server แยกธุรกรรมที่รองรับทุกรายการตามลำดับบนจอ. UOB Thai/English ที่เป็นธุรกรรมเดียวกันจะถูกรวมเป็นรายการเดียว และแต่ละธุรกรรมจะเข้า Inbox แยกกัน
 
 ## 4. ผลลัพธ์และความปลอดภัย
 
-- ครั้งแรกตอบ `202 queued`
+- `queued` = จำนวนรายการใหม่ที่เข้า Shortcut Inbox
+- `duplicate` = จำนวนรายการที่เคยรับแล้ว ระบบไม่สร้างซ้ำ
+- `failed` = กลุ่มข้อความที่มีจุดเริ่มต้นธุรกรรมแต่ server อ่านไม่ได้ ให้กรอกเองหรือจับภาพใหม่; รายการที่อ่านได้ยังเข้า Inbox ตามปกติ
+- ครั้งแรกของรายการใหม่ตอบ `202`; ถ้าทุกรายการเป็นของเดิมตอบ `200 duplicate`
 - ส่งข้อความเดิมซ้ำตอบ `200 duplicate` และไม่สร้างรายการซ้ำ
+- ถ้าตอบ `ingest_failed` ให้รัน Shortcut เดิมซ้ำได้อย่างปลอดภัย ระบบจะ dedupe แถวที่เข้าแล้วและเติมเฉพาะรายการที่ยังไม่เข้า
 - รายการจะเข้า **Transactions → รายการจาก Shortcut** เท่านั้น
 - ต้องเปิดดู แก้ไข และกด Save เองจึงจะสร้าง Transaction จริง
 - ถ้า Token รั่ว ให้ revoke จากหน้าเชื่อมต่อ iOS Shortcut แล้วสร้างใหม่
 
-คู่มือเดิมแบบ parser บน iPhone เก็บไว้เป็นเอกสารขั้นสูง: `money-tracker-shortcut-setup-th.md`
+คู่มือเดิมแบบ parser/action map บน iPhone ยังเป็น legacy และเลือกเฉพาะ block ล่าสุด; อย่าใช้เมื่อต้องการเก็บหลายธุรกรรมจากหน้าจอเดียว. เก็บไว้เป็นเอกสารขั้นสูง: `money-tracker-shortcut-setup-th.md`

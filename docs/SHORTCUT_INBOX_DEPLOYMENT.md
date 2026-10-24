@@ -52,6 +52,14 @@ Use only a fixture such as the SCB text in `work/fixtures/scb-single.input.json`
 
 Verify in the app that the item appears in Transactions → Shortcut Inbox, opens a draft without saving, preserves the raw-text disclosure in collapsed form, and is consumed only after the user presses Save. A failed acknowledgement may leave a local retry receipt, but it must never create a second transaction.
 
+### Multi-transaction and partial-result smoke
+
+1. Use a synthetic `Get What's On Screen` fixture with two adjacent UOB Thai/English pairs. The response must be HTTP `202`, `found: 2`, `queued: 2`, `duplicate: 0`, `failed: 0`, and two ordered results. Confirm exactly two independent Inbox rows; the Thai/English copies must not become four rows.
+2. Open the first Inbox item, review/edit it, and press **Save**. Confirm that the second item remains pending, then open and save it separately. Saving one item must not consume or alter the other.
+3. Send the same two-pair fixture again. It must return HTTP `200` with `duplicate: 2` and the same two capture IDs; no new rows should appear.
+4. Use a fixture with one complete SCB/UOB group followed by an anchored group missing its required screen suffix. Expect HTTP `202`, `status: partial`, `queued: 1`, `duplicate: 0`, `failed: 1`, and a failed ordinal only. The readable item must still be reviewable in Inbox; recapture or enter the failed item manually.
+5. If the response is `ingest_failed`, rerun the identical Shortcut input. The first request may have inserted some rows before the infrastructure error; dedupe must report those as duplicates and insert only the remaining rows.
+
 ## Rollback
 
 1. If ingestion is unsafe, revoke the affected device Token in the app immediately. This blocks new captures without deleting the review inbox.
@@ -63,5 +71,6 @@ Verify in the app that the item appears in Transactions → Shortcut Inbox, open
 
 - `supabase test db --workdir supabase` succeeds against a running local Supabase/Docker stack.
 - All Edge Function tests and `node --test tests/*.test.js` pass.
-- iOS checks cover notification and screen entry paths, latest-block selection, light/dark 320px layout, closed-app ingestion, network loss/retry, claim conflict, dismiss/restore, and transfer editing.
+- iOS checks cover notification and screen entry paths, multi-block ordering, bilingual UOB grouping, partial-result counts, light/dark 320px layout, closed-app ingestion, network loss/retry, claim conflict, dismiss/restore, and transfer editing.
+- Production evidence must show that responses and logs contain only stable status/counts, item ordinals, IDs, and error codes—never source text, amount, merchant, card/account suffix, decrypted payloads, device Tokens, or encryption keys. Evidence should include a two-item screen, one partial unreadable item, and an independent review/Save of each Inbox row.
 - Logs contain only stable error codes and request IDs; never raw text, decrypted payloads, device Tokens, or encryption keys.
