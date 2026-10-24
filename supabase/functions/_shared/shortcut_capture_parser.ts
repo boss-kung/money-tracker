@@ -19,6 +19,7 @@ type ParsedCandidate = {
   source: CaptureSource
   language?: UobLanguage
   amount: string | null
+  direction: 'debit' | 'credit'
   merchant: string | null
   accountLast4: string | null
   cardLast4: string | null
@@ -58,6 +59,12 @@ function amount(value: string | undefined): string | null {
   if (!value) return null
   const parsed = Number(value.replaceAll(',', ''))
   return Number.isFinite(parsed) && parsed > 0 ? Math.abs(parsed).toFixed(2) : null
+}
+
+function availableCredit(value: string | undefined): string | null {
+  if (!value) return null
+  const parsed = Number(value.replaceAll(',', ''))
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed.toFixed(2) : null
 }
 
 function dateFromText(text: string): string | null {
@@ -130,7 +137,10 @@ function parseCandidate(
       ? thaiMerchant
       : text.match(/\sat\s+(.+?)(?:\s+on\s+\d{2}\/|[\n\r]|$)/iu)?.[1])
     const cardLast4 = text.match(thai ? /UOB-(\d{4})/u : /ending\s+(?:UOB-)?(\d{4})/iu)?.[1] ?? null
-    const availableCredit = text.match(/วงเงินคงเหลือใช้ได้\s*([\d,]+(?:\.\d{1,2})?)/u)?.[1]
+    const availableCreditWithSuffix = text.match(/วงเงินคงเหลือใช้ได้\s*([\d,]+(?:\.\d{1,2})?)\s*THB/u)?.[1]
+      ?? text.match(/Available credit:\s*THB\s*([\d,]+(?:\.\d{1,2})?)/iu)?.[1]
+      ?? null
+    const availableCreditValue = text.match(/วงเงินคงเหลือใช้ได้\s*([\d,]+(?:\.\d{1,2})?)/u)?.[1]
       ?? text.match(/Available credit:\s*THB\s*([\d,]+(?:\.\d{1,2})?)/iu)?.[1]
       ?? null
     return {
@@ -139,12 +149,13 @@ function parseCandidate(
       source,
       language: thai ? 'thai' : 'english',
       amount: parsedAmount,
+      direction: 'debit',
       merchant,
       accountLast4: null,
       cardLast4,
       transactionDateTime: dateFromText(text),
-      availableCredit: amount(availableCredit ?? undefined),
-      complete: Boolean(parsedAmount) && (captureMethod === 'line_notification' || Boolean(availableCredit)),
+      availableCredit: availableCredit(availableCreditValue ?? undefined),
+      complete: Boolean(parsedAmount) && (captureMethod === 'line_notification' || Boolean(availableCreditWithSuffix)),
     }
   }
 
@@ -157,6 +168,7 @@ function parseCandidate(
       relevantText: text,
       source,
       amount: parsedAmount,
+      direction: credit ? 'credit' : 'debit',
       merchant: clean(text.match(credit ? /จากบัญชี\s+([^\n\r]+)/u : /เข้าบัญชี\s+([^\n\r]+)/u)?.[1]),
       accountLast4: text.match(credit ? /เข้าบัญชี[^\n\r]*X-(\d{4})/u : /จากบัญชี[^\n\r]*X-(\d{4})/u)?.[1] ?? null,
       cardLast4: null,
@@ -172,6 +184,7 @@ function parseCandidate(
     relevantText: text,
     source,
     amount: parsedAmount,
+    direction: 'debit',
     merchant: clean(text.match(/Merchant:\s*([^\n\r]+)/iu)?.[1]),
     accountLast4: null,
     cardLast4: null,
@@ -229,7 +242,7 @@ function payloadFromCandidate(
     bank: source === 'scb_connect' ? 'SCB' : source === 'uob_thai' ? 'UOB' : null,
     amount: candidate.amount ?? '',
     currency: 'THB',
-    direction: candidate.source === 'scb_connect' && /รายการเงินเข้า/u.test(candidate.text) ? 'credit' : 'debit',
+    direction: candidate.direction,
     merchant: candidate.merchant,
     description: candidate.merchant,
     account_last4: candidate.accountLast4,

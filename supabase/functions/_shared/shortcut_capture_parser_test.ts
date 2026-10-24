@@ -349,6 +349,40 @@ Deno.test('UOB pairing requires matching amount card merchant credit and date', 
   }
 })
 
+Deno.test('UOB pairing treats zero available credit as a real matching value', async () => {
+  const result = await parseRawShortcutCaptures({
+    raw_text: uobPair({ thaiCredit: '0.00', englishCredit: '100.00' }).join('\n'),
+    capture_method: 'line_notification',
+    captured_at: '2026-10-24T16:20:00+07:00',
+  })
+  equal(result.found, 2)
+})
+
+Deno.test('SCB debit direction is not changed by merchant text', async () => {
+  const result = await parseRawShortcutCaptures({
+    raw_text: [
+      'รายการเงินออก -20.00 บาท',
+      'จากบัญชี SAMPLE X-1111',
+      'เข้าบัญชี ร้านรายการเงินเข้า',
+      'ยอดเงินที่ใช้ได้ 2,000.00 บาท',
+    ].join('\n'),
+    capture_method: 'whats_on_screen',
+    captured_at: '2026-10-24T16:20:00+07:00',
+  })
+  equal(result.captures[0].capture.direction, 'debit')
+})
+
+Deno.test('whats_on_screen UOB requires the THB available-credit suffix', async () => {
+  await rejectsCode(
+    () => parseRawShortcutCaptures({
+      raw_text: 'มีการใช้บัตร UOB-1111 @SHOP 12.34 THB วงเงินคงเหลือใช้ได้ 100.00',
+      capture_method: 'whats_on_screen',
+      captured_at: '2026-10-24T16:20:00+07:00',
+    }),
+    'invalid_capture',
+  )
+})
+
 Deno.test('complete UOB partner absorbs its matching incomplete translation', async () => {
   const pair = uobPair()
   const result = await parseRawShortcutCaptures({
