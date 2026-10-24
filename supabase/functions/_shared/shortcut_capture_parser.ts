@@ -8,27 +8,38 @@ import {
 
 const CAPTURE_METHODS = new Set(['line_notification', 'whats_on_screen'])
 const PARSER_VERSION = 'shortcut-server-1.0.0'
+const MAX_CAPTURES = 10
 
-const FULL_BLOCK_PATTERNS = [
-  /มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?วงเงินคงเหลือใช้ได้\s*[\d,]+(?:\.\d{1,2})?\s*THB/giu,
-  /You have spent[\s\S]*?Available credit:\s*THB\s*[\d,]+(?:\.\d{1,2})?/giu,
-  /รายการเงิน(?:ออก|เข้า)\s*-?[\d,]+(?:\.\d{1,2})?\s*บาท[\s\S]*?ยอดเงินที่ใช้ได้\s*[\d,]+(?:\.\d{1,2})?\s*บาท/giu,
-  /LINE Pay Purchase[\s\S]*?Balance:\s*(?:THB\s*)?[\d,]+(?:\.\d{1,2})?/giu,
-]
+type CaptureSource = 'uob_thai' | 'uob_english' | 'scb_connect' | 'line_wallet'
+type UobLanguage = 'thai' | 'english'
 
-// LINE may deliver only a notification preview, which often omits the
-// available-credit/balance/date suffix present in the full bank screen. These
-// relaxed patterns are deliberately enabled only for line_notification
-// captures and stop at the next transaction anchor so the latest block wins.
-const COMPACT_NOTIFICATION_PATTERNS = [
-  /มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?(?:จำนวน\s*)?[\d,]+(?:\.\d{1,2})?\s*THB[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
-  /You have spent[\s\S]*?THB\s*[\d,]+(?:\.\d{1,2})?[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
-  /รายการเงิน(?:ออก|เข้า)\s*-?[\d,]+(?:\.\d{1,2})?\s*บาท[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
-  /LINE Pay Purchase\s*(?:฿\s*|THB\s*)?[\d,]+(?:\.\d{1,2})?[\s\S]*?(?=\n(?:มีการใช้บัตร|You have spent|รายการเงิน(?:ออก|เข้า)|LINE Pay Purchase)|$)/giu,
-]
+type ParsedCandidate = {
+  text: string
+  relevantText: string
+  source: CaptureSource
+  language?: UobLanguage
+  amount: string | null
+  merchant: string | null
+  accountLast4: string | null
+  cardLast4: string | null
+  transactionDateTime: string | null
+  availableCredit: string | null
+  complete: boolean
+}
 
-function invalid(): never {
-  throw new ShortcutRequestError(400, 'invalid_capture')
+export type RawCaptureFailure = {
+  item: number
+  code: 'unreadable_capture'
+}
+
+export type RawCaptureBatch = {
+  found: number
+  captures: Array<{ item: number; capture: ValidatedCaptureV1 }>
+  failures: RawCaptureFailure[]
+}
+
+function invalid(code = 'invalid_capture'): never {
+  throw new ShortcutRequestError(400, code)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -36,15 +47,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeForParsing(text: string): string {
-  return text.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ')
-}
-
-function latestBlock(text: string, captureMethod: string): string | null {
-  const patterns = captureMethod === 'line_notification'
-    ? [...COMPACT_NOTIFICATION_PATTERNS, ...FULL_BLOCK_PATTERNS]
-    : FULL_BLOCK_PATTERNS
-  const matches = patterns.flatMap(pattern => [...text.matchAll(pattern)].map(match => ({ index: match.index ?? -1, text: match[0] })))
-  return matches.sort((left, right) => left.index - right.index).at(-1)?.text ?? null
+  return text.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim()
 }
 
 function clean(value: string | undefined): string | null {
@@ -77,62 +80,211 @@ function rawText(value: unknown): string {
   return trimmed
 }
 
-export async function parseRawShortcutCapture(input: unknown, now = new Date().toISOString()): Promise<ValidatedCaptureV1> {
+function anchorSource(line: string): CaptureSource | null {
+  if (/^\s*มีการใช้บัตร\s+UOB-\d{4}\b/iu.test(line)) return 'uob_thai'
+  if (/^\s*You have spent\b/iu.test(line)) return 'uob_english'
+  if (/^\s*รายการเงิน(?:ออก|เข้า)(?:\s|$)/u.test(line)) return 'scb_connect'
+  if (/^\s*LINE Pay Purchase\b/iu.test(line)) return 'line_wallet'
+  return null
+}
+
+function candidateSegments(text: string): Array<{ source: CaptureSource; text: string }> {
+  const lines = text.split('\n')
+  const anchors: Array<{ line: number; source: CaptureSource }> = []
+  lines.forEach((line, index) => {
+    const source = anchorSource(line)
+    if (source) anchors.push({ line: index, source })
+  })
+  if (!anchors.length) invalid()
+  return anchors.map((anchor, index) => ({
+    source: anchor.source,
+    text: lines.slice(anchor.line, anchors[index + 1]?.line ?? lines.length).join('\n').trim(),
+  }))
+}
+
+function trimCandidateText(source: CaptureSource, text: string): string {
+  const patterns: Record<CaptureSource, RegExp> = {
+    uob_thai: /^\s*มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?วงเงินคงเหลือใช้ได้\s*[\d,]+(?:\.\d{1,2})?\s*THB/iu,
+    uob_english: /^\s*You have spent[\s\S]*?Available credit:\s*THB\s*[\d,]+(?:\.\d{1,2})?/iu,
+    scb_connect: /^[\s\S]*?รายการเงิน(?:ออก|เข้า)[\s\S]*?ยอดเงินที่ใช้ได้\s*[\d,]+(?:\.\d{1,2})?\s*บาท/u,
+    line_wallet: /^\s*LINE Pay Purchase[\s\S]*?Balance:\s*(?:THB\s*)?[\d,]+(?:\.\d{1,2})?/iu,
+  }
+  return text.match(patterns[source])?.[0].trim() ?? text.trim()
+}
+
+function parseCandidate(
+  source: CaptureSource,
+  text: string,
+  captureMethod: 'line_notification' | 'whats_on_screen',
+): ParsedCandidate {
+  text = trimCandidateText(source, text)
+  if (source === 'uob_thai' || source === 'uob_english') {
+    const thai = source === 'uob_thai'
+    const transactionText = thai ? text.split(/วงเงินคงเหลือใช้ได้/iu, 1)[0] : text
+    const parsedAmount = amount(transactionText.match(thai
+      ? /(?:จำนวน\s*)?([\d,]+(?:\.\d{1,2})?)\s*THB/u
+      : /spent\s+THB\s*([\d,]+(?:\.\d{1,2})?)/iu)?.[1])
+    const thaiMerchant = text.match(/ที่ร้าน\s*([^\n\r]+)/u)?.[1]
+      ?? text.match(/UOB-\d{4}\s+(?:จำนวน\s*)?(.+?)\s+[\d,]+(?:\.\d{1,2})?\s*THB/iu)?.[1]
+    const merchant = clean(thai
+      ? thaiMerchant
+      : text.match(/\sat\s+(.+?)(?:\s+on\s+\d{2}\/|[\n\r]|$)/iu)?.[1])
+    const cardLast4 = text.match(thai ? /UOB-(\d{4})/u : /ending\s+(?:UOB-)?(\d{4})/iu)?.[1] ?? null
+    const availableCredit = text.match(/วงเงินคงเหลือใช้ได้\s*([\d,]+(?:\.\d{1,2})?)/u)?.[1]
+      ?? text.match(/Available credit:\s*THB\s*([\d,]+(?:\.\d{1,2})?)/iu)?.[1]
+      ?? null
+    return {
+      text,
+      relevantText: text,
+      source,
+      language: thai ? 'thai' : 'english',
+      amount: parsedAmount,
+      merchant,
+      accountLast4: null,
+      cardLast4,
+      transactionDateTime: dateFromText(text),
+      availableCredit: amount(availableCredit ?? undefined),
+      complete: Boolean(parsedAmount) && (captureMethod === 'line_notification' || Boolean(availableCredit)),
+    }
+  }
+
+  if (source === 'scb_connect') {
+    const money = text.match(/รายการเงิน(ออก|เข้า)\s*-?([\d,]+(?:\.\d{1,2})?)\s*บาท/u)
+    const credit = money?.[1] === 'เข้า'
+    const parsedAmount = amount(money?.[2])
+    return {
+      text,
+      relevantText: text,
+      source,
+      amount: parsedAmount,
+      merchant: clean(text.match(credit ? /จากบัญชี\s+([^\n\r]+)/u : /เข้าบัญชี\s+([^\n\r]+)/u)?.[1]),
+      accountLast4: text.match(credit ? /เข้าบัญชี[^\n\r]*X-(\d{4})/u : /จากบัญชี[^\n\r]*X-(\d{4})/u)?.[1] ?? null,
+      cardLast4: null,
+      transactionDateTime: dateFromText(text),
+      availableCredit: amount(text.match(/ยอดเงินที่ใช้ได้\s*([\d,]+(?:\.\d{1,2})?)\s*บาท/u)?.[1]),
+      complete: Boolean(parsedAmount) && (captureMethod === 'line_notification' || /ยอดเงินที่ใช้ได้\s*[\d,]+(?:\.\d{1,2})?\s*บาท/u.test(text)),
+    }
+  }
+
+  const parsedAmount = amount(text.match(/LINE Pay Purchase\s*(?:฿\s*|THB\s*)?([\d,]+(?:\.\d{1,2})?)/iu)?.[1])
+  return {
+    text,
+    relevantText: text,
+    source,
+    amount: parsedAmount,
+    merchant: clean(text.match(/Merchant:\s*([^\n\r]+)/iu)?.[1]),
+    accountLast4: null,
+    cardLast4: null,
+    transactionDateTime: dateFromText(text),
+    availableCredit: amount(text.match(/Balance:\s*(?:THB\s*)?([\d,]+(?:\.\d{1,2})?)/iu)?.[1]),
+    complete: Boolean(parsedAmount) && (captureMethod === 'line_notification' || /Balance:\s*(?:THB\s*)?[\d,]+(?:\.\d{1,2})?/iu.test(text)),
+  }
+}
+
+function canonicalOptional(value: string | null): string | null {
+  return value ? normalizeCaptureText(value).toLocaleLowerCase('en-US') : null
+}
+
+function canPair(left: ParsedCandidate, right: ParsedCandidate): boolean {
+  if (!((left.source === 'uob_thai' && right.source === 'uob_english')
+    || (left.source === 'uob_english' && right.source === 'uob_thai'))) return false
+  if (!left.amount || !right.amount || left.amount !== right.amount) return false
+  if (!left.cardLast4 || !right.cardLast4 || left.cardLast4 !== right.cardLast4) return false
+  for (const [leftValue, rightValue] of [
+    [left.merchant, right.merchant],
+    [left.availableCredit, right.availableCredit],
+    [left.transactionDateTime, right.transactionDateTime],
+  ] as Array<[string | null, string | null]>) {
+    if (leftValue && rightValue && canonicalOptional(leftValue) !== canonicalOptional(rightValue)) return false
+  }
+  return true
+}
+
+function mergePair(left: ParsedCandidate, right: ParsedCandidate): ParsedCandidate {
+  const primary = right.complete ? right : left.complete ? left : right
+  const other = primary === right ? left : right
+  return {
+    ...primary,
+    text: `${left.text}\n${right.text}`,
+    relevantText: primary.relevantText,
+    merchant: primary.merchant ?? other.merchant,
+    accountLast4: primary.accountLast4 ?? other.accountLast4,
+    cardLast4: primary.cardLast4 ?? other.cardLast4,
+    transactionDateTime: primary.transactionDateTime ?? other.transactionDateTime,
+    availableCredit: primary.availableCredit ?? other.availableCredit,
+    complete: primary.complete || other.complete,
+  }
+}
+
+function payloadFromCandidate(
+  candidate: ParsedCandidate,
+  capturedAt: string,
+  captureMethod: 'line_notification' | 'whats_on_screen',
+): Omit<ValidatedCaptureV1, 'dedupe_key'> {
+  const source = candidate.source === 'uob_english' ? 'uob_thai' : candidate.source
+  return {
+    schema_version: 'money-tracker.capture.v1',
+    parser_version: PARSER_VERSION,
+    source,
+    bank: source === 'scb_connect' ? 'SCB' : source === 'uob_thai' ? 'UOB' : null,
+    amount: candidate.amount ?? '',
+    currency: 'THB',
+    direction: candidate.source === 'scb_connect' && /รายการเงินเข้า/u.test(candidate.text) ? 'credit' : 'debit',
+    merchant: candidate.merchant,
+    description: candidate.merchant,
+    account_last4: candidate.accountLast4,
+    card_last4: candidate.cardLast4,
+    transaction_datetime: candidate.transactionDateTime,
+    captured_at: capturedAt,
+    capture_method: captureMethod,
+    raw_text: candidate.text,
+    relevant_text: normalizeCaptureText(candidate.relevantText),
+    parse_status: 'complete',
+    dedupe_version: 1,
+  }
+}
+
+async function finalizeCapture(
+  candidate: ParsedCandidate,
+  capturedAt: string,
+  captureMethod: 'line_notification' | 'whats_on_screen',
+): Promise<ValidatedCaptureV1> {
+  const payload: ValidatedCaptureV1 = { ...payloadFromCandidate(candidate, capturedAt, captureMethod), dedupe_key: '' }
+  payload.dedupe_key = await sha256Hex(await canonicalDedupeMaterial(payload))
+  return payload
+}
+
+export async function parseRawShortcutCaptures(input: unknown, now = new Date().toISOString()): Promise<RawCaptureBatch> {
   if (!isRecord(input) || typeof input.capture_method !== 'string' || !CAPTURE_METHODS.has(input.capture_method)) invalid()
   const originalText = rawText(input.raw_text)
   const capturedAt = timestamp(input.captured_at, now)
-  const block = latestBlock(normalizeForParsing(originalText), input.capture_method)
-  if (!block) invalid()
+  const captureMethod = input.capture_method as 'line_notification' | 'whats_on_screen'
+  const segments = candidateSegments(normalizeForParsing(originalText))
+  const candidates = segments.map(({ source, text }) => parseCandidate(source, text, captureMethod))
 
-  const payload: ValidatedCaptureV1 = {
-    schema_version: 'money-tracker.capture.v1',
-    parser_version: PARSER_VERSION,
-    source: 'unknown',
-    bank: null,
-    amount: '',
-    currency: 'THB',
-    direction: 'debit',
-    merchant: null,
-    description: null,
-    account_last4: null,
-    card_last4: null,
-    transaction_datetime: dateFromText(block),
-    captured_at: capturedAt,
-    capture_method: input.capture_method as 'line_notification' | 'whats_on_screen',
-    raw_text: originalText,
-    relevant_text: normalizeCaptureText(block),
-    parse_status: 'complete',
-    dedupe_version: 1,
-    dedupe_key: '',
+  const logical: ParsedCandidate[] = []
+  for (let index = 0; index < candidates.length; index += 1) {
+    const current = candidates[index]
+    const next = candidates[index + 1]
+    if (next && canPair(current, next)) {
+      logical.push(mergePair(current, next))
+      index += 1
+    } else {
+      logical.push(current)
+    }
   }
+  if (logical.length > MAX_CAPTURES) invalid('too_many_captures')
 
-  if (/มีการใช้บัตร|You have spent/iu.test(block)) {
-    const thai = /มีการใช้บัตร/u.test(block)
-    payload.source = 'uob_thai'
-    payload.bank = 'UOB'
-    const transactionText = thai ? block.split(/วงเงินคงเหลือใช้ได้/iu, 1)[0] : block
-    payload.amount = amount(transactionText.match(thai ? /(?:จำนวน\s*)?([\d,]+(?:\.\d{1,2})?)\s*THB/u : /spent\s+THB\s*([\d,]+(?:\.\d{1,2})?)/iu)?.[1]) || ''
-    const thaiMerchant = block.match(/ที่ร้าน\s*([^\n\r]+)/u)?.[1]
-      ?? block.match(/UOB-\d{4}\s+(?:จำนวน\s*)?(.+?)\s+[\d,]+(?:\.\d{1,2})?\s*THB/iu)?.[1]
-    payload.merchant = clean(thai ? thaiMerchant : block.match(/\sat\s+(.+?)(?:\s+on\s+\d{2}\/|[\n\r]|$)/iu)?.[1])
-    payload.card_last4 = block.match(thai ? /UOB-(\d{4})/u : /ending\s+(?:UOB-)?(\d{4})/iu)?.[1] ?? null
-  } else if (/รายการเงิน(?:ออก|เข้า)/u.test(block)) {
-    const money = block.match(/รายการเงิน(ออก|เข้า)\s*-?([\d,]+(?:\.\d{1,2})?)\s*บาท/u)
-    const credit = money?.[1] === 'เข้า'
-    payload.source = 'scb_connect'
-    payload.bank = 'SCB'
-    payload.amount = amount(money?.[2]) || ''
-    payload.direction = credit ? 'credit' : 'debit'
-    payload.merchant = clean(block.match(credit ? /จากบัญชี\s+([^\n\r]+)/u : /เข้าบัญชี\s+([^\n\r]+)/u)?.[1])
-    payload.account_last4 = block.match(credit ? /เข้าบัญชี[^\n\r]*X-(\d{4})/u : /จากบัญชี[^\n\r]*X-(\d{4})/u)?.[1] ?? null
-  } else if (/LINE Pay Purchase/iu.test(block)) {
-    payload.source = 'line_wallet'
-    payload.amount = amount(block.match(/LINE Pay Purchase\s*(?:฿\s*|THB\s*)?([\d,]+(?:\.\d{1,2})?)/iu)?.[1]) || ''
-    payload.merchant = clean(block.match(/Merchant:\s*([^\n\r]+)/iu)?.[1])
+  const captures: RawCaptureBatch['captures'] = []
+  const failures: RawCaptureFailure[] = []
+  for (const [index, candidate] of logical.entries()) {
+    const item = index + 1
+    if (!candidate.complete || !candidate.amount) {
+      failures.push({ item, code: 'unreadable_capture' })
+      continue
+    }
+    captures.push({ item, capture: await finalizeCapture(candidate, capturedAt, captureMethod) })
   }
-
-  if (payload.source === 'unknown' || !payload.amount) invalid()
-  payload.description = payload.merchant
-  payload.dedupe_key = await sha256Hex(await canonicalDedupeMaterial(payload))
-  return payload
+  if (!captures.length) invalid()
+  return { found: logical.length, captures, failures }
 }
