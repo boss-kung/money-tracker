@@ -285,6 +285,6 @@ export async function parseRawShortcutCaptures(input: unknown, now = new Date().
     }
     captures.push({ item, capture: await finalizeCapture(candidate, capturedAt, captureMethod) })
   }
-  if (!captures.length) invalid()
+  if (!captures.length && logical.length === 1) invalid()
   return { found: logical.length, captures, failures }
 }
