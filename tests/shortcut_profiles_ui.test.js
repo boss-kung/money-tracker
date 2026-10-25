@@ -4,6 +4,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const source = fs.readFileSync(path.join(__dirname, '../shortcut_profiles.js'), 'utf8')
+const productionHtml = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8')
+const demoHtml = fs.readFileSync(path.join(__dirname, '../demo/index.html'), 'utf8')
+const release = require('../release_manifest.js')
 const api = require('../shortcut_profiles.js').__test
 const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/shortcut_profile_cases.json'), 'utf8'))
 
@@ -81,4 +84,12 @@ test('activation stays blocked until both local samples match completely', () =>
 test('profile view model exposes metadata only and never raw samples or compiled rule', () => {
   const view = api.profileViewModel({ id: 'p1', name: 'UCHOOSE', app_label: 'UCHOOSE', enabled: true, short_code: 'ABC234', profile_version: 2, compiled_rule: { secret: true }, samples: ['private'] })
   assert.deepEqual(view, { id: 'p1', name: 'UCHOOSE', app_label: 'UCHOOSE', enabled: true, short_code: 'ABC234', profile_version: 2 })
+})
+
+test('profile wizard release assets are present and versioned in production and demo', () => {
+  assert.equal(release.version, '2026.10.25-shortcut-profiles-r154')
+  for (const html of [productionHtml, demoHtml]) {
+    assert.match(html, new RegExp(`style_v2\\.css\\?v=${release.version}`))
+    assert.match(html, new RegExp(`ui_v2\\.css\\?v=${release.version}`))
+  }
 })

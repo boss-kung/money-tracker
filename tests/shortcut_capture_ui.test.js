@@ -7,6 +7,7 @@ const root = path.join(__dirname, '..')
 const capture = fs.readFileSync(path.join(root, 'shortcut_capture.js'), 'utf8')
 const app = fs.readFileSync(path.join(root, 'app_v2.js'), 'utf8')
 const css = fs.readFileSync(path.join(root, 'ui_v2.css'), 'utf8')
+const profileCss = fs.readFileSync(path.join(root, 'style_v2.css'), 'utf8')
 const loader = fs.readFileSync(path.join(root, 'feature_loader.js'), 'utf8')
 const manifest = require('../release_manifest.js')
 
@@ -48,5 +49,11 @@ test('responsive inbox and token controls have accessible touch-target styles', 
   for (const name of ['shortcut-inbox-', 'shortcut-token-']) assert.match(css, new RegExp(`\\.${name}`))
   assert.match(css, /shortcut-inbox[^}]*min-height:\s*44px/s)
   assert.match(css, /shortcut-inbox[^}]*safe-area|safe-area[^}]*shortcut-inbox/s)
+})
+
+test('bank profile settings entry points to the guided profile wizard and its CSS is shipped', () => {
+  assert.match(capture, /shortcut-profile-settings-row/)
+  assert.match(capture, /openShortcutProfileSettings|MTShortcutProfiles/)
+  assert.match(profileCss, /\.shortcut-profile-shell/)
 })
 
