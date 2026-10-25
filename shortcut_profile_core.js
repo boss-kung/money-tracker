@@ -5,6 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict'
   const LIMITS = { thb_amount: 64, date: 32, time: 16, text: 256, last4: 4, reference: 128 }
+  const MAX_SAMPLE_LENGTH = 32768
   function normalizeProfileText(value) { return String(value ?? '').normalize('NFKC').replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').replace(/\s+/gu, ' ').trim().toLocaleLowerCase('en-US') }
   function detectProfileCandidates(text) {
     const normalized = normalizeProfileText(text); const result = []; let id = 0
@@ -15,6 +16,42 @@
     for (const match of normalized.matchAll(/\b\d{4}\b/gu)) add('last4', match[0], match[0], match.index, match.index + match[0].length)
     normalized.split(' ').forEach((value, index, words) => { if (value && !/^\d/.test(value) && value.length <= LIMITS.text) { const start = words.slice(0, index).join(' ').length + (index ? 1 : 0); add('text', value, value, start, start + value.length) } })
     return result
+  }
+  function detectProfileAmountCandidates(text) {
+    const normalized = normalizeProfileText(text)
+    const candidates = detectProfileCandidates(text).filter(candidate => candidate.type === 'thb_amount')
+    const dateTimeSpans = detectProfileCandidates(text).filter(candidate => candidate.type === 'date' || candidate.type === 'time')
+    return candidates.map(candidate => {
+      const before = normalized.slice(Math.max(0, candidate.start - 8), candidate.start)
+      const after = normalized.slice(candidate.end, Math.min(normalized.length, candidate.end + 8))
+      const currencyConfirmed = /(?:thb|บาท|฿)\s*$/iu.test(before) || /^(?:\s*)(?:thb|บาท|฿)(?:\s|$)/iu.test(after)
+      const overlapsDateOrTime = dateTimeSpans.some(span => candidate.start < span.end && candidate.end > span.start)
+      return { ...candidate, currencyConfirmed, overlapsDateOrTime }
+    })
+  }
+  function validateProfileDraft(draft = {}) {
+    const errors = {}
+    const samples = Array.isArray(draft.samples) ? draft.samples.map(value => String(value ?? '')) : []
+    const amountCandidates = samples.slice(0, 2).map(detectProfileAmountCandidates)
+    if (!String(draft.appLabel || '').trim()) errors.appLabel = 'ระบุชื่อแอป'
+    if (samples.length !== 2) errors.samples = 'ต้องมีตัวอย่างแจ้งเตือน 2 รายการ'
+    samples.slice(0, 2).forEach((sample, index) => {
+      if (!sample.trim()) errors[`sample_${index}`] = 'วางตัวอย่างแจ้งเตือนก่อนดำเนินการต่อ'
+      else if (sample.length > MAX_SAMPLE_LENGTH) errors[`sample_${index}`] = 'ตัวอย่างยาวเกิน 32,768 ตัวอักษร'
+    })
+    if (samples.length === 2 && samples[0].trim() && samples[0].trim() === samples[1].trim()) errors.samples = 'ตัวอย่างแจ้งเตือนต้องไม่เหมือนกัน'
+    if (draft.direction !== 'debit' && draft.direction !== 'credit') errors.direction = 'เลือกทิศทางรายการ'
+    const mustContain = Array.isArray(draft.mustContain) ? draft.mustContain.map(normalizeProfileText).filter(Boolean) : []
+    if (!mustContain.length) errors.mustContain = 'ระบุคำที่ต้องมีอย่างน้อย 1 คำ'
+    else if (samples.length === 2 && samples.every(sample => sample.trim()) && mustContain.some(anchor => !samples.every(sample => normalizeProfileText(sample).includes(anchor)))) errors.mustContain = 'คำที่ต้องมีต้องพบในตัวอย่างทั้งสองรายการ'
+    const selections = Array.isArray(draft.amountSelections) ? draft.amountSelections : []
+    amountCandidates.forEach((candidates, index) => {
+      const selectedId = selections[index]
+      const selected = candidates.find(candidate => candidate.id === selectedId)
+      if (!selected) errors[`amount_${index}`] = 'เลือกยอดเงินจากตัวอย่าง'
+      else if (selected.overlapsDateOrTime) errors[`amount_${index}`] = 'เลือกยอดเงินที่ไม่ใช่วันที่หรือเวลา'
+    })
+    return { valid: Object.keys(errors).length === 0, errors, amountCandidates }
   }
   function candidateFor(selection, candidates) {
     if (selection && typeof selection === 'object') {
@@ -66,5 +103,5 @@
     if (complete.length === 1) return { status: 'complete', value: complete[0] }
     return { status: 'needs_review', reason: 'no_variant_match' }
   }
-  return { normalizeProfileText, detectProfileCandidates, compileProfileVariant, compileProfileVariantRule, matchProfileRule }
+  return { normalizeProfileText, detectProfileCandidates, detectProfileAmountCandidates, validateProfileDraft, compileProfileVariant, compileProfileVariantRule, matchProfileRule }
 })
