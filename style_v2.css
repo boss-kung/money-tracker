@@ -9481,3 +9481,250 @@ html.mt-auth-gated #app {
   max-width: none !important;
   margin-inline: 0 !important;
 }
+
+/* Bank notification profile wizard — scoped mobile-first layout. */
+.shortcut-profile-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  overflow-x: hidden;
+  color: var(--text);
+}
+#sub-screen .shortcut-profile-shell { max-width: none; }
+.shortcut-profile-header {
+  align-items: center;
+  gap: 12px !important;
+  min-height: 68px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+}
+.shortcut-profile-header h2 {
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -.035em;
+}
+.shortcut-profile-header p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+.shortcut-profile-header .btn-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font-size: 24px;
+}
+.shortcut-profile-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-top: 20px !important;
+}
+.shortcut-profile-footer {
+  display: flex;
+  flex-shrink: 0;
+  gap: 10px;
+  padding: 12px max(var(--app-gutter), var(--safe-l)) 12px max(var(--app-gutter), var(--safe-r));
+  padding-bottom: calc(12px + var(--safe-b, env(safe-area-inset-bottom, 0px)));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.shortcut-profile-footer .btn { flex: 1 1 0; min-height: 48px; }
+.shortcut-profile-shell .btn { min-height: 44px; border-radius: 14px; font: inherit; font-weight: 800; }
+.shortcut-profile-shell input,
+.shortcut-profile-shell textarea,
+.shortcut-profile-shell select {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border) !important;
+  border-radius: 14px;
+  background: var(--surface-soft) !important;
+  color: var(--text) !important;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.45;
+  color-scheme: light dark;
+}
+.shortcut-profile-shell textarea { resize: vertical; }
+.shortcut-profile-shell input::placeholder,
+.shortcut-profile-shell textarea::placeholder { color: var(--muted); opacity: .82; }
+.shortcut-profile-shell input:focus,
+.shortcut-profile-shell textarea:focus,
+.shortcut-profile-shell select:focus { border-color: var(--primary) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
+.shortcut-profile-copy { margin-bottom: 18px; }
+.shortcut-profile-copy h3,
+.shortcut-profile-intro h3 { margin: 0 0 6px; font-size: 21px; line-height: 1.25; font-weight: 800; letter-spacing: -.03em; }
+.shortcut-profile-copy p,
+.shortcut-profile-intro p { color: var(--muted); font-size: 14px; line-height: 1.55; }
+.shortcut-profile-copy.is-centered { text-align: center; }
+.shortcut-profile-privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 0 20px;
+  padding: 12px 13px;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.shortcut-profile-field { margin: 0 0 18px; }
+.shortcut-profile-field .form-label,
+.shortcut-profile-fieldset .form-label { margin-bottom: 7px; color: var(--text) !important; font-size: 14px; line-height: 1.35; }
+.shortcut-profile-optional { color: var(--muted); font-size: 12px; font-weight: 400; }
+.shortcut-profile-sample-grid { display: grid; gap: 14px; margin-top: 6px; }
+.shortcut-profile-sample-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs, 0 2px 8px rgba(15,23,42,.06));
+}
+.shortcut-profile-sample-heading,
+.shortcut-profile-review-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.shortcut-profile-counter,
+.shortcut-profile-review-heading span { flex: 0 0 auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.shortcut-profile-sample { min-height: 148px !important; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important; font-size: 14px !important; }
+.shortcut-profile-fieldset { min-width: 0; margin: 0 0 20px; padding: 0; border: 0; }
+.shortcut-profile-section-title { margin: 0 0 9px; color: var(--text); font-size: 14px; font-weight: 800; }
+.shortcut-profile-segmented { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.shortcut-profile-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.shortcut-profile-segment input { position: absolute; opacity: 0; pointer-events: none; }
+.shortcut-profile-segment.is-selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary); }
+.shortcut-profile-review-card { margin: 0 0 12px; padding: 14px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); }
+.shortcut-profile-review-heading strong { font-size: 14px; }
+.shortcut-profile-candidate-list { display: grid; gap: 8px; }
+.shortcut-profile-candidate {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .15s;
+}
+.shortcut-profile-candidate input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.shortcut-profile-candidate small { color: var(--muted); font-size: 11px; }
+.shortcut-profile-candidate-value { font-variant-numeric: tabular-nums; font-weight: 800; }
+.shortcut-profile-candidate.is-selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 12%, transparent); }
+.shortcut-profile-candidate:has(input:focus-visible) { outline: 3px solid color-mix(in srgb, var(--primary) 26%, transparent); outline-offset: 2px; }
+.shortcut-profile-advanced { margin: 4px 0 18px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.shortcut-profile-advanced summary { min-height: 48px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--text); font-size: 14px; font-weight: 800; list-style: none; }
+.shortcut-profile-advanced summary::-webkit-details-marker { display: none; }
+.shortcut-profile-advanced summary::after { content: '＋'; color: var(--muted); font-size: 18px; }
+.shortcut-profile-advanced[open] summary::after { content: '−'; }
+.shortcut-profile-error { margin-top: 6px; color: var(--expense); font-size: 12px; line-height: 1.45; }
+.shortcut-profile-empty-result { padding: 14px; border: 1px dashed var(--border); border-radius: 14px; color: var(--muted); font-size: 13px; line-height: 1.45; text-align: center; }
+.shortcut-profile-result-list { display: grid; gap: 10px; margin: 22px 0; }
+.shortcut-profile-result { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.shortcut-profile-result strong,
+.shortcut-profile-result small { display: block; }
+.shortcut-profile-result small { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.shortcut-profile-result-status { flex: 0 0 auto; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+.shortcut-profile-result-status.is-pass { background: color-mix(in srgb, var(--income) 13%, var(--surface)); color: var(--income); }
+.shortcut-profile-result-status.is-warn { background: color-mix(in srgb, var(--amber, #d97706) 15%, var(--surface)); color: var(--amber, #b45309); }
+.shortcut-profile-result-status.is-fail { background: color-mix(in srgb, var(--expense) 13%, var(--surface)); color: var(--expense); }
+.shortcut-profile-stepper { display: flex; align-items: flex-start; gap: 8px; padding: 16px max(var(--app-gutter), var(--safe-l)) 4px; background: var(--surface); }
+.shortcut-profile-step { display: flex; min-width: 0; flex: 1; flex-direction: column; align-items: center; gap: 5px; color: var(--muted); text-align: center; }
+.shortcut-profile-step > span { display: grid; width: 28px; height: 28px; place-items: center; border: 1.5px solid var(--border); border-radius: 50%; background: var(--surface-soft); font-size: 12px; font-weight: 800; }
+.shortcut-profile-step small { font-size: 10px; line-height: 1.25; }
+.shortcut-profile-step.is-current { color: var(--primary); }
+.shortcut-profile-step.is-current > span,
+.shortcut-profile-step.is-done > span { border-color: var(--primary); background: var(--primary); color: #fff; }
+.shortcut-profile-stepper > i { flex: 0 1 34px; height: 1px; margin-top: 14px; background: var(--border); }
+.shortcut-profile-intro { margin-bottom: 20px; }
+.shortcut-profile-list { display: grid; gap: 10px; }
+.shortcut-profile-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 68px; padding: 12px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; }
+.shortcut-profile-row-icon { display: grid; width: 42px; height: 42px; flex: 0 0 42px; place-items: center; border-radius: 14px; background: color-mix(in srgb, var(--primary) 12%, var(--surface)); font-size: 21px; }
+.shortcut-profile-row-main { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
+.shortcut-profile-row-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.shortcut-profile-row-main small { color: var(--muted); font-size: 12px; }
+.shortcut-profile-row-status { flex: 0 0 auto; color: var(--muted); font-size: 11px; font-weight: 700; }
+.shortcut-profile-row-status.is-enabled { color: var(--income); }
+.shortcut-profile-empty,
+.shortcut-profile-state { margin: 16px 0; padding: 28px 16px; border: 1px dashed var(--border); border-radius: 18px; color: var(--muted); text-align: center; }
+.shortcut-profile-empty > div { margin-bottom: 8px; font-size: 34px; }
+.shortcut-profile-empty strong,
+.shortcut-profile-state strong { display: block; color: var(--text); font-size: 16px; }
+.shortcut-profile-empty p,
+.shortcut-profile-state p { margin-top: 6px; font-size: 13px; line-height: 1.5; }
+.shortcut-profile-state.is-error { border-color: color-mix(in srgb, var(--expense) 34%, var(--border)); }
+.shortcut-profile-state.is-warning { border-color: color-mix(in srgb, var(--amber, #d97706) 34%, var(--border)); background: color-mix(in srgb, var(--amber, #d97706) 8%, var(--surface)); }
+.shortcut-profile-skeleton-list { display: grid; gap: 10px; }
+.shortcut-profile-skeleton-list div { height: 68px; border-radius: 18px; background: linear-gradient(100deg, var(--surface-soft) 35%, color-mix(in srgb, var(--surface-soft) 65%, var(--border)) 50%, var(--surface-soft) 65%); background-size: 300% 100%; animation: shortcut-profile-shimmer 1.3s ease-in-out infinite; }
+.shortcut-profile-detail-hero { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; padding: 16px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); }
+.shortcut-profile-detail-hero > span { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 16px; background: color-mix(in srgb, var(--primary) 12%, var(--surface)); font-size: 25px; }
+.shortcut-profile-detail-hero h3 { font-size: 18px; line-height: 1.25; }
+.shortcut-profile-detail-hero p { margin-top: 3px; color: var(--muted); font-size: 12px; }
+.shortcut-profile-toggle { display: flex; align-items: center; gap: 10px; min-height: 48px; margin: 0 0 20px; color: var(--text); font-size: 14px; font-weight: 700; cursor: pointer; }
+.shortcut-profile-toggle input { width: 22px; height: 22px; min-height: 22px; accent-color: var(--primary); }
+.shortcut-profile-marker { display: grid; gap: 8px; margin: 18px 0; padding: 14px; border: 1px solid color-mix(in srgb, var(--primary) 26%, var(--border)); border-radius: 16px; background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
+.shortcut-profile-marker span { color: var(--muted); font-size: 12px; }
+.shortcut-profile-marker code { padding: 10px; border-radius: 10px; background: var(--surface-soft); color: var(--primary); font: 700 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; user-select: all; }
+.shortcut-profile-marker .btn { width: auto; justify-self: start; padding-inline: 16px; }
+.shortcut-profile-instructions { margin-top: 18px; padding: 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); }
+.shortcut-profile-instructions strong { display: block; margin-bottom: 8px; }
+.shortcut-profile-instructions ol { padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.shortcut-profile-instructions code { color: var(--primary); overflow-wrap: anywhere; }
+.shortcut-profile-conflict-card { display: grid; gap: 5px; margin: 20px 0; padding: 16px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); }
+.shortcut-profile-conflict-card span,
+.shortcut-profile-conflict-card small { color: var(--muted); font-size: 12px; }
+.shortcut-profile-conflict-card strong { font-size: 17px; }
+@keyframes shortcut-profile-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+@media (max-width: 560px) {
+  .shortcut-profile-scroll { padding-top: 16px !important; }
+  .shortcut-profile-footer { gap: 8px; }
+  .shortcut-profile-footer .btn { min-height: 50px; }
+  .shortcut-profile-segmented { grid-template-columns: 1fr; }
+  .shortcut-profile-stepper { gap: 4px; }
+  .shortcut-profile-step small { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shortcut-profile-shell,
+  .shortcut-profile-shell *,
+  .shortcut-profile-skeleton-list div { animation: none !important; transition: none !important; }
+}
+html.dark .shortcut-profile-shell input,
+html.dark .shortcut-profile-shell textarea,
+html.dark .shortcut-profile-shell select { background: var(--surface-2, var(--surface-soft)) !important; }
