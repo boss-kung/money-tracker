@@ -10,7 +10,7 @@
   function detectProfileCandidates(text) {
     const normalized = normalizeProfileText(text); const result = []; let id = 0
     const add = (type, match, value, start, end) => result.push({ id: `candidate-${id++}`, type, value, start, end })
-    for (const match of normalized.matchAll(/(?:thb|บาท|฿)?\s*[0-9][0-9,]*(?:\.\d{1,2})?/giu)) add('thb_amount', match[0].trim(), match[0].trim(), match.index, match.index + match[0].length)
+    for (const match of normalized.matchAll(/[0-9][0-9,]*(?:\.\d{1,2})?/gu)) add('thb_amount', match[0], match[0], match.index, match.index + match[0].length)
     for (const match of normalized.matchAll(/\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2})\b/gu)) add('date', match[0], match[0], match.index, match.index + match[0].length)
     for (const match of normalized.matchAll(/\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\b/gu)) add('time', match[0], match[0], match.index, match.index + match[0].length)
     for (const match of normalized.matchAll(/\b\d{4}\b/gu)) add('last4', match[0], match[0], match.index, match.index + match[0].length)
@@ -103,5 +103,14 @@
     if (complete.length === 1) return { status: 'complete', value: complete[0] }
     return { status: 'needs_review', reason: 'no_variant_match' }
   }
-  return { normalizeProfileText, detectProfileCandidates, detectProfileAmountCandidates, validateProfileDraft, compileProfileVariant, compileProfileVariantRule, matchProfileRule }
+  function profileAmountNumber(value) {
+    const match = String(value ?? '').replace(/,/g, '').match(/[0-9]+(?:\.\d{1,2})?/)
+    return match ? Number(match[0]) : null
+  }
+  function profileAmountMatches(result, candidate) {
+    const resultAmount = profileAmountNumber(result?.value?.amount)
+    const candidateAmount = profileAmountNumber(candidate?.value)
+    return result?.status === 'complete' && resultAmount !== null && candidateAmount !== null && resultAmount === candidateAmount
+  }
+  return { normalizeProfileText, detectProfileCandidates, detectProfileAmountCandidates, validateProfileDraft, compileProfileVariant, compileProfileVariantRule, matchProfileRule, profileAmountMatches }
 })

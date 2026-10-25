@@ -90,13 +90,37 @@ test('activation stays blocked until both local samples match completely', () =>
   assert.equal(api.validateStep(draft, 'test').valid, true)
 })
 
+test('wizard invalidates a stale amount selection when a sample changes', () => {
+  assert.match(source, /amountSelections\[index\]\s*=\s*null/)
+  assert.match(source, /detectProfileAmountCandidates\(event\.target\.value\)/)
+  assert.match(source, /prepareConfirm\(\)/)
+})
+
+test('wizard keeps save and navigation actions disabled while saving', () => {
+  assert.match(source, /state\.saveStatus === 'saving'/)
+  assert.match(source, /กำลังบันทึก/)
+  assert.match(source, /if \(state\.saveStatus === 'saving'\) return/)
+})
+
+test('completion and details expose a guide and rule metadata without raw samples', () => {
+  assert.match(source, /เปิดคู่มือการตั้ง Automation/)
+  assert.match(source, /shortcut-profile-rule-summary/)
+  assert.match(source, /directionLabel\(/)
+  assert.doesNotMatch(source, /profile\.samples/)
+})
+
+test('conflict screen exposes the latest version and discards draft state safely', () => {
+  assert.match(source, /latest\.profile_version/)
+  assert.match(source, /state\s*=\s*createDraft\('create'\)/)
+})
+
 test('profile view model exposes metadata only and never raw samples or compiled rule', () => {
   const view = api.profileViewModel({ id: 'p1', name: 'UCHOOSE', app_label: 'UCHOOSE', enabled: true, short_code: 'ABC234', profile_version: 2, compiled_rule: { secret: true }, samples: ['private'] })
   assert.deepEqual(view, { id: 'p1', name: 'UCHOOSE', app_label: 'UCHOOSE', enabled: true, short_code: 'ABC234', profile_version: 2 })
 })
 
 test('profile wizard release assets are present and versioned in production and demo', () => {
-  assert.equal(release.version, '2026.10.25-shortcut-profiles-r154')
+  assert.equal(release.version, '2026.10.25-shortcut-profiles-r155')
   for (const html of [productionHtml, demoHtml]) {
     assert.match(html, new RegExp(`style_v2\\.css\\?v=${release.version}`))
     assert.match(html, new RegExp(`ui_v2\\.css\\?v=${release.version}`))

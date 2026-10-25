@@ -9605,7 +9605,7 @@ html.mt-auth-gated #app {
 }
 .shortcut-profile-counter,
 .shortcut-profile-review-heading span { flex: 0 0 auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.shortcut-profile-sample { min-height: 148px !important; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important; font-size: 14px !important; }
+.shortcut-profile-sample { min-height: 148px !important; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important; font-size: 16px !important; }
 .shortcut-profile-fieldset { min-width: 0; margin: 0 0 20px; padding: 0; border: 0; }
 .shortcut-profile-section-title { margin: 0 0 9px; color: var(--text); font-size: 14px; font-weight: 800; }
 .shortcut-profile-segmented { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -9707,10 +9707,18 @@ html.mt-auth-gated #app {
 .shortcut-profile-instructions strong { display: block; margin-bottom: 8px; }
 .shortcut-profile-instructions ol { padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.65; }
 .shortcut-profile-instructions code { color: var(--primary); overflow-wrap: anywhere; }
+.shortcut-profile-guide { display: inline-flex; width: auto; margin-top: 14px; }
+.shortcut-profile-rule-summary { display: grid; gap: 9px; margin: 0 0 20px; padding: 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.shortcut-profile-rule-summary h4 { margin: 0 0 2px; font-size: 14px; }
+.shortcut-profile-rule-summary div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.shortcut-profile-rule-summary span { color: var(--muted); font-size: 12px; }
+.shortcut-profile-rule-summary strong { min-width: 0; color: var(--text); font-size: 13px; text-align: right; overflow-wrap: anywhere; }
+.shortcut-profile-action-hint { margin: 0 max(var(--app-gutter), var(--safe-l)) 8px; color: var(--expense); font-size: 12px; line-height: 1.45; }
 .shortcut-profile-conflict-card { display: grid; gap: 5px; margin: 20px 0; padding: 16px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); }
 .shortcut-profile-conflict-card span,
 .shortcut-profile-conflict-card small { color: var(--muted); font-size: 12px; }
 .shortcut-profile-conflict-card strong { font-size: 17px; }
+.shortcut-profile-conflict-card hr { width: 100%; margin: 8px 0; border: 0; border-top: 1px solid var(--border); }
 @keyframes shortcut-profile-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 @media (max-width: 560px) {
   .shortcut-profile-scroll { padding-top: 16px !important; }

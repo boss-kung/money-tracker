@@ -5,7 +5,7 @@
   if (root) root.MT_RELEASE = manifest
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict'
-  const version = '2026.10.25-shortcut-profiles-r154'
+  const version = '2026.10.25-shortcut-profiles-r155'
   const coreAssets = Object.freeze([
     './',
     './index.html',

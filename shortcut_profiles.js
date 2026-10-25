@@ -28,6 +28,10 @@
 
   function directionLabel(direction) { return direction === 'credit' ? 'เงินเข้า/คืนเงิน' : direction === 'debit' ? 'เงินออก' : '' }
   function stepHeading(step) { return `ขั้น ${STEP_ORDER.indexOf(step) + 1} จาก 3` }
+  function guideHref() {
+    const pathname = String(root.location?.pathname || '')
+    return pathname.includes('/demo/') ? '../outputs/money-tracker-shortcut-simple-setup-th.md' : 'outputs/money-tracker-shortcut-simple-setup-th.md'
+  }
 
   function createDraft(mode = 'create', profile = null, handoff = {}) {
     const sampleText = String(handoff.sampleText || '')
@@ -151,10 +155,23 @@
   function runLocalTests() {
     try {
       const rule = compileDraft()
-      state.testResults = state.samples.map(sample => core.matchProfileRule(rule, sample, new Date().toISOString()))
+      state.testResults = state.samples.map((sample, index) => {
+        const result = core.matchProfileRule(rule, sample, new Date().toISOString())
+        const candidate = core.detectProfileAmountCandidates(sample).find(item => item.id === state.amountSelections[index])
+        return core.profileAmountMatches(result, candidate) ? result : { status: 'needs_review', reason: 'selected_amount_mismatch' }
+      })
     } catch (error) {
       state.testResults = [{ status: 'needs_review', reason: error.message }, { status: 'needs_review', reason: error.message }]
     }
+  }
+
+  function resultReason(result) {
+    return ({
+      selected_amount_mismatch: 'ระบบจับยอดไม่ตรงกับยอดที่เลือก กลับไปเลือกยอดใหม่',
+      no_variant_match: 'ระบบยังจับคู่รูปแบบไม่ได้ ตรวจคำที่ต้องมีและตัวอย่างอีกครั้ง',
+      ambiguous_variant: 'พบหลายรูปแบบที่เป็นไปได้ ลองใช้คำที่ต้องมีให้เฉพาะเจาะจงขึ้น',
+      notification_content_unavailable: 'ไม่มีข้อความแจ้งเตือนให้ตรวจสอบ',
+    })[result?.reason] || 'ระบบยังจับคู่รูปแบบไม่ได้ ลองกลับไปตรวจสอบข้อมูล'
   }
 
   function errorLabel(key, errors = state.errors) {
@@ -201,16 +218,19 @@
   }
 
   function renderTest() {
-    return `<div class="shortcut-profile-copy"><h3>ทดลองก่อนเปิดใช้</h3><p>ผลนี้คำนวณในเครื่องจากตัวอย่างที่คุณวางไว้ ยังไม่มีการส่งข้อมูลไปที่ระบบ</p></div><div class="shortcut-profile-result-list" role="status" aria-live="polite">${[0, 1].map(index => { const result = state.testResults[index] || {}; return `<article class="shortcut-profile-result"><div><strong>ตัวอย่างที่ ${index + 1}</strong><small>${result.status === 'complete' ? `${directionLabel(result.value?.direction)} · ${escape(result.value?.amount || '')} บาท` : 'ระบบยังจับคู่รูปแบบไม่ได้'}</small></div>${resultLabel(result)}</article>` }).join('')}</div>${errorLabel('test')}`
+    return `<div class="shortcut-profile-copy"><h3>ทดลองก่อนเปิดใช้</h3><p>ผลนี้คำนวณในเครื่องจากตัวอย่างที่คุณวางไว้ ยังไม่มีการส่งข้อมูลไปที่ระบบ</p></div><div class="shortcut-profile-result-list" role="status" aria-live="polite">${[0, 1].map(index => { const result = state.testResults[index] || {}; return `<article class="shortcut-profile-result"><div><strong>ตัวอย่างที่ ${index + 1}</strong><small>${result.status === 'complete' ? `${directionLabel(result.value?.direction)} · ${escape(result.value?.amount || '')} บาท` : escape(resultReason(result))}</small></div>${resultLabel(result)}</article>` }).join('')}</div>${errorLabel('test')}`
   }
 
   function renderWizard() {
     const validation = validateStep(state, state.step)
     const canContinue = validation.valid
+    const isSaving = state.saveStatus === 'saving'
+    const actionHint = Object.values(state.errors || {})[0] || ''
     const body = state.step === 'samples' ? renderSamples() : state.step === 'confirm' ? renderConfirm() : renderTest()
     const primaryLabel = state.step === 'samples' ? 'ถัดไป' : state.step === 'confirm' ? 'ทดลองตัวอย่าง' : 'เปิดใช้งานโปรไฟล์'
     const primaryAction = state.step === 'test' ? 'save' : 'next'
-    return `<section class="shortcut-profile-shell shortcut-profile-editor" data-profile-mode="${escape(state.mode)}"><div class="sub-header shortcut-profile-header"><button type="button" class="btn-icon" data-profile-action="back" aria-label="ย้อนกลับ">←</button><div><h2 tabindex="-1" data-profile-heading>${state.mode === 'relearn' ? 'เรียนรู้รูปแบบใหม่' : 'เพิ่มแอปธนาคาร'}</h2><p>${stepHeading(state.step)}</p></div><div></div></div>${renderStepper(state.step)}<div class="sub-scroll shortcut-profile-scroll">${body}</div><div class="shortcut-profile-footer"><button type="button" class="btn btn-secondary" data-profile-action="cancel">ยกเลิก</button><button type="button" class="btn btn-primary" data-profile-action="${primaryAction}"${canContinue ? '' : ' disabled'}>${primaryLabel}</button></div></section>`
+    const busyAttr = isSaving ? ' disabled aria-disabled="true"' : ''
+    return `<section class="shortcut-profile-shell shortcut-profile-editor" data-profile-mode="${escape(state.mode)}" aria-busy="${isSaving}"><div class="sub-header shortcut-profile-header"><button type="button" class="btn-icon" data-profile-action="back" aria-label="ย้อนกลับ"${busyAttr}>←</button><div><h2 tabindex="-1" data-profile-heading>${state.mode === 'relearn' ? 'เรียนรู้รูปแบบใหม่' : 'เพิ่มแอปธนาคาร'}</h2><p>${stepHeading(state.step)}</p></div><div></div></div>${renderStepper(state.step)}<div class="sub-scroll shortcut-profile-scroll">${body}</div><p class="shortcut-profile-action-hint" id="profile-action-hint" role="status"${actionHint ? '' : ' hidden'}>${escape(actionHint)}</p><div class="shortcut-profile-footer"><button type="button" class="btn btn-secondary" data-profile-action="cancel"${busyAttr}>ยกเลิก</button><button type="button" class="btn btn-primary" data-profile-action="${primaryAction}"${canContinue && !isSaving ? '' : ' disabled'} aria-describedby="profile-action-hint">${isSaving ? 'กำลังบันทึก…' : primaryLabel}</button></div></section>`
   }
 
   function renderList(result = {}, error = '') {
@@ -225,19 +245,31 @@
     return `<section class="shortcut-profile-shell shortcut-profile-screen"><div class="sub-header shortcut-profile-header"><button type="button" class="btn-icon" data-profile-action="close" aria-label="ย้อนกลับ">←</button><h2>รูปแบบแจ้งเตือนธนาคาร</h2><div></div></div><div class="sub-scroll shortcut-profile-scroll"><div class="shortcut-profile-intro"><h3>เพิ่มการตรวจจับแอปธนาคาร</h3><p>คัดลอกตัวอย่างแจ้งเตือน 2 รายการจากแอปเดียวกัน ตัวอย่างจะอยู่ในเครื่องนี้เท่านั้น</p></div>${body}</div>${!result.loading && !error ? '<div class="shortcut-profile-footer"><button type="button" class="btn btn-primary" data-profile-action="new">เพิ่มแอปธนาคาร</button></div>' : ''}</section>`
   }
 
+  function renderRuleSummary(profile) {
+    const rule = profile?.compiled_rule?.variants?.[0] || null
+    const anchors = parseAnchors(rule?.mustContain)
+    const fields = ['amount', 'date', 'time', 'merchant', 'accountLast4', 'cardLast4', 'transactionReference'].filter(key => rule?.[key]).length
+    return `<section class="shortcut-profile-rule-summary" aria-label="สรุปรูปแบบการตรวจจับ"><h4>สรุปรูปแบบการตรวจจับ</h4><div><span>ทิศทาง</span><strong>${escape(directionLabel(rule?.direction) || 'ยังไม่ระบุ')}</strong></div><div><span>คำที่ต้องมี</span><strong>${escape(anchors.join(', ') || '—')}</strong></div><div><span>ข้อมูลที่ดึง</span><strong>${fields ? `${fields} ฟิลด์` : 'กฎพร้อมใช้งาน'}</strong></div></section>`
+  }
+
   function renderDetails(profile) {
     const enabled = detail?.enabled ?? profile.enabled
     const detailError = detail?.error ? `<p class="shortcut-profile-error" role="alert">${escape(detail.error)}</p>` : ''
-    return `<section class="shortcut-profile-shell shortcut-profile-details"><div class="sub-header shortcut-profile-header"><button type="button" class="btn-icon" data-profile-action="back-list" aria-label="ย้อนกลับ">←</button><h2>รายละเอียดโปรไฟล์</h2><div></div></div><div class="sub-scroll shortcut-profile-scroll"><div class="shortcut-profile-detail-hero"><span aria-hidden="true">🏦</span><div><h3>${escape(profile.name)}</h3><p>${escape(profile.app_label || profile.short_code || '')}</p></div></div><div class="shortcut-profile-field"><label class="form-label" for="profile-detail-name">ชื่อโปรไฟล์</label><input id="profile-detail-name" class="form-input" data-detail-field="name" maxlength="64" value="${escape(detail?.name ?? profile.name)}"></div><div class="shortcut-profile-field"><label class="form-label" for="profile-detail-app">ชื่อแอป</label><input id="profile-detail-app" class="form-input" data-detail-field="app_label" maxlength="64" value="${escape((detail?.appLabel ?? profile.app_label) ?? '')}"></div><label class="shortcut-profile-toggle"><input type="checkbox" data-detail-field="enabled"${enabled ? ' checked' : ''}><span>เปิดใช้งานโปรไฟล์นี้</span></label><div class="shortcut-profile-marker"><span>รหัสสำหรับ Automation</span><code>MT-PROFILE:${escape(profile.short_code || '')}</code><button type="button" class="btn btn-secondary" data-profile-action="copy-marker">คัดลอก</button></div>${detailError}</div><div class="shortcut-profile-footer"><button type="button" class="btn btn-secondary" data-profile-action="relearn">เรียนรู้รูปแบบใหม่</button><button type="button" class="btn btn-primary" data-profile-action="save-detail">บันทึก</button></div></section>`
+    return `<section class="shortcut-profile-shell shortcut-profile-details"><div class="sub-header shortcut-profile-header"><button type="button" class="btn-icon" data-profile-action="back-list" aria-label="ย้อนกลับ">←</button><h2>รายละเอียดโปรไฟล์</h2><div></div></div><div class="sub-scroll shortcut-profile-scroll"><div class="shortcut-profile-detail-hero"><span aria-hidden="true">🏦</span><div><h3>${escape(profile.name)}</h3><p>${escape(profile.app_label || profile.short_code || '')}</p></div></div>${renderRuleSummary(profile)}<div class="shortcut-profile-field"><label class="form-label" for="profile-detail-name">ชื่อโปรไฟล์</label><input id="profile-detail-name" class="form-input" data-detail-field="name" maxlength="64" value="${escape(detail?.name ?? profile.name)}"></div><div class="shortcut-profile-field"><label class="form-label" for="profile-detail-app">ชื่อแอป</label><input id="profile-detail-app" class="form-input" data-detail-field="app_label" maxlength="64" value="${escape((detail?.appLabel ?? profile.app_label) ?? '')}"></div><label class="shortcut-profile-toggle"><input type="checkbox" data-detail-field="enabled"${enabled ? ' checked' : ''}><span>เปิดใช้งานโปรไฟล์นี้</span></label><div class="shortcut-profile-marker"><span>รหัสสำหรับ Automation</span><code>MT-PROFILE:${escape(profile.short_code || '')}</code><button type="button" class="btn btn-secondary" data-profile-action="copy-marker">คัดลอก</button></div>${detailError}</div><div class="shortcut-profile-footer"><button type="button" class="btn btn-secondary" data-profile-action="relearn">เรียนรู้รูปแบบใหม่</button><button type="button" class="btn btn-primary" data-profile-action="save-detail">บันทึก</button></div></section>`
   }
 
   function renderCompletion(profile) {
-    return `<section class="shortcut-profile-shell shortcut-profile-complete"><div class="sub-header shortcut-profile-header"><div></div><h2>โปรไฟล์พร้อมใช้งาน</h2><div></div></div><div class="sub-scroll shortcut-profile-scroll"><div class="shortcut-profile-success-icon" aria-hidden="true">✓</div><div class="shortcut-profile-copy is-centered"><h3>${escape(profile.name || 'โปรไฟล์ใหม่')}</h3><p>${escape(profile.app_label || '')} · ${profile.enabled === false ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</p></div><div class="shortcut-profile-marker"><span>ใส่รหัสนี้ใน Text action ของ Automation</span><code>MT-PROFILE:${escape(profile.short_code || '')}</code><button type="button" class="btn btn-secondary" data-profile-action="copy-marker">คัดลอก</button></div><div class="shortcut-profile-instructions"><strong>ตั้ง Automation บน iPhone</strong><ol><li>เปิด Shortcuts → Automation → Notification</li><li>เพิ่ม Text action เป็น <code>MT-PROFILE:${escape(profile.short_code || '')}</code></li><li>ต่อด้วย Title, Subtitle และ Message/Body แล้ว Run Shortcut</li></ol></div></div><div class="shortcut-profile-footer"><button type="button" class="btn btn-primary" data-profile-action="done">เสร็จแล้ว</button></div></section>`
+    const direction = profile.direction || profile.compiled_rule?.variants?.[0]?.direction
+    return `<section class="shortcut-profile-shell shortcut-profile-complete"><div class="sub-header shortcut-profile-header"><div></div><h2>โปรไฟล์พร้อมใช้งาน</h2><div></div></div><div class="sub-scroll shortcut-profile-scroll"><div class="shortcut-profile-success-icon" aria-hidden="true">✓</div><div class="shortcut-profile-copy is-centered"><h3>${escape(profile.name || 'โปรไฟล์ใหม่')}</h3><p>${escape(profile.app_label || '')} · ${escape(directionLabel(direction) || 'รูปแบบที่ยืนยันแล้ว')} · ${profile.enabled === false ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</p></div><div class="shortcut-profile-marker"><span>ใส่รหัสนี้ใน Text action ของ Automation</span><code>MT-PROFILE:${escape(profile.short_code || '')}</code><button type="button" class="btn btn-secondary" data-profile-action="copy-marker">คัดลอก</button></div><div class="shortcut-profile-instructions"><strong>ตั้ง Automation บน iPhone</strong><ol><li>เปิด Shortcuts → Automation → Notification</li><li>เพิ่ม Text action เป็น <code>MT-PROFILE:${escape(profile.short_code || '')}</code></li><li>ต่อด้วย Title, Subtitle และ Message/Body แล้ว Run Shortcut</li></ol><a class="btn btn-secondary shortcut-profile-guide" href="${escape(guideHref())}" target="_blank" rel="noopener">เปิดคู่มือการตั้ง Automation</a></div></div><div class="shortcut-profile-footer"><button type="button" class="btn btn-primary" data-profile-action="done">เสร็จแล้ว</button></div></section>`
   }
 
   function renderConflict() {
     const latest = conflict?.latest || {}
-    return `<section class="shortcut-profile-shell shortcut-profile-conflict"><div class="sub-header shortcut-profile-header"><button type="button" class="btn-icon" data-profile-action="conflict-back" aria-label="ย้อนกลับ">←</button><h2>ข้อมูลถูกแก้ไขแล้ว</h2><div></div></div><div class="sub-scroll shortcut-profile-scroll"><div class="shortcut-profile-state is-warning" role="alert"><strong>โปรไฟล์นี้มีเวอร์ชันใหม่กว่า</strong><p>เพื่อป้องกันการเขียนทับข้อมูลของคุณ โปรดเลือกว่าจะใช้ข้อมูลล่าสุดหรือยืนยันการแทนที่</p></div><div class="shortcut-profile-conflict-card"><span>เวอร์ชันล่าสุด</span><strong>${escape(latest.name || '')}</strong><small>${escape(latest.app_label || '')} · ${latest.enabled === false ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</small></div></div><div class="shortcut-profile-footer"><button type="button" class="btn btn-secondary" data-profile-action="conflict-discard">ใช้ข้อมูลล่าสุด</button><button type="button" class="btn btn-primary" data-profile-action="conflict-reapply">ยืนยันการแทนที่</button></div></section>`
+    const pendingName = conflict?.mode === 'metadata' ? detail?.name : getDefaultProfileName(state)
+    const pendingApp = conflict?.mode === 'metadata' ? detail?.appLabel : state.appLabel
+    const pendingDirection = conflict?.mode === 'metadata' ? '' : directionLabel(state.direction)
+    const currentVersion = conflict?.mode === 'metadata' ? detail?.profile?.profile_version : state.expectedVersion
+    return `<section class="shortcut-profile-shell shortcut-profile-conflict"><div class="sub-header shortcut-profile-header"><button type="button" class="btn-icon" data-profile-action="conflict-back" aria-label="ย้อนกลับ">←</button><h2>ข้อมูลถูกแก้ไขแล้ว</h2><div></div></div><div class="sub-scroll shortcut-profile-scroll"><div class="shortcut-profile-state is-warning" role="alert"><strong>โปรไฟล์นี้มีเวอร์ชันใหม่กว่า</strong><p>เพื่อป้องกันการเขียนทับข้อมูลของคุณ โปรดตรวจสอบข้อมูลล่าสุดก่อนยืนยัน</p></div><div class="shortcut-profile-conflict-card"><span>เวอร์ชันล่าสุด · v${escape(latest.profile_version ?? '—')}</span><strong>${escape(latest.name || '')}</strong><small>${escape(latest.app_label || '')} · ${latest.enabled === false ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</small><hr><span>การเปลี่ยนแปลงที่รอยืนยัน · จาก v${escape(currentVersion ?? '—')}</span><strong>${escape(pendingName || 'ยังไม่ระบุชื่อ')}</strong><small>${escape(pendingApp || '')}${pendingDirection ? ` · ${escape(pendingDirection)}` : ''}</small></div></div><div class="shortcut-profile-footer"><button type="button" class="btn btn-secondary" data-profile-action="conflict-discard">ใช้ข้อมูลล่าสุด</button><button type="button" class="btn btn-primary" data-profile-action="conflict-reapply">ยืนยันการแทนที่</button></div></section>`
   }
 
   function errorMessage(error) {
@@ -273,17 +305,34 @@
     const action = screen?.querySelector?.('[data-profile-action="next"], [data-profile-action="save"]')
     if (!action) return
     const validation = validateStep(state, state.step)
+    state.errors = validation.errors
     action.disabled = !validation.valid
     action.setAttribute('aria-disabled', String(!validation.valid))
+    const message = Object.values(validation.errors || {})[0] || ''
+    const hint = screen.querySelector('[data-profile-action-hint], #profile-action-hint')
+    if (hint) { hint.textContent = message; hint.hidden = !message }
+    action.setAttribute('aria-describedby', message ? 'profile-action-hint' : '')
+    const fieldSelectors = {
+      appLabel: '[data-profile-field="app_label"]',
+      mustContain: '[data-profile-field="must_contain"]',
+      mustNotContain: '[data-profile-field="must_not_contain"]',
+      sample_0: '[data-profile-sample="0"]',
+      sample_1: '[data-profile-sample="1"]',
+    }
+    Object.entries(fieldSelectors).forEach(([key, selector]) => screen.querySelector(selector)?.setAttribute('aria-invalid', String(Boolean(validation.errors?.[key]))))
   }
 
   function bindWizard() {
     const screen = root.document?.querySelector?.('.shortcut-profile-editor')
     if (!screen) return
     screen.querySelectorAll('[data-profile-sample]').forEach(input => input.addEventListener('input', event => {
-      state.samples[Number(input.dataset.profileSample)] = event.target.value
+      const index = Number(input.dataset.profileSample)
+      state.samples[index] = event.target.value
+      state.amountSelections[index] = null
+      state.amountCandidates[index] = core.detectProfileAmountCandidates(event.target.value)
+      state.testResults = []
       state.dirty = true
-      const counter = screen.querySelector(`[data-profile-counter="${input.dataset.profileSample}"]`)
+      const counter = screen.querySelector(`[data-profile-counter="${index}"]`)
       if (counter) counter.textContent = `${event.target.value.length.toLocaleString('th-TH')}/${MAX_SAMPLE_LENGTH.toLocaleString('th-TH')}`
       refreshWizardAction(screen)
     }))
@@ -307,8 +356,10 @@
       refreshWizardAction(screen)
     }))
     screen.querySelectorAll('[data-profile-amount]').forEach(input => input.addEventListener('change', event => { state.amountSelections[Number(input.dataset.profileAmount)] = event.target.value; state.dirty = true; screen.querySelectorAll(`[data-profile-amount="${input.dataset.profileAmount}"]`).forEach(option => option.closest('label')?.classList.toggle('is-selected', option.checked)); refreshWizardAction(screen) }))
-    screen.querySelector('[data-profile-action="back"]')?.addEventListener('click', () => handleWizardBack())
-    screen.querySelector('[data-profile-action="cancel"]')?.addEventListener('click', () => handleWizardCancel())
+    if (state.saveStatus !== 'saving') {
+      screen.querySelector('[data-profile-action="back"]')?.addEventListener('click', () => handleWizardBack())
+      screen.querySelector('[data-profile-action="cancel"]')?.addEventListener('click', () => handleWizardCancel())
+    }
     screen.querySelector('[data-profile-action="next"]')?.addEventListener('click', () => goNext())
     screen.querySelector('[data-profile-action="save"]')?.addEventListener('click', () => saveWizard())
   }
@@ -330,7 +381,15 @@
   function focusFirstError() { try { root.document?.querySelector?.('.shortcut-profile-error')?.previousElementSibling?.focus?.() } catch (_) {} }
 
   function discardWizard() {
-    const discard = () => { state = createDraft('create'); openList() }
+    const discard = () => {
+      const wasRelearn = state.mode === 'relearn'
+      const profileId = state.profileId
+      const originProfile = detail?.profile || state.profile
+      state = createDraft('create')
+      conflict = null
+      if (wasRelearn && profileId) return originProfile?.id ? showDetails(originProfile) : openDetails(profileId)
+      openList()
+    }
     if (!state.dirty) return discard()
     if (root.App?.showConfirm) root.App.showConfirm({ title: 'ละทิ้งข้อมูลที่กรอก?', body: 'ตัวอย่างแจ้งเตือนจะไม่ถูกเก็บไว้', danger: true, confirmLabel: 'ละทิ้ง', onConfirm: discard })
     else discard()
@@ -359,6 +418,7 @@
   function handleWizardCancel() { discardWizard() }
 
   async function saveWizard() {
+    if (state.saveStatus === 'saving') return
     const screen = root.document?.querySelector?.('.shortcut-profile-editor')
     syncWizard(screen)
     const validation = validateStep(state, 'test')
@@ -370,7 +430,7 @@
       const rule = compileDraft()
       const payload = { name: getDefaultProfileName(state), app_label: String(state.appLabel || '').trim(), enabled: true, compiled_rule: rule }
       const result = state.profileId ? await root.MTShortcutCapture.updateProfile(state.profileId, { ...payload, expected_version: state.expectedVersion }) : await root.MTShortcutCapture.createProfile(payload)
-      completion = result.profile || result
+      completion = { ...(result.profile || result), direction: state.direction, mustContain: [...state.mustContain], mustNotContain: [...state.mustNotContain] }
       state = createDraft('create')
       mount(renderCompletion(completion), bindCompletion)
     } catch (error) {
@@ -431,7 +491,13 @@
 
   function bindConflict() {
     root.document?.querySelector('[data-profile-action="conflict-back"]')?.addEventListener('click', () => modeBackFromConflict())
-    root.document?.querySelector('[data-profile-action="conflict-discard"]')?.addEventListener('click', () => { if (conflict?.latest) showDetails(conflict.latest) })
+    root.document?.querySelector('[data-profile-action="conflict-discard"]')?.addEventListener('click', () => {
+      if (!conflict?.latest) return
+      const latest = conflict.latest
+      state = createDraft('create')
+      conflict = null
+      showDetails(latest)
+    })
     root.document?.querySelector('[data-profile-action="conflict-reapply"]')?.addEventListener('click', () => confirmConflict())
   }
 

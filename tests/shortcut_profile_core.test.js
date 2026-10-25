@@ -46,6 +46,33 @@ test('amount candidates mark currency-confirmed values and date/time overlaps wi
   assert.ok(candidates.every(item => Number.isInteger(item.start) && Number.isInteger(item.end)))
 })
 
+test('amount candidates keep currency prefixes outside the numeric value', () => {
+  for (const [text, expected] of [['THB 100', '100'], ['฿200', '200'], ['บาท 300', '300']]) {
+    const candidates = core.detectProfileAmountCandidates(text)
+    assert.equal(candidates.length, 1)
+    assert.equal(candidates[0].value, expected)
+    assert.equal(candidates[0].currencyConfirmed, true)
+  }
+})
+
+test('selected amount must agree with the amount extracted by the compiled rule', () => {
+  const samples = ['BANK alpha amount 100 THB old alpha amount 200 THB', 'BANK beta amount 150 THB new beta amount 250 THB']
+  const candidates = samples.map(sample => core.detectProfileAmountCandidates(sample))
+  const selected = candidates.map(items => items.at(-1))
+  const rule = core.compileProfileVariantRule({
+    id: 'purchase',
+    direction: 'debit',
+    samples,
+    selections: samples.map((_, index) => ({ amount: candidates[index][0].id })),
+    mustContain: ['bank'],
+  })
+  const results = samples.map(sample => core.matchProfileRule(rule, sample))
+  assert.equal(core.profileAmountMatches(results[0], selected[0]), false)
+  assert.equal(core.profileAmountMatches(results[1], selected[1]), false)
+  assert.equal(core.profileAmountMatches(results[0], candidates[0][0]), true)
+  assert.equal(core.profileAmountMatches(results[1], candidates[1][0]), true)
+})
+
 test('draft validation requires explicit direction, shared required phrase, and selected amounts', () => {
   const samples = [fixture.purchase.text, fixture.purchase.text.replace('120.50', '80.00')]
   const amountSelections = samples.map(sample => core.detectProfileAmountCandidates(sample).find(item => item.currencyConfirmed)?.id)
