@@ -5,8 +5,8 @@ Release: `2026.10.25-shortcut-profiles-r155`
 
 ## Automated verification
 
-- `node --test tests/*.test.js` — **565 passed, 0 failed**.
-- Focused release/profile suites — **41 passed, 0 failed**:
+- `node --test tests/*.test.js` — **566 passed, 0 failed**.
+- Focused release/profile suites — **42 passed, 0 failed**:
   - `tests/feature_loader.test.js`
   - `tests/shortcut_capture_ui.test.js`
   - `tests/release_manifest.test.js`
