@@ -13,6 +13,7 @@
   let state = createDraft('create')
   let detail = null
   let conflict = null
+  let conflictStatus = 'idle'
   let completion = null
 
   function escape(value) {
@@ -64,6 +65,7 @@
     state = createDraft('create')
     detail = null
     conflict = null
+    conflictStatus = 'idle'
     completion = null
   }
 
@@ -187,10 +189,10 @@
     const nameValue = state.nameTouched ? state.name : getDefaultProfileName(state)
     return `<div class="shortcut-profile-copy"><h3>วางตัวอย่างแจ้งเตือน</h3><p>ใช้ข้อความแจ้งเตือน 2 รายการจากแอปเดียวกัน ระบบจะเรียนรู้รูปแบบบนเครื่องนี้</p></div>
       <div class="shortcut-profile-privacy" role="note"><span aria-hidden="true">🔒</span><span>ตัวอย่างอยู่ในหน้านี้ชั่วคราว ไม่ถูกบันทึกหรือส่งขึ้นเซิร์ฟเวอร์</span></div>
-      <div class="shortcut-profile-field"><label class="form-label" for="profile-app-label">ชื่อแอป <span aria-hidden="true">*</span></label><input id="profile-app-label" class="form-input" data-profile-field="app_label" maxlength="64" autocomplete="off" value="${escape(state.appLabel)}" placeholder="เช่น UCHOOSE" aria-describedby="profile-error-appLabel">${errorLabel('appLabel')}</div>
+      <div class="shortcut-profile-field"><label class="form-label" for="profile-app-label">ชื่อแอป <span aria-hidden="true">*</span></label><input id="profile-app-label" class="form-input" data-profile-field="app_label" maxlength="64" autocomplete="off" value="${escape(state.appLabel)}" placeholder="เช่น UCHOOSE" aria-describedby="profile-error-appLabel" aria-invalid="${state.errors.appLabel ? 'true' : 'false'}">${errorLabel('appLabel')}</div>
       <div class="shortcut-profile-field"><label class="form-label" for="profile-name">ชื่อโปรไฟล์ <span class="shortcut-profile-optional">(แก้ได้)</span></label><input id="profile-name" class="form-input" data-profile-field="name" maxlength="64" autocomplete="off" value="${escape(nameValue)}" placeholder="ชื่อที่จะแสดงในรายการ"></div>
       <div class="shortcut-profile-sample-grid">
-        ${[0, 1].map(index => `<div class="shortcut-profile-sample-card"><div class="shortcut-profile-sample-heading"><label class="form-label" for="profile-sample-${index}">ตัวอย่างที่ ${index + 1} <span aria-hidden="true">*</span></label><span class="shortcut-profile-counter" data-profile-counter="${index}">${String(state.samples[index] || '').length.toLocaleString('th-TH')}/${MAX_SAMPLE_LENGTH.toLocaleString('th-TH')}</span></div><textarea id="profile-sample-${index}" class="form-input shortcut-profile-sample" data-profile-sample="${index}" maxlength="${MAX_SAMPLE_LENGTH}" rows="6" spellcheck="false" placeholder="แตะค้างเพื่อวางข้อความแจ้งเตือน">${escape(state.samples[index])}</textarea>${errorLabel(`sample_${index}`)}</div>`).join('')}
+        ${[0, 1].map(index => `<div class="shortcut-profile-sample-card"><div class="shortcut-profile-sample-heading"><label class="form-label" for="profile-sample-${index}">ตัวอย่างที่ ${index + 1} <span aria-hidden="true">*</span></label><span class="shortcut-profile-counter" data-profile-counter="${index}">${String(state.samples[index] || '').length.toLocaleString('th-TH')}/${MAX_SAMPLE_LENGTH.toLocaleString('th-TH')}</span></div><textarea id="profile-sample-${index}" class="form-input shortcut-profile-sample" data-profile-sample="${index}" maxlength="${MAX_SAMPLE_LENGTH}" rows="6" spellcheck="false" placeholder="แตะค้างเพื่อวางข้อความแจ้งเตือน" aria-invalid="${state.errors[`sample_${index}`] ? 'true' : 'false'}">${escape(state.samples[index])}</textarea>${errorLabel(`sample_${index}`)}</div>`).join('')}
       </div>
       ${errorLabel('samples')}`
   }
@@ -207,7 +209,7 @@
       <fieldset class="shortcut-profile-fieldset"><legend class="form-label">รายการนี้เป็นแบบไหน <span aria-hidden="true">*</span></legend><div class="shortcut-profile-segmented" role="radiogroup" aria-label="ทิศทางรายการ"><label class="shortcut-profile-segment${state.direction === 'debit' ? ' is-selected' : ''}"><input type="radio" name="profile-direction" data-profile-direction="debit"${state.direction === 'debit' ? ' checked' : ''}>เงินออก</label><label class="shortcut-profile-segment${state.direction === 'credit' ? ' is-selected' : ''}"><input type="radio" name="profile-direction" data-profile-direction="credit"${state.direction === 'credit' ? ' checked' : ''}>เงินเข้า/คืนเงิน</label></div>${errorLabel('direction')}</fieldset>
       <div class="shortcut-profile-section-title">เลือกยอดเงินจากตัวอย่าง</div>
       ${[0, 1].map(index => `<section class="shortcut-profile-review-card"><div class="shortcut-profile-review-heading"><strong>ตัวอย่างที่ ${index + 1}</strong><span>${(state.amountCandidates[index] || []).filter(item => item.currencyConfirmed).length === 1 ? 'พบอัตโนมัติ' : 'ต้องเลือก'}</span></div>${renderCandidateCards(index)}</section>`).join('')}
-      <div class="shortcut-profile-field"><label class="form-label" for="profile-must-contain">คำที่ต้องมี <span aria-hidden="true">*</span></label><input id="profile-must-contain" class="form-input" data-profile-field="must_contain" maxlength="256" value="${escape(state.mustContain.join(', '))}" placeholder="เช่น UCHOOSE" aria-describedby="profile-error-mustContain"><p class="form-hint">ใช้คำที่มีอยู่ในตัวอย่างทั้งสองรายการ คั่นด้วย comma หรือขึ้นบรรทัดใหม่</p>${errorLabel('mustContain')}</div>
+      <div class="shortcut-profile-field"><label class="form-label" for="profile-must-contain">คำที่ต้องมี <span aria-hidden="true">*</span></label><input id="profile-must-contain" class="form-input" data-profile-field="must_contain" maxlength="256" value="${escape(state.mustContain.join(', '))}" placeholder="เช่น UCHOOSE" aria-describedby="profile-error-mustContain" aria-invalid="${state.errors.mustContain ? 'true' : 'false'}"><p class="form-hint">ใช้คำที่มีอยู่ในตัวอย่างทั้งสองรายการ คั่นด้วย comma หรือขึ้นบรรทัดใหม่</p>${errorLabel('mustContain')}</div>
       <details class="shortcut-profile-advanced"${state.advancedOpen ? ' open' : ''}><summary>ตั้งค่าขั้นสูง</summary><div class="shortcut-profile-field"><label class="form-label" for="profile-must-not-contain">คำที่ไม่ควรพบ <span class="shortcut-profile-optional">(ไม่บังคับ)</span></label><input id="profile-must-not-contain" class="form-input" data-profile-field="must_not_contain" maxlength="256" value="${escape(state.mustNotContain.join(', '))}" placeholder="เช่น OTP, รหัสผ่าน"><p class="form-hint">ถ้าพบคำเหล่านี้ ระบบจะไม่นำรายการเข้ามา</p></div></details>`
   }
 
@@ -265,11 +267,14 @@
 
   function renderConflict() {
     const latest = conflict?.latest || {}
+    const isSaving = conflictStatus === 'saving'
     const pendingName = conflict?.mode === 'metadata' ? detail?.name : getDefaultProfileName(state)
     const pendingApp = conflict?.mode === 'metadata' ? detail?.appLabel : state.appLabel
     const pendingDirection = conflict?.mode === 'metadata' ? '' : directionLabel(state.direction)
     const currentVersion = conflict?.mode === 'metadata' ? detail?.profile?.profile_version : state.expectedVersion
-    return `<section class="shortcut-profile-shell shortcut-profile-conflict"><div class="sub-header shortcut-profile-header"><button type="button" class="btn-icon" data-profile-action="conflict-back" aria-label="ย้อนกลับ">←</button><h2>ข้อมูลถูกแก้ไขแล้ว</h2><div></div></div><div class="sub-scroll shortcut-profile-scroll"><div class="shortcut-profile-state is-warning" role="alert"><strong>โปรไฟล์นี้มีเวอร์ชันใหม่กว่า</strong><p>เพื่อป้องกันการเขียนทับข้อมูลของคุณ โปรดตรวจสอบข้อมูลล่าสุดก่อนยืนยัน</p></div><div class="shortcut-profile-conflict-card"><span>เวอร์ชันล่าสุด · v${escape(latest.profile_version ?? '—')}</span><strong>${escape(latest.name || '')}</strong><small>${escape(latest.app_label || '')} · ${latest.enabled === false ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</small><hr><span>การเปลี่ยนแปลงที่รอยืนยัน · จาก v${escape(currentVersion ?? '—')}</span><strong>${escape(pendingName || 'ยังไม่ระบุชื่อ')}</strong><small>${escape(pendingApp || '')}${pendingDirection ? ` · ${escape(pendingDirection)}` : ''}</small></div></div><div class="shortcut-profile-footer"><button type="button" class="btn btn-secondary" data-profile-action="conflict-discard">ใช้ข้อมูลล่าสุด</button><button type="button" class="btn btn-primary" data-profile-action="conflict-reapply">ยืนยันการแทนที่</button></div></section>`
+    const pendingEnabled = conflict?.mode === 'metadata' ? detail?.enabled !== false : true
+    const busyAttr = isSaving ? ' disabled aria-disabled="true"' : ''
+    return `<section class="shortcut-profile-shell shortcut-profile-conflict" aria-busy="${isSaving}"><div class="sub-header shortcut-profile-header"><button type="button" class="btn-icon" data-profile-action="conflict-back" aria-label="ย้อนกลับ"${busyAttr}>←</button><h2>ข้อมูลถูกแก้ไขแล้ว</h2><div></div></div><div class="sub-scroll shortcut-profile-scroll"><div class="shortcut-profile-state is-warning" role="alert"><strong>โปรไฟล์นี้มีเวอร์ชันใหม่กว่า</strong><p>เพื่อป้องกันการเขียนทับข้อมูลของคุณ โปรดตรวจสอบข้อมูลล่าสุดก่อนยืนยัน</p></div><div class="shortcut-profile-conflict-card"><span>เวอร์ชันล่าสุด · v${escape(latest.profile_version ?? '—')}</span><strong>${escape(latest.name || '')}</strong><small>${escape(latest.app_label || '')} · ${latest.enabled === false ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</small><hr><span>การเปลี่ยนแปลงที่รอยืนยัน · จาก v${escape(currentVersion ?? '—')}</span><strong>${escape(pendingName || 'ยังไม่ระบุชื่อ')}</strong><small>${escape(pendingApp || '')}${pendingDirection ? ` · ${escape(pendingDirection)}` : ''} · ${pendingEnabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}</small></div></div><div class="shortcut-profile-footer"><button type="button" class="btn btn-secondary" data-profile-action="conflict-discard"${busyAttr}>ใช้ข้อมูลล่าสุด</button><button type="button" class="btn btn-primary" data-profile-action="conflict-reapply"${busyAttr}>${isSaving ? 'กำลังบันทึก…' : 'ยืนยันการแทนที่'}</button></div></section>`
   }
 
   function errorMessage(error) {
@@ -442,7 +447,7 @@
   }
 
   function copyMarker() {
-    const code = completion?.short_code || detail?.profile?.short_code || ''
+    const code = detail?.profile?.short_code || completion?.short_code || ''
     if (!code) return
     root.navigator?.clipboard?.writeText?.(`MT-PROFILE:${code}`).then(() => notify('คัดลอกแล้ว', 'success')).catch(() => notify('คัดลอกไม่สำเร็จ ให้แตะค้างที่รหัส', 'warn'))
   }
@@ -453,6 +458,7 @@
   }
 
   function showDetails(profile) {
+    completion = null
     detail = { profile, name: profile.name || '', appLabel: profile.app_label || '', enabled: profile.enabled !== false }
     mount(renderDetails(profile), bindDetails)
   }
@@ -482,20 +488,33 @@
 
   async function openConflict(mode) {
     try {
+      conflictStatus = 'idle'
       const profileId = mode === 'metadata' ? detail?.profile?.id : state.profileId
       const result = await root.MTShortcutCapture.getProfile(profileId)
       conflict = { mode, latest: result.profile || result }
       mount(renderConflict(), bindConflict)
-    } catch (error) { notify(errorMessage(error), 'error') }
+    } catch (error) {
+      conflictStatus = 'idle'
+      if (mode === 'metadata' && detail?.profile) {
+        detail.error = errorMessage(error)
+        mount(renderDetails(detail.profile), bindDetails)
+      } else {
+        state.saveStatus = 'idle'
+        state.errors = { test: errorMessage(error) }
+        mountWizard()
+      }
+    }
   }
 
   function bindConflict() {
+    if (conflictStatus === 'saving') return
     root.document?.querySelector('[data-profile-action="conflict-back"]')?.addEventListener('click', () => modeBackFromConflict())
     root.document?.querySelector('[data-profile-action="conflict-discard"]')?.addEventListener('click', () => {
       if (!conflict?.latest) return
       const latest = conflict.latest
       state = createDraft('create')
       conflict = null
+      conflictStatus = 'idle'
       showDetails(latest)
     })
     root.document?.querySelector('[data-profile-action="conflict-reapply"]')?.addEventListener('click', () => confirmConflict())
@@ -504,26 +523,31 @@
   function modeBackFromConflict() { if (conflict?.mode === 'metadata' && detail?.profile) showDetails(detail.profile); else mountWizard() }
 
   function confirmConflict() {
+    if (conflictStatus === 'saving') return
     const apply = async () => {
       if (!conflict?.latest) return
+      conflictStatus = 'saving'
+      mount(renderConflict(), bindConflict)
       if (conflict.mode === 'metadata') {
         try {
           const result = await root.MTShortcutCapture.updateProfile(conflict.latest.id, { name: String(detail.name || '').trim(), app_label: String(detail.appLabel || '').trim(), enabled: detail.enabled, compiled_rule: conflict.latest.compiled_rule, expected_version: conflict.latest.profile_version })
+          conflictStatus = 'idle'
           showDetails({ ...conflict.latest, ...(result.profile || result), name: detail.name, app_label: detail.appLabel, enabled: detail.enabled })
-        } catch (error) { notify(errorMessage(error), 'error') }
+        } catch (error) { conflictStatus = 'idle'; notify(errorMessage(error), 'error'); mount(renderConflict(), bindConflict) }
         return
       }
       state.profile = conflict.latest
       state.expectedVersion = conflict.latest.profile_version
       runLocalTests()
-      if (state.testResults.some(result => result.status !== 'complete')) return mountWizard()
+      if (state.testResults.some(result => result.status !== 'complete')) { conflictStatus = 'idle'; return mountWizard() }
       try {
         const rule = compileDraft()
         const result = await root.MTShortcutCapture.updateProfile(state.profileId, { name: getDefaultProfileName(state), app_label: state.appLabel.trim(), enabled: true, compiled_rule: rule, expected_version: state.expectedVersion })
-        completion = result.profile || result
+        conflictStatus = 'idle'
+        completion = { ...(result.profile || result), direction: state.direction, mustContain: [...state.mustContain], mustNotContain: [...state.mustNotContain] }
         state = createDraft('create')
         mount(renderCompletion(completion), bindCompletion)
-      } catch (error) { notify(errorMessage(error), 'error') }
+      } catch (error) { conflictStatus = 'idle'; notify(errorMessage(error), 'error'); mount(renderConflict(), bindConflict) }
     }
     if (root.App?.showConfirm) root.App.showConfirm({ title: 'แทนที่โปรไฟล์เวอร์ชันล่าสุด?', body: 'ระบบจะใช้ข้อมูลที่คุณเพิ่งทดสอบและแทนที่กฎล่าสุด', danger: true, confirmLabel: 'ยืนยันการแทนที่', onConfirm: apply })
     else apply()
@@ -533,7 +557,7 @@
     const screen = root.document?.querySelector?.('.shortcut-profile-screen')
     if (!screen) return
     screen.querySelector('[data-profile-action="close"]')?.addEventListener('click', () => { clear(); root.App?.closeSubScreen?.() })
-    screen.querySelector('[data-profile-action="new"]')?.addEventListener('click', () => { state = createDraft('create'); mountWizard() })
+    screen.querySelector('[data-profile-action="new"]')?.addEventListener('click', () => { completion = null; state = createDraft('create'); mountWizard() })
     screen.querySelector('[data-profile-action="retry"]')?.addEventListener('click', openList)
     screen.querySelectorAll('[data-profile-open]').forEach(button => button.addEventListener('click', () => openDetails(button.dataset.profileOpen)))
   }
@@ -547,6 +571,7 @@
   }
 
   async function openList() {
+    completion = null
     mount(renderList({ loading: true }), () => {})
     try {
       const result = await root.MTShortcutCapture.listProfiles()
@@ -555,6 +580,7 @@
   }
 
   function openEditor(profileId = '', handoff = {}) {
+    completion = null
     if (!profileId) { state = createDraft('create', null, handoff); mountWizard(); return }
     root.MTShortcutCapture.getProfile(profileId).then(result => { state = createDraft('relearn', result.profile || result, handoff); mountWizard() }).catch(error => notify(errorMessage(error), 'error'))
   }

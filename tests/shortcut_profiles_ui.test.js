@@ -111,7 +111,14 @@ test('completion and details expose a guide and rule metadata without raw sample
 
 test('conflict screen exposes the latest version and discards draft state safely', () => {
   assert.match(source, /latest\.profile_version/)
+  assert.match(source, /pendingEnabled/)
+  assert.match(source, /conflictStatus === 'saving'/)
   assert.match(source, /state\s*=\s*createDraft\('create'\)/)
+})
+
+test('profile marker follows the currently opened detail profile', () => {
+  assert.match(source, /detail\?\.profile\?\.short_code \|\| completion\?\.short_code/)
+  assert.match(source, /completion = null\n    detail = \{ profile/)
 })
 
 test('profile view model exposes metadata only and never raw samples or compiled rule', () => {

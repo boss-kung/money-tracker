@@ -1,6 +1,6 @@
 # Shortcut profile wizard verification
 
-Date: 2026-10-25  
+Date: 2026-10-25
 Release: `2026.10.25-shortcut-profiles-r155`
 
 ## Automated verification
