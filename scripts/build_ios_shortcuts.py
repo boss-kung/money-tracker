@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Build the native Money Tracker Shortcuts.
-
-The notification workflow deliberately checks its converted input before the
-network action.  A Personal Automation that does not pass the Notification
-magic variable otherwise sends an empty raw_text and only produces the vague
-server error ``invalid_capture``.
-"""
+"""Build the two native Money Tracker Shortcuts and sign them with macOS Shortcuts."""
 
 from __future__ import annotations
 
@@ -145,21 +139,13 @@ def quick_look_action(request_uuid: str) -> dict:
     }
 
 
-def conditional_action(
-    action_uuid: str,
-    grouping_uuid: str,
-    mode: int,
-    text_uuid: str | None = None,
-) -> dict:
+def conditional_action(action_uuid: str, grouping_uuid: str, mode: int, text_uuid: str | None = None) -> dict:
     parameters = {
         "UUID": action_uuid,
         "GroupingIdentifier": grouping_uuid,
         "WFControlFlowMode": mode,
     }
     if mode == 0:
-        # 100 is Apple's stable "has any value" condition.  The source is
-        # the Text output, not the raw Notification object, so a missing
-        # automation input is caught before the HTTP request.
         parameters.update({
             "WFCondition": 100,
             "WFInput": direct_token(text_uuid or "", "Text"),
@@ -190,21 +176,24 @@ def make_workflow(name: str, capture_method: str, manual: bool) -> dict:
         format_date_action(formatted_date_uuid, date_uuid),
     ]
     if manual:
-        actions.append({
-            "WFWorkflowActionIdentifier": "is.workflow.actions.getonscreencontext",
+        actions.append(
+            {
+                "WFWorkflowActionIdentifier": "is.workflow.actions.getonscreencontext",
+                "WFWorkflowActionParameters": {
+                    "WFOnScreenContextResultType": "Text",
+                    "UUID": screen_uuid,
+                },
+            }
+        )
+    actions.append(
+        {
+            "WFWorkflowActionIdentifier": "is.workflow.actions.detect.text",
             "WFWorkflowActionParameters": {
-                "WFOnScreenContextResultType": "Text",
-                "UUID": screen_uuid,
+                "CustomOutputName": "Text",
+                "UUID": text_uuid,
             },
-        })
-    actions.append({
-        "WFWorkflowActionIdentifier": "is.workflow.actions.detect.text",
-        "WFWorkflowActionParameters": {
-            "CustomOutputName": "Text",
-            "UUID": text_uuid,
-        },
-    })
-
+        }
+    )
     if manual:
         actions.extend([
             dictionary_action(dictionary_uuid, text_uuid, capture_method, formatted_date_uuid),
@@ -277,10 +266,11 @@ def build(out_dir: Path) -> None:
         signed = out_dir / f"{name}.shortcut"
         workflow = make_workflow(name, capture_method, manual)
         bare.write_bytes(plistlib.dumps(workflow, fmt=plistlib.FMT_BINARY, sort_keys=False))
-        subprocess.run([
-            "shortcuts", "sign", "--mode", "people-who-know-me",
-            "--input", str(bare), "--output", str(signed),
-        ], check=True)
+        # The Shortcuts CLI wraps the bare workflow in Apple's AEA1 archive.
+        subprocess.run(
+            ["shortcuts", "sign", "--mode", "people-who-know-me", "--input", str(bare), "--output", str(signed)],
+            check=True,
+        )
         bare.unlink(missing_ok=True)
         print(signed)
 

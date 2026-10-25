@@ -1,340 +1,72 @@
-# Money Tracker — คู่มือสร้าง iOS Shortcut แบบ Native
+# Money Tracker Shortcuts — วิธีติดตั้งแบบสั้น
 
-เอกสารนี้เป็น fallback แบบ action-by-action หลังจาก Shortcuts บน Mac สร้าง draft ได้ แต่บริการ export/sign ของ Apple ตอบ `NSURLErrorDomain error 500` จึงยังไม่มีไฟล์ `.shortcut` ที่พิสูจน์แล้วว่า import ได้จริง อย่าใช้ draft ที่ชื่อ `Money Tracker Parser` ส่งข้อมูลจริงจนกว่าจะตรวจตามหัวข้อ “ทดสอบก่อน Production” ครบ
+ไฟล์ที่ต้องใช้มี 2 ไฟล์:
 
-ไฟล์ประกอบ:
+- `Money Tracker - Notification Inbox.shortcut` — รับข้อความจาก LINE Notification
+- `Money Tracker - Manual Screen Capture.shortcut` — อ่านข้อความจากหน้าจอด้วย Get What's On Screen
 
-- `money-tracker-shortcut-action-map.json` — regex, schema และกติกา dedupe แบบ copy/paste
-- `money-tracker-test-fixtures.json` — expected result ของ 6 กรณี
-- `../work/reference-parser.mjs` และ `../work/reference-parser.test.mjs` — reference ที่รันบน Mac เพื่อยืนยัน regex/dedupe; ไม่ใช่ runtime ของ iPhone
+## 1) นำเข้าใน iPhone
 
-## 0. สำคัญ: ไฟล์ Shortcut ไม่ได้สร้าง Notification Automation
+ส่งไฟล์ `.shortcut` ไปที่ iPhone ด้วย AirDrop หรือเก็บไว้ใน iCloud Drive แล้วแตะไฟล์ > **Add Shortcut**.
 
-การนำเข้าไฟล์ `.shortcut` จะติดตั้งเฉพาะ action ของ Shortcut เท่านั้น ไม่ได้สร้างตัวเรียกเมื่อ LINE แจ้งเตือนให้เอง ต้องสร้าง Personal Automation บน iPhone เพิ่ม:
+ถ้า iPhone ถามให้ตรวจสอบ Shortcut ให้แตะ **Add Shortcut** ได้ เพราะไฟล์นี้เป็น Shortcut ของ Money Tracker ที่สร้างไว้สำหรับ endpoint ของโปรเจกต์นี้
 
-1. เปิด `Shortcuts` → `Automation` → `New Automation` → `Notification`.
-2. เลือก `App = LINE` และเริ่มต้นใช้ filter กว้าง เช่น `UOB` หรือไม่ใส่ข้อความกรอง.
-3. เพิ่ม action `Run Shortcut` → `Money Tracker - Notification Inbox`.
-4. ในช่องรับ Input ของ `Run Shortcut` เลือก Magic Variable **Notification**.
-5. เปิด `Ask Before Running` ไว้ระหว่างทดสอบก่อน แล้วค่อยปิดเมื่อยืนยันผลแล้ว.
+## 2) ใส่ Device Token
 
-ถ้า Automation ไม่ส่ง Magic Variable `Notification` เข้าไป `Get Text from Input` จะได้ค่าว่างและจะไม่มีรายการเข้า Inbox. การรัน Shortcut จากแอป Shortcuts โดยไม่มี input ก็ไม่ใช่การทดสอบ Notification path.
+ต้องทำซ้ำกับ Shortcut ทั้งสองตัว:
 
-## 1. สร้าง `Money Tracker Parser`
+1. เปิด Shortcut แล้วแตะ **Edit**
+2. แตะ action **Get Contents of URL**
+3. เปิด **Headers**
+4. ที่ `Authorization` เปลี่ยนเฉพาะคำว่า `PASTE_DEVICE_TOKEN_HERE`
+5. ต้องคงรูปแบบเป็น `Bearer ตามด้วย-token-จริง`
 
-สร้าง Shortcut ใหม่ชื่อนี้ตรงตัว และใช้เฉพาะ action มาตรฐานของ Apple
+ไม่ต้องเปลี่ยน URL — ไฟล์ใส่ endpoint ของ Money Tracker ไว้แล้ว:
 
-### 1.1 Config และ input
+`https://bwtoyxxwwmsaoaitihqj.supabase.co/functions/v1/ingest-shortcut-capture`
 
-1. `Dictionary` ตั้งชื่อผลลัพธ์เป็น `Config`:
-   - `mode` (Text): `test`
-   - `endpoint` (Text): `https://<project-ref>.supabase.co/functions/v1/ingest-shortcut-capture`
-   - `api_key` (Text): `REPLACE_WITH_ONE_TIME_DEVICE_TOKEN` (วาง Token ที่สร้างจาก Money Tracker > เพิ่มเติม > ตั้งค่า > เชื่อมต่อ iOS Shortcut)
-   - `schema_version` (Text): `money-tracker.capture.v1`
-   - `parser_version` (Text): `ios-shortcut-1.1.0`
-2. `Get Dictionary from Input` ใช้ `Shortcut Input`; ตั้งผลลัพธ์เป็น `Input`.
-3. `Get Dictionary Value` จาก `Input` จำนวน 4 ครั้ง:
-   - `raw_text` → `RawText`
-   - `capture_method` → `CaptureMethod`
-   - `captured_at` → `CapturedAt`
-   - `force_test` → `ForceTest`
-4. `If CapturedAt does not have any value`:
-   - `Current Date`
-   - `Format Date`: Custom `yyyy-MM-dd'T'HH:mm:ssXXX`, Time Zone `Asia/Bangkok`
-   - `Set Variable CapturedAt`
-5. ค่าเริ่มต้นก่อน parse:
-   - `source = unknown`
-   - `bank = Nothing`
-   - `amount = Nothing`
-   - `currency = THB`
-   - `direction = unknown`
-   - `merchant = Nothing`
-   - `description = Nothing`
-   - `account_last4 = Nothing`
-   - `card_last4 = Nothing`
-   - `transaction_datetime = Nothing`
-   - `relevant_text = Nothing`
-   - `parse_status = invalid`
-   - `dedupe_key = Nothing`
+อย่าส่ง token ให้คนอื่นหรือใส่ไว้ในข้อความแชต
 
-`RawText` ต้องเก็บต้นฉบับไว้ ห้ามเอาผล normalization เขียนทับ
+## 3) ตั้ง LINE Notification Automation
 
-### 1.2 Normalize เฉพาะข้อความสำหรับ parse
+บน iPhone รุ่น/ระบบที่มี **Notification trigger**:
 
-ทำ `Replace Text` ต่อกัน 3 ครั้งและเปิด `Regular Expression` ทุกครั้ง:
+1. เปิด **Shortcuts > Shortcuts**
+2. แตะ `Money Tracker - Notification Inbox` > **Edit** > **Automation**
+3. เลือก **Notification**
+4. ตั้ง **App = LINE**
+5. เพิ่ม filter ที่ช่วยแยกแจ้งเตือนธุรกรรม เช่น `UOB`, `SCB`, `LINE Pay`, `ใช้บัตร`, หรือ `รายการเงินออก`
+6. ให้ automation เรียก Shortcut `Money Tracker - Notification Inbox`
+7. เปิดให้รันอัตโนมัติถ้าต้องการ แล้วแตะ **Done**
 
-| Find | Replace |
-|---|---|
-| `\r\n?` | ใส่ line break จริงหนึ่งตัว |
-| `\u00A0` | ช่องว่างหนึ่งตัว |
-| `[ \t]+` | ช่องว่างหนึ่งตัว |
+แนะนำให้เริ่มจากเปิด **Ask Before Running** ไว้ก่อน เพื่อทดสอบและตรวจข้อมูลก่อน จากนั้นค่อยปิดเมื่อมั่นใจ
 
-ตั้งผลสุดท้ายเป็น `ParseText`. อย่าใช้ `\s+` เพราะจะลบ line break ที่ regex block ต้องใช้
+ถ้าเมนูไม่มี `Notification` ให้ใช้ Manual Screen Capture แทน หรืออัปเดต iOS/Shortcuts ให้รองรับ trigger นี้
 
-### 1.3 หา block ล่าสุด
+## 4) ใช้ Manual Screen Capture
 
-เพิ่ม `Match Text` **หนึ่งตัว** กับ `ParseText` ด้วย combined pattern นี้:
+เปิดหน้าแจ้งเตือนหรือหน้ารายการของ UOB Thai, SCB Connect หรือ LINE Wallet ให้เห็นธุรกรรมที่ต้องการ แล้วเรียก `Money Tracker - Manual Screen Capture` จากแอป Shortcuts, Home Screen หรือ Share Sheet. Server จะอ่านธุรกรรมที่รองรับทุกกลุ่มบนหน้าจอตามลำดับ และแยกแต่ละกลุ่มเป็น Inbox item; สำเนา UOB ภาษาไทย/อังกฤษของรายการเดียวกันจะรวมเป็นรายการเดียว
 
-```regex
-(?is)(?:มีการใช้บัตร\s+UOB-\d{4}[\s\S]*?วงเงินคงเหลือใช้ได้\s*[\d,]+(?:\.\d{1,2})?\s*THB|You have spent[\s\S]*?Available credit:\s*THB\s*[\d,]+(?:\.\d{1,2})?|รายการเงิน(?:ออก|เข้า)\s*-?[\d,]+(?:\.\d{1,2})?\s*บาท[\s\S]*?ยอดเงินที่ใช้ได้\s*[\d,]+(?:\.\d{1,2})?\s*บาท|LINE Pay Purchase[\s\S]*?Balance:\s*(?:THB\s*)?[\d,]+(?:\.\d{1,2})?)
-```
+Shortcut จะส่งข้อความหน้าจอทั้งก้อนให้ Money Tracker แล้วรับผลรวม `queued`, `duplicate`, `failed` กลับมา: รายการใหม่เข้า Inbox, รายการซ้ำไม่สร้างใหม่, ส่วนรายการที่อ่านไม่สำเร็จให้จับภาพใหม่หรือกรอกเอง. ถ้าได้ `ingest_failed` ให้รัน Shortcut เดิมซ้ำได้อย่างปลอดภัย
 
-ตั้งผลเป็น `AllBlocks` → `Count`:
+## หลังส่งสำเร็จ
 
-- ถ้า Count = 0 ให้คง payload เป็น `invalid`.
-- ถ้า Count > 0 ให้ `Get Item from List: Last Item` → `RelevantText`.
-- ตรวจ `RelevantText`: มี `มีการใช้บัตร`/`You have spent` → UOB; มี `รายการเงินออก`/`รายการเงินเข้า` → SCB; มี `LINE Pay Purchase` → LINE Wallet.
+Money Tracker จะเก็บแต่ละรายการไว้ใน **Shortcut Inbox** แยกกัน เพื่อให้คุณเปิดตรวจ แก้ไข merchant/amount/account/date และกด **บันทึก** ทีละรายการเป็นรายการเงินจริง การส่งซ้ำจึงปลอดภัยและรองรับการตรวจ duplicate
 
-ต้อง Match ด้วย combined pattern ก่อนแล้วค่อย Last Item เพื่อให้เลือก block ท้ายสุดตามลำดับบนหน้าจอ แม้หน้าจอเดียวมีหลายธนาคาร
+ถ้า Quick Look แสดงผลตอบกลับจาก API แปลว่าส่งเข้า Inbox สำเร็จแล้ว
 
-### 1.4 Extract UOB
+## 5) วันที่รายการและการส่งซ้ำ
 
-เมื่อ `RelevantText` เป็น UOB:
+ไฟล์ Native จะมี action `Current Date` และ `Format Date` อยู่ต้น workflow โดยอ่านเวลาหนึ่งครั้งแล้วส่ง `captured_at` เป็น ISO 8601 พร้อม offset (`yyyy-MM-dd'T'HH:mm:ssXXX`, เวลา Asia/Bangkok) ทั้งใน Dictionary และ JSON request. ไม่ใช้ค่าจาก workflow ก่อนหน้า และไม่ให้รายการที่ 2 ยืมวันที่ของรายการที่ 1
 
-1. ตั้ง `source = uob_thai`, `bank = UOB`, `direction = debit`.
-2. Amount: ลอง pattern แรก; ถ้าไม่พบใช้ pattern ที่สอง:
+วันที่ในร่าง Inbox ใช้ลำดับ `transaction_date` → วันที่ของ `transaction_datetime` → วันที่ของ `captured_at`. ถ้าข้อความแจ้งเตือนไม่มีวันที่ ระบบจะแสดงคำเตือนบนฟอร์มว่าใช้วันที่รับแจ้งเตือน โปรดตรวจสอบก่อนกด **บันทึก**. ธุรกรรมหลายกลุ่มบนหน้าจอจะถูกแยกและคงวันที่ของแต่ละกลุ่มไว้
 
-```regex
-จำนวน\s*([\d,]+(?:\.\d{1,2})?)\s*THB
-```
+ถ้าส่งซ้ำทันทีหลัง network error ให้รัน Shortcut เดิมได้ ระบบจะ dedupe รายการเดิมภายในประมาณ 5 นาที. รายการที่ไม่มีเวลา/เลขอ้างอิงและส่งช้ากว่านั้นอาจถูกจัดเป็นรายการใหม่ จึงควรตรวจ Inbox ก่อนบันทึกทุกครั้ง
 
-```regex
-(?i)spent\s+THB\s*([\d,]+(?:\.\d{1,2})?)
-```
+## 6) เพิ่มรูปแบบธนาคารด้วยตัวอย่าง 2 รายการ
 
-3. `Get Group from Matched Text: Group At Index 1`, ลบ `,`, แล้ว `Calculate` ค่านั้น → `amount`.
-4. Merchant: ลองตามลำดับ แล้วเอา Group 1 → `merchant` และ `description`:
+ใน Money Tracker เปิด **เพิ่มเติม → ตั้งค่า → รูปแบบแจ้งเตือนธนาคาร** แล้วสร้างโปรไฟล์สำหรับ UCHOOSE หรือแอปอื่น โดยคัดลอกข้อความแจ้งเตือนตัวอย่าง 2 รายการลงในตัวช่วยสร้าง เลือกจำนวน THB, ทิศทาง, ช่องวันที่/เวลา/ร้านค้า/เลขอ้างอิง และข้อความที่ต้องมีหรือห้ามมี จากนั้นกด **ทดสอบในเครื่อง** ให้ผ่านหนึ่งรายการก่อนบันทึก
 
-```regex
-ที่ร้าน\s*([^\n\r]+)
-```
+ตัวอย่างดิบไม่ถูกส่งออกจาก browser และไม่เก็บใน local/session storage; เซิร์ฟเวอร์รับเฉพาะ compiled rule ที่เข้ารหัส. ระบบไม่รับ regex, JavaScript หรือ pattern ที่รันโค้ด. หลังบันทึก ให้สร้าง Automation ของ LINE โดยวาง Text action `MT-PROFILE:<รหัส 6 ตัว>` แล้วต่อด้วย Title, Subtitle และ Message/Body ของ Notification คั่นบรรทัด ก่อน Run Shortcut. การตั้ง Automation เป็นรายเครื่อง ต้องทำซ้ำบน iPhone แต่ละเครื่อง และควรเปิด Show Previews ระหว่างทดสอบ
 
-```regex
-(?i)\sat\s+(.+?)\s+on\s+\d{2}/
-```
-
-5. Card last four: ลองตามลำดับ แล้วเอา Group 1 → `card_last4`:
-
-```regex
-UOB-(\d{4})
-```
-
-```regex
-(?i)ending\s+(\d{4})
-```
-
-### 1.5 Extract SCB Connect
-
-เมื่อ `RelevantText` เป็น SCB:
-
-1. ตั้ง `source = scb_connect`, `bank = SCB`.
-2. Match:
-
-```regex
-รายการเงิน(ออก|เข้า)\s*-?([\d,]+(?:\.\d{1,2})?)\s*บาท
-```
-
-3. Group 1 เป็น `เข้า` → `direction = credit`; ค่าอื่น → `direction = debit`.
-4. Group 2 ลบ `,`, `Calculate` → `amount`.
-5. Merchant/description ให้เลือกตาม Group 1:
-
-```regex
-เข้าบัญชี\s+([^\n\r]+)
-```
-
-ใช้ pattern นี้เมื่อเงินออก; เมื่อเงินเข้าใช้:
-
-```regex
-จากบัญชี\s+([^\n\r]+)
-```
-
-เอา Group 1 → `merchant` และ `description`.
-6. Account last four: เงินออกใช้ pattern แรก; เงินเข้าใช้ patternที่สอง:
-
-```regex
-จากบัญชี[^\n\r]*X-(\d{4})
-```
-
-```regex
-เข้าบัญชี[^\n\r]*X-(\d{4})
-```
-
-เอา Group 1 → `account_last4`.
-
-### 1.6 Extract LINE Wallet
-
-เมื่อ `RelevantText` เป็น LINE Wallet:
-
-1. ตั้ง `source = line_wallet`, `bank = Nothing`, `direction = debit`.
-2. Amount:
-
-```regex
-(?i)LINE Pay Purchase\s*(?:฿|THB\s*)?([\d,]+(?:\.\d{1,2})?)
-```
-
-เอา Group 1, ลบ `,`, `Calculate` → `amount`.
-3. Merchant/description:
-
-```regex
-(?i)Merchant:\s*([^\n\r]+)
-```
-
-เอา Group 1 → `merchant` และ `description`.
-
-### 1.7 Normalize transaction datetime
-
-ใน branch ที่รองรับ ให้ `Match Text` กับ `RelevantText`:
-
-```regex
-(\d{2})/(\d{2})/(\d{4})\s+(\d{2}):(\d{2})
-```
-
-ถ้าพบ ให้ดึง Group 1–5 แล้วสร้าง `Text` โดยไม่มีช่องว่าง:
-
-```text
-[Group 3]-[Group 2]-[Group 1]T[Group 4]:[Group 5]:00+07:00
-```
-
-ตั้งเป็น `transaction_datetime`. ถ้าไม่พบให้คง `Nothing`; อย่าใช้ `CapturedAt` แทนฟิลด์นี้
-
-### 1.8 Validate และสร้าง dedupe key
-
-1. ถ้า `source != unknown` และ `amount > 0` ให้ `parse_status = complete`; นอกนั้นคง `invalid`.
-2. `Format Number` ของ `amount`: Decimal, 2 decimal places, locale ที่ใช้จุดเป็น decimal → `Amount2`; แปลงเป็น Text เพื่อส่งเป็น canonical string เช่น `80.00`.
-3. `If account_last4 has any value` ใช้ค่านั้น; Otherwise ใช้ `card_last4`; ถ้ายังไม่มีให้ Text ว่าง → `Identifier`.
-4. ถ้า `transaction_datetime` มีค่า ใช้ค่านั้น → `DateKey`; Otherwise ใช้ 10 ตัวแรกของ `CapturedAt` (`yyyy-MM-dd`).
-5. ถ้า `description` ไม่มีค่าใช้ Text ว่าง; ถ้ามีให้:
-   - `Trim Whitespace`
-   - `Replace Text` regex `[ \t]+` → ช่องว่างหนึ่งตัว
-   - `Change Case: lowercase`
-   - ตั้งเป็น `DescriptionKey`
-6. `Text` หนึ่งบรรทัด:
-
-```text
-v1|[source]|[direction]|[Amount2]|THB|[Identifier]|[DateKey]|[DescriptionKey]|[RelevantHash]
-```
-
-7. สร้าง `RelevantHash`: `Hash` ของ `RelevantText` ที่ normalize แล้วด้วย SHA-256; ต่อท้าย canonical line แล้ว `Hash` อีกครั้ง → `Change Case: lowercase` → `dedupe_key`.
-8. ถ้า `parse_status != complete` ให้คง `dedupe_key = Nothing`.
-
-ห้ามใส่ `raw_text` หรือ `capture_method` ลง canonical line มิฉะนั้น notification กับ screen ของ transaction เดียวกันจะ dedupe ไม่ได้; ใช้เฉพาะ `SHA-256(normalized relevant_text)` เป็นส่วนท้ายของ line.
-
-### 1.9 Payload Dictionary
-
-สร้าง `Dictionary` ชื่อ `Payload` ด้วย key ครบ 19 ตัว:
-
-| Key | Type/value |
-|---|---|
-| `schema_version` | Text จาก Config |
-| `parser_version` | Text จาก Config |
-| `source` | Text |
-| `bank` | Text หรือ `Nothing` |
-| `amount` | Text canonical เช่น `80.00` หรือ `Nothing` |
-| `currency` | `THB` |
-| `direction` | Text |
-| `merchant` | Text หรือ `Nothing` |
-| `description` | Text หรือ `Nothing` |
-| `account_last4` | Text หรือ `Nothing` |
-| `card_last4` | Text หรือ `Nothing` |
-| `transaction_datetime` | Text หรือ `Nothing` |
-| `captured_at` | Text |
-| `capture_method` | Text |
-| `raw_text` | `RawText` ต้นฉบับ |
-| `relevant_text` | Text หรือ `Nothing` |
-| `parse_status` | Text |
-| `dedupe_version` | Number `1` |
-| `dedupe_key` | Text หรือ `Nothing` |
-
-บน iPhone ของคุณ ให้เปิด Quick Look แล้วตรวจว่า `Nothing` แสดงเป็น JSON `null`. ถ้ารุ่น OS นั้นตัด key ทิ้ง ให้สร้าง JSON Text ที่มี `null` ก่อน แล้วใช้ `Get Dictionary from Input` เพื่อคง key ไว้
-
-### 1.10 Test/Production safety gate
-
-เรียง action หลัง `Payload` แบบนี้:
-
-1. `If parse_status is not complete`: `Quick Look Payload` → `Stop and Output Payload`.
-2. `If ForceTest is true`: `Quick Look Payload` → `Stop and Output Payload`.
-3. อ่าน `mode`, `endpoint`, `api_key` จาก `Config`; `api_key` ในที่นี้คือ device Token ที่ Money Tracker แสดงครั้งเดียว ไม่ใช่ service-role key.
-4. `If mode is test`: `Quick Look Payload` → `Stop and Output Payload`.
-5. Production gate ต้องผ่านทุกข้อ:
-   - `mode is production`
-   - endpoint begins with `https://`
-   - endpoint ไม่เท่ากับ placeholder
-   - api key ไม่เท่ากับ placeholder
-6. ถ้า gate ไม่ผ่าน: `Show Alert` ว่า “Production config ไม่ครบ—ยังไม่ส่งข้อมูล” → `Stop and Output Payload`.
-7. ถ้าผ่าน: `Get Contents of URL`:
-   - URL = endpoint
-   - Method = POST
-   - Request Body = JSON
-   - JSON = `Payload`
-   - Header `Content-Type: application/json`
-   - Header `Authorization: Bearer [api_key]`
-8. `Stop and Output` response.
-
-## 2. สร้าง `Money Tracker Screen`
-
-1. `Get What's On Screen`.
-2. `Get Text from Input` → `RawText`.
-3. ถ้าไม่มีข้อความ: `Show Alert` “ไม่พบข้อความบนหน้าจอ” → Stop.
-4. `Current Date` → `Format Date` custom `yyyy-MM-dd'T'HH:mm:ssXXX`, Time Zone `Asia/Bangkok`.
-5. `Dictionary`:
-   - `raw_text`: RawText
-   - `capture_method`: `whats_on_screen`
-   - `captured_at`: formatted Current Date
-   - `force_test`: Boolean false
-6. `Run Shortcut: Money Tracker Parser` โดยส่ง Dictionary เป็น input.
-7. `Stop and Output` ผลจาก Parser.
-
-ใช้จาก Shortcuts app, Action Button, Back Tap หรือ Control Center ขณะเปิดแชต UOB Thai, SCB Connect หรือ LINE Wallet. Parser จะเลือก complete block สุดท้ายบนจอ
-
-## 3. LINE Notification Automation
-
-Shortcuts รุ่นปัจจุบันมี trigger ชื่อ `Notification` ที่เลือก App และ filter `Message`, `Subtitle`, `Title` ได้ แต่ความสามารถในการรันโดยไม่ถามขึ้นกับ iOS และการตั้งค่าเครื่อง ให้สร้างบน iPhone จริงและทดสอบตอนล็อกจอด้วย
-
-เพื่อทำ OR ระหว่างสามแหล่ง ให้สร้าง automation ของ App `LINE` แยก 3 ตัว โดยแต่ละตัวมี filter เดียว:
-
-1. `มีการใช้บัตร` หรือ `You have spent`
-2. `รายการเงินออก` หรือ `รายการเงินเข้า`
-3. `LINE Pay Purchase`
-
-ถ้าหน้า filter รองรับเงื่อนไขเดียว ให้สร้างเพิ่มเป็น automation แยก อย่าใส่หลาย filter ใน automation เดียว เพราะหลาย criteria อาจถูกตีความเป็น AND
-
-ภายในแต่ละ automation:
-
-1. ใช้ magic variable `Notification`; เปิดรายละเอียดแล้วดึง `Title`, `Subtitle`, `Message`/`Body` ที่มีในเครื่อง.
-2. `Text` รวมค่าที่มี โดยคั่นแต่ละส่วนด้วย line break → `RawText`.
-3. `Current Date` → format ISO แบบเดียวกับด้านบน.
-4. `Dictionary`:
-   - `raw_text`: RawText
-   - `capture_method`: `line_notification`
-   - `captured_at`: formatted Current Date
-   - `force_test`: Boolean false
-5. `Run Shortcut: Money Tracker Parser` ด้วย Dictionary.
-
-ถ้า Notification variable ไม่มี message body ให้ตรวจ LINE/iOS ว่าอนุญาต Show Previews; ถ้า iOS ไม่ยอมรัน trigger อัตโนมัติ ให้ใช้การยืนยันจาก notification หรือ fallback `Money Tracker Screen`. อย่าส่งข้อความ LINE ทุกชนิดเข้า Production โดยไม่มี parser invalid gate
-
-## 4. ทดสอบก่อน Production
-
-1. คง `mode = test`.
-2. ทดสอบอย่างน้อย UOB Thai, UOB English, SCB เงินออก, SCB เงินเข้า, SCB สองรายการ, หลายธนาคารบนจอ, LINE Wallet และข้อความที่ไม่ใช่ธุรกรรม.
-3. SCB สองรายการและหลายธนาคารบนจอต้องได้ block รายการหลังสุด.
-4. ส่ง transaction เดียวกันผ่าน notification และ screen; `dedupe_key` ต้องเหมือนกันและเป็น hex 64 ตัว.
-5. Invalid ต้องเป็น `source = unknown`, `amount = null`, `parse_status = invalid`, และห้ามมี prompt ขอ network.
-6. ใน Production capture แรกต้องตอบ `202 queued`; ส่ง payload เดิมซ้ำต้องตอบ `200 duplicate` พร้อม `capture_id` เดิม.
-7. บน Mac ตรวจ reference logic ได้ด้วย:
-
-```sh
-node --test work/reference-parser.test.mjs
-```
-
-reference parser มีไว้ตรวจ contract เท่านั้น ไม่ได้ถูกเรียกจาก iPhone
-
-## 5. เปิด Production
-
-1. ใน Money Tracker เปิด **เพิ่มเติม → ตั้งค่า → เชื่อมต่อ iOS Shortcut** แล้วสร้าง device Token; ห้ามใช้ admin/service-role key.
-2. ใช้ HTTPS endpoint จริงและเปลี่ยน placeholder ทั้ง endpoint/key.
-3. ทดสอบ Quick Look ครบทุก source ก่อน.
-4. เปลี่ยน `mode` จาก `test` เป็น `production` เป็นขั้นตอนสุดท้าย.
-5. หลังส่งสำเร็จ ให้เปิด Transactions → รายการจาก Shortcut, รีวิว/แก้ไข และกดบันทึกเอง; Shortcut ไม่มี action auto-save.
-6. ผู้ที่แก้ Shortcut ได้จะเห็น device Token; หากสงสัยว่ารั่ว ให้ revoke จากหน้าตั้งค่าแล้วสร้าง Token ใหม่.
-
-หากภายหลัง Apple export กลับมาใช้งานได้ ให้ export “For Anyone”, sign/validate แล้วทดลอง preview import โดยไม่กดแทน Shortcut เดิมจนกว่าจะตรวจชื่อและ action ครบ
+โปรไฟล์ที่ตรงครบจะเข้า Inbox เป็นรายการจาก `custom_profile`; ถ้าไม่ครบ/กำกวม/เนื้อหาถูกซ่อนจะแสดง `ต้องตรวจเอง` โดยไม่เดาจำนวนเงินหรือทิศทาง. เลือก **สร้างรายการเอง** เพื่อกรอกผ่านฟอร์มปกติ, **ปรับรูปแบบ** เพื่อกลับไปแก้โปรไฟล์, หรือ **ทิ้งรายการ**. ข้อความ OTP/การตลาดที่ตรง `mustNotContain` จะถูก `ignored` และไม่สร้างรายการ
