@@ -19,7 +19,7 @@ test('feature loader exposes ordered, coalesced group loading with readiness sta
 })
 
 test('capture feature loads parser core before the transport module', () => {
-  assert.match(loader, /capture:\s*\[\s*'quick_capture\.js',\s*'shortcut_capture_core\.js',\s*'shortcut_capture\.js'/)
+  assert.match(loader, /capture:\s*\[\s*'quick_capture\.js',\s*'shortcut_capture_core\.js',\s*'shortcut_profile_core\.js',\s*'shortcut_capture\.js',\s*'shortcut_profiles\.js'/)
 })
 
 test('deferred feature groups batch their startup redraw into one request', () => {
@@ -36,6 +36,8 @@ test('release manifest keeps deferred modules offline-cacheable', () => {
   assert.ok(manifest.deferredAssets.includes('./quick_capture.js'))
   assert.ok(manifest.deferredAssets.includes('./shortcut_capture_core.js'))
   assert.ok(manifest.deferredAssets.includes('./shortcut_capture.js'))
+  assert.ok(manifest.deferredAssets.includes('./shortcut_profile_core.js'))
+  assert.ok(manifest.deferredAssets.includes('./shortcut_profiles.js'))
   for (const asset of manifest.deferredAssets) assert.ok(manifest.coreAssets.includes(asset), `${asset} must remain precached`)
   for (const html of [index, demo]) {
     assert.doesNotMatch(html, /<script\s+defer[^>]+(?:notifications_v2|quick_capture|split_bill|loans_v2|onboarding)\.js/)

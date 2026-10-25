@@ -11,11 +11,12 @@
     const source = String(capture?.source || '')
     if (capture?.account_last4) return { source, kind: 'account', last4: String(capture.account_last4) }
     if (capture?.card_last4) return { source, kind: 'card', last4: String(capture.card_last4) }
+    if (source === 'custom_profile' && capture?.profile_id) return { source, kind: 'profile', profileId: String(capture.profile_id) }
     return null
   }
 
   function sameAlias(left, right) {
-    return Boolean(left && right && left.source === right.source && left.kind === right.kind && left.last4 === right.last4)
+    return Boolean(left && right && left.source === right.source && left.kind === right.kind && (left.last4 === right.last4 || left.profileId === right.profileId))
   }
 
   function findWalletByAlias(wallets, key) {

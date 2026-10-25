@@ -1151,3 +1151,8 @@ html.dark.ui-v2 .mt-net-card::after { background: var(--bg); }
   .shortcut-token-form > div { align-items:stretch; flex-direction:column; }
   .shortcut-token-form button { width:100%; }
 }
+.shortcut-inbox-needs-review .shortcut-inbox-item-amount,
+.shortcut-needs-review-actions { display: flex; gap: .5rem; align-items: center; }
+.shortcut-inbox-needs-review .shortcut-inbox-item-amount { color: var(--text-muted, #777); }
+.shortcut-needs-review { padding: 1rem; }
+.shortcut-needs-review .shortcut-inbox-raw pre { white-space: pre-wrap; max-height: 16rem; overflow: auto; }

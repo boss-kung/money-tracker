@@ -5,7 +5,7 @@
   if (root) root.MT_RELEASE = manifest
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict'
-  const version = '2026.10.23-shortcut-draft-r149'
+  const version = '2026.10.25-shortcut-profiles-r151'
   const coreAssets = Object.freeze([
     './',
     './index.html',
@@ -43,6 +43,8 @@
     './quick_capture.js',
     './shortcut_capture_core.js',
     './shortcut_capture.js',
+    './shortcut_profile_core.js',
+    './shortcut_profiles.js',
     './thai_bank_holidays.js',
     './manifest.json',
     './assets/icon.svg',
@@ -62,6 +64,8 @@
     './quick_capture.js',
     './shortcut_capture_core.js',
     './shortcut_capture.js',
+    './shortcut_profile_core.js',
+    './shortcut_profiles.js',
     './onboarding.js',
   ])
   const networkFirstFiles = Object.freeze(coreAssets

@@ -115,6 +115,13 @@ async function reclaimExpiredClaims(supabase: AdminClientLike, userId: string, d
 }
 
 function preview(row: CaptureRow, payload: Record<string, unknown>) {
+  if (payload.parse_status === 'needs_review') {
+    return {
+      capture_id: String(row.id), status: String(row.status), accepted_at: row.accepted_at, updated_at: row.updated_at,
+      source: payload.source, profile_id: payload.profile_id, profile_name: payload.profile_name, captured_at: payload.captured_at,
+      parse_status: 'needs_review',
+    }
+  }
   return {
     capture_id: String(row.id), status: String(row.status), accepted_at: row.accepted_at, updated_at: row.updated_at,
     source: payload.source, bank: payload.bank, amount: payload.amount, currency: payload.currency, direction: payload.direction,

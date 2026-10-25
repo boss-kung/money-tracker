@@ -37,6 +37,30 @@ export type CaptureEnvelopeV1 = {
 
 export type ValidatedCaptureV1 = CaptureEnvelopeV1
 
+export type ValidatedCustomProfileCaptureV1 = CaptureEnvelopeV1 & {
+  source: 'custom_profile'
+  profile_id: string
+  profile_version: number
+  profile_name: string
+}
+
+export type ValidatedNeedsReviewCaptureV1 = {
+  schema_version: string
+  parser_version: string
+  source: 'custom_profile'
+  profile_id: string
+  profile_version: number
+  profile_name: string
+  captured_at: string
+  capture_method: 'line_notification'
+  raw_text: string
+  relevant_text: string
+  parse_status: 'needs_review'
+  reason: 'notification_content_unavailable' | 'no_variant_match' | 'ambiguous_variant' | 'incomplete_fields' | 'unsupported_currency'
+  dedupe_version: 2
+  dedupe_key: string
+}
+
 export type CaptureDedupeIdentity = {
   version: 1 | 2
   dedupeKey: string
@@ -166,6 +190,7 @@ export async function buildCaptureDedupeIdentity(
   const baseMaterial = [
     'v2-base',
     String(capture.source || ''),
+    String(capture.profile_id || ''),
     String(capture.direction || ''),
     amount,
     CURRENCY,
@@ -190,6 +215,34 @@ export async function buildCaptureDedupeIdentity(
   const legacyKey = await sha256Hex(await canonicalDedupeMaterial({ ...capture, dedupe_version: 1 }))
   if (version === 1) return { version, dedupeKey: legacyKey, baseKey, legacyKey, strong, capturedAt }
   return { version: version as 1 | 2, dedupeKey, baseKey, legacyKey, strong, capturedAt }
+}
+
+export async function buildNeedsReviewDedupeIdentity(capture: Pick<ValidatedNeedsReviewCaptureV1, 'source' | 'profile_id' | 'raw_text' | 'captured_at'>): Promise<CaptureDedupeIdentity> {
+  const capturedAt = isoDate(capture.captured_at)
+  const rawHash = await sha256Hex(normalizeCaptureText(capture.raw_text))
+  const baseKey = await sha256Hex(['v2-custom-review', capture.source, capture.profile_id, rawHash].join('|'))
+  const bucket = Math.floor(Date.parse(capturedAt) / (5 * 60 * 1000))
+  const dedupeKey = await sha256Hex(['v2-custom-review-window', baseKey, bucket].join('|'))
+  return { version: 2, dedupeKey, baseKey, legacyKey: dedupeKey, strong: false, capturedAt }
+}
+
+export async function validateNeedsReviewCapture(input: unknown, serverNow = new Date()): Promise<ValidatedNeedsReviewCaptureV1> {
+  if (!isRecord(input) || input.schema_version !== SCHEMA_VERSION || input.source !== 'custom_profile' || input.parse_status !== 'needs_review' || input.capture_method !== 'line_notification') throw invalid()
+  const reason = input.reason
+  if (!['notification_content_unavailable', 'no_variant_match', 'ambiguous_variant', 'incomplete_fields', 'unsupported_currency'].includes(String(reason))) throw invalid()
+  const profileId = typeof input.profile_id === 'string' && /^[0-9a-f-]{36}$/i.test(input.profile_id) ? input.profile_id : ''
+  const profileVersion = Number(input.profile_version)
+  const profileName = cleanOptional(input.profile_name, 64)
+  const rawText = normalizeCaptureText(input.raw_text)
+  const relevantText = normalizeCaptureText(input.relevant_text)
+  if (!profileId || !Number.isInteger(profileVersion) || profileVersion < 1 || !profileName || rawText.length > MAX_TEXT_LENGTH || relevantText.length > MAX_TEXT_LENGTH) throw invalid()
+  const capturedAt = normalizeShortcutCapturedAt(input.captured_at, serverNow.toISOString())
+  const dedupeKey = typeof input.dedupe_key === 'string' ? input.dedupe_key : ''
+  if (!/^[0-9a-f]{64}$/.test(dedupeKey)) throw invalid('invalid_dedupe_key')
+  const normalized: ValidatedNeedsReviewCaptureV1 = { schema_version: SCHEMA_VERSION, parser_version: String(input.parser_version || '').trim().slice(0, 80), source: 'custom_profile', profile_id: profileId, profile_version: profileVersion, profile_name: profileName, captured_at: capturedAt, capture_method: 'line_notification', raw_text: rawText, relevant_text: relevantText, parse_status: 'needs_review', reason: reason as ValidatedNeedsReviewCaptureV1['reason'], dedupe_version: 2, dedupe_key: dedupeKey }
+  const expected = await buildNeedsReviewDedupeIdentity(normalized)
+  if (expected.dedupeKey !== dedupeKey) throw invalid('invalid_dedupe_key')
+  return normalized
 }
 
 export async function validateCaptureV1(input: unknown, serverNow = new Date()): Promise<ValidatedCaptureV1> {

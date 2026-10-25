@@ -15,23 +15,27 @@ This feature is review-first: a LINE notification or `Get What's On Screen` capt
 
 3. Apply the migration and inspect the resulting policies/RPC grants. The two inbox tables must have no direct `anon` or `authenticated` table access; only the Edge Functions use the service-role client.
 
-## Deploy
+## Deploy order
 
-Run from the repository root. Use the project-link/profile mechanism approved for the deployment environment; do not include secret values in command arguments or logs.
+Deploy in this order and complete the smoke checks for each phase before moving on: database migration → authenticated profile/ingestion/Inbox Edge Functions → web client → native Shortcuts. Run from the repository root. Use the project-link/profile mechanism approved for the deployment environment; do not include secret values in command arguments or logs.
 
 ```sh
+# Phase 1: migration and grants first
 supabase db push
+
+# Phase 2: Edge Functions
 supabase secrets set --env-file /secure/secret-file
+supabase functions deploy shortcut-parser-profiles
 supabase functions deploy ingest-shortcut-capture --no-verify-jwt
 supabase functions deploy manage-shortcut-tokens
 supabase functions deploy shortcut-inbox
 ```
 
-Only `ingest-shortcut-capture` may use `--no-verify-jwt`: it authenticates the one-time device Token itself. `manage-shortcut-tokens` and `shortcut-inbox` must retain gateway JWT verification and resolve the signed-in user before constructing an admin client.
+Only `ingest-shortcut-capture` may use `--no-verify-jwt`: it authenticates the one-time device Token itself. `shortcut-parser-profiles`, `manage-shortcut-tokens`, and `shortcut-inbox` must retain gateway JWT verification and resolve the signed-in user before constructing an admin client.
 
 Confirm the scheduled cleanup job exists and is enabled. Its job removes expired ciphertext and retains the dedupe receipt for the configured retention period.
 
-## Mobile setup
+### Phase 3: web client and Phase 4: native Shortcut
 
 1. Sign in to Money Tracker.
 2. Open **เพิ่มเติม → ตั้งค่า → เชื่อมต่อ iOS Shortcut**.
@@ -39,6 +43,10 @@ Confirm the scheduled cleanup job exists and is enabled. Its job removes expired
 4. Use `outputs/money-tracker-shortcut-simple-setup-th.md`: the Shortcut sends only `raw_text` and `capture_method`; the server parses UOB, SCB Connect, and LINE Wallet.
 5. Paste the Token into the `Authorization: Bearer ...` header and use the production ingestion URL shown in that guide.
 6. Run a harmless synthetic or personal notification. Switch to the Inbox and review/edit before pressing Save; the Shortcut never writes a transaction directly.
+
+To add UCHOOSE or another bank app, create a profile in the authenticated web settings with two sanitized local samples. The browser sends only the bounded `compiled_rule`; it never sends the raw samples. After saving, add `MT-PROFILE:<six-character-code>` as a Text action in the per-device Notification Automation, followed by Title/Subtitle/Message/Body. A matched profile queues a structured capture; a changed/hidden format queues `needs_review`; explicit OTP/marketing exclusions return `ignored` without an Inbox row.
+
+Publish the matching web release only after the migration and functions are healthy. Then build/import both native Shortcuts with the same endpoint and device Token. The generated workflows capture one offset-bearing `captured_at` at startup; do not copy a timestamp from another run.
 
 ### Notification automation check
 
@@ -59,6 +67,20 @@ Verify in the app that the item appears in Transactions → Shortcut Inbox, open
 3. Send the same two-pair fixture again. It must return HTTP `200` with `duplicate: 2` and the same two capture IDs; no new rows should appear.
 4. Use a fixture with one complete SCB/UOB group followed by an anchored group missing its required screen suffix. Expect HTTP `202`, `status: partial`, `queued: 1`, `duplicate: 0`, `failed: 1`, and a failed ordinal only. The readable item must still be reviewable in Inbox; recapture or enter the failed item manually.
 5. If the response is `ingest_failed`, rerun the identical Shortcut input. The first request may have inserted some rows before the infrastructure error; dedupe must report those as duplicates and insert only the remaining rows.
+
+### Date and retry boundary smoke
+
+1. Use two synthetic UOB groups dated `24/10` and `25/10` in one screen. Confirm two Inbox drafts retain those distinct dates after claim and decrypt; neither uses the other group's date.
+2. Repeat with a transaction at the Bangkok midnight boundary (for example `23:59` and `00:01`). Confirm the date comes from the transaction text/timezone, not the server's UTC date.
+3. Submit an otherwise timeless capture twice with `captured_at` values in the same five-minute bucket. Confirm the second response is `duplicate`.
+4. Submit the same timeless capture more than five minutes later. It may queue as a new item; verify the warning/date and do not save without review.
+
+### Custom profile smoke
+
+1. Use synthetic UCHOOSE-like purchase and refund notifications containing the generated marker. Confirm one complete `custom_profile` capture per message, with the stable profile UUID in the encrypted payload and no marker in stored `raw_text`.
+2. Change the notification format or hide previews. Confirm the response queues `needs_review` and the list preview shows only profile name/id, capture time, and `ต้องตรวจเอง`; no guessed amount, merchant, suffix, or raw text appears until claim.
+3. Send a synthetic OTP/marketing message matching `mustNotContain`. Confirm HTTP `200 {"status":"ignored"}` and no new Inbox row.
+4. Rename or bump the profile version, then retry the same complete/unparsed message. Confirm dedupe identity remains tied to the stable profile UUID, not the mutable display name/version.
 
 ## Rollback
 

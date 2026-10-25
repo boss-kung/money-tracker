@@ -1,0 +1,13 @@
+{
+  "purchase": {
+    "text": "UCHOOSE ซื้อสินค้า ร้านกาแฟ จำนวน 120.50 THB วันที่ 24/10/2026 เวลา 19:42 เลขที่ 123456",
+    "expected": {"status": "complete", "direction": "debit", "amount": "120.50", "transactionDate": "2026-10-24", "transactionDateTime": "2026-10-24T19:42:00+07:00", "merchant": "กาแฟ", "transactionReference": "123456", "variantId": "purchase"}
+  },
+  "refund": {
+    "text": "UCHOOSE คืนเงิน จำนวน 50 THB วันที่ 25/10/2026 เวลา 09:10 เลขที่ 654321",
+    "expected": {"status": "complete", "direction": "credit", "amount": "50.00", "transactionDate": "2026-10-25", "transactionDateTime": "2026-10-25T09:10:00+07:00", "transactionReference": "654321", "variantId": "refund"}
+  },
+  "ignored": {"text": "UCHOOSE OTP รหัส 123456", "expected": {"status": "ignored"}},
+  "incomplete": {"text": "UCHOOSE ซื้อสินค้า ร้านกาแฟ วันที่ 24/10/2026", "expected": {"status": "needs_review", "reason": "incomplete_fields"}},
+  "foreign": {"text": "UCHOOSE ซื้อสินค้า USD 10", "expected": {"status": "needs_review", "reason": "unsupported_currency"}}
+}

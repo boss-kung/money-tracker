@@ -9,7 +9,7 @@
   const groups = {
     notifications: ['notification_snapshot.js', 'notification_sync.js', 'notification_device_lifecycle.js', 'notifications_v2.js'],
     advanced: ['split_bill.js', 'loans_v2.js'],
-    capture: ['quick_capture.js', 'shortcut_capture_core.js', 'shortcut_capture.js'],
+    capture: ['quick_capture.js', 'shortcut_capture_core.js', 'shortcut_profile_core.js', 'shortcut_capture.js', 'shortcut_profiles.js'],
     onboarding: ['onboarding.js'],
   }
   const states = new Map()

@@ -9,8 +9,10 @@
   },
   "input": {
     "required": ["raw_text", "capture_method"],
-    "optional": ["captured_at", "force_test"],
-    "capture_methods": ["line_notification", "whats_on_screen"]
+    "optional": ["captured_at", "transaction_date", "transaction_reference", "force_test"],
+    "capture_methods": ["line_notification", "whats_on_screen"],
+    "custom_profile_marker": "MT-PROFILE:[A-HJ-NP-Z2-9]{6}",
+    "custom_profile_capture_method": "line_notification only"
   },
   "normalization": [
     { "pattern": "\\r\\n?", "replacement": "\\n" },
@@ -64,17 +66,24 @@
   ],
   "transaction_datetime_pattern": "(\\d{2})/(\\d{2})/(\\d{4})\\s+(\\d{2}):(\\d{2})",
   "transaction_datetime_output": "group3-group2-group1Tgroup4:group5:00+07:00",
-  "dedupe_basis": [
-    "v1",
-    "source",
-    "direction",
-    "amount with exactly two decimals",
-    "THB",
-    "account_last4 or card_last4 or empty text",
-    "transaction_datetime or captured_at date",
-    "trimmed lowercase description",
-    "SHA-256 of normalized relevant_text"
-  ],
+  "dedupe_versions": {
+    "v1_legacy": [
+      "source",
+      "direction",
+      "amount with exactly two decimals",
+      "THB",
+      "account_last4 or card_last4 or empty text",
+      "transaction_datetime or captured_at date",
+      "trimmed lowercase description",
+      "SHA-256 of normalized relevant_text"
+    ],
+    "v2": {
+      "strong_identity": "v1 material plus transaction_datetime or transaction_reference when present",
+      "timeless_identity": "v1 material plus a five-minute Bangkok capture-time bucket when neither strong field is present",
+      "retry_window": "timeless identities dedupe within five minutes; strong identities remain stable across capture time",
+      "lock_material": "SHA-256 of the shared source/direction/amount/currency/identifier/date/description/relevant-text material"
+    }
+  },
   "dedupe_separator": "|",
   "dedupe_algorithm": "SHA-256 lowercase hexadecimal",
   "payload_fields": [
@@ -90,6 +99,8 @@
     "account_last4",
     "card_last4",
     "transaction_datetime",
+    "transaction_date",
+    "transaction_reference",
     "captured_at",
     "capture_method",
     "raw_text",
@@ -100,6 +111,9 @@
   ],
   "payload_types": {
     "amount": "canonical decimal string with exactly two fractional digits",
+    "transaction_date": "nullable strict YYYY-MM-DD calendar date",
+    "transaction_reference": "nullable normalized bank/reference identifier, at most 128 characters",
+    "dedupe_version": "integer; server-generated raw captures use 2 and legacy normalized envelopes may use 1",
     "dedupe_key": "lowercase SHA-256 hex string"
   },
   "never_post_when": [

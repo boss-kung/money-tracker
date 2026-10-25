@@ -53,10 +53,10 @@
   <a class="back" href="./index.html">← กลับแอป</a>
 
   <h1>นโยบายความเป็นส่วนตัว</h1>
-  <p class="meta">Privacy Policy &nbsp;·&nbsp; อัปเดตล่าสุด: มิถุนายน 2026</p>
+  <p class="meta">Privacy Policy &nbsp;·&nbsp; อัปเดตล่าสุด: 25 ตุลาคม 2026</p>
 
   <div class="highlight">
-    <strong>สรุปสั้น ๆ:</strong> ข้อมูลการเงินของคุณถูกเข้ารหัสบนอุปกรณ์ก่อนบันทึกบน cloud — เราอ่านไม่ได้ ข้อมูลที่แอปเก็บในเซิร์ฟเวอร์มีเพียง email สำหรับ login และสัญญาณตัวเลขสำหรับการแจ้งเตือน (ไม่มีชื่อรายการ จำนวนเงิน หรือรายละเอียดส่วนตัว)
+    <strong>สรุปสั้น ๆ:</strong> ข้อมูล Vault ยังคงเข้ารหัสบนอุปกรณ์แบบ end-to-end แต่ข้อความแจ้งเตือนจาก Shortcut เป็นคนละเส้นทาง: ส่งผ่าน HTTPS ไปยัง Supabase Edge Function เพื่อ parse ในหน่วยความจำ แล้วเข้ารหัสก่อนเก็บใน Shortcut Inbox/profile staging ให้เจ้าของรีวิว
   </div>
 
   <h2>1. ข้อมูลที่เก็บรวบรวม</h2>
@@ -89,13 +89,23 @@
     <tr><td>Vault (encrypted)</td><td>Sync ข้ามอุปกรณ์ (ข้อมูลอ่านไม่ได้จากฝั่งเรา)</td></tr>
     <tr><td>Push token</td><td>ส่งการแจ้งเตือนที่คุณตั้งค่าไว้</td></tr>
     <tr><td>สัญญาณตัวเลข</td><td>ตรวจสอบว่าควรส่งการแจ้งเตือนหรือไม่</td></tr>
+    <tr><td>Shortcut notification text</td><td>แยกรายการเข้า Inbox เพื่อให้เจ้าของตรวจและกดบันทึกเอง; ไม่ใช่ Vault end-to-end encryption</td></tr>
+    <tr><td>Compiled profile rule</td><td>จับรูปแบบแอปธนาคารที่ผู้ใช้สร้างจากตัวอย่าง 2 รายการ; เก็บเป็น ciphertext ฝั่งเซิร์ฟเวอร์</td></tr>
   </table>
   <p>เราไม่ขาย แชร์ หรือนำข้อมูลของคุณไปใช้เพื่อโฆษณาหรือวัตถุประสงค์อื่น</p>
+
+  <h2>2.1 เส้นทาง Shortcut และโปรไฟล์แจ้งเตือน</h2>
+  <ul>
+    <li>ข้อความ Title/Subtitle/Body ของ Notification ถูกส่งผ่าน HTTPS ไปยัง Edge Function และประมวลผลในหน่วยความจำ ก่อนเข้ารหัสด้วย AES-GCM แล้วจึงเก็บใน Inbox เพื่อรีวิว</li>
+    <li>ตัวอย่างดิบที่ใช้สร้างโปรไฟล์อยู่ในหน่วยความจำของ browser เท่านั้น ไม่ถูกส่งหรือเขียนลง localStorage/sessionStorage/analytics; เซิร์ฟเวอร์รับเฉพาะ compiled rule ที่เข้ารหัสแล้ว</li>
+    <li>Inbox ciphertext จะหมดอายุ/ล้างตาม lifecycle ที่ระบุในคู่มือ deployment (payload purge 7 วัน และ dedupe receipt 180 วัน); การลบบัญชีลบแถวที่ผูกกับผู้ใช้</li>
+    <li>ระบบไม่เขียนรายการเข้า Ledger อัตโนมัติ ผู้ใช้ต้องเปิดตรวจ แก้ไข และกดบันทึกเอง</li>
+  </ul>
 
   <h2>3. บริการบุคคลที่สาม</h2>
   <table>
     <tr><th>บริการ</th><th>วัตถุประสงค์</th><th>ข้อมูลที่แชร์</th></tr>
-    <tr><td><a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase</a></td><td>Authentication, encrypted cloud storage</td><td>Email, encrypted vault blob</td></tr>
+    <tr><td><a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase</a></td><td>Authentication, Edge Function processing, encrypted cloud storage</td><td>Email, encrypted vault blob, encrypted Shortcut Inbox/profile staging</td></tr>
     <tr><td><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google OAuth</a></td><td>Sign-in</td><td>Email, Google ID</td></tr>
     <tr><td><a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase / FCM</a></td><td>Push notifications</td><td>Push subscription token</td></tr>
     <tr><td>CoinGecko / CoinCap</td><td>ราคาสินทรัพย์ดิจิทัล</td><td>รหัสสินทรัพย์ (ไม่มีข้อมูลส่วนตัว)</td></tr>

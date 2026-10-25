@@ -585,3 +585,35 @@ Deno.test('concurrent atomic store calls produce one queued and one duplicate re
   equal(bodies.filter(result => result.status === 'duplicate').length, 1)
 })
 
+Deno.test('routes an owned profile marker to a structured encrypted capture', async () => {
+  const db = fakeDatabase({ tokenRow, rows: new Map() })
+  const profile = {
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', user_id: userId, short_code: 'ABC234', name: 'UChoose', app_label: 'UCHOOSE', enabled: true, disabled_at: null, format_version: 1, profile_version: 3,
+    rule_ciphertext: '\\x01', rule_iv: '\\x000000000000000000000000', rule_encryption_key_version: 1,
+  }
+  let encrypted: Record<string, unknown> | null = null
+  const handler = createIngestShortcutCaptureHandler(deps(db, {
+    lookupProfile: async () => profile,
+    decryptProfile: async () => ({ format_version: 1, variants: [{ id: 'purchase', direction: 'debit', mustContain: ['uchoose', 'ซื้อสินค้า'], mustNotContain: [], amount: { before: 'จำนวน ', after: ' thb', occurrence: 1, valueType: 'thb_amount', maxLength: 32 }, date: { before: 'วันที่ ', after: ' เวลา', occurrence: 1, valueType: 'date', maxLength: 16 }, merchant: { before: 'ร้าน ', after: ' จำนวน', occurrence: 1, valueType: 'text', maxLength: 64 } }] }),
+    encrypt: async payload => { encrypted = payload as Record<string, unknown>; return { ciphertext: new Uint8Array([1]), iv: new Uint8Array(12), keyVersion: 1 } },
+  }))
+  const response = await handler(request({ raw_text: 'MT-PROFILE:ABC234\nUCHOOSE ซื้อสินค้า ร้าน กาแฟ จำนวน 120.50 THB วันที่ 24/10/2026 เวลา 19:42', capture_method: 'line_notification', captured_at: '2026-10-25T00:00:00+07:00' }))
+  equal(response.status, 202)
+  const encryptedPayload = encrypted as unknown as Record<string, unknown>
+  equal(encryptedPayload.source, 'custom_profile')
+  equal(encryptedPayload.profile_id, profile.id)
+  if (String(encryptedPayload.raw_text).includes('MT-PROFILE')) throw new Error('marker must not be stored')
+})
+
+Deno.test('explicit profile exclusion is ignored without encryption or store', async () => {
+  const db = fakeDatabase({ tokenRow })
+  let encryptCalls = 0
+  const handler = createIngestShortcutCaptureHandler(deps(db, {
+    lookupProfile: async () => ({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', user_id: userId, short_code: 'ABC234', name: 'UChoose', enabled: true, disabled_at: null, format_version: 1, profile_version: 1 }),
+    decryptProfile: async () => ({ format_version: 1, variants: [{ id: 'otp', direction: 'debit', mustContain: ['uchoose'], mustNotContain: ['otp'], amount: { before: 'amount ', occurrence: 1, valueType: 'thb_amount', maxLength: 32 } }] }),
+    encrypt: async payload => { encryptCalls++; return { ciphertext: new Uint8Array([1]), iv: new Uint8Array(12), keyVersion: 1 } },
+  }))
+  const response = await handler(request({ raw_text: 'MT-PROFILE:ABC234\nUCHOOSE OTP code 1234', capture_method: 'line_notification' }))
+  equal(response.status, 200); equal(await body(response), { status: 'ignored', ignored: true }); equal(encryptCalls, 0)
+})
+

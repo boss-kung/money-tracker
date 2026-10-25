@@ -1,6 +1,8 @@
 import {
   decryptCapture,
   encryptCapture,
+  decryptShortcutJson,
+  encryptShortcutJson,
   generateDeviceToken,
   loadInboxKeyring,
   parseDeviceToken,
@@ -68,4 +70,25 @@ Deno.test('selects the highest configured key version for new writes', async () 
   const encrypted = await encryptCapture({ value: 2 }, { captureId: 'capture-2', userId: 'user-2', schemaVersion: 'money-tracker.capture.v1' }, keyring)
   equal(encrypted.keyVersion, 2)
   equal((await decryptCapture(encrypted, { captureId: 'capture-2', userId: 'user-2', schemaVersion: 'money-tracker.capture.v1' }, keyring)).value, 2)
+})
+
+Deno.test('profile JSON encryption binds profile identity, owner, and version in AAD', async () => {
+  const key = crypto.getRandomValues(new Uint8Array(32))
+  const keyring = await loadInboxKeyring((name: string) => name === 'MT_SHORTCUT_INBOX_KEY_V1' ? base64Key(key) : undefined)
+  const context = { objectId: 'profile-1', userId: 'user-1', objectType: 'profile_rule' as const, objectVersion: 'v1.3' }
+  const encrypted = await encryptShortcutJson({ anchor: 'secret merchant' }, context, keyring)
+  equal((await decryptShortcutJson(encrypted, context, keyring)).anchor, 'secret merchant')
+  for (const changed of [
+    { ...context, objectId: 'profile-2' },
+    { ...context, userId: 'user-2' },
+    { ...context, objectType: 'capture' as const },
+    { ...context, objectVersion: 'v1.4' },
+  ]) {
+    try {
+      await decryptShortcutJson(encrypted, changed, keyring)
+      throw new Error('wrong profile AAD must fail')
+    } catch (error) {
+      if (String(error).includes('wrong profile AAD')) throw error
+    }
+  }
 })

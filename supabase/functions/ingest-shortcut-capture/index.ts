@@ -1,14 +1,21 @@
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 import {
   buildCaptureDedupeIdentity,
+  buildNeedsReviewDedupeIdentity,
   validateCaptureV1,
+  validateNeedsReviewCapture,
+  type ValidatedCustomProfileCaptureV1,
+  type ValidatedNeedsReviewCaptureV1,
   type CaptureDedupeIdentity,
   type ValidatedCaptureV1,
   ShortcutRequestError,
 } from '../_shared/shortcut_capture.ts'
+import { normalizeShortcutCapturedAt } from '../_shared/shortcut_date.ts'
+import { matchShortcutProfile, parseShortcutProfileMarker, validateShortcutProfileRule, type ShortcutProfileRule } from '../_shared/shortcut_profile.ts'
 import { parseRawShortcutCaptures, type RawCaptureBatch } from '../_shared/shortcut_capture_parser.ts'
 import {
   encryptCapture,
+  decryptShortcutJson,
   loadInboxKeyring,
   parseDeviceToken,
   timingSafeEqual,
@@ -29,7 +36,9 @@ export type IngestShortcutCaptureDeps = {
   verifyToken: (secret: string, pepper: string) => Promise<Uint8Array>
   compareVerifier: (left: Uint8Array, right: Uint8Array) => boolean
   loadKeyring: () => Promise<InboxKeyring>
-  encrypt: (payload: ValidatedCaptureV1, context: { captureId: string; userId: string; schemaVersion: string }, keyring: InboxKeyring) => Promise<EncryptedCapture>
+  encrypt: (payload: ValidatedCaptureV1 & Record<string, unknown>, context: { captureId: string; userId: string; schemaVersion: string }, keyring: InboxKeyring) => Promise<EncryptedCapture>
+  lookupProfile?: (supabase: AdminClientLike, userId: string, shortCode: string) => Promise<Record<string, unknown> | null>
+  decryptProfile?: (row: Record<string, unknown>, userId: string, keyring: InboxKeyring) => Promise<ShortcutProfileRule>
   randomUUID: () => string
   now: () => Date
 }
@@ -184,6 +193,50 @@ function isRawCaptureEnvelope(value: unknown): value is Record<string, unknown> 
   return typeof record.raw_text === 'string' && typeof record.capture_method === 'string' && !('source' in record)
 }
 
+type CustomCapture = ValidatedCustomProfileCaptureV1 | ValidatedNeedsReviewCaptureV1
+
+async function lookupProfile(supabase: AdminClientLike, userId: string, shortCode: string, deps: IngestShortcutCaptureDeps): Promise<Record<string, unknown> | null> {
+  if (deps.lookupProfile) return deps.lookupProfile(supabase, userId, shortCode)
+  const result = await supabase.from('mt_shortcut_parser_profiles').select('id,user_id,short_code,name,app_label,enabled,disabled_at,format_version,profile_version,rule_ciphertext,rule_iv,rule_encryption_key_version').eq('user_id', userId).eq('short_code', shortCode).eq('enabled', true).is('disabled_at', null).maybeSingle()
+  if (result.error) throw result.error
+  return result.data as Record<string, unknown> | null
+}
+
+async function prepareCustomCapture(input: Record<string, unknown>, marker: { shortCode: string; notificationText: string }, supabase: AdminClientLike, userId: string, receivedAt: Date, deps: IngestShortcutCaptureDeps): Promise<{ ignored: boolean; capture?: CustomCapture; identity?: CaptureDedupeIdentity }> {
+  if (input.capture_method !== 'line_notification') throw new IngestRequestError(400, 'invalid_capture')
+  const profile = await lookupProfile(supabase, userId, marker.shortCode, deps)
+  if (!profile || profile.enabled !== true || profile.disabled_at) throw new IngestRequestError(400, 'invalid_capture')
+  const keyring = await deps.loadKeyring()
+  if (!deps.decryptProfile) throw new Error('profile_decrypt_unavailable')
+  let rule: ShortcutProfileRule
+  try { rule = validateShortcutProfileRule(await deps.decryptProfile(profile, userId, keyring)) } catch { throw new IngestRequestError(400, 'invalid_capture') }
+  const capturedAt = normalizeShortcutCapturedAt(input.captured_at, receivedAt.toISOString())
+  const match = matchShortcutProfile(rule, marker.notificationText, capturedAt)
+  if (match.status === 'ignored') return { ignored: true }
+  const profileId = String(profile.id || '')
+  const profileVersion = Number(profile.profile_version)
+  const profileName = String(profile.name || '').trim().slice(0, 64)
+  if (!/^[0-9a-f-]{36}$/i.test(profileId) || !Number.isInteger(profileVersion) || profileVersion < 1 || !profileName) throw new IngestRequestError(400, 'invalid_capture')
+  if (match.status === 'needs_review') {
+    const draft: ValidatedNeedsReviewCaptureV1 = {
+      schema_version: 'money-tracker.capture.v1', parser_version: 'shortcut-profile-1', source: 'custom_profile', profile_id: profileId, profile_version: profileVersion, profile_name: profileName,
+      captured_at: capturedAt, capture_method: 'line_notification', raw_text: marker.notificationText, relevant_text: marker.notificationText, parse_status: 'needs_review', reason: match.reason, dedupe_version: 2, dedupe_key: '0'.repeat(64),
+    }
+    const identity = await buildNeedsReviewDedupeIdentity(draft)
+    draft.dedupe_key = identity.dedupeKey
+    return { ignored: false, capture: await validateNeedsReviewCapture(draft, receivedAt), identity }
+  }
+  const value = match.value
+  const draft = {
+    schema_version: 'money-tracker.capture.v1', parser_version: 'shortcut-profile-1', source: 'custom_profile', bank: String(profile.app_label || profile.name || '').slice(0, 64), amount: value.amount, currency: 'THB', direction: value.direction,
+    merchant: value.merchant, description: value.merchant, account_last4: value.accountLast4, card_last4: value.cardLast4, transaction_date: value.transactionDate, transaction_reference: value.transactionReference, transaction_datetime: value.transactionDateTime,
+    captured_at: capturedAt, capture_method: 'line_notification', raw_text: marker.notificationText, relevant_text: marker.notificationText, parse_status: 'complete', dedupe_version: 2, dedupe_key: '0'.repeat(64), profile_id: profileId, profile_version: profileVersion, profile_name: profileName,
+  } as ValidatedCustomProfileCaptureV1
+  const identity = await buildCaptureDedupeIdentity(draft)
+  draft.dedupe_key = identity.dedupeKey
+  return { ignored: false, capture: draft, identity }
+}
+
 export function createIngestShortcutCaptureHandler(deps: IngestShortcutCaptureDeps): (req: Request) => Promise<Response> {
   return async req => {
     const options = handleOptions(req)
@@ -219,21 +272,30 @@ export function createIngestShortcutCaptureHandler(deps: IngestShortcutCaptureDe
       if (rate.data !== true) throw new IngestRequestError(429, 'rate_limited')
 
       const input = parseBody(bodyBytes)
-      let batch: RawCaptureBatch
+      const userId = String(row.user_id)
+      let customPrepared: Awaited<ReturnType<typeof prepareCustomCapture>> | null = null
+      let batch: RawCaptureBatch = { found: 0, captures: [], failures: [] }
       try {
         if (isRawCaptureEnvelope(input)) {
-          batch = await parseRawShortcutCaptures(input, receivedAt.toISOString())
+          const marker = parseShortcutProfileMarker(String(input.raw_text))
+          if (marker) {
+            customPrepared = await prepareCustomCapture(input, marker, supabase, userId, receivedAt, deps)
+            if (customPrepared.ignored) return jsonResponse({ status: 'ignored', ignored: true }, 200, req)
+            batch = { found: 1, captures: [], failures: [] }
+          } else {
+            batch = await parseRawShortcutCaptures(input, receivedAt.toISOString())
+          }
         } else {
           const capture = await validateCaptureV1(input, receivedAt)
           batch = { found: 1, captures: [{ item: 1, capture }], failures: [] }
         }
       } catch (error) {
         if (error instanceof ShortcutRequestError) throw error
+        if (error instanceof IngestRequestError) throw error
         throw new IngestRequestError(400, 'invalid_capture')
       }
 
-      const userId = String(row.user_id)
-      if (!batch.captures.length) return unreadableResponse(batch, req)
+      if (!customPrepared && !batch.captures.length) return unreadableResponse(batch, req)
 
       const results = new Map<number, IngestItemResult>()
       for (const failure of batch.failures) {
@@ -242,11 +304,14 @@ export function createIngestShortcutCaptureHandler(deps: IngestShortcutCaptureDe
 
       const pending: Array<{
         item: number
-        capture: ValidatedCaptureV1
+        capture: ValidatedCaptureV1 | ValidatedCustomProfileCaptureV1 | ValidatedNeedsReviewCaptureV1
         identity: CaptureDedupeIdentity
         captureId: string
         encrypted?: EncryptedCapture
       }> = []
+      if (customPrepared?.capture && customPrepared.identity) {
+        pending.push({ item: 1, capture: customPrepared.capture, identity: customPrepared.identity, captureId: deps.randomUUID() })
+      }
       for (const parsedCapture of batch.captures) {
         const capture = await validateCaptureV1(parsedCapture.capture, receivedAt)
         const identity = await buildCaptureDedupeIdentity(capture)
@@ -256,7 +321,7 @@ export function createIngestShortcutCaptureHandler(deps: IngestShortcutCaptureDe
       if (pending.length) {
         const keyring = await deps.loadKeyring()
         for (const item of pending) {
-          item.encrypted = await deps.encrypt(item.capture, {
+          item.encrypted = await deps.encrypt(item.capture as ValidatedCaptureV1 & Record<string, unknown>, {
             captureId: item.captureId,
             userId,
             schemaVersion: item.capture.schema_version,
@@ -311,6 +376,7 @@ if (import.meta.main) {
     compareVerifier: timingSafeEqual,
     loadKeyring: () => loadInboxKeyring(name => Deno.env.get(name)),
     encrypt: encryptCapture,
+    decryptProfile: async (row, userId, keyring) => validateShortcutProfileRule(await decryptShortcutJson({ ciphertext: bytesFromDatabase(row.rule_ciphertext), iv: bytesFromDatabase(row.rule_iv), keyVersion: Number(row.rule_encryption_key_version) }, { objectId: String(row.id), userId, objectType: 'profile_rule', objectVersion: `${Number(row.format_version)}:${Number(row.profile_version)}` }, keyring)),
     randomUUID: () => crypto.randomUUID(),
     now: () => new Date(),
   }))

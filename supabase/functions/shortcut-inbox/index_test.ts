@@ -156,3 +156,15 @@ Deno.test('dismiss and restore stay confirmation-neutral and honor the retention
   if (!db.calls.some(call => call.method === 'rpc:mt_shortcut_restore_capture')) throw new Error('restore RPC missing')
 })
 
+Deno.test('needs-review list preview omits guessed financial fields but claim returns owned payload', async () => {
+  const review = { ...payload, source: 'custom_profile', profile_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', profile_name: 'UChoose', profile_version: 2, parse_status: 'needs_review', reason: 'incomplete_fields', raw_text: 'secret notification', amount: '999999.99', merchant: 'trap', account_last4: '1234' }
+  const db = database({ rows: [captureRow()], row: captureRow() })
+  const handler = createShortcutInboxHandler(deps(db, { decrypt: async () => review }))
+  const listed = await body(await handler(req('GET', '/shortcut-inbox?view=pending')))
+  const item = (listed.items as Record<string, unknown>[])[0]
+  equal(item.parse_status, 'needs_review'); equal(item.profile_name, 'UChoose')
+  if ('amount' in item || 'merchant' in item || 'raw_text' in item) throw new Error('needs-review preview leaked financial or raw fields')
+  const claimed = await body(await handler(req('POST', '/shortcut-inbox/claim', { capture_id: captureId })))
+  equal((claimed.capture as Record<string, unknown>).raw_text, 'secret notification')
+})
+

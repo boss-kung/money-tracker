@@ -107,7 +107,7 @@
   }
 
   function safeSummary(item) {
-    const allowed = ['capture_id', 'status', 'accepted_at', 'updated_at', 'source', 'bank', 'amount', 'currency', 'direction', 'merchant', 'description', 'account_last4', 'card_last4', 'transaction_date', 'transaction_datetime', 'captured_at', 'capture_method']
+    const allowed = ['capture_id', 'status', 'accepted_at', 'updated_at', 'source', 'bank', 'amount', 'currency', 'direction', 'merchant', 'description', 'account_last4', 'card_last4', 'transaction_date', 'transaction_datetime', 'captured_at', 'capture_method', 'profile_id', 'profile_name', 'profile_version', 'parse_status', 'reason']
     return Object.fromEntries(allowed.filter(key => item && Object.prototype.hasOwnProperty.call(item, key)).map(key => [key, item[key]]))
   }
 
@@ -164,6 +164,11 @@
   async function listTokens() { return request('manage-shortcut-tokens', '') }
   async function createToken(label) { return request('manage-shortcut-tokens', '', { method: 'POST', body: { label } }) }
   async function revokeToken(id) { return request('manage-shortcut-tokens', `/${encodeURIComponent(id)}/revoke`, { method: 'POST', body: {} }) }
+  async function listProfiles() { return request('shortcut-parser-profiles', '') }
+  async function getProfile(id) { return request('shortcut-parser-profiles', `/${encodeURIComponent(id)}`) }
+  async function createProfile(input) { return request('shortcut-parser-profiles', '', { method: 'POST', body: input }) }
+  async function updateProfile(id, input) { return request('shortcut-parser-profiles', `/${encodeURIComponent(id)}`, { method: 'PUT', body: input }) }
+  async function archiveProfile(id, expectedVersion) { return request('shortcut-parser-profiles', `/${encodeURIComponent(id)}/archive`, { method: 'POST', body: { expected_version: expectedVersion } }) }
 
   async function acknowledge(capture, scope = requireAuth()) {
     const transactionId = core.transactionId(capture.captureId)
@@ -199,9 +204,12 @@
   }
 
   async function openDraft(id) {
+    const existing = claims.get(String(id))
+    if (existing?.capture?.parse_status === 'needs_review') return openNeedsReview(id)
     const capture = claims.get(String(id)) || await claim(id)
     try {
       const payload = capture.capture || capture
+      if (payload.parse_status === 'needs_review') return openNeedsReview(id)
       const state = appState()
       if (!state) throw new TransportError('APP_STATE_UNAVAILABLE', 'app_state_unavailable')
       const merchant = root.MTQuickCapture?.matchMerchant?.(payload.merchant, state.merchants || [])
@@ -225,6 +233,69 @@
       try { await release(id) } catch (_) {}
       throw error
     }
+  }
+
+  function capturedDate(value) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(String(value || '')))
+      const get = type => parts.find(part => part.type === type)?.value || ''
+      const result = `${get('year')}-${get('month')}-${get('day')}`
+      return /^\d{4}-\d{2}-\d{2}$/.test(result) ? result : ''
+    } catch (_) { return '' }
+  }
+
+  function renderNeedsReviewMarkup(payload, id) {
+    const reason = { notification_content_unavailable: 'ไม่พบเนื้อหาแจ้งเตือน', no_variant_match: 'รูปแบบยังไม่ตรงกับโปรไฟล์', ambiguous_variant: 'ตรงกับหลายรูปแบบ', incomplete_fields: 'ข้อมูลธุรกรรมไม่ครบ', unsupported_currency: 'สกุลเงินยังไม่รองรับ' }[payload.reason] || 'ต้องตรวจสอบด้วยตนเอง'
+    const raw = escapeHtml(payload.raw_text || payload.relevant_text || '')
+    return `<section class="shortcut-needs-review" data-shortcut-needs-review-id="${escapeHtml(id)}"><div class="sub-header"><button type="button" class="btn-icon" data-needs-review-action="back" aria-label="ย้อนกลับ">←</button><h2>ต้องตรวจเอง</h2><div></div></div><div class="card card-pad"><h3>${escapeHtml(payload.profile_name || 'โปรไฟล์แจ้งเตือน')}</h3><p role="status">${escapeHtml(reason)}</p><details class="shortcut-inbox-raw"><summary>ดูข้อความต้นฉบับ</summary><pre>${raw}</pre></details><div class="shortcut-needs-review-actions"><button type="button" class="btn btn-primary" data-needs-review-action="manual">สร้างรายการเอง</button><button type="button" class="btn btn-secondary" data-needs-review-action="edit-profile">ปรับรูปแบบ</button><button type="button" class="btn btn-danger" data-needs-review-action="dismiss">ทิ้งรายการ</button></div></div></section>`
+  }
+
+  function bindNeedsReviewActions() {
+    const screen = root.document?.querySelector?.('.shortcut-needs-review')
+    if (!screen) return
+    const id = screen.dataset.shortcutNeedsReviewId
+    const payload = claims.get(String(id))?.capture || {}
+    screen.querySelectorAll('[data-needs-review-action]').forEach(button => button.addEventListener('click', async event => {
+      event.preventDefault()
+      const action = button.dataset.needsReviewAction
+      try {
+        if (action === 'back') { await onTransactionClose(); root.App?.openSubScreen?.(renderInboxMarkup(snapshot(), inboxView), { animate: false }); bindInboxActions() }
+        else if (action === 'manual') await openManualReview(id)
+        else if (action === 'edit-profile') await openProfileEditorForReview(id, payload)
+        else if (action === 'dismiss') root.App?.showConfirm?.({ title: 'ทิ้งรายการนี้?', body: 'รายการจะถูกย้ายไปอยู่รายการที่ซ่อน', danger: true, confirmLabel: 'ทิ้งรายการ', onConfirm: async () => { await dismiss(id); await openInbox(inboxView) } })
+      } catch (error) { toast(error?.message || 'ดำเนินการไม่สำเร็จ', 'error') }
+    }))
+  }
+
+  async function openNeedsReview(id) {
+    const capture = claims.get(String(id)) || await claim(id)
+    const payload = capture.capture || capture
+    if (payload.parse_status !== 'needs_review') return openDraft(id)
+    activeCaptureId = String(id)
+    activeDateFallback = null
+    root.App?.openSubScreen?.(renderNeedsReviewMarkup(payload, id), { animate: false })
+    bindNeedsReviewActions()
+    return { capture, payload }
+  }
+
+  async function openManualReview(id) {
+    const capture = claims.get(String(id))
+    if (!capture) throw new TransportError('CLAIM_REQUIRED')
+    const payload = capture.capture || capture
+    const state = appState()
+    if (!state) throw new TransportError('APP_STATE_UNAVAILABLE', 'app_state_unavailable')
+    const date = capturedDate(payload.captured_at)
+    state.txMode = 'add'; state.editingTxId = null
+    state.tx = { ...(state.tx || {}), type: state.tx?.type === 'income' ? 'income' : 'expense', amount: '0.00', walletId: '', toWalletId: '', categoryId: '', merchant: '', note: '', date, externalCapture: { provider: 'ios_shortcut', captureId: String(id), dedupeVersion: payload.dedupe_version, dedupeKey: payload.dedupe_key } }
+    activeCaptureId = String(id)
+    activeDateFallback = date ? { captureId: String(id), date } : null
+    root.App?.openOverlay?.('overlay-add-tx'); root.App?._renderAddTxDetail?.(); injectReviewDisclosure()
+    return state.tx
+  }
+
+  async function openProfileEditorForReview(id, payload) {
+    await release(id)
+    root.MTShortcutProfiles?.openEditor?.(String(payload.profile_id || ''), { sampleText: String(payload.raw_text || payload.relevant_text || ''), captureId: String(id) })
   }
 
   function onTransactionSave(context) {
@@ -282,12 +353,13 @@
     const dismissed = view === 'dismissed'
     const rows = items.map(item => {
       const id = escapeHtml(item.capture_id)
-      const title = escapeHtml(item.merchant || item.description || item.bank || item.source || 'รายการจาก Shortcut')
+      const needsReview = item.parse_status === 'needs_review'
+      const title = escapeHtml(needsReview ? (item.profile_name || 'ต้องตรวจเอง') : (item.merchant || item.description || item.bank || item.source || 'รายการจาก Shortcut'))
       const detail = escapeHtml([item.bank || item.source, item.account_last4 ? `บัญชี ••••${item.account_last4}` : '', item.card_last4 ? `บัตร ••••${item.card_last4}` : ''].filter(Boolean).join(' · '))
       const date = escapeHtml(dateLabel(item.transaction_date || item.transaction_datetime || item.captured_at || item.accepted_at))
-      const amount = escapeHtml(amountLabel(item))
-      const status = escapeHtml(item.status || (dismissed ? 'dismissed' : 'pending'))
-      return `<article class="shortcut-inbox-item" data-shortcut-inbox-id="${id}">
+      const amount = needsReview ? '—' : escapeHtml(amountLabel(item))
+      const status = escapeHtml(needsReview ? 'ต้องตรวจเอง' : (item.status || (dismissed ? 'dismissed' : 'pending')))
+      return `<article class="shortcut-inbox-item${needsReview ? ' shortcut-inbox-needs-review' : ''}" data-shortcut-inbox-id="${id}">
         <button type="button" class="shortcut-inbox-open" data-shortcut-inbox-action="${dismissed ? 'restore' : 'open'}" data-shortcut-inbox-id="${id}" aria-label="${dismissed ? 'กู้คืนรายการ' : 'ตรวจสอบรายการ'} ${title}">
           <span class="shortcut-inbox-item-main"><strong>${title}</strong><span>${detail || 'ไม่พบข้อมูลบัญชีหรือบัตร'}${date ? ` · ${date}` : ''}</span></span>
           <span class="shortcut-inbox-item-amount">${amount || '—'}<small>${status}</small></span>
@@ -431,10 +503,11 @@
     const wrapper = doc.createElement('div')
     wrapper.id = 'shortcut-token-settings'
     wrapper.className = 'shortcut-token-settings'
-    wrapper.innerHTML = '<div class="sec-title">เชื่อมต่อ</div><div class="card card-pad"><button type="button" class="settings-row shortcut-token-settings-row"><span class="s-icon">📱</span><span class="s-label">เชื่อมต่อ iOS Shortcut<div class="shortcut-token-settings-help">จัดการ Token สำหรับแจ้งเตือนจาก LINE</div></span><span class="s-arrow">›</span></button></div>'
+    wrapper.innerHTML = '<div class="sec-title">เชื่อมต่อ</div><div class="card card-pad"><button type="button" class="settings-row shortcut-token-settings-row"><span class="s-icon">📱</span><span class="s-label">เชื่อมต่อ iOS Shortcut<div class="shortcut-token-settings-help">จัดการ Token สำหรับแจ้งเตือนจาก LINE</div></span><span class="s-arrow">›</span></button><button type="button" class="settings-row shortcut-profile-settings-row"><span class="s-icon">🏦</span><span class="s-label">รูปแบบแจ้งเตือนธนาคาร<div class="shortcut-token-settings-help">เพิ่ม UCHOOSE หรือแอปธนาคารอื่นจากตัวอย่าง 2 รายการ</div></span><span class="s-arrow">›</span></button></div>'
     const settingsPane = content.querySelector('.more-tab-pane[data-pane="settings"]') || content
     settingsPane.appendChild(wrapper)
     wrapper.querySelector('button')?.addEventListener('click', openTokenSettings)
+    wrapper.querySelector('.shortcut-profile-settings-row')?.addEventListener('click', () => root.MTShortcutProfiles?.openList?.())
   }
 
   function injectReviewDisclosure() {
@@ -467,7 +540,7 @@
     host.appendChild(warning)
   }
 
-  const api = Object.freeze({ refresh, claim, release, dismiss, restore, openDraft, openInbox, openTokenSettings, listTokens, createToken, revokeToken, retryAcknowledgements, snapshot })
+  const api = Object.freeze({ refresh, claim, release, dismiss, restore, openDraft, openNeedsReview, openInbox, openTokenSettings, listTokens, createToken, revokeToken, listProfiles, getProfile, createProfile, updateProfile, archiveProfile, retryAcknowledgements, snapshot })
   root.MTScreenHooks?.register?.('transactionSave', 'shortcut-capture.save-before-ack', onTransactionSave, { priority: 200 })
   root.MTScreenHooks?.register?.('transactionClose', 'shortcut-capture.release-claim', onTransactionClose, { priority: 200 })
   root.MTScreenHooks?.register?.('transactions', 'shortcut-capture.inbox-button', injectShortcutLauncher, { priority: 200 })
