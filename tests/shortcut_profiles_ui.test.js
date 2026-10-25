@@ -19,3 +19,11 @@ test('profile wizard never sends or persists raw samples', () => {
   assert.doesNotMatch(source, /createProfile\([^)]*sample/i)
   assert.match(source, /MT-PROFILE:/)
 })
+
+test('profile wizard uses user-supplied anchors instead of hardcoding one bank', () => {
+  assert.match(source, /data-profile-field="must_contain"/)
+  assert.match(source, /data-profile-field="must_not_contain"/)
+  assert.match(source, /const mustContain = parseAnchors\(/)
+  assert.match(source, /mustNotContain: parseAnchors\(/)
+  assert.doesNotMatch(source, /mustContain:\s*\[\s*['"]uchoose['"]\s*\]/i)
+})
