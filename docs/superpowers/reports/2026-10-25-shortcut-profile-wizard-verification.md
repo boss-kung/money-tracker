@@ -5,8 +5,8 @@ Release: `2026.10.25-shortcut-profiles-r154`
 
 ## Automated verification
 
-- `node --test tests/*.test.js` — **558 passed, 0 failed**.
-- Focused release/profile suites — **28 passed, 0 failed**:
+- `node --test tests/*.test.js` — **559 passed, 0 failed**.
+- Focused release/profile suites — **29 passed, 0 failed**:
   - `tests/feature_loader.test.js`
   - `tests/shortcut_capture_ui.test.js`
   - `tests/release_manifest.test.js`
@@ -17,6 +17,8 @@ Release: `2026.10.25-shortcut-profiles-r154`
 - `git diff --check` — passed.
 
 Coverage includes local-only sample handling, candidate safety checks, explicit direction, the three-step flow, conflict metadata, dark-mode tokens, safe-area footer spacing, 16px controls, touch targets, reduced-motion behavior, production/demo cache-key parity, and deferred feature ordering.
+
+The final regression pass also verifies that the Next/Activate action re-enables as fields become valid and that Back moves through prior wizard steps while Cancel retains the discard confirmation.
 
 ## Browser smoke check
 
