@@ -1,3 +1,9 @@
+import {
+  bangkokCalendarDate,
+  normalizeShortcutCapturedAt,
+  validateShortcutTransactionDate,
+} from './shortcut_date.ts'
+
 const SOURCES = new Set(['uob_thai', 'scb_connect', 'line_wallet'])
 const CAPTURE_METHODS = new Set(['line_notification', 'whats_on_screen'])
 const DIRECTIONS = new Set(['debit', 'credit'])
@@ -17,7 +23,8 @@ export type CaptureEnvelopeV1 = {
   description: string | null
   account_last4: string | null
   card_last4: string | null
-  transaction_date?: string | null
+  transaction_date: string | null
+  transaction_reference: string | null
   transaction_datetime: string | null
   captured_at: string
   capture_method: 'line_notification' | 'whats_on_screen'
@@ -29,6 +36,15 @@ export type CaptureEnvelopeV1 = {
 }
 
 export type ValidatedCaptureV1 = CaptureEnvelopeV1
+
+export type CaptureDedupeIdentity = {
+  version: 1 | 2
+  dedupeKey: string
+  baseKey: string
+  legacyKey: string
+  strong: boolean
+  capturedAt: string
+}
 
 export class ShortcutRequestError extends Error {
   status: number
@@ -123,16 +139,72 @@ export async function sha256Hex(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-export async function validateCaptureV1(input: unknown): Promise<ValidatedCaptureV1> {
+function captureCalendarDate(capture: Partial<CaptureEnvelopeV1> & Record<string, unknown>): string {
+  const transactionDate = validateShortcutTransactionDate(capture.transaction_date, true)
+  if (transactionDate) return transactionDate
+  const transactionDateTime = isoDate(capture.transaction_datetime, true)
+  if (transactionDateTime) return bangkokCalendarDate(transactionDateTime)
+  if (cleanOptional(capture.transaction_reference, 128)) return ''
+  return bangkokCalendarDate(String(capture.captured_at || ''))
+}
+
+function canonicalInstant(value: string): string {
+  return new Date(value).toISOString()
+}
+
+export async function buildCaptureDedupeIdentity(
+  capture: Partial<CaptureEnvelopeV1> & Record<string, unknown>,
+): Promise<CaptureDedupeIdentity> {
+  const version = Number(capture.dedupe_version ?? 1)
+  if (version !== 1 && version !== 2) throw invalid()
+  const capturedAt = isoDate(capture.captured_at)
+  const amount = canonicalAmount(capture.amount)
+  const identifier = String(capture.account_last4 || capture.card_last4 || '')
+  const date = captureCalendarDate({ ...capture, captured_at: capturedAt })
+  const description = normalizeCaptureText(capture.description || capture.merchant || '').toLocaleLowerCase('en-US')
+  const relevant = await sha256Hex(normalizeCaptureText(capture.relevant_text))
+  const baseMaterial = [
+    'v2-base',
+    String(capture.source || ''),
+    String(capture.direction || ''),
+    amount,
+    CURRENCY,
+    identifier,
+    date,
+    description,
+    relevant,
+  ].join('|')
+  const baseKey = await sha256Hex(baseMaterial)
+  const transactionDateTime = isoDate(capture.transaction_datetime, true)
+  const transactionReference = cleanOptional(capture.transaction_reference, 128)
+  const strong = Boolean(transactionDateTime || transactionReference)
+  const strongMaterial = [
+    'v2-strong',
+    baseKey,
+    transactionDateTime ? canonicalInstant(transactionDateTime) : '',
+    transactionReference || '',
+  ].join('|')
+  const bucket = Math.floor(Date.parse(capturedAt) / (5 * 60 * 1000))
+  const dedupeMaterial = strong ? strongMaterial : ['v2-timeless', baseKey, bucket].join('|')
+  const dedupeKey = await sha256Hex(dedupeMaterial)
+  const legacyKey = await sha256Hex(await canonicalDedupeMaterial({ ...capture, dedupe_version: 1 }))
+  if (version === 1) return { version, dedupeKey: legacyKey, baseKey, legacyKey, strong, capturedAt }
+  return { version: version as 1 | 2, dedupeKey, baseKey, legacyKey, strong, capturedAt }
+}
+
+export async function validateCaptureV1(input: unknown, serverNow = new Date()): Promise<ValidatedCaptureV1> {
   if (!isRecord(input)) throw invalid()
   if (input.schema_version !== SCHEMA_VERSION || typeof input.parser_version !== 'string' || !input.parser_version.trim()) throw invalid()
   if (!SOURCES.has(String(input.source)) || !CAPTURE_METHODS.has(String(input.capture_method)) || !DIRECTIONS.has(String(input.direction))) throw invalid()
-  if (input.currency !== CURRENCY || input.parse_status !== 'complete' || Number(input.dedupe_version) !== 1) throw invalid()
+  const dedupeVersion = Number(input.dedupe_version)
+  if (input.currency !== CURRENCY || input.parse_status !== 'complete' || ![1, 2].includes(dedupeVersion)) throw invalid()
 
   const rawText = normalizeCaptureText(input.raw_text)
   const relevantText = normalizeCaptureText(input.relevant_text)
   if (!rawText || !relevantText || rawText.length > MAX_TEXT_LENGTH || relevantText.length > MAX_TEXT_LENGTH) throw invalid()
-  const capturedAt = isoDate(input.captured_at)
+  const capturedAt = normalizeShortcutCapturedAt(input.captured_at, serverNow.toISOString())
+  const transactionDate = validateShortcutTransactionDate(input.transaction_date, true)
+  const transactionReference = cleanOptional(input.transaction_reference, 128)
   const transactionDateTime = isoDate(input.transaction_datetime, true)
   const amount = canonicalAmount(input.amount)
   const merchant = cleanOptional(input.merchant)
@@ -154,16 +226,20 @@ export async function validateCaptureV1(input: unknown): Promise<ValidatedCaptur
     description,
     account_last4: accountLast4,
     card_last4: cardLast4,
+    transaction_date: transactionDate,
+    transaction_reference: transactionReference,
     transaction_datetime: transactionDateTime,
     captured_at: capturedAt,
     capture_method: String(input.capture_method) as 'line_notification' | 'whats_on_screen',
     raw_text: rawText,
     relevant_text: relevantText,
     parse_status: 'complete',
-    dedupe_version: 1,
+    dedupe_version: dedupeVersion,
     dedupe_key: dedupeKey,
   }
-  const expectedKey = await sha256Hex(await canonicalDedupeMaterial(normalized))
+  const expectedKey = dedupeVersion === 1
+    ? await sha256Hex(await canonicalDedupeMaterial(normalized))
+    : (await buildCaptureDedupeIdentity(normalized)).dedupeKey
   if (expectedKey !== dedupeKey) throw invalid('invalid_dedupe_key')
   return normalized
 }

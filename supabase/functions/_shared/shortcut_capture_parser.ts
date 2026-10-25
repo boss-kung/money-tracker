@@ -1,7 +1,6 @@
 import {
-  canonicalDedupeMaterial,
+  buildCaptureDedupeIdentity,
   normalizeCaptureText,
-  sha256Hex,
   ShortcutRequestError,
   type ValidatedCaptureV1,
 } from './shortcut_capture.ts'
@@ -260,13 +259,14 @@ function payloadFromCandidate(
     account_last4: candidate.accountLast4,
     card_last4: candidate.cardLast4,
     transaction_date: candidate.transactionDate,
+    transaction_reference: null,
     transaction_datetime: candidate.transactionDateTime,
     captured_at: capturedAt,
     capture_method: captureMethod,
     raw_text: candidate.text,
     relevant_text: normalizeCaptureText(candidate.relevantText),
     parse_status: 'complete',
-    dedupe_version: 1,
+    dedupe_version: 2,
   }
 }
 
@@ -276,7 +276,7 @@ async function finalizeCapture(
   captureMethod: 'line_notification' | 'whats_on_screen',
 ): Promise<ValidatedCaptureV1> {
   const payload: ValidatedCaptureV1 = { ...payloadFromCandidate(candidate, capturedAt, captureMethod), dedupe_key: '' }
-  payload.dedupe_key = await sha256Hex(await canonicalDedupeMaterial(payload))
+  payload.dedupe_key = (await buildCaptureDedupeIdentity(payload)).dedupeKey
   return payload
 }
 
