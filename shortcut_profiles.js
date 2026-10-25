@@ -447,7 +447,8 @@
   }
 
   function copyMarker() {
-    const code = detail?.profile?.short_code || completion?.short_code || ''
+    const renderedMarker = root.document?.querySelector?.('.shortcut-profile-marker code')?.textContent?.trim() || ''
+    const code = renderedMarker.replace(/^MT-PROFILE:/u, '') || detail?.profile?.short_code || completion?.short_code || ''
     if (!code) return
     root.navigator?.clipboard?.writeText?.(`MT-PROFILE:${code}`).then(() => notify('คัดลอกแล้ว', 'success')).catch(() => notify('คัดลอกไม่สำเร็จ ให้แตะค้างที่รหัส', 'warn'))
   }

@@ -117,6 +117,7 @@ test('conflict screen exposes the latest version and discards draft state safely
 })
 
 test('profile marker follows the currently opened detail profile', () => {
+  assert.match(source, /querySelector\?\.\('\.shortcut-profile-marker code'\)/)
   assert.match(source, /detail\?\.profile\?\.short_code \|\| completion\?\.short_code/)
   assert.match(source, /completion = null\n    detail = \{ profile/)
 })
