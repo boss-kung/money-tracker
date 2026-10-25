@@ -73,10 +73,31 @@ def field_dict(items: list[dict]) -> dict:
     }
 
 
-def dictionary_action(action_uuid: str, raw_uuid: str, capture_method: str) -> dict:
+def current_date_action(action_uuid: str) -> dict:
+    return {
+        "WFWorkflowActionIdentifier": "is.workflow.actions.date",
+        "WFWorkflowActionParameters": {"UUID": action_uuid},
+    }
+
+
+def format_date_action(action_uuid: str, date_uuid: str) -> dict:
+    return {
+        "WFWorkflowActionIdentifier": "is.workflow.actions.format.date",
+        "WFWorkflowActionParameters": {
+            "UUID": action_uuid,
+            "WFInput": direct_token(date_uuid, "Date"),
+            "WFDateFormatStyle": "Custom",
+            "WFDateFormat": "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "WFDateFormatTimeZone": "Asia/Bangkok",
+        },
+    }
+
+
+def dictionary_action(action_uuid: str, raw_uuid: str, capture_method: str, captured_at_uuid: str) -> dict:
     items = [
         field_item("raw_text", token_field(raw_uuid, "Text")),
         field_item("capture_method", capture_method),
+        field_item("captured_at", token_field(captured_at_uuid, "Formatted Date")),
     ]
     return {
         "WFWorkflowActionIdentifier": "is.workflow.actions.dictionary",
@@ -87,7 +108,7 @@ def dictionary_action(action_uuid: str, raw_uuid: str, capture_method: str) -> d
     }
 
 
-def request_action(action_uuid: str, raw_text_uuid: str, capture_method: str) -> dict:
+def request_action(action_uuid: str, raw_text_uuid: str, capture_method: str, captured_at_uuid: str) -> dict:
     headers = field_dict([
         field_item("Authorization", TOKEN_PLACEHOLDER),
         field_item("Content-Type", "application/json"),
@@ -95,6 +116,7 @@ def request_action(action_uuid: str, raw_text_uuid: str, capture_method: str) ->
     body = field_dict([
         field_item("raw_text", token_field(raw_text_uuid, "Text")),
         field_item("capture_method", capture_method),
+        field_item("captured_at", token_field(captured_at_uuid, "Formatted Date")),
     ])
     return {
         "WFWorkflowActionIdentifier": "is.workflow.actions.downloadurl",
@@ -156,12 +178,17 @@ def show_result_action(message: str) -> dict:
 
 
 def make_workflow(name: str, capture_method: str, manual: bool) -> dict:
+    date_uuid = uid()
+    formatted_date_uuid = uid()
     screen_uuid = uid()
     text_uuid = uid()
     dictionary_uuid = uid()
     request_uuid = uid()
 
-    actions: list[dict] = []
+    actions: list[dict] = [
+        current_date_action(date_uuid),
+        format_date_action(formatted_date_uuid, date_uuid),
+    ]
     if manual:
         actions.append({
             "WFWorkflowActionIdentifier": "is.workflow.actions.getonscreencontext",
@@ -180,16 +207,16 @@ def make_workflow(name: str, capture_method: str, manual: bool) -> dict:
 
     if manual:
         actions.extend([
-            dictionary_action(dictionary_uuid, text_uuid, capture_method),
-            request_action(request_uuid, text_uuid, capture_method),
+            dictionary_action(dictionary_uuid, text_uuid, capture_method, formatted_date_uuid),
+            request_action(request_uuid, text_uuid, capture_method, formatted_date_uuid),
             quick_look_action(request_uuid),
         ])
     else:
         grouping_uuid = uid()
         actions.extend([
             conditional_action(uid(), grouping_uuid, 0, text_uuid),
-            dictionary_action(dictionary_uuid, text_uuid, capture_method),
-            request_action(request_uuid, text_uuid, capture_method),
+            dictionary_action(dictionary_uuid, text_uuid, capture_method, formatted_date_uuid),
+            request_action(request_uuid, text_uuid, capture_method, formatted_date_uuid),
             quick_look_action(request_uuid),
             conditional_action(uid(), grouping_uuid, 1),
             show_result_action(
