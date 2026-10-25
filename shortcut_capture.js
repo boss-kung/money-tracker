@@ -12,6 +12,7 @@
   const summaries = new Map()
   const claims = new Map()
   let activeCaptureId = ''
+  let activeDateFallback = null
   let loaded = false
   let pendingCount = 0
   let inboxView = 'pending'
@@ -106,7 +107,7 @@
   }
 
   function safeSummary(item) {
-    const allowed = ['capture_id', 'status', 'accepted_at', 'updated_at', 'source', 'bank', 'amount', 'currency', 'direction', 'merchant', 'description', 'account_last4', 'card_last4', 'transaction_datetime', 'captured_at', 'capture_method']
+    const allowed = ['capture_id', 'status', 'accepted_at', 'updated_at', 'source', 'bank', 'amount', 'currency', 'direction', 'merchant', 'description', 'account_last4', 'card_last4', 'transaction_date', 'transaction_datetime', 'captured_at', 'capture_method']
     return Object.fromEntries(allowed.filter(key => item && Object.prototype.hasOwnProperty.call(item, key)).map(key => [key, item[key]]))
   }
 
@@ -146,7 +147,7 @@
     const capture = claims.get(String(id)); if (!capture) return { ok: true }
     const scope = requireAuth()
     const result = await request('shortcut-inbox', '/release', { method: 'POST', body: { capture_id: String(id), claim_secret: capture.claim_secret } }, scope)
-    claims.delete(String(id)); if (activeCaptureId === String(id)) activeCaptureId = ''
+    claims.delete(String(id)); if (activeCaptureId === String(id)) { activeCaptureId = ''; activeDateFallback = null }
     return result
   }
   async function dismiss(id) {
@@ -168,7 +169,7 @@
     const transactionId = core.transactionId(capture.captureId)
     try {
       const result = await request('shortcut-inbox', '/consume', { method: 'POST', body: { capture_id: capture.captureId, claim_secret: capture.claim_secret, transaction_id: transactionId } }, scope)
-      claims.delete(capture.captureId); removeSummary(capture.captureId); pendingCount = Math.max(0, pendingCount - 1); updateInboxBadge(); if (activeCaptureId === capture.captureId) activeCaptureId = ''
+      claims.delete(capture.captureId); removeSummary(capture.captureId); pendingCount = Math.max(0, pendingCount - 1); updateInboxBadge(); if (activeCaptureId === capture.captureId) { activeCaptureId = ''; activeDateFallback = null }
       return result
     } catch (error) {
       if (error.retryable || error.code === 'capture_claimed') {
@@ -213,6 +214,7 @@
       state.editingTxId = null
       state.tx = { ...(state.tx || {}), ...mapped.draft, externalCapture: { provider: 'ios_shortcut', captureId: String(id), dedupeVersion: payload.dedupe_version, dedupeKey: payload.dedupe_key } }
       activeCaptureId = String(id)
+      activeDateFallback = mapped.usedCapturedAtFallback ? { captureId: String(id), date: mapped.draft.date } : null
       root.App?.openOverlay?.('overlay-add-tx')
       root.App?._renderAddTxDetail?.()
       return mapped
@@ -233,6 +235,7 @@
     const state = appState()
     const savedType = state?.tx?.type
     activeCaptureId = ''
+    activeDateFallback = null
     if (['expense', 'income'].includes(savedType) && capture.capture) {
       const mappedWallet = state?.tx?.walletId
       const key = core.aliasKey({ ...capture.capture, direction: savedType === 'income' ? 'credit' : 'debit' })
@@ -252,6 +255,7 @@
     if (!activeCaptureId) return undefined
     const id = activeCaptureId
     activeCaptureId = ''
+    activeDateFallback = null
     if (!online()) return undefined
     return release(id).catch(() => undefined)
   }
@@ -263,6 +267,7 @@
 
   function dateLabel(value) {
     if (!value) return ''
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value)
     try { return new Date(value).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }) } catch (_) { return String(value) }
   }
 
@@ -279,7 +284,7 @@
       const id = escapeHtml(item.capture_id)
       const title = escapeHtml(item.merchant || item.description || item.bank || item.source || 'รายการจาก Shortcut')
       const detail = escapeHtml([item.bank || item.source, item.account_last4 ? `บัญชี ••••${item.account_last4}` : '', item.card_last4 ? `บัตร ••••${item.card_last4}` : ''].filter(Boolean).join(' · '))
-      const date = escapeHtml(dateLabel(item.transaction_datetime || item.captured_at || item.accepted_at))
+      const date = escapeHtml(dateLabel(item.transaction_date || item.transaction_datetime || item.captured_at || item.accepted_at))
       const amount = escapeHtml(amountLabel(item))
       const status = escapeHtml(item.status || (dismissed ? 'dismissed' : 'pending'))
       return `<article class="shortcut-inbox-item" data-shortcut-inbox-id="${id}">
@@ -444,13 +449,32 @@
     host.appendChild(details)
   }
 
+  function injectDateFallbackWarning() {
+    const doc = root.document
+    const existing = doc?.querySelector?.('.shortcut-capture-date-warning')
+    const state = appState()
+    const fallback = activeDateFallback
+    const shouldShow = Boolean(fallback && fallback.captureId === activeCaptureId && String(state?.tx?.date || '') === String(fallback.date || ''))
+    if (!shouldShow) { existing?.remove?.(); return }
+    if (existing) return
+    const input = doc?.getElementById?.('tx-date')
+    const host = input?.closest?.('.form-group') || input?.parentElement
+    if (!host || !doc?.createElement) return
+    const warning = doc.createElement('div')
+    warning.className = 'shortcut-capture-date-warning form-hint'
+    warning.setAttribute('role', 'status')
+    warning.textContent = 'ไม่พบวันที่รายการ จึงใช้วันที่รับแจ้งเตือน โปรดตรวจสอบ'
+    host.appendChild(warning)
+  }
+
   const api = Object.freeze({ refresh, claim, release, dismiss, restore, openDraft, openInbox, openTokenSettings, listTokens, createToken, revokeToken, retryAcknowledgements, snapshot })
   root.MTScreenHooks?.register?.('transactionSave', 'shortcut-capture.save-before-ack', onTransactionSave, { priority: 200 })
   root.MTScreenHooks?.register?.('transactionClose', 'shortcut-capture.release-claim', onTransactionClose, { priority: 200 })
   root.MTScreenHooks?.register?.('transactions', 'shortcut-capture.inbox-button', injectShortcutLauncher, { priority: 200 })
   root.MTScreenHooks?.register?.('more', 'shortcut-capture.token-settings', injectTokenSettings, { priority: 200 })
+  root.MTScreenHooks?.register?.('addTransactionDetail', 'shortcut-capture.date-warning', injectDateFallbackWarning, { priority: 200 })
   root.MTScreenHooks?.register?.('addTransactionDetail', 'shortcut-capture.review-disclosure', injectReviewDisclosure, { priority: 200 })
-  root.addEventListener?.('mt:auth-state-changed', () => { summaries.clear(); claims.clear(); activeCaptureId = ''; pendingCount = 0; tokenResult = null; loaded = false })
+  root.addEventListener?.('mt:auth-state-changed', () => { summaries.clear(); claims.clear(); activeCaptureId = ''; activeDateFallback = null; pendingCount = 0; tokenResult = null; loaded = false })
   root.addEventListener?.('online', () => { retryAcknowledgements().catch(() => {}) })
   root.addEventListener?.('pageshow', () => { refresh().catch(() => {}); retryAcknowledgements().catch(() => {}) })
   root.document?.addEventListener?.('visibilitychange', () => { if (root.document.visibilityState === 'visible') { refresh().catch(() => {}); retryAcknowledgements().catch(() => {}) } })

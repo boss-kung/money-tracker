@@ -119,7 +119,7 @@ function preview(row: CaptureRow, payload: Record<string, unknown>) {
     capture_id: String(row.id), status: String(row.status), accepted_at: row.accepted_at, updated_at: row.updated_at,
     source: payload.source, bank: payload.bank, amount: payload.amount, currency: payload.currency, direction: payload.direction,
     merchant: payload.merchant, description: payload.description, account_last4: payload.account_last4, card_last4: payload.card_last4,
-    transaction_datetime: payload.transaction_datetime, captured_at: payload.captured_at, capture_method: payload.capture_method,
+    transaction_date: payload.transaction_date, transaction_datetime: payload.transaction_datetime, captured_at: payload.captured_at, capture_method: payload.capture_method,
   }
 }
 

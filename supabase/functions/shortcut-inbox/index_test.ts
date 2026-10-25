@@ -15,7 +15,7 @@ function req(method: string, path: string, value?: unknown) {
 const userId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const captureId = '22222222-2222-4222-8222-222222222222'
 const payload = {
-  schema_version: 'money-tracker.capture.v1', parser_version: 'ios-shortcut-1.0.0', source: 'scb_connect', bank: 'SCB', amount: '80.00', currency: 'THB', direction: 'debit', merchant: 'MBR9', description: 'MBR9', account_last4: '4078', card_last4: null, transaction_datetime: '2026-10-05T21:39:00+07:00', captured_at: '2026-10-05T21:40:03+07:00', capture_method: 'whats_on_screen', raw_text: 'RAW SECRET', relevant_text: 'RELEVANT SECRET', parse_status: 'complete', dedupe_version: 1, dedupe_key: 'a'.repeat(64),
+  schema_version: 'money-tracker.capture.v1', parser_version: 'ios-shortcut-1.0.0', source: 'scb_connect', bank: 'SCB', amount: '80.00', currency: 'THB', direction: 'debit', merchant: 'MBR9', description: 'MBR9', account_last4: '4078', card_last4: null, transaction_date: '2026-10-04', transaction_reference: null, transaction_datetime: '2026-10-05T21:39:00+07:00', captured_at: '2026-10-05T21:40:03+07:00', capture_method: 'whats_on_screen', raw_text: 'RAW SECRET', relevant_text: 'RELEVANT SECRET', parse_status: 'complete', dedupe_version: 1, dedupe_key: 'a'.repeat(64),
 }
 
 function captureRow(overrides: Record<string, unknown> = {}) {
@@ -79,6 +79,7 @@ Deno.test('auth precedes privileged access and lists owner-scoped preview fields
   const item = (result.items as Record<string, unknown>[])[0]
   if ('raw_text' in item || 'relevant_text' in item) throw new Error('list leaked review text')
   equal(item.merchant, 'MBR9')
+  equal(item.transaction_date, '2026-10-04')
   equal(result.next_cursor, null)
 })
 

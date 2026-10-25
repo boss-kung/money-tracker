@@ -87,6 +87,18 @@ test('claim uses one stable non-secret browser device UUID and save hook acknowl
   assert.equal(env.calls.filter(call => call.url.endsWith('/consume')).length, 1)
 })
 
+test('keeps transaction_date in safe list and claim previews without raw text', async () => {
+  const captureId = '33333333-3333-4333-8333-333333333333'
+  const env = setup({ fetchImpl: async url => url.endsWith('/claim')
+    ? response(200, { capture_id: captureId, capture: { source: 'uob_thai', amount: '12.34', direction: 'debit', merchant: 'SHOP', transaction_date: '2026-10-24', captured_at: '2026-10-25T16:20:00+07:00', raw_text: 'secret', relevant_text: 'secret' }, claim_secret: 'claim-secret' })
+    : response(200, { items: [] }) })
+  await env.api.claim(captureId)
+  const summary = env.api.snapshot().summaries[0]
+  assert.equal(summary.transaction_date, '2026-10-24')
+  assert.equal('raw_text' in summary, false)
+  assert.equal('relevant_text' in summary, false)
+})
+
 test('opens a capture draft through the app state accessor when state is not a window global', async () => {
   const captureId = '22222222-2222-4222-8222-222222222222'
   const appState = { wallets: [{ id: 'wallet-1', type: 'bank' }], transactions: [], tx: {} }

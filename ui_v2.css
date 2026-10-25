@@ -1126,6 +1126,7 @@ html.dark.ui-v2 .mt-net-card::after { background: var(--bg); }
 .shortcut-inbox-raw { margin:12px 0; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2, var(--bg)); }
 .shortcut-inbox-raw summary { min-height:44px; display:flex; align-items:center; cursor:pointer; color:var(--muted); }
 .shortcut-inbox-raw pre { max-height:220px; overflow:auto; margin:8px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; font:12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.shortcut-capture-date-warning { margin-top:6px; color:var(--expense, #b91c1c); font-size:12px; line-height:1.45; }
 .shortcut-token-settings { margin-top:12px; }
 .shortcut-token-settings-row { width:100%; border:0; color:inherit; background:transparent; text-align:left; font:inherit; cursor:pointer; }
 .shortcut-token-settings-help { margin-top:2px; color:var(--muted); font-size:12px; font-weight:400; }

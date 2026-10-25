@@ -33,6 +33,29 @@ test('uses captured time as an explicit fallback and keeps amounts positive', ()
   assert.equal(result.draft.date, '2026-10-05')
 })
 
+test('uses transaction date precedence and Bangkok calendar conversion with provenance', () => {
+  const explicit = core.mapCaptureToDraft(capture({
+    transaction_date: '2026-10-04',
+    transaction_datetime: '2026-10-05T00:30:00+07:00',
+  }))
+  assert.equal(explicit.draft.date, '2026-10-04')
+  assert.equal(explicit.dateSource, 'transaction_date')
+  assert.equal(explicit.usedCapturedAtFallback, false)
+
+  const datetime = core.mapCaptureToDraft(capture({
+    transaction_date: null,
+    transaction_datetime: '2026-10-24T18:30:00Z',
+  }))
+  assert.equal(datetime.draft.date, '2026-10-25')
+  assert.equal(datetime.dateSource, 'transaction_datetime')
+  assert.equal(datetime.usedCapturedAtFallback, false)
+
+  const captured = core.mapCaptureToDraft(capture({ transaction_date: null, transaction_datetime: null, captured_at: '2026-10-24T18:30:00Z' }))
+  assert.equal(captured.draft.date, '2026-10-25')
+  assert.equal(captured.dateSource, 'captured_at')
+  assert.equal(captured.usedCapturedAtFallback, true)
+})
+
 test('alias priority is exact and merchant suggestion is only a fallback', () => {
   const key = core.aliasKey(capture())
   assert.deepEqual(key, { source: 'scb_connect', kind: 'account', last4: '4078' })

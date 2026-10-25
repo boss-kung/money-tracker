@@ -28,6 +28,13 @@ test('inbox and token settings use hooks, escaped review disclosure, and confirm
   assert.doesNotMatch(capture, /openDraft\([^)]*\)[\s\S]{0,500}saveTx\(/)
 })
 
+test('fallback date warning is scoped to an unchanged Shortcut draft date', () => {
+  assert.match(capture, /shortcut-capture-date-warning/)
+  assert.match(capture, /ไม่พบวันที่รายการ จึงใช้วันที่รับแจ้งเตือน โปรดตรวจสอบ/)
+  assert.match(capture, /tx-date/)
+  assert.match(capture, /activeDateFallback/)
+})
+
 test('responsive inbox and token controls have accessible touch-target styles', () => {
   for (const name of ['shortcut-inbox-', 'shortcut-token-']) assert.match(css, new RegExp(`\\.${name}`))
   assert.match(css, /shortcut-inbox[^}]*min-height:\s*44px/s)

@@ -29,9 +29,25 @@
     return match ? match[1] : ''
   }
 
+  function bangkokDatePart(value) {
+    if (!value) return ''
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).formatToParts(new Date(String(value)))
+      const get = type => parts.find(part => part.type === type)?.value || ''
+      const result = `${get('year')}-${get('month')}-${get('day')}`
+      return /^\d{4}-\d{2}-\d{2}$/.test(result) ? result : ''
+    } catch (_) { return '' }
+  }
+
   function mapCaptureToDraft(capture, context = {}) {
     const direction = capture?.direction === 'credit' ? 'income' : 'expense'
-    const usedCapturedAtFallback = !capture?.transaction_datetime
+    const transactionDate = datePart(capture?.transaction_date)
+    const transactionDateTime = bangkokDatePart(capture?.transaction_datetime)
+    const capturedAtDate = bangkokDatePart(capture?.captured_at)
+    const dateSource = transactionDate ? 'transaction_date' : transactionDateTime ? 'transaction_datetime' : 'captured_at'
+    const usedCapturedAtFallback = dateSource === 'captured_at'
     const alias = aliasKey(capture)
     const exact = findWalletByAlias(context.wallets, alias)
     const suggestedWallet = exact || (typeof context.suggestWallet === 'function' ? context.suggestWallet(capture) : null)
@@ -45,7 +61,7 @@
       categoryId: suggestedCategory || context.defaultCategoryId || '',
       merchant: String(capture?.merchant || ''),
       note: String(capture?.description || ''),
-      date: datePart(capture?.transaction_datetime) || datePart(capture?.captured_at),
+      date: transactionDate || transactionDateTime || capturedAtDate,
       external: {
         captureId: String(capture?.capture_id || capture?.id || ''),
         source: 'shortcut',
@@ -53,7 +69,7 @@
         dedupeKey: String(capture?.dedupe_key || ''),
       },
     }
-    return { draft, aliasKey: alias, usedCapturedAtFallback }
+    return { draft, aliasKey: alias, dateSource, usedCapturedAtFallback }
   }
 
   function findExistingCaptureTransaction(transactions, captureId) {
