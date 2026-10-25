@@ -23489,6 +23489,13 @@ try { window.__mountUpcomingBillsFeature?.() } catch (err) { console.error('Upco
       </div>`
 
     const settingsHtml = `
+      <div id="shortcut-token-settings">
+        <div class="sec-title">เชื่อมต่อ</div>
+        <div class="card card-pad">
+          ${row({ icon: '📱', label: 'เชื่อมต่อ iOS Shortcut', desc: 'จัดการ Token สำหรับแจ้งเตือน', onclick: "App.ensureFeatureAndCall('capture','openShortcutTokenSettings')" })}
+          ${row({ icon: '🏦', label: 'รูปแบบแจ้งเตือนธนาคาร', desc: 'เพิ่ม UCHOOSE หรือแอปอื่นจากตัวอย่าง 2 รายการ', onclick: "App.ensureFeatureAndCall('capture','openShortcutProfileSettings')" })}
+        </div>
+      </div>
       <div class="sec-title">จัดการ</div>
       <div class="card card-pad">
         ${row({ icon: '🏷️', label: 'จัดการหมวดหมู่', value: 'รายรับ/รายจ่าย', onclick: "App.openCategoryScreen('expense')" })}

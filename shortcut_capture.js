@@ -473,6 +473,15 @@
     try { const result = await listTokens(); root.App?.openSubScreen?.(renderTokenMarkup(result), { animate: false }); bindTokenActions() } catch (error) { rerenderToken(error) }
   }
 
+  function openShortcutProfileSettings() {
+    return root.MTShortcutProfiles?.openList?.()
+  }
+
+  if (root.App) {
+    root.App.openShortcutTokenSettings = openTokenSettings
+    root.App.openShortcutProfileSettings = openShortcutProfileSettings
+  }
+
   function updateInboxBadge() {
     const badge = root.document?.querySelector?.('.shortcut-inbox-badge')
     if (badge) { const count = pendingCount; badge.textContent = count > 99 ? '99+' : String(count); badge.hidden = count < 1 }
@@ -540,7 +549,7 @@
     host.appendChild(warning)
   }
 
-  const api = Object.freeze({ refresh, claim, release, dismiss, restore, openDraft, openNeedsReview, openInbox, openTokenSettings, listTokens, createToken, revokeToken, listProfiles, getProfile, createProfile, updateProfile, archiveProfile, retryAcknowledgements, snapshot })
+  const api = Object.freeze({ refresh, claim, release, dismiss, restore, openDraft, openNeedsReview, openInbox, openTokenSettings, openShortcutProfileSettings, listTokens, createToken, revokeToken, listProfiles, getProfile, createProfile, updateProfile, archiveProfile, retryAcknowledgements, snapshot })
   root.MTScreenHooks?.register?.('transactionSave', 'shortcut-capture.save-before-ack', onTransactionSave, { priority: 200 })
   root.MTScreenHooks?.register?.('transactionClose', 'shortcut-capture.release-claim', onTransactionClose, { priority: 200 })
   root.MTScreenHooks?.register?.('transactions', 'shortcut-capture.inbox-button', injectShortcutLauncher, { priority: 200 })

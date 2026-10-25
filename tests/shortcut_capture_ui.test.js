@@ -5,6 +5,7 @@ const path = require('node:path')
 
 const root = path.join(__dirname, '..')
 const capture = fs.readFileSync(path.join(root, 'shortcut_capture.js'), 'utf8')
+const app = fs.readFileSync(path.join(root, 'app_v2.js'), 'utf8')
 const css = fs.readFileSync(path.join(root, 'ui_v2.css'), 'utf8')
 const loader = fs.readFileSync(path.join(root, 'feature_loader.js'), 'utf8')
 const manifest = require('../release_manifest.js')
@@ -26,6 +27,14 @@ test('inbox and token settings use hooks, escaped review disclosure, and confirm
   assert.match(capture, /Copy|คัดลอก/)
   assert.match(capture, /escapeHtml|escape/)
   assert.doesNotMatch(capture, /openDraft\([^)]*\)[\s\S]{0,500}saveTx\(/)
+})
+
+test('Shortcut settings stay visible before the deferred capture feature loads', () => {
+  assert.match(app, /shortcut-token-settings/)
+  assert.match(app, /เชื่อมต่อ iOS Shortcut/)
+  assert.match(app, /รูปแบบแจ้งเตือนธนาคาร/)
+  assert.match(app, /ensureFeatureAndCall\('capture'/)
+  assert.match(capture, /openShortcutProfileSettings/)
 })
 
 test('fallback date warning is scoped to an unchanged Shortcut draft date', () => {
