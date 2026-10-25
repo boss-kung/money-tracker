@@ -5,6 +5,11 @@ import {
   ShortcutRequestError,
   type ValidatedCaptureV1,
 } from './shortcut_capture.ts'
+import {
+  normalizeShortcutCapturedAt,
+  parseShortcutDateFromText,
+  type ShortcutParsedDate,
+} from './shortcut_date.ts'
 
 const CAPTURE_METHODS = new Set(['line_notification', 'whats_on_screen'])
 const PARSER_VERSION = 'shortcut-server-1.0.0'
@@ -23,7 +28,9 @@ type ParsedCandidate = {
   merchant: string | null
   accountLast4: string | null
   cardLast4: string | null
+  transactionDate: string | null
   transactionDateTime: string | null
+  dateInvalid: boolean
   availableCredit: string | null
   complete: boolean
 }
@@ -65,19 +72,6 @@ function availableCredit(value: string | undefined): string | null {
   if (!value) return null
   const parsed = Number(value.replaceAll(',', ''))
   return Number.isFinite(parsed) && parsed >= 0 ? parsed.toFixed(2) : null
-}
-
-function dateFromText(text: string): string | null {
-  const match = text.match(/(\d{2})\/(\d{2})\/(\d{4})\s+@?(\d{2}):(\d{2})/u)
-  if (!match) return null
-  const [, day, month, year, hour, minute] = match
-  return `${year}-${month}-${day}T${hour}:${minute}:00+07:00`
-}
-
-function timestamp(value: unknown, fallback: string): string {
-  const candidate = typeof value === 'string' && value.trim() ? value.trim() : fallback
-  if (Number.isNaN(Date.parse(candidate)) || !/[zZ]|[+-]\d{2}:?\d{2}$/.test(candidate)) invalid()
-  return candidate.replace(/z$/i, 'Z').replace(/([+-]\d{2})(\d{2})$/, '$1:$2')
 }
 
 function rawText(value: unknown): string {
@@ -123,8 +117,16 @@ function parseCandidate(
   source: CaptureSource,
   text: string,
   captureMethod: 'line_notification' | 'whats_on_screen',
+  capturedAt: string,
 ): ParsedCandidate {
   text = trimCandidateText(source, text)
+  let parsedDate: ShortcutParsedDate = { transactionDate: null, transactionDateTime: null }
+  let dateInvalid = false
+  try {
+    parsedDate = parseShortcutDateFromText(text, capturedAt)
+  } catch {
+    dateInvalid = true
+  }
   if (source === 'uob_thai' || source === 'uob_english') {
     const thai = source === 'uob_thai'
     const transactionText = thai ? text.split(/วงเงินคงเหลือใช้ได้/iu, 1)[0] : text
@@ -153,9 +155,11 @@ function parseCandidate(
       merchant,
       accountLast4: null,
       cardLast4,
-      transactionDateTime: dateFromText(text),
+      transactionDate: parsedDate.transactionDate,
+      transactionDateTime: parsedDate.transactionDateTime,
+      dateInvalid,
       availableCredit: availableCredit(availableCreditValue ?? undefined),
-      complete: Boolean(parsedAmount) && (captureMethod === 'line_notification' || Boolean(availableCreditWithSuffix)),
+      complete: !dateInvalid && Boolean(parsedAmount) && (captureMethod === 'line_notification' || Boolean(availableCreditWithSuffix)),
     }
   }
 
@@ -172,9 +176,11 @@ function parseCandidate(
       merchant: clean(text.match(credit ? /จากบัญชี\s+([^\n\r]+)/u : /เข้าบัญชี\s+([^\n\r]+)/u)?.[1]),
       accountLast4: text.match(credit ? /เข้าบัญชี[^\n\r]*X-(\d{4})/u : /จากบัญชี[^\n\r]*X-(\d{4})/u)?.[1] ?? null,
       cardLast4: null,
-      transactionDateTime: dateFromText(text),
+      transactionDate: parsedDate.transactionDate,
+      transactionDateTime: parsedDate.transactionDateTime,
+      dateInvalid,
       availableCredit: amount(text.match(/ยอดเงินที่ใช้ได้\s*([\d,]+(?:\.\d{1,2})?)\s*บาท/u)?.[1]),
-      complete: Boolean(parsedAmount) && (captureMethod === 'line_notification' || /ยอดเงินที่ใช้ได้\s*[\d,]+(?:\.\d{1,2})?\s*บาท/u.test(text)),
+      complete: !dateInvalid && Boolean(parsedAmount) && (captureMethod === 'line_notification' || /ยอดเงินที่ใช้ได้\s*[\d,]+(?:\.\d{1,2})?\s*บาท/u.test(text)),
     }
   }
 
@@ -188,9 +194,11 @@ function parseCandidate(
     merchant: clean(text.match(/Merchant:\s*([^\n\r]+)/iu)?.[1]),
     accountLast4: null,
     cardLast4: null,
-    transactionDateTime: dateFromText(text),
+    transactionDate: parsedDate.transactionDate,
+    transactionDateTime: parsedDate.transactionDateTime,
+    dateInvalid,
     availableCredit: amount(text.match(/Balance:\s*(?:THB\s*)?([\d,]+(?:\.\d{1,2})?)/iu)?.[1]),
-    complete: Boolean(parsedAmount) && (captureMethod === 'line_notification' || /Balance:\s*(?:THB\s*)?[\d,]+(?:\.\d{1,2})?/iu.test(text)),
+    complete: !dateInvalid && Boolean(parsedAmount) && (captureMethod === 'line_notification' || /Balance:\s*(?:THB\s*)?[\d,]+(?:\.\d{1,2})?/iu.test(text)),
   }
 }
 
@@ -203,9 +211,11 @@ function canPair(left: ParsedCandidate, right: ParsedCandidate): boolean {
     || (left.source === 'uob_english' && right.source === 'uob_thai'))) return false
   if (!left.amount || !right.amount || left.amount !== right.amount) return false
   if (!left.cardLast4 || !right.cardLast4 || left.cardLast4 !== right.cardLast4) return false
+  if (left.dateInvalid || right.dateInvalid) return false
   for (const [leftValue, rightValue] of [
     [left.merchant, right.merchant],
     [left.availableCredit, right.availableCredit],
+    [left.transactionDate, right.transactionDate],
     [left.transactionDateTime, right.transactionDateTime],
   ] as Array<[string | null, string | null]>) {
     if (leftValue && rightValue && canonicalOptional(leftValue) !== canonicalOptional(rightValue)) return false
@@ -223,7 +233,9 @@ function mergePair(left: ParsedCandidate, right: ParsedCandidate): ParsedCandida
     merchant: primary.merchant ?? other.merchant,
     accountLast4: primary.accountLast4 ?? other.accountLast4,
     cardLast4: primary.cardLast4 ?? other.cardLast4,
+    transactionDate: primary.transactionDate ?? other.transactionDate,
     transactionDateTime: primary.transactionDateTime ?? other.transactionDateTime,
+    dateInvalid: primary.dateInvalid || other.dateInvalid,
     availableCredit: primary.availableCredit ?? other.availableCredit,
     complete: primary.complete || other.complete,
   }
@@ -247,6 +259,7 @@ function payloadFromCandidate(
     description: candidate.merchant,
     account_last4: candidate.accountLast4,
     card_last4: candidate.cardLast4,
+    transaction_date: candidate.transactionDate,
     transaction_datetime: candidate.transactionDateTime,
     captured_at: capturedAt,
     capture_method: captureMethod,
@@ -270,10 +283,10 @@ async function finalizeCapture(
 export async function parseRawShortcutCaptures(input: unknown, now = new Date().toISOString()): Promise<RawCaptureBatch> {
   if (!isRecord(input) || typeof input.capture_method !== 'string' || !CAPTURE_METHODS.has(input.capture_method)) invalid()
   const originalText = rawText(input.raw_text)
-  const capturedAt = timestamp(input.captured_at, now)
+  const capturedAt = normalizeShortcutCapturedAt(input.captured_at, now)
   const captureMethod = input.capture_method as 'line_notification' | 'whats_on_screen'
   const segments = candidateSegments(normalizeForParsing(originalText))
-  const candidates = segments.map(({ source, text }) => parseCandidate(source, text, captureMethod))
+  const candidates = segments.map(({ source, text }) => parseCandidate(source, text, captureMethod, capturedAt))
 
   const logical: ParsedCandidate[] = []
   for (let index = 0; index < candidates.length; index += 1) {

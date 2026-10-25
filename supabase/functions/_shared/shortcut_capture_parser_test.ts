@@ -35,7 +35,7 @@ Deno.test('server parser returns the latest SCB block with complete fields', asy
       'ยอดเงินที่ใช้ได้ 1,088.37 บาท',
     ].join('\n'),
     capture_method: 'whats_on_screen',
-    captured_at: '2026-10-05T21:40:00+07:00',
+    captured_at: '2026-10-24T21:40:00+07:00',
   })
   equal(result.found, 2)
   const capture = result.captures[1].capture
@@ -54,7 +54,7 @@ Deno.test('server parser supports UOB Thai and LINE Wallet', async () => {
   const uob = await parseRawShortcutCapture({
     raw_text: 'มีการใช้บัตร UOB-1234 จำนวน 120.50 THB ที่ร้าน COFFEE วันที่/เวลา 05/10/2026 09:00 วงเงินคงเหลือใช้ได้ 3,000.00 THB',
     capture_method: 'line_notification',
-    captured_at: '2026-10-05T09:01:00+07:00',
+    captured_at: '2026-10-24T09:01:00+07:00',
   })
   equal(uob.source, 'uob_thai')
   equal(uob.card_last4, '1234')
@@ -63,7 +63,7 @@ Deno.test('server parser supports UOB Thai and LINE Wallet', async () => {
   const line = await parseRawShortcutCapture({
     raw_text: 'LINE Pay Purchase ฿45.00\nMerchant: Bakery\nBalance: THB 900.00',
     capture_method: 'line_notification',
-    captured_at: '2026-10-05T09:01:00+07:00',
+    captured_at: '2026-10-24T09:01:00+07:00',
   })
   equal(line.source, 'line_wallet')
   equal(line.merchant, 'Bakery')
@@ -74,7 +74,7 @@ Deno.test('server parser accepts compact UOB notification previews without avail
   const thai = await parseRawShortcutCapture({
     raw_text: 'UOB แจ้งเตือน\nมีการใช้บัตร UOB-1234 จำนวน 1,250.75 THB ที่ร้าน CENTRAL ONLINE',
     capture_method: 'line_notification',
-    captured_at: '2026-10-05T09:01:00+07:00',
+    captured_at: '2026-10-24T09:01:00+07:00',
   })
   equal(thai.source, 'uob_thai')
   equal(thai.bank, 'UOB')
@@ -86,7 +86,7 @@ Deno.test('server parser accepts compact UOB notification previews without avail
   const english = await parseRawShortcutCapture({
     raw_text: 'UOB\nYou have spent THB 499.00 on card ending 5678 at NETFLIX.COM',
     capture_method: 'line_notification',
-    captured_at: '2026-10-05T09:01:00+07:00',
+    captured_at: '2026-10-24T09:01:00+07:00',
   })
   equal(english.source, 'uob_thai')
   equal(english.bank, 'UOB')
@@ -101,7 +101,7 @@ Deno.test('server parser still rejects compact UOB text without a positive amoun
     () => parseRawShortcutCapture({
       raw_text: 'มีการใช้บัตร UOB-1234 ที่ร้าน CENTRAL ONLINE',
       capture_method: 'line_notification',
-      captured_at: '2026-10-05T09:01:00+07:00',
+      captured_at: '2026-10-24T09:01:00+07:00',
     }),
     'invalid_capture',
   )
@@ -109,7 +109,7 @@ Deno.test('server parser still rejects compact UOB text without a positive amoun
     () => parseRawShortcutCapture({
       raw_text: 'มีการใช้บัตร UOB-1234 ที่ร้าน CENTRAL ONLINE วงเงินคงเหลือใช้ได้ 3,000.00 THB',
       capture_method: 'line_notification',
-      captured_at: '2026-10-05T09:01:00+07:00',
+      captured_at: '2026-10-24T09:01:00+07:00',
     }),
     'invalid_capture',
   )
@@ -122,7 +122,7 @@ Deno.test('server parser returns ordered compact UOB notification blocks', async
       'มีการใช้บัตร UOB-2222 จำนวน 20.00 THB ที่ร้าน NEW MERCHANT',
     ].join('\n'),
     capture_method: 'line_notification',
-    captured_at: '2026-10-05T09:01:00+07:00',
+    captured_at: '2026-10-24T09:01:00+07:00',
   })
   equal(result.found, 2)
   equal(result.captures.map(({ capture }) => [capture.amount, capture.card_last4, capture.merchant]), [
@@ -141,7 +141,7 @@ Deno.test('server parser accepts compact SCB and LINE Wallet notification previe
       'เข้าบัญชี MBR9',
     ].join('\n'),
     capture_method: 'line_notification',
-    captured_at: '2026-10-05T09:01:00+07:00',
+    captured_at: '2026-10-24T09:01:00+07:00',
   })
   equal(scb.source, 'scb_connect')
   equal(scb.amount, '80.00')
@@ -151,7 +151,7 @@ Deno.test('server parser accepts compact SCB and LINE Wallet notification previe
   const line = await parseRawShortcutCapture({
     raw_text: 'LINE Pay Purchase ฿45.00\nMerchant: Bakery',
     capture_method: 'line_notification',
-    captured_at: '2026-10-05T09:01:00+07:00',
+    captured_at: '2026-10-24T09:01:00+07:00',
   })
   equal(line.source, 'line_wallet')
   equal(line.amount, '45.00')
@@ -218,7 +218,7 @@ Deno.test('notification and screen raw captures share a dedupe key', async () =>
     'วันที่/เวลา 05/10/2026 21:39',
     'ยอดเงินที่ใช้ได้ 1,088.37 บาท',
   ].join('\n')
-  const common = { captured_at: '2026-10-05T21:40:00+07:00' }
+  const common = { captured_at: '2026-10-24T21:40:00+07:00' }
   const notification = await parseRawShortcutCapture({ ...common, raw_text: text, capture_method: 'line_notification' })
   const screen = await parseRawShortcutCapture({ ...common, raw_text: `SCB Connect\nเมนูหลัก\n${text}\nหน้าแรก`, capture_method: 'whats_on_screen' })
   equal(notification.dedupe_key, screen.dedupe_key)
@@ -287,6 +287,10 @@ Deno.test('server parser collapses each adjacent bilingual UOB message once', as
   equal(result.captures.map(({ capture }) => [capture.amount, capture.card_last4]), [
     ['12.34', '1111'],
     ['56.78', '1111'],
+  ])
+  equal(result.captures.map(({ capture }) => [capture.transaction_date, capture.transaction_datetime]), [
+    ['2026-10-24', '2026-10-24T16:00:00+07:00'],
+    ['2026-10-24', '2026-10-24T16:00:00+07:00'],
   ])
   equal(result.captures[0].capture.raw_text, uobPair().join('\n'))
   equal(result.captures[1].capture.raw_text, uobPair({ amount: '56.78', thaiMerchant: '@SHOP TWO' }).join('\n'))
@@ -414,6 +418,21 @@ Deno.test('parser reports unreadable groups without dropping readable groups', a
   equal(result.failures, [{ item: 2, code: 'unreadable_capture' }])
 })
 
+Deno.test('invalid source dates stay unreadable without dropping valid siblings', async () => {
+  const result = await parseRawShortcutCaptures({
+    raw_text: [
+      'มีการใช้บัตร UOB-1111 จำนวน 12.34 THB ที่ร้าน INVALID SHOP วันที่ 31/02/2026 วงเงินคงเหลือใช้ได้ 90,000.00 THB',
+      'มีการใช้บัตร UOB-2222 จำนวน 56.78 THB ที่ร้าน VALID SHOP วันที่ 25/10 วงเงินคงเหลือใช้ได้ 89,943.22 THB',
+    ].join('\n'),
+    capture_method: 'line_notification',
+    captured_at: '2026-10-25T16:20:00+07:00',
+  }, '2026-10-25T16:20:00+07:00')
+  equal(result.captures.map(({ item, capture }) => [item, capture.transaction_date, capture.amount]), [
+    [2, '2026-10-25', '56.78'],
+  ])
+  equal(result.failures, [{ item: 1, code: 'unreadable_capture' }])
+})
+
 Deno.test('anchor words inside merchant lines do not split candidates', async () => {
   const result = await parseRawShortcutCaptures({
     raw_text: [
@@ -444,4 +463,19 @@ Deno.test('parser rejects more than ten logical groups', async () => {
 Deno.test('server parser rejects unsupported or non-transaction text', async () => {
   await rejectsCode(() => parseRawShortcutCaptures({ raw_text: 'hello', capture_method: 'whats_on_screen' }), 'invalid_capture')
   await rejectsCode(() => parseRawShortcutCaptures({ raw_text: 'รายการเงินออก -80.00 บาท', capture_method: 'email' }), 'invalid_capture')
+})
+
+Deno.test('screen candidates keep their own date-only transaction dates', async () => {
+  const result = await parseRawShortcutCaptures({
+    raw_text: [
+      'มีการใช้บัตร UOB-1111 จำนวน 12.34 THB ที่ร้าน FIRST SHOP วันที่ 24/10 วงเงินคงเหลือใช้ได้ 90,000.00 THB',
+      'มีการใช้บัตร UOB-1111 จำนวน 56.78 THB ที่ร้าน SECOND SHOP วันที่ 25/10 วงเงินคงเหลือใช้ได้ 89,943.22 THB',
+    ].join('\n'),
+    capture_method: 'line_notification',
+    captured_at: '2026-10-25T16:20:00+07:00',
+  }, '2026-10-25T16:20:00+07:00')
+  equal(result.captures.map(({ capture }) => [capture.transaction_date, capture.transaction_datetime]), [
+    ['2026-10-24', null],
+    ['2026-10-25', null],
+  ])
 })

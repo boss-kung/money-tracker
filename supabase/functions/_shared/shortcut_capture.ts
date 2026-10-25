@@ -17,6 +17,7 @@ export type CaptureEnvelopeV1 = {
   description: string | null
   account_last4: string | null
   card_last4: string | null
+  transaction_date?: string | null
   transaction_datetime: string | null
   captured_at: string
   capture_method: 'line_notification' | 'whats_on_screen'
