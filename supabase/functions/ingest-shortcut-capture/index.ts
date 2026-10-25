@@ -1,6 +1,8 @@
 import { handleOptions, jsonResponse } from '../_shared/cors.ts'
 import {
+  buildCaptureDedupeIdentity,
   validateCaptureV1,
+  type CaptureDedupeIdentity,
   type ValidatedCaptureV1,
   ShortcutRequestError,
 } from '../_shared/shortcut_capture.ts'
@@ -94,18 +96,6 @@ async function tokenRow(supabase: AdminClientLike, tokenId: string) {
   return result.data as Record<string, unknown> | null
 }
 
-async function existingCapture(supabase: AdminClientLike, userId: string, capture: Pick<ValidatedCaptureV1, 'dedupe_version' | 'dedupe_key'>) {
-  const result = await supabase
-    .from('mt_shortcut_captures')
-    .select('id,status')
-    .eq('user_id', userId)
-    .eq('dedupe_version', capture.dedupe_version)
-    .eq('dedupe_key', capture.dedupe_key)
-    .maybeSingle()
-  if (result.error) throw result.error
-  return result.data as { id: string; status?: string } | null
-}
-
 function duplicateResponse(capture: { id: string }) {
   return { status: 'queued', capture_id: capture.id, duplicate: true }
 }
@@ -179,6 +169,15 @@ function parseBody(bytes: Uint8Array): unknown {
   }
 }
 
+function storeResult(value: unknown): { capture_id: string; duplicate: boolean } {
+  const row = Array.isArray(value) ? value[0] : value
+  if (!row || typeof row !== 'object') throw new Error('invalid_store_result')
+  const captureId = Reflect.get(row, 'capture_id')
+  const duplicate = Reflect.get(row, 'duplicate')
+  if (typeof captureId !== 'string' || !captureId || typeof duplicate !== 'boolean') throw new Error('invalid_store_result')
+  return { capture_id: captureId, duplicate }
+}
+
 function isRawCaptureEnvelope(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
@@ -210,9 +209,10 @@ export function createIngestShortcutCaptureHandler(deps: IngestShortcutCaptureDe
       if (!deps.compareVerifier(expected, stored)) invalidToken()
       if (row.revoked_at) throw new IngestRequestError(401, 'revoked_token')
 
+      const receivedAt = deps.now()
       const rate = await supabase.rpc('mt_shortcut_take_rate_slot', {
         p_token_id: parsedToken.tokenId,
-        p_now: deps.now().toISOString(),
+        p_now: receivedAt.toISOString(),
         p_limit: 30,
       })
       if (rate.error) throw rate.error
@@ -222,9 +222,9 @@ export function createIngestShortcutCaptureHandler(deps: IngestShortcutCaptureDe
       let batch: RawCaptureBatch
       try {
         if (isRawCaptureEnvelope(input)) {
-          batch = await parseRawShortcutCaptures(input, deps.now().toISOString())
+          batch = await parseRawShortcutCaptures(input, receivedAt.toISOString())
         } else {
-          const capture = await validateCaptureV1(input)
+          const capture = await validateCaptureV1(input, receivedAt)
           batch = { found: 1, captures: [{ item: 1, capture }], failures: [] }
         }
       } catch (error) {
@@ -240,15 +240,17 @@ export function createIngestShortcutCaptureHandler(deps: IngestShortcutCaptureDe
         results.set(failure.item, { item: failure.item, status: 'failed', code: failure.code })
       }
 
-      const pending: Array<{ item: number; capture: ValidatedCaptureV1; captureId: string; encrypted?: EncryptedCapture }> = []
+      const pending: Array<{
+        item: number
+        capture: ValidatedCaptureV1
+        identity: CaptureDedupeIdentity
+        captureId: string
+        encrypted?: EncryptedCapture
+      }> = []
       for (const parsedCapture of batch.captures) {
-        const capture = await validateCaptureV1(parsedCapture.capture)
-        const existing = await existingCapture(supabase, userId, capture)
-        if (existing) {
-          results.set(parsedCapture.item, { item: parsedCapture.item, status: 'duplicate', capture_id: existing.id, duplicate: true })
-          continue
-        }
-        pending.push({ item: parsedCapture.item, capture, captureId: deps.randomUUID() })
+        const capture = await validateCaptureV1(parsedCapture.capture, receivedAt)
+        const identity = await buildCaptureDedupeIdentity(capture)
+        pending.push({ item: parsedCapture.item, capture, identity, captureId: deps.randomUUID() })
       }
 
       if (pending.length) {
@@ -263,36 +265,27 @@ export function createIngestShortcutCaptureHandler(deps: IngestShortcutCaptureDe
 
         for (const item of pending) {
           const encrypted = item.encrypted as EncryptedCapture
-          const inserted = await supabase.from('mt_shortcut_captures').insert({
-            id: item.captureId,
-            user_id: userId,
-            token_id: parsedToken.tokenId,
-            schema_version: item.capture.schema_version,
-            dedupe_version: item.capture.dedupe_version,
-            dedupe_key: item.capture.dedupe_key,
-            status: 'pending',
-            ciphertext: byteaHex(encrypted.ciphertext),
-            iv: byteaHex(encrypted.iv),
-            encryption_key_version: encrypted.keyVersion,
-            accepted_at: deps.now().toISOString(),
-            updated_at: deps.now().toISOString(),
-          }).select('id').maybeSingle()
-          if (!inserted.error) {
-            results.set(item.item, { item: item.item, status: 'queued', capture_id: item.captureId, duplicate: false })
-            continue
-          }
-
-          // A concurrent retry may win the unique dedupe constraint. The
-          // encrypted bytes are intentionally discarded and the winner is
-          // returned instead.
-          if (String(Reflect.get(inserted.error as object, 'code')) === '23505') {
-            const winner = await existingCapture(supabase, userId, item.capture)
-            if (winner) {
-              results.set(item.item, { item: item.item, status: 'duplicate', capture_id: winner.id, duplicate: true })
-              continue
-            }
-          }
-          throw inserted.error
+          const stored = await supabase.rpc('mt_shortcut_store_capture', {
+            p_id: item.captureId,
+            p_user_id: userId,
+            p_token_id: parsedToken.tokenId,
+            p_schema_version: item.capture.schema_version,
+            p_dedupe_version: item.identity.version,
+            p_dedupe_key: item.identity.dedupeKey,
+            p_dedupe_base_key: item.identity.version === 2 ? item.identity.baseKey : null,
+            p_legacy_dedupe_key: item.identity.legacyKey,
+            p_is_strong: item.identity.strong,
+            p_captured_at: item.identity.capturedAt,
+            p_ciphertext: byteaHex(encrypted.ciphertext),
+            p_iv: byteaHex(encrypted.iv),
+            p_encryption_key_version: encrypted.keyVersion,
+            p_now: receivedAt.toISOString(),
+          })
+          if (stored.error) throw stored.error
+          const receipt = storeResult(stored.data)
+          results.set(item.item, receipt.duplicate
+            ? { item: item.item, status: 'duplicate', capture_id: receipt.capture_id, duplicate: true }
+            : { item: item.item, status: 'queued', capture_id: receipt.capture_id, duplicate: false })
         }
       }
 
