@@ -55,7 +55,7 @@ test('profile UI keeps notification samples local and accepts only encrypted com
 })
 
 test('release is pinned to the shortcut inbox contract version', () => {
-  assert.equal(manifest.version, '2026.10.25-shortcut-profiles-r155')
+  assert.equal(manifest.version, '2026.10.25-shortcut-profiles-r156')
 })
 
 test('shortcut inbox state RPCs avoid the PostgreSQL CURRENT_TIME name collision', () => {

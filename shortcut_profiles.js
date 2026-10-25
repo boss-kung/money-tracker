@@ -240,11 +240,11 @@
     const body = result.loading
       ? '<div class="shortcut-profile-skeleton-list"><div></div><div></div></div>'
       : error
-        ? `<div class="shortcut-profile-state is-error" role="alert"><strong>โหลดโปรไฟล์ไม่สำเร็จ</strong><p>${escape(errorMessage(error))}</p><button type="button" class="btn btn-secondary" data-profile-action="retry">ลองอีกครั้ง</button></div>`
+        ? `<div class="shortcut-profile-state is-error" role="alert"><strong>โหลดโปรไฟล์เดิมไม่สำเร็จ</strong><p>${escape(errorMessage(error))} คุณยังเพิ่มแอปธนาคารใหม่และวางตัวอย่างได้</p><button type="button" class="btn btn-secondary" data-profile-action="retry">ลองอีกครั้ง</button></div>`
         : profiles.length
           ? `<div class="shortcut-profile-list">${profiles.map(profile => `<button type="button" class="shortcut-profile-row" data-profile-open="${escape(profile.id)}"><span class="shortcut-profile-row-icon" aria-hidden="true">🏦</span><span class="shortcut-profile-row-main"><strong>${escape(profile.name)}</strong><small>${escape(profile.app_label || profile.short_code || '')}</small></span><span class="shortcut-profile-row-status${profile.enabled ? ' is-enabled' : ''}">${profile.enabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}</span><span aria-hidden="true">›</span></button>`).join('')}</div>`
           : '<div class="shortcut-profile-empty"><div aria-hidden="true">🏦</div><strong>ยังไม่มีแอปธนาคาร</strong><p>เพิ่มตัวอย่างแจ้งเตือน 2 รายการ แล้วให้ Money Tracker เรียนรู้รูปแบบ</p></div>'
-    return `<section class="shortcut-profile-shell shortcut-profile-screen"><div class="sub-header shortcut-profile-header"><button type="button" class="btn-icon" data-profile-action="close" aria-label="ย้อนกลับ">←</button><h2>รูปแบบแจ้งเตือนธนาคาร</h2><div></div></div><div class="sub-scroll shortcut-profile-scroll"><div class="shortcut-profile-intro"><h3>เพิ่มการตรวจจับแอปธนาคาร</h3><p>คัดลอกตัวอย่างแจ้งเตือน 2 รายการจากแอปเดียวกัน ตัวอย่างจะอยู่ในเครื่องนี้เท่านั้น</p></div>${body}</div>${!result.loading && !error ? '<div class="shortcut-profile-footer"><button type="button" class="btn btn-primary" data-profile-action="new">เพิ่มแอปธนาคาร</button></div>' : ''}</section>`
+    return `<section class="shortcut-profile-shell shortcut-profile-screen"><div class="sub-header shortcut-profile-header"><button type="button" class="btn-icon" data-profile-action="close" aria-label="ย้อนกลับ">←</button><h2>รูปแบบแจ้งเตือนธนาคาร</h2><div></div></div><div class="sub-scroll shortcut-profile-scroll"><div class="shortcut-profile-intro"><h3>เพิ่มการตรวจจับแอปธนาคาร</h3><p>คัดลอกตัวอย่างแจ้งเตือน 2 รายการจากแอปเดียวกัน ตัวอย่างจะอยู่ในเครื่องนี้เท่านั้น</p></div>${body}</div>${!result.loading ? '<div class="shortcut-profile-footer"><button type="button" class="btn btn-primary" data-profile-action="new">เพิ่มแอปธนาคาร</button></div>' : ''}</section>`
   }
 
   function renderRuleSummary(profile) {
@@ -587,7 +587,7 @@
   }
 
   const api = { openList, openEditor, clear }
-  if (typeof module !== 'undefined' && module.exports) api.__test = { createDraft, validateStep, profileViewModel, getDefaultProfileName, stepHeading, stepLabels: STEP_LABELS }
+  if (typeof module !== 'undefined' && module.exports) api.__test = { createDraft, validateStep, profileViewModel, getDefaultProfileName, stepHeading, stepLabels: STEP_LABELS, renderList }
   root.addEventListener?.('mt:auth-state-changed', clear)
   root.addEventListener?.('pagehide', clear)
   return Object.freeze(api)

@@ -127,8 +127,16 @@ test('profile view model exposes metadata only and never raw samples or compiled
   assert.deepEqual(view, { id: 'p1', name: 'UCHOOSE', app_label: 'UCHOOSE', enabled: true, short_code: 'ABC234', profile_version: 2 })
 })
 
+test('profile list failure still lets the user start a new profile', () => {
+  const html = api.renderList({}, new Error('profile_failed'))
+  assert.match(html, /โหลดโปรไฟล์เดิมไม่สำเร็จ/)
+  assert.match(html, /data-profile-action="retry"/)
+  assert.match(html, /data-profile-action="new"/)
+  assert.match(html, />เพิ่มแอปธนาคาร</)
+})
+
 test('profile wizard release assets are present and versioned in production and demo', () => {
-  assert.equal(release.version, '2026.10.25-shortcut-profiles-r155')
+  assert.equal(release.version, '2026.10.25-shortcut-profiles-r156')
   for (const html of [productionHtml, demoHtml]) {
     assert.match(html, new RegExp(`style_v2\\.css\\?v=${release.version}`))
     assert.match(html, new RegExp(`ui_v2\\.css\\?v=${release.version}`))
