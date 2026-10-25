@@ -46,6 +46,8 @@ Confirm the scheduled cleanup job exists and is enabled. Its job removes expired
 
 To add UCHOOSE or another bank app, create a profile in the authenticated web settings with two sanitized local samples. The browser sends only the bounded `compiled_rule`; it never sends the raw samples. After saving, add `MT-PROFILE:<six-character-code>` as a Text action in the per-device Notification Automation, followed by Title/Subtitle/Message/Body. A matched profile queues a structured capture; a changed/hidden format queues `needs_review`; explicit OTP/marketing exclusions return `ignored` without an Inbox row.
 
+Profile setup path: **เพิ่มเติม → ตั้งค่า → รูปแบบแจ้งเตือนธนาคาร → เพิ่มแอปธนาคาร**. The guided flow has three steps: paste two notifications, confirm direction/amount/anchors, then run both local samples before activating. Existing profiles open their metadata page; choose **เรียนรู้รูปแบบใหม่** to replace the rule with a fresh local test.
+
 Publish the matching web release only after the migration and functions are healthy. Then build/import both native Shortcuts with the same endpoint and device Token. The generated workflows capture one offset-bearing `captured_at` at startup; do not copy a timestamp from another run.
 
 ### Notification automation check
