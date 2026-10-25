@@ -269,6 +269,14 @@
     screen.querySelectorAll('[data-profile-amount]:checked').forEach(input => { state.amountSelections[Number(input.dataset.profileAmount)] = input.value })
   }
 
+  function refreshWizardAction(screen) {
+    const action = screen?.querySelector?.('[data-profile-action="next"], [data-profile-action="save"]')
+    if (!action) return
+    const validation = validateStep(state, state.step)
+    action.disabled = !validation.valid
+    action.setAttribute('aria-disabled', String(!validation.valid))
+  }
+
   function bindWizard() {
     const screen = root.document?.querySelector?.('.shortcut-profile-editor')
     if (!screen) return
@@ -277,6 +285,7 @@
       state.dirty = true
       const counter = screen.querySelector(`[data-profile-counter="${input.dataset.profileSample}"]`)
       if (counter) counter.textContent = `${event.target.value.length.toLocaleString('th-TH')}/${MAX_SAMPLE_LENGTH.toLocaleString('th-TH')}`
+      refreshWizardAction(screen)
     }))
     screen.querySelector('[data-profile-field="app_label"]')?.addEventListener('input', event => {
       state.appLabel = event.target.value
@@ -285,19 +294,21 @@
         const name = screen.querySelector('[data-profile-field="name"]')
         if (name) name.value = getDefaultProfileName(state)
       }
+      refreshWizardAction(screen)
     })
-    screen.querySelector('[data-profile-field="name"]')?.addEventListener('input', event => { state.name = event.target.value; state.nameTouched = true; state.dirty = true })
-    screen.querySelector('[data-profile-field="must_contain"]')?.addEventListener('input', event => { state.mustContain = parseAnchors(event.target.value); state.dirty = true })
-    screen.querySelector('[data-profile-field="must_not_contain"]')?.addEventListener('input', event => { state.mustNotContain = parseAnchors(event.target.value); state.dirty = true })
+    screen.querySelector('[data-profile-field="name"]')?.addEventListener('input', event => { state.name = event.target.value; state.nameTouched = true; state.dirty = true; refreshWizardAction(screen) })
+    screen.querySelector('[data-profile-field="must_contain"]')?.addEventListener('input', event => { state.mustContain = parseAnchors(event.target.value); state.dirty = true; refreshWizardAction(screen) })
+    screen.querySelector('[data-profile-field="must_not_contain"]')?.addEventListener('input', event => { state.mustNotContain = parseAnchors(event.target.value); state.dirty = true; refreshWizardAction(screen) })
     screen.querySelectorAll('[data-profile-direction]').forEach(input => input.addEventListener('change', event => {
       state.direction = event.target.dataset.profileDirection
       state.dirty = true
       screen.querySelectorAll('[data-profile-direction]').forEach(option => option.closest('label')?.classList.toggle('is-selected', option.checked))
       if (!state.nameTouched) { const name = screen.querySelector('[data-profile-field="name"]'); if (name) name.value = getDefaultProfileName(state) }
+      refreshWizardAction(screen)
     }))
-    screen.querySelectorAll('[data-profile-amount]').forEach(input => input.addEventListener('change', event => { state.amountSelections[Number(input.dataset.profileAmount)] = event.target.value; state.dirty = true; screen.querySelectorAll(`[data-profile-amount="${input.dataset.profileAmount}"]`).forEach(option => option.closest('label')?.classList.toggle('is-selected', option.checked)) }))
+    screen.querySelectorAll('[data-profile-amount]').forEach(input => input.addEventListener('change', event => { state.amountSelections[Number(input.dataset.profileAmount)] = event.target.value; state.dirty = true; screen.querySelectorAll(`[data-profile-amount="${input.dataset.profileAmount}"]`).forEach(option => option.closest('label')?.classList.toggle('is-selected', option.checked)); refreshWizardAction(screen) }))
     screen.querySelector('[data-profile-action="back"]')?.addEventListener('click', () => handleWizardBack())
-    screen.querySelector('[data-profile-action="cancel"]')?.addEventListener('click', () => handleWizardBack(true))
+    screen.querySelector('[data-profile-action="cancel"]')?.addEventListener('click', () => handleWizardCancel())
     screen.querySelector('[data-profile-action="next"]')?.addEventListener('click', () => goNext())
     screen.querySelector('[data-profile-action="save"]')?.addEventListener('click', () => saveWizard())
   }
@@ -318,12 +329,34 @@
 
   function focusFirstError() { try { root.document?.querySelector?.('.shortcut-profile-error')?.previousElementSibling?.focus?.() } catch (_) {} }
 
-  function handleWizardBack(force = false) {
-    if (force || !state.dirty) { openList(); return }
+  function discardWizard() {
     const discard = () => { state = createDraft('create'); openList() }
+    if (!state.dirty) return discard()
     if (root.App?.showConfirm) root.App.showConfirm({ title: 'ละทิ้งข้อมูลที่กรอก?', body: 'ตัวอย่างแจ้งเตือนจะไม่ถูกเก็บไว้', danger: true, confirmLabel: 'ละทิ้ง', onConfirm: discard })
     else discard()
   }
+
+  function returnToPreviousStep() {
+    const screen = root.document?.querySelector?.('.shortcut-profile-editor')
+    syncWizard(screen)
+    if (state.step === 'test') {
+      state.step = 'confirm'
+      state.testResults = []
+      state.errors = {}
+      mountWizard()
+      return
+    }
+    if (state.step === 'confirm') {
+      state.step = 'samples'
+      state.errors = {}
+      mountWizard()
+      return
+    }
+    discardWizard()
+  }
+
+  function handleWizardBack() { returnToPreviousStep() }
+  function handleWizardCancel() { discardWizard() }
 
   async function saveWizard() {
     const screen = root.document?.querySelector?.('.shortcut-profile-editor')

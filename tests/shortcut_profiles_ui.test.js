@@ -53,6 +53,15 @@ test('input listeners mutate the draft without re-rendering the whole sub-screen
   const listenerBlock = source.slice(sampleListenerStart, listStart)
   assert.doesNotMatch(listenerBlock, /showEditor\(\)/)
   assert.doesNotMatch(listenerBlock, /openSubScreen\(/)
+  assert.match(source, /refreshWizardAction\(screen\)/)
+})
+
+test('wizard back moves between steps while cancel keeps the discard guard', () => {
+  assert.match(source, /function returnToPreviousStep\(\)/)
+  assert.match(source, /state\.step = 'confirm'/)
+  assert.match(source, /state\.step = 'samples'/)
+  assert.match(source, /function handleWizardCancel\(\)/)
+  assert.match(source, /root\.App\?\.showConfirm/)
 })
 
 test('default profile name follows app and direction only until the user edits it', () => {
